@@ -50,13 +50,18 @@ import {
 const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
 const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
 
+type Engine = 'logreg' | 'lightgbm';
+
 interface LoadedModel {
   version: string;
   kind: PrematchKind;
   featuresVersion: 1 | 2 | 3;
   tier: Tier | null;
   algorithm: string;
-  weights: number[];          // длина зависит от featuresVersion
+  engine: Engine;
+  weights: number[];          // logreg only; lightgbm — пустой массив
+  blobB64: string | null;     // lightgbm only — сериализованный bundle (base64)
+  featureDim: number;         // источник истины для проверки размерности
   calibration: CalibrationModel | null;
   trainAccuracy: number;
   testAccuracy: number;
@@ -64,6 +69,46 @@ interface LoadedModel {
   trainSize: number;
   testSize: number;
   loadedAt: Date;
+}
+
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
+const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
+const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
+
+let lightgbmDisabled = false;  // выставляется при долгих сбоях ml-service
+let lightgbmDisabledUntil = 0;
+const LIGHTGBM_BACKOFF_MS = 60_000;
+
+let _cachedToken: string | null = null;
+function mlServiceToken(): string | null {
+  if (_cachedToken) return _cachedToken;
+  const env = (process.env.ML_SERVICE_TOKEN ?? '').trim();
+  if (env) { _cachedToken = env; return env; }
+  // Fallback: dev-режим — ml-service пишет токен в /tmp
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    const v = fs.readFileSync(ML_TOKEN_FILE, 'utf8').trim();
+    if (v) { _cachedToken = v; return v; }
+  } catch { /* file may not exist yet */ }
+  return null;
+}
+
+function lightgbmAvailable(): boolean {
+  if (!lightgbmDisabled) return true;
+  if (Date.now() >= lightgbmDisabledUntil) {
+    lightgbmDisabled = false;
+    return true;
+  }
+  return false;
+}
+
+function tripLightgbm(reason: string): void {
+  if (!lightgbmDisabled) {
+    logger.warn({ reason, backoffMs: LIGHTGBM_BACKOFF_MS }, '[PredictionModel] tripping lightgbm circuit-breaker');
+  }
+  lightgbmDisabled = true;
+  lightgbmDisabledUntil = Date.now() + LIGHTGBM_BACKOFF_MS;
 }
 
 export interface DraftInput {
@@ -75,8 +120,16 @@ export interface DraftInput {
   direAccountIds?: number[] | null;
 }
 
-function modelKey(kind: PrematchKind, fv: 1 | 2 | 3): string {
-  return `${kind}|v${fv}`;
+function modelKey(kind: PrematchKind, fv: 1 | 2 | 3, engine: Engine): string {
+  return `${kind}|v${fv}|${engine}`;
+}
+
+/** Пытается достать lightgbm-вариант, иначе logreg. */
+function getModel(kind: PrematchKind, fv: 1 | 2 | 3): LoadedModel | null {
+  const lgbm = cachedModels.get(modelKey(kind, fv, 'lightgbm'));
+  if (lgbm && modelUsable(lgbm)) return lgbm;
+  const lr = cachedModels.get(modelKey(kind, fv, 'logreg'));
+  return lr && modelUsable(lr) ? lr : null;
 }
 
 let cachedModels: Map<string, LoadedModel> = new Map();
@@ -108,19 +161,39 @@ function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
   const tierRaw = meta['tier'];
   const tier: Tier | null = tierRaw === 't1' || tierRaw === 't2' || tierRaw === 't3' ? tierRaw : null;
   const fv = (m.featuresVersion ?? 1) as 1 | 2 | 3;
-  // Веса хранятся как { w0, w1, ... }. Длина определяется по фактическим
-  // ключам, чтобы безопасно пережить добавление новых фичей в будущем.
+  const engine: Engine = m.engine === 'lightgbm' ? 'lightgbm' : 'logreg';
+
+  // logreg: веса в jsonb { w0, w1, ... }
   const keys = Object.keys(wRaw)
     .filter(k => /^w\d+$/.test(k))
     .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
   const weights = keys.map(k => wRaw[k] ?? 0);
+
+  // lightgbm: blob = bytea, длину фич берём из features jsonb-массива.
+  let blobB64: string | null = null;
+  if (engine === 'lightgbm') {
+    const blob = m.binaryBlob as Buffer | Uint8Array | null;
+    if (blob) {
+      blobB64 = Buffer.isBuffer(blob)
+        ? blob.toString('base64')
+        : Buffer.from(blob).toString('base64');
+    }
+  }
+  const featuresArr = Array.isArray(m.features) ? (m.features as unknown[]) : [];
+  const featureDim = engine === 'logreg'
+    ? weights.length
+    : (featuresArr.length || weights.length);
+
   return {
     version: m.version,
     kind: m.kind as PrematchKind,
     featuresVersion: fv,
     tier,
     algorithm: m.algorithm,
+    engine,
     weights,
+    blobB64,
+    featureDim,
     calibration,
     trainAccuracy: m.trainAccuracy ?? 0,
     testAccuracy: m.testAccuracy ?? 0,
@@ -129,6 +202,44 @@ function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
     testSize: m.testSampleSize ?? 0,
     loadedAt: new Date(),
   };
+}
+
+async function predictViaMlService(blobB64: string, features: number[]): Promise<number | null> {
+  if (!lightgbmAvailable()) return null;
+  const token = mlServiceToken();
+  if (!token) {
+    tripLightgbm('no ML_SERVICE_TOKEN');
+    return null;
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ML_PREDICT_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${ML_SERVICE_URL}/predict`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ml-token': token },
+      body: JSON.stringify({ blob_b64: blobB64, features }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      tripLightgbm(`ml-service ${res.status}: ${body.slice(0, 120)}`);
+      return null;
+    }
+    const data = (await res.json()) as { raw_prob: number; calibrated_prob: number };
+    if (typeof data.calibrated_prob !== 'number') {
+      tripLightgbm('ml-service bad payload');
+      return null;
+    }
+    return data.calibrated_prob;
+  } catch (e) {
+    const reason = (e as Error).name === 'AbortError'
+      ? `timeout ${ML_PREDICT_TIMEOUT_MS}ms`
+      : (e as Error).message;
+    tripLightgbm(reason);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -157,22 +268,26 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
     const next = new Map<string, LoadedModel>();
     for (const r of rows) {
       const loaded = rowToLoaded(r);
-      const key = modelKey(loaded.kind, loaded.featuresVersion);
+      // Ключ теперь включает engine — допускаем одновременно lightgbm + logreg
+      // под одну (kind, fv) пару (Wave 4 fallback).
+      const key = modelKey(loaded.kind, loaded.featuresVersion, loaded.engine);
       if (!next.has(key)) next.set(key, loaded);
     }
     cachedModels = next;
     lastModelLoad = Date.now();
 
-    const fallbackV1 = next.get(modelKey('prematch_winner', 1));
-    const anyFallback = fallbackV1 ?? next.get(modelKey('prematch_winner', 2)) ?? null;
-    const surface = anyFallback ?? next.values().next().value ?? null;
+    const surface =
+      next.get(modelKey('prematch_winner', 1, 'lightgbm')) ??
+      next.get(modelKey('prematch_winner', 1, 'logreg')) ??
+      next.get(modelKey('prematch_winner', 2, 'lightgbm')) ??
+      next.get(modelKey('prematch_winner', 2, 'logreg')) ??
+      next.values().next().value ?? null;
 
     logger.info(
       {
         loaded: Array.from(next.keys()),
-        v1Fallback: fallbackV1?.version,
-        v2Fallback: next.get(modelKey('prematch_winner', 2))?.version,
-        v3Fallback: next.get(modelKey('prematch_winner', 3))?.version,
+        surface: surface?.version,
+        engineCounts: countByEngine(next),
       },
       '[PredictionModel] Active models loaded',
     );
@@ -185,14 +300,22 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
   }
 }
 
-/** Backward-compat: возвращает v1 fallback (или любую первую) из кеша. */
+/** Backward-compat: возвращает v1 fallback (lightgbm > logreg). */
 export function getActiveModel(): LoadedModel | null {
   return (
-    cachedModels.get(modelKey('prematch_winner', 1)) ??
-    cachedModels.get(modelKey('prematch_winner', 2)) ??
+    cachedModels.get(modelKey('prematch_winner', 1, 'lightgbm')) ??
+    cachedModels.get(modelKey('prematch_winner', 1, 'logreg')) ??
+    cachedModels.get(modelKey('prematch_winner', 2, 'lightgbm')) ??
+    cachedModels.get(modelKey('prematch_winner', 2, 'logreg')) ??
     cachedModels.values().next().value ??
     null
   );
+}
+
+function countByEngine(m: Map<string, LoadedModel>): Record<Engine, number> {
+  const out: Record<Engine, number> = { logreg: 0, lightgbm: 0 };
+  for (const v of m.values()) out[v.engine]++;
+  return out;
 }
 
 /** Все активные модели — для отладки и model-status endpoint. */
@@ -352,10 +475,59 @@ function buildTeamFeatures(
 
 function pickModel(tier: Tier | null, fv: 1 | 2 | 3): LoadedModel | null {
   if (tier) {
-    const tierModel = cachedModels.get(modelKey(tierKind(tier), fv));
-    if (tierModel) return tierModel;
+    const tm = getModel(tierKind(tier), fv);
+    if (tm) return tm;
   }
-  return cachedModels.get(modelKey('prematch_winner', fv)) ?? null;
+  return getModel('prematch_winner', fv);
+}
+
+function modelUsable(m: LoadedModel): boolean {
+  if (m.engine === 'lightgbm') {
+    return m.blobB64 != null && lightgbmAvailable();
+  }
+  return m.weights.length > 0;
+}
+
+/**
+ * Ищет logreg-модель в кеше как spare tire для LightGBM. Стратегия —
+ * максимально близкая lineage:
+ *   1. ровно тот же (kind, fv) на logreg
+ *   2. (prematch_winner — общий fallback) на той же fv
+ *   3. любой logreg с той же featureDim (последняя соломинка, логируем)
+ * Это нужно чтобы при сбое t1-LightGBM не подставился случайный t2-LR
+ * другой размерности или другого тира — иначе мы тихо ломаем калибровку
+ * и tier-routing.
+ */
+function findLogregFallback(
+  kind: PrematchKind,
+  fv: 1 | 2 | 3,
+  dim: number,
+): LoadedModel | null {
+  // exact lineage
+  const exact = cachedModels.get(modelKey(kind, fv, 'logreg'));
+  if (exact && exact.engine === 'logreg' && exact.weights.length === dim) return exact;
+  // generic prematch_winner на той же fv
+  if (kind !== 'prematch_winner') {
+    const generic = cachedModels.get(modelKey('prematch_winner', fv, 'logreg'));
+    if (generic && generic.weights.length === dim) {
+      logger.warn(
+        { requestedKind: kind, fv, fallbackVersion: generic.version },
+        '[PredictionModel] LR fallback: tier-specific LR missing, using prematch_winner',
+      );
+      return generic;
+    }
+  }
+  // last resort: dim match (логируем как degradation)
+  for (const m of cachedModels.values()) {
+    if (m.engine === 'logreg' && m.weights.length === dim) {
+      logger.warn(
+        { requestedKind: kind, fv, fallbackKind: m.kind, fallbackFv: m.featuresVersion, fallbackVersion: m.version },
+        '[PredictionModel] LR fallback: lineage mismatch, last-resort dim match',
+      );
+      return m;
+    }
+  }
+  return null;
 }
 
 /**
@@ -441,7 +613,7 @@ export async function predictMatchWinner(
       h2h: h2hCache,
     });
     const v3Model = pickModel(tier, 3);
-    if (v3Model && v3Model.weights.length === teamFeats.length + heroFeats.length + extraFeats.length) {
+    if (v3Model && v3Model.featureDim === teamFeats.length + heroFeats.length + extraFeats.length) {
       model = v3Model;
       features = [...teamFeats, ...heroFeats, ...extraFeats];
       usedFv = 3;
@@ -451,7 +623,7 @@ export async function predictMatchWinner(
   // v2 fallback
   if (!model && heroFeats) {
     const v2Model = pickModel(tier, 2);
-    if (v2Model && v2Model.weights.length === teamFeats.length + heroFeats.length) {
+    if (v2Model && v2Model.featureDim === teamFeats.length + heroFeats.length) {
       model = v2Model;
       features = [...teamFeats, ...heroFeats];
       usedFv = 2;
@@ -468,7 +640,7 @@ export async function predictMatchWinner(
   if (!model) {
     // Crash-safe: матчем размерности.
     for (const m of cachedModels.values()) {
-      if (m.weights.length === teamFeats.length) {
+      if (modelUsable(m) && m.featureDim === teamFeats.length) {
         model = m;
         features = teamFeats;
         usedFv = m.featuresVersion;
@@ -478,18 +650,38 @@ export async function predictMatchWinner(
   }
 
   if (!model) return null;
-  if (model.weights.length !== features.length) {
+  if (model.featureDim !== features.length) {
     logger.warn(
-      { modelVersion: model.version, modelDim: model.weights.length, featDim: features.length },
+      { modelVersion: model.version, modelDim: model.featureDim, featDim: features.length },
       '[PredictionModel] dim mismatch, refusing prediction',
     );
     return null;
   }
 
-  let z = 0;
-  for (let i = 0; i < features.length; i++) z += model.weights[i] * features[i];
-  const rawProb = sigmoid(z);
-  const calibrated = applyCalibration(rawProb, model.calibration);
+  let rawProb: number;
+  let calibrated: number;
+  if (model.engine === 'lightgbm' && model.blobB64) {
+    const mlProb = await predictViaMlService(model.blobB64, features);
+    if (mlProb == null) {
+      // Fallback: предпочитаем LR с тем же (kind, fv) lineage,
+      // чтобы не сбить tier-routing при сбое ml-service (см. findLogregFallback).
+      const fb = findLogregFallback(model.kind, model.featuresVersion, features.length);
+      if (!fb) return null;
+      model = fb;
+      let z = 0;
+      for (let i = 0; i < features.length; i++) z += model.weights[i] * features[i];
+      rawProb = sigmoid(z);
+      calibrated = applyCalibration(rawProb, model.calibration);
+    } else {
+      rawProb = mlProb;
+      calibrated = mlProb;  // изотоника уже внутри bundle
+    }
+  } else {
+    let z = 0;
+    for (let i = 0; i < features.length; i++) z += model.weights[i] * features[i];
+    rawProb = sigmoid(z);
+    calibrated = applyCalibration(rawProb, model.calibration);
+  }
 
   const featureRecord: Record<string, number> = {};
   for (let i = 0; i < TEAM_FEATURE_NAMES.length; i++) {

@@ -14,7 +14,17 @@ import {
   boolean,
   index,
   uniqueIndex,
+  customType,
 } from 'drizzle-orm/pg-core';
+
+// Кастомный bytea-тип, потому что drizzle-orm/pg-core не экспортирует bytea
+// напрямую. Используется для хранения сериализованных моделей (pickle/joblib)
+// LightGBM в Wave 4. Работает через Buffer на Node-стороне.
+const bytea = customType<{ data: Buffer; default: false }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 import { sql } from 'drizzle-orm';
 import { createInsertSchema } from 'drizzle-zod';
 import { z } from 'zod/v4';
@@ -96,6 +106,14 @@ export const modelVersionsTable = pgTable('model_versions', {
   // (команды + hero/draft, Волна 2). Обе версии одного kind могут быть
   // активны одновременно — инференс выбирает v2 если есть драфт, иначе v1.
   featuresVersion: integer('features_version').notNull().default(1),
+  // Wave 4: тип ML-движка. 'logreg' — pure-JS logistic regression (исторический
+  // дефолт, веса в `weights`). 'lightgbm' — gradient boosting, сериализованная
+  // модель в `binaryBlob`, инференс через ml-service по HTTP с graceful
+  // fallback на LR той же (kind, featuresVersion).
+  engine: text('engine').notNull().default('logreg'),
+  // Wave 4: бинарный блоб для не-JSON моделей (pickle/joblib LightGBM).
+  // Для logreg-движка остаётся NULL — веса всё ещё в `weights` jsonb.
+  binaryBlob: bytea('binary_blob'),
   trainAccuracy: real('train_accuracy'),
   testAccuracy: real('test_accuracy'),
   brierScore: real('brier_score'),
@@ -106,11 +124,15 @@ export const modelVersionsTable = pgTable('model_versions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   kindActiveIdx: index('model_versions_kind_active_idx').on(t.kind, t.isActive),
-  // Гарантируем на уровне БД: НЕ БОЛЕЕ ОДНОЙ активной модели на каждую пару
-  // (kind, features_version). Это позволяет иметь параллельно активные v1 и v2
-  // одного kind для graceful fallback (если у матча неизвестен драфт — v1).
-  oneActivePerKindIdx: uniqueIndex('model_versions_one_active_per_kind_idx')
-    .on(t.kind, t.featuresVersion)
+  // Гарантируем на уровне БД: НЕ БОЛЕЕ ОДНОЙ активной модели на каждую тройку
+  // (kind, features_version, engine). Wave 4 добавил engine — это позволяет
+  // одновременно держать активные logreg + lightgbm одной (kind, fv) пары:
+  // по умолчанию инференс идёт через lightgbm (через ml-service), а LR
+  // остаётся spare tire для случаев timeout/ошибки ml-service. До Wave 4
+  // индекс был просто на (kind, fv) — и логически продолжает гарантировать
+  // «не более одной активной LR + не более одной активной LightGBM» на (kind, fv).
+  oneActivePerKindEngineIdx: uniqueIndex('model_versions_one_active_per_kind_engine_idx')
+    .on(t.kind, t.featuresVersion, t.engine)
     .where(sql`${t.isActive} = true`),
 }));
 

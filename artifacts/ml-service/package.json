@@ -1,0 +1,9 @@
+{
+  "name": "@workspace/ml-service",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8090} --app-dir .",
+    "install-deps": "python3 -m pip install --user --break-system-packages -r requirements.txt"
+  }
+}

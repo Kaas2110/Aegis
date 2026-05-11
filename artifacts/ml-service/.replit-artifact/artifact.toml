@@ -1,0 +1,13 @@
+kind = "api"
+previewPath = "/ml"
+title = "ML Service"
+version = "1.0.0"
+id = "aegis-ml-service"
+
+[[services]]
+localPort = 8090
+name = "ML Service"
+paths = []
+
+[services.development]
+run = "pnpm --filter @workspace/ml-service run dev"

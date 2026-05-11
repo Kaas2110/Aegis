@@ -4,7 +4,7 @@ Production-ready Dota 2 esports analytics mobile app. Russian UI. Live ML-driven
 
 Бренд: «Aegis». Внутренние пакеты по-прежнему называются `@workspace/mobile`/`@workspace/api-server` (не переименовываем без необходимости — миграция импортов не оправдана).
 
-Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle, Expo (React Native), Zod (`zod/v4`), in-process logistic regression (no native deps).
+Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle, Expo (React Native), Zod (`zod/v4`), Wave 4 ML: LightGBM 4.6 + sklearn IsotonicRegression в Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn, stateless — blob shipped per /predict), pure-JS logistic regression в `services/PredictionModel.ts` остаётся как fallback (60s circuit-breaker, 200ms timeout).
 
 ## Run & Operate
 
@@ -21,7 +21,8 @@ Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle
 - `pnpm --filter @workspace/scripts run compute:recent-form` — recompute `team_recent_form` (30/90-day)
 - `pnpm --filter @workspace/scripts run compute:h2h` — recompute `team_h2h` (365-day)
 - `pnpm --filter @workspace/scripts run compute:bo3-series [days=180]` — aggregate `bo3_series`
-- `pnpm --filter @workspace/scripts run train:model` — atomic swap of all v1+v2+v3 active prematch models (live-winner trained back-to-back, non-fatal)
+- `pnpm --filter @workspace/scripts run train:model` — atomic swap of all v1+v2+v3 active prematch models (live-winner trained back-to-back, non-fatal). Engine = logistic regression (fallback baseline).
+- `pnpm --filter @workspace/scripts run train:lightgbm` — Wave 4 gradient-boosted prematch models (LightGBM via `artifacts/ml-service`). Атомарный swap внутри `engine='lightgbm'`; LR-модели остаются как fallback. Inference: api-server идёт по HTTP в ml-service с 200ms timeout + 60s circuit-breaker; на любой сбой → LR.
 - `pnpm --filter @workspace/scripts run train:market-models` — Wave 3.D derived-market baselines (per-tier log-normal kills/duration, base-rate+logit first-blood)
 - `pnpm --filter @workspace/scripts run train:live-model` — train live-winner from `live_snapshots × prematch_outcomes`
 - `pnpm run typecheck` — full typecheck (libs first via `typecheck:libs`)
@@ -55,7 +56,7 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 
 ## Roadmap (после миграции в новый workspace, 2026-05-11)
 
-- **ML upgrade → gradient boosting.** Сейчас все prematch/live модели — pure-JS logistic regression в `services/PredictionModel.ts` + `scripts/src/train-model.ts`. План: вынести обучение в отдельный Python-сервис на LightGBM/XGBoost (фичи остаются прежними, формат `model_artifacts.weights` расширяем под tree-ensemble), inference либо через ONNX-runtime в Node, либо через сайдкар. Старые LR-модели остаются как fallback.
+- **ML upgrade → gradient boosting (Wave 4 — DONE для prematch).** Реализовано: `artifacts/ml-service` (FastAPI + LightGBM + sklearn IsotonicRegression), `model_versions.engine` enum logreg|lightgbm + binary_blob bytea, partial unique index `(kind, fv, engine) WHERE is_active`. Тренировка: `scripts/src/train-lightgbm.ts` (12 jobs: 3 fv × 4 buckets, исключая live). Inference: PredictionModel.predictViaMlService — HTTP, 200ms timeout, 60s circuit-breaker, кеш blob в памяти api-server, фолбэк на logreg при любой ошибке. **Осталось:** live-winner перенести на LightGBM (когда `live_snapshots × prematch_outcomes` ≥ 200); derived markets (`train:market-models`) пока на logit/log-normal.
 - **Все модели — вероятностные.** Каждая активная модель (prematch_winner v1/v2/v3, prematch_winner_t2, live_winner, derived markets из `train:market-models`) выдаёт `p ∈ [0,1]` (или μ/σ для kills/duration с CDF-обёрткой). UI читает только `prediction.confidence` / `prediction.ev`.
 - **Backtest UI скрыт.** `app/(tabs)/backtest.tsx` файл оставлен, маршрут спрятан (`href: null` / `hidden`). Эндпоинт `/api/analytics/backtest` доступен — UI вернётся, когда `prematch_outcomes` накопит ≥200 строк.
 - **Detailed mode = primary на проде.** Simple-режим оставляем закомментированным под будущий gating Lite/Premium (RevenueCat). Все toggles `viewMode` пока ведут на `'detailed'`.
