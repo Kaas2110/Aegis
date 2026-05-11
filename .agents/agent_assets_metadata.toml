@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "vrX3cK33dKMSAn0VbZbKB"
+uri = "file://backups/aegis-full-backup-2026-05-11.tar.gz"
+type = "unspecified"
+title = "Aegis full backup — код + БД + 18 активных моделей (11 MB)"
+
+[[outputs]]
+id = "yezbT-QT6naNGE4cR09RI"
+uri = "file://backups/RESTORE.md"
+type = "text"
+title = "RESTORE.md — пошаговая инструкция восстановления"
