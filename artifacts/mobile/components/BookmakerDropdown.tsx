@@ -14,11 +14,12 @@ interface Option {
 
 const BOOKMAKER_OPTIONS: Option[] = [
   { label: 'Все БК', value: 'all' },
-  { label: 'Pari', value: 'pari' },
   { label: 'Fonbet', value: 'fonbet' },
-  { label: 'BetBoom', value: 'betboom' },
   { label: 'Лига Ставок', value: 'liga_stavok' },
-  { label: 'Betfair', value: 'betfair' },
+  { label: 'PARI', value: 'pari' },
+  { label: 'BetBoom', value: 'betboom' },
+  { label: '1xStavka', value: 'x1stavka' },
+  { label: 'Olimp.bet', value: 'olimp' },
   { label: 'Mock', value: 'mock' },
 ];
 

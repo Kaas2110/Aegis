@@ -28,7 +28,7 @@ Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle
 - `pnpm --filter @workspace/scripts run train:live-model` — train live-winner from `live_snapshots × prematch_outcomes`
 - `pnpm run typecheck` — full typecheck (libs first via `typecheck:libs`)
 
-Required env: `DATABASE_URL`. Optional: `ODDS_API_KEY`, `STRATZ_TOKEN`, `PANDASCORE_API_KEY`, `PINNACLE_GUEST_API_KEY`, `ADMIN_TOKEN`, `DISABLE_LIVE_WORKER`, `DISABLE_SCHEDULER`.
+Required env: `DATABASE_URL`. Optional: `ODDS_API_KEY`, `STRATZ_TOKEN`, `PANDASCORE_API_KEY`, `PINNACLE_GUEST_API_KEY`, `ADMIN_TOKEN`, `DISABLE_LIVE_WORKER`, `DISABLE_SCHEDULER`, `BOOKMAKERS_ENABLED` (default false), `PROXY_URL` (РФ-прокси для букмекеров с не-РФ IP).
 
 ## Product
 
@@ -69,7 +69,17 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **scheduler_state.notes.stepResults** — журнал успешности каждого шага в БД, видно из `/api/admin/scheduler/state`.
 - **ENV управление**: `DISABLE_SCHEDULER=true` (выкл воркер целиком), `DISABLE_AUTO_RETRAIN=true` (только данные, без тренировок), `DISABLE_LIVE_WORKER`, `DISABLE_OUTCOME_TRACKER`, `AUTO_DB_PUSH=false`.
 
-**Букмекеры (Fonbet/Лига Ставок):** API мобильных приложений (`line34.fonbet.ru`, `1xstavka`-style эндпоинты) бесплатны и без ключа, но гео-блочат не-РФ IP. Из РФ работают напрямую; с зарубежного хостинга нужен `PROXY_URL` (любой РФ-прокси). Код в `routes/bookmakers.ts` корректно: пытается напрямую, при сбое — мок + hint про PROXY_URL. Пользователь предупреждён про ToS.
+**Букмекеры (6 источников):** Fonbet, Лига Ставок, PARI, BetBoom, 1xStavka, Olimp.bet. Все — публичные мобильные/web JSON API без ключей. Гео-блочат не-РФ IP. Код в `routes/bookmakers.ts`: unified `UnifiedBookmakerEvent`, кэш 60s в памяти, rate-limit 1.5s/source, fail-soft внутри (HTTP-ошибка адаптера → пустые events + hint). Управляется ENV-флагом `BOOKMAKERS_ENABLED=true` (по умолчанию false на Replit). При выключенном флаге все эндпоинты честно возвращают **HTTP 503** с JSON-телом — клиенты отличают «фича выключена» от «временно упало». На РФ-проде включается без `PROXY_URL`; на зарубежном хостинге нужен `PROXY_URL` (любой РФ-прокси). Эндпоинты: `GET /api/bookmakers/status` (всегда 200), `GET /api/bookmakers/all/dota2`, `GET /api/bookmakers/{source}/dota2`. Пользователь предупреждён про ToS.
+
+**Букмекеры — текущее покрытие маркетов (2026-05-11):**
+- `winner` маппится у 4/6 (PARI, BetBoom, 1xStavka, Olimp.bet). Fonbet/Лига Ставок отдают только список событий — winner подтянем при добавлении per-event details fetch.
+- `totalKills` / `totalDuration` / `firstBlood` — типы зарезервированы в `UnifiedBookmakerEvent`, маппинг **не реализован**. Будет вместе с EV-merge.
+
+**Букмекеры — что осталось (отложено сознательно):**
+1. **EV-merge на фронте** — matching events букмекеров к `pro_matches` по командам/времени, фактическое использование `filters.bookmaker` в `app/(tabs)/index.tsx::applyFilters` (сейчас фильтр в стейте есть, но в выборку не идёт), `BookmakerDropdown` подключить к header'у home-экрана (закомментирован), синхронизация набора опций между `FilterBar` (legacy: betfair) и `BookmakerDropdown` (новый: x1stavka/olimp).
+2. **Полный охват маркетов** — fonbet/liga_stavok winner (через details endpoint), totals/firstBlood маппинг по всем 6.
+3. **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
+Все 3 пункта — отдельная сессия после Wave «B», когда понадобится показывать «модель vs кэф» в Premium-UI.
 
 ## Roadmap (после миграции в новый workspace, 2026-05-11)
 
