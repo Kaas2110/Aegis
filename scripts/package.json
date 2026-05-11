@@ -18,6 +18,7 @@
     "train:model": "tsx ./src/train-model.ts",
     "train:market-models": "tsx ./src/train-market-models.ts",
     "train:live-model": "tsx ./src/train-live-model.ts",
+    "import:snapshot": "tsx ./src/import-snapshot.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
