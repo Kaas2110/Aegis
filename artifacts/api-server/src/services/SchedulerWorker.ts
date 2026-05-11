@@ -1,17 +1,21 @@
 /**
  * Шедулер автоматического обновления данных и переобучения модели.
  *
- * Логика:
- *  - Раз в 24 часа проверяет текущий патч Dota 2 (OpenDota /api/constants/patch).
- *  - При обнаружении нового патча: планирует переобучение через 7 дней
- *    (даём pro-сцене сыграть достаточное количество матчей на новом патче).
- *  - Иначе: переобучение раз в 30 дней от последней успешной тренировки.
- *  - При наступлении срока: запускает ingest:teams → ingest:matches → train:model
- *    (через child_process), результат логирует в scheduler_state.
+ * Поведение для production-deploy «поставил → работает»:
+ *  - Каждые 24h: tick — проверка патча, daily refresh (lightweight ingest+compute),
+ *    sliding window prune, прюнинг live_snapshots, decision retrain.
+ *  - Cold start (БД пустая → нет pro_matches): немедленный full retrain pipeline.
+ *  - Новый патч: планирует full retrain через 7 дней (даём мете устаканиться).
+ *  - Иначе: full retrain раз в 30 дней.
+ *  - Full retrain pipeline: 14 шагов (teams, matches, drafts, hero-stats,
+ *    hero-matchups, players-heroes, leagues, recent-form, h2h, bo3-series,
+ *    player-glicko, train:model[CRITICAL], train:lightgbm, train:market-models,
+ *    train:live-model). Все шаги кроме train:model — non-fatal (ошибка
+ *    логируется, pipeline продолжается).
  *
- * Состояние хранится в таблице scheduler_state (single-row, id=1).
- *
- * Управление: ENV-переменная DISABLE_SCHEDULER=true отключает воркер.
+ * Состояние: scheduler_state (single-row, id=1). Управление:
+ *  - DISABLE_SCHEDULER=true — отключить весь воркер.
+ *  - DISABLE_AUTO_RETRAIN=true — отключить только тренировку (ingest+compute идут).
  */
 
 import { spawn } from 'node:child_process';
@@ -96,7 +100,11 @@ async function fetchCurrentPatch(): Promise<OpenDotaPatch | null> {
 /**
  * Запускает pnpm-команду в корне workspace и резолвится при завершении.
  */
-function runPnpmScript(scriptName: string, args: string[] = []): Promise<{ code: number; tail: string }> {
+function runPnpmScript(
+  scriptName: string,
+  args: string[] = [],
+  opts: { timeoutMs?: number } = {},
+): Promise<{ code: number; tail: string; timedOut: boolean }> {
   return new Promise((resolve) => {
     const child = spawn(
       'pnpm',
@@ -120,45 +128,106 @@ function runPnpmScript(scriptName: string, args: string[] = []): Promise<{ code:
     child.stdout?.on('data', collect);
     child.stderr?.on('data', collect);
 
+    let timedOut = false;
+    const timeoutMs = opts.timeoutMs ?? SCRIPT_DEFAULT_TIMEOUT_MS;
+    const killer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ignore */ } }, 5_000);
+    }, timeoutMs);
+
     child.on('close', (code) => {
-      resolve({ code: code ?? -1, tail: buffer.slice(-15).join('\n') });
+      clearTimeout(killer);
+      resolve({ code: code ?? -1, tail: buffer.slice(-15).join('\n'), timedOut });
     });
     child.on('error', (err) => {
-      resolve({ code: -1, tail: `spawn error: ${String(err)}` });
+      clearTimeout(killer);
+      resolve({ code: -1, tail: `spawn error: ${String(err)}`, timedOut });
     });
   });
 }
+
+/**
+ * Запускает скрипт и НИКОГДА не выбрасывает — все ошибки логируются.
+ * Используется для non-fatal шагов pipeline'а (ingest/compute/non-critical train).
+ * Возвращает true при успехе.
+ */
+async function runScriptSafe(
+  scriptName: string,
+  label: string,
+  args: string[] = [],
+  opts: { timeoutMs?: number } = {},
+): Promise<boolean> {
+  const startedAt = Date.now();
+  try {
+    const r = await runPnpmScript(scriptName, args, opts);
+    const durationMs = Date.now() - startedAt;
+    if (r.code === 0) {
+      logger.info({ step: label, durationMs }, '[Scheduler] step done');
+      return true;
+    }
+    logger.warn(
+      { step: label, code: r.code, timedOut: r.timedOut, durationMs, tail: r.tail },
+      '[Scheduler] step failed (non-fatal, continuing)',
+    );
+    return false;
+  } catch (err) {
+    logger.warn({ step: label, err: String(err) }, '[Scheduler] step exception (non-fatal)');
+    return false;
+  }
+}
+
+const SCRIPT_DEFAULT_TIMEOUT_MS = 30 * 60 * 1000; // 30 минут — крупный потолок
+const SCRIPT_FAST_TIMEOUT_MS = 10 * 60 * 1000;    // 10 минут — для быстрых compute
 
 async function runRetrainPipeline(reason: string): Promise<boolean> {
   if (runInFlight) {
     logger.warn('[Scheduler] retrain already in flight, skipping');
     return false;
   }
+  // Mutual exclusion с daily refresh: если идёт лёгкий цикл данных,
+  // ждём его завершения (до 15 минут), чтобы не плодить дубли spawn'ов
+  // ingest:teams/matches.
+  const waitStart = Date.now();
+  while (dailyRefreshInFlight && Date.now() - waitStart < 15 * 60 * 1000) {
+    logger.info('[Scheduler] retrain ждёт завершения daily refresh');
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+  if (dailyRefreshInFlight) {
+    logger.warn('[Scheduler] daily refresh не завершился за 15 мин — пропускаю retrain');
+    return false;
+  }
   runInFlight = true;
   stats.totalRetrainAttempts++;
   const startedAt = new Date();
-  logger.info({ reason }, '[Scheduler] starting retrain pipeline');
+  logger.info({ reason }, '[Scheduler] starting full retrain pipeline');
+
+  const stepResults: Record<string, boolean> = {};
+  let trainTail = '';
 
   try {
-    // 1. Обновляем рейтинги команд (быстрый, ~5с)
-    const teamsRun = await runPnpmScript('ingest:teams');
+    // ── Phase 1: ingest (свежие данные из OpenDota) ──────────────────────
+    // teams и matches — критичные. Если упали — без них тренировка
+    // бессмысленна. Остальное — non-fatal.
+    const teamsRun = await runPnpmScript('ingest:teams', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['ingest:teams'] = teamsRun.code === 0;
     logger.info({ code: teamsRun.code }, '[Scheduler] ingest:teams done');
-    if (teamsRun.code !== 0) {
-      throw new Error(`ingest:teams failed: ${teamsRun.tail}`);
-    }
+    if (teamsRun.code !== 0) throw new Error(`ingest:teams failed: ${teamsRun.tail}`);
     await updateState({ lastIngestAt: new Date() });
 
-    // 2. Подтягиваем свежие матчи (15 страниц = ~1500 матчей, ~17с)
     const matchesRun = await runPnpmScript('ingest:matches', ['15']);
+    stepResults['ingest:matches'] = matchesRun.code === 0;
     logger.info({ code: matchesRun.code }, '[Scheduler] ingest:matches done');
-    if (matchesRun.code !== 0) {
-      throw new Error(`ingest:matches failed: ${matchesRun.tail}`);
-    }
+    if (matchesRun.code !== 0) throw new Error(`ingest:matches failed: ${matchesRun.tail}`);
 
-    // 2.5. Сдвигаем скользящее окно: удаляем матчи старше TRAIN_WINDOW_DAYS.
-    //      Это и есть обещанное «убираем самые старые 30 дней каждый цикл»:
-    //      между двумя успешными переобучениями (раз в 30 дней) граница окна
-    //      продвигается ровно на 30 дней вперёд.
+    // Non-fatal обогащение: drafts, hero-stats, hero-matchups, players-heroes, leagues
+    stepResults['ingest:drafts'] = await runScriptSafe('ingest:drafts', 'ingest:drafts');
+    stepResults['ingest:hero-stats'] = await runScriptSafe('ingest:hero-stats', 'ingest:hero-stats', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['ingest:hero-matchups'] = await runScriptSafe('ingest:hero-matchups', 'ingest:hero-matchups');
+    stepResults['ingest:players-heroes'] = await runScriptSafe('ingest:players-heroes', 'ingest:players-heroes');
+    stepResults['ingest:leagues'] = await runScriptSafe('ingest:leagues', 'ingest:leagues', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+
+    // ── Phase 2: sliding window prune ────────────────────────────────────
     const cutoffSec = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 24 * 60 * 60;
     const deleted = await db
       .delete(proMatchesTable)
@@ -169,29 +238,51 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
       '[Scheduler] sliding window prune',
     );
 
-    // 3. Обучаем модель
-    const trainRun = await runPnpmScript('train:model');
-    logger.info({ code: trainRun.code, tail: trainRun.tail }, '[Scheduler] train:model done');
-    if (trainRun.code !== 0) {
-      throw new Error(`train:model failed: ${trainRun.tail}`);
+    // ── Phase 3: compute (производные таблицы) — все non-fatal ───────────
+    stepResults['compute:recent-form'] = await runScriptSafe('compute:recent-form', 'compute:recent-form', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['compute:h2h'] = await runScriptSafe('compute:h2h', 'compute:h2h', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['compute:bo3-series'] = await runScriptSafe('compute:bo3-series', 'compute:bo3-series', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['compute:player-glicko'] = await runScriptSafe('compute:player-glicko', 'compute:player-glicko', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+
+    if (process.env['DISABLE_AUTO_RETRAIN'] === 'true') {
+      logger.warn('[Scheduler] DISABLE_AUTO_RETRAIN=true — пропускаю фазу тренировки (lastTrainAt НЕ обновляется)');
+      stats.lastRetrainResult = 'data-only (training skipped via DISABLE_AUTO_RETRAIN)';
+      // НЕ обновляем lastTrainAt и nextTrainDueAt: иначе после снятия флага
+      // следующее переобучение отложится на 30 дней и пропуски моделей замаскируются.
+      // Обновляем lastIngestAt и notes — этого достаточно для аудита.
+      await updateState({
+        lastIngestAt: new Date(),
+        notes: { reason, completedAt: new Date().toISOString(), stepResults, prunedOldMatches: deleted.length, dataOnly: true, trainingSkipped: 'DISABLE_AUTO_RETRAIN' },
+      });
+      return true;
     }
 
-    // 4. Перезагружаем прематч-модель в память сервера (без рестарта)
+    // ── Phase 4: train — train:model критичен, остальные non-fatal ───────
+    const trainRun = await runPnpmScript('train:model');
+    stepResults['train:model'] = trainRun.code === 0;
+    trainTail = trainRun.tail;
+    logger.info({ code: trainRun.code, tail: trainRun.tail }, '[Scheduler] train:model done');
+    if (trainRun.code !== 0) throw new Error(`train:model failed: ${trainRun.tail}`);
+
     await loadActiveModel();
 
-    // 5. Тренируем live-модель (на собранных live_snapshots × prematch_outcomes).
-    //    Падение этого шага НЕ блокирует пайплайн — у молодой системы
-    //    может ещё не быть достаточно резолвленных снапшотов.
-    try {
-      const liveTrainRun = await runPnpmScript('train:live-model');
-      logger.info({ code: liveTrainRun.code, tail: liveTrainRun.tail }, '[Scheduler] train:live-model done');
-      if (liveTrainRun.code === 0) {
-        await loadActiveLiveModel();
-      } else {
-        logger.warn({ tail: liveTrainRun.tail }, '[Scheduler] train:live-model returned non-zero, skipping reload');
+    // train:lightgbm — non-fatal. Зависит от ml-service: при сбое останется LR.
+    stepResults['train:lightgbm'] = await runScriptSafe('train:lightgbm', 'train:lightgbm');
+    if (stepResults['train:lightgbm']) {
+      try { await loadActiveModel(); } catch (err) {
+        logger.warn({ err: String(err) }, '[Scheduler] reload after train:lightgbm failed');
       }
-    } catch (err) {
-      logger.warn({ err: String(err) }, '[Scheduler] train:live-model failed (non-fatal)');
+    }
+
+    // train:market-models — non-fatal
+    stepResults['train:market-models'] = await runScriptSafe('train:market-models', 'train:market-models', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+
+    // train:live-model — non-fatal (нужны накопленные снапшоты)
+    stepResults['train:live-model'] = await runScriptSafe('train:live-model', 'train:live-model', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    if (stepResults['train:live-model']) {
+      try { await loadActiveLiveModel(); } catch (err) {
+        logger.warn({ err: String(err) }, '[Scheduler] reload after train:live-model failed');
+      }
     }
 
     stats.totalRetrainSuccess++;
@@ -205,20 +296,27 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
       notes: {
         reason,
         completedAt: new Date().toISOString(),
-        trainTail: trainRun.tail,
+        trainTail,
+        stepResults,
         prunedOldMatches: deleted.length,
         windowDays: TRAIN_WINDOW_DAYS,
       },
     });
 
-    logger.info({ reason, durationMs: Date.now() - startedAt.getTime() }, '[Scheduler] retrain success');
+    logger.info(
+      { reason, durationMs: Date.now() - startedAt.getTime(), stepResults },
+      '[Scheduler] full retrain pipeline success',
+    );
     return true;
   } catch (err) {
     stats.totalRetrainFailed++;
     stats.lastRetrainResult = `error: ${String(err)}`;
     stats.lastError = String(err);
-    await updateState({ lastError: String(err) });
-    logger.error({ err }, '[Scheduler] retrain failed');
+    await updateState({
+      lastError: String(err),
+      notes: { reason, failedAt: new Date().toISOString(), stepResults },
+    });
+    logger.error({ err, stepResults }, '[Scheduler] retrain pipeline failed');
     return false;
   } finally {
     runInFlight = false;
@@ -226,14 +324,58 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
 }
 
 /**
+ * Daily refresh — лёгкий цикл данных без полной тренировки.
+ * Запускается раз в сутки между full-retrain'ами, чтобы предсказания
+ * (form/h2h/glicko/players-heroes) не «черствели».
+ * Все шаги non-fatal.
+ */
+let dailyRefreshInFlight = false;
+async function runDailyRefresh(): Promise<void> {
+  if (dailyRefreshInFlight || runInFlight) return;
+  dailyRefreshInFlight = true;
+  // Двойная проверка после установки флага: если retrain успел стартовать
+  // в этом же тике — тут же откатываемся.
+  if (runInFlight) { dailyRefreshInFlight = false; return; }
+  const startedAt = Date.now();
+  logger.info('[Scheduler] daily refresh: starting');
+  try {
+    await runScriptSafe('ingest:teams', 'daily/ingest:teams', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    await runScriptSafe('ingest:matches', 'daily/ingest:matches', ['5']);
+    await runScriptSafe('ingest:drafts', 'daily/ingest:drafts');
+    await runScriptSafe('ingest:players-heroes', 'daily/ingest:players-heroes');
+    await runScriptSafe('compute:recent-form', 'daily/compute:recent-form', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    await runScriptSafe('compute:h2h', 'daily/compute:h2h', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    await runScriptSafe('compute:player-glicko', 'daily/compute:player-glicko', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    logger.info({ durationMs: Date.now() - startedAt }, '[Scheduler] daily refresh: done');
+  } finally {
+    dailyRefreshInFlight = false;
+  }
+}
+
+/**
  * Решает, нужно ли запускать переобучение прямо сейчас.
  */
-function shouldRetrainNow(state: typeof schedulerStateTable.$inferSelect | null): {
+async function shouldRetrainNow(state: typeof schedulerStateTable.$inferSelect | null): Promise<{
   retrain: boolean;
   reason: string;
-} {
+}> {
   if (!state) return { retrain: false, reason: 'no state row yet' };
   const now = Date.now();
+
+  // 0) Cold start: пустая БД → запускаем full pipeline сразу,
+  //    не дожидаясь патча или 30-дневного цикла. Это критично для self-deploy:
+  //    свежеразвёрнутый сервер должен стать рабочим без ручного вмешательства.
+  if (!state.lastTrainAt) {
+    try {
+      const cnt = await db.select({ c: sql<number>`count(*)::int` }).from(proMatchesTable);
+      const matchCount = cnt[0]?.c ?? 0;
+      if (matchCount < 100) {
+        return { retrain: true, reason: `cold start (pro_matches=${matchCount}, никогда не тренировались)` };
+      }
+    } catch (err) {
+      logger.warn({ err: String(err) }, '[Scheduler] cold-start check failed');
+    }
+  }
 
   // 1) Запланировано после нового патча — ждём срока
   if (state.nextTrainDueAt && state.nextTrainDueAt.getTime() <= now) {
@@ -315,12 +457,16 @@ async function tickOnce(): Promise<void> {
   }
 
   // 3. Проверяем — пора ли переобучать
-  const decision = shouldRetrainNow(state);
+  const decision = await shouldRetrainNow(state);
   if (decision.retrain) {
     // Не блокируем тикер — запускаем фоном
     void runRetrainPipeline(decision.reason);
   } else {
     logger.debug({ reason: decision.reason }, '[Scheduler] retrain not needed');
+    // 4. Daily refresh: лёгкий цикл данных без full retrain.
+    //    Не запускаем если pipeline уже идёт или БД пустая (cold-start
+    //    решит retrain → ingest всё равно будет).
+    void runDailyRefresh();
   }
 }
 

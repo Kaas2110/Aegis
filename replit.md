@@ -55,6 +55,22 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`threat_model.md`** — модель угроз для security-сканов.
 - См. skill `pnpm-workspace` — структура монорепо, TypeScript, project references.
 
+## Production automation (Wave «C» — DONE 2026-05-11)
+
+Цель: «развернул на сервер/ноут → всё само работает». Реализовано в `services/SchedulerWorker.ts` + `lib/ensureSchema.ts`:
+
+- **Auto schema bootstrap** при старте api-server: `ensureSchema()` проверяет наличие `pro_matches`; если таблицы нет — спавнит `pnpm --filter @workspace/db run push`. Idempotent. Отключается `AUTO_DB_PUSH=false` (для CI-managed схемы).
+- **Cold-start retrain**: первый tick шедулера (T+30s после старта) проверяет `count(pro_matches)`; если <100 → запускает full retrain pipeline сразу, не дожидаясь патча или 30-дневного цикла.
+- **Full retrain pipeline (15 шагов)** запускается при новом патче (через 7 дней) или раз в 30 дней:
+  1. `ingest:teams` (CRITICAL) → 2. `ingest:matches[15]` (CRITICAL) → 3. `ingest:drafts` → 4. `ingest:hero-stats` → 5. `ingest:hero-matchups` → 6. `ingest:players-heroes` → 7. `ingest:leagues` → 8. sliding window prune (>180d) → 9. `compute:recent-form` → 10. `compute:h2h` → 11. `compute:bo3-series` → 12. `compute:player-glicko` → 13. `train:model` (CRITICAL, hot-reload в память) → 14. `train:lightgbm` → 15. `train:market-models` + `train:live-model` (hot-reload).
+  - Каждый non-critical шаг — в собственном `runScriptSafe`, ошибка/таймаут логируется, pipeline продолжается. Падает только при сбое `ingest:teams`/`ingest:matches`/`train:model`.
+  - Все спавны имеют timeout (по умолчанию 30 мин, для compute — 10 мин), SIGTERM→SIGKILL escalation.
+- **Daily refresh** (между full retrain'ами): лёгкий цикл раз в 24h — teams + matches[5] + drafts + players-heroes + recent-form + h2h + player-glicko. Все non-fatal. Не запускается, если pipeline уже идёт.
+- **scheduler_state.notes.stepResults** — журнал успешности каждого шага в БД, видно из `/api/admin/scheduler/state`.
+- **ENV управление**: `DISABLE_SCHEDULER=true` (выкл воркер целиком), `DISABLE_AUTO_RETRAIN=true` (только данные, без тренировок), `DISABLE_LIVE_WORKER`, `DISABLE_OUTCOME_TRACKER`, `AUTO_DB_PUSH=false`.
+
+**Букмекеры (Fonbet/Лига Ставок):** API мобильных приложений (`line34.fonbet.ru`, `1xstavka`-style эндпоинты) бесплатны и без ключа, но гео-блочат не-РФ IP. Из РФ работают напрямую; с зарубежного хостинга нужен `PROXY_URL` (любой РФ-прокси). Код в `routes/bookmakers.ts` корректно: пытается напрямую, при сбое — мок + hint про PROXY_URL. Пользователь предупреждён про ToS.
+
 ## Roadmap (после миграции в новый workspace, 2026-05-11)
 
 - **Wave 3 «proper» (per-player Glicko — DONE для v3 LR).** Новая таблица `player_ratings` (account_id PK, rating, rd, games, wins, last_match_*). Скрипт `compute:player-glicko` крутит Glicko-1 multi-opponent batch updates по pro_matches × match_drafts (с RD time-decay c=63, period=30d). 5-я v3-extra фича — `player_glicko_diff = (avg(rad) − avg(dire)) / 200` (нейтрально 1500 при отсутствии записи). v3 dim 16 → **17**. Активно: LR v3 (`prematch_winner` + `prematch_winner_t2`). LightGBM v3 пока заблокирован объёмом данных (нужно ≥80 матчей с обоими полными account_ids — на 2026-05-11 в БД 68/60). Покрытие player_ratings: 107 игроков, 5 с ≥20 играми. Расширится по мере накопления `match_drafts.radiant/dire_account_ids`.

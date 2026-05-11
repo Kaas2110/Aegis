@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { ensureSchema } from "./lib/ensureSchema";
 import { startLiveWorker } from "./services/LiveWorker";
 import { startScheduler } from "./services/SchedulerWorker";
 import { startOutcomeTracker } from "./services/OutcomeTracker";
@@ -19,13 +20,18 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+app.listen(port, async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
   logger.info({ port }, "Server listening");
+
+  // Cold-start: если БД пустая (свежеразвёрнутый сервер без миграций) —
+  // автоматически прогоняем drizzle-kit push. Безопасно: idempotent, при
+  // существующей схеме просто no-op.
+  await ensureSchema();
 
   // Поднимаем активную live-модель (не критично — может не существовать
   // на свежей системе, до первого ретрейна live-пайплайна).
