@@ -396,6 +396,18 @@ export const appSettingsTable = pgTable('app_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── ОВЕРРАЙДЫ КЛЮЧЕЙ ВНЕШНИХ API ─────────────────────────────────────────
+// Хранит per-key override значений ENV (ODDS_API_KEY, STRATZ_TOKEN, ...).
+// Если строка есть и value не NULL — используется вместо process.env. Пустое
+// значение или отсутствие строки — fallback на ENV. Управляется только из
+// admin-web (эндпоинты /api/admin/integrations).
+export const apiKeyOverridesTable = pgTable('api_key_overrides', {
+  envName: text('env_name').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type ApiKeyOverride = typeof apiKeyOverridesTable.$inferSelect;
+
 // ── СОСТОЯНИЕ ШЕДУЛЕРА (single-row, id=1) ────────────────────────────────
 // Отслеживает: текущий замеченный патч, время последней тренировки,
 // время следующей запланированной тренировки.

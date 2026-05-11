@@ -14,6 +14,7 @@
 
 import { logger } from '../lib/logger';
 import { getAppSettings } from './AppSettings';
+import { getApiKey } from './ApiKeysService';
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const SPORT_KEY = 'esports_dota_2';
@@ -55,9 +56,9 @@ export async function fetchDota2Odds(force = false): Promise<OddsFetchResult> {
     return { available: false, reason: 'use_bookmaker_odds=false (отключено в админке)' };
   }
 
-  const apiKey = process.env['ODDS_API_KEY'];
+  const apiKey = getApiKey('ODDS_API_KEY');
   if (!apiKey) {
-    return { available: false, reason: 'ODDS_API_KEY не задан в env' };
+    return { available: false, reason: 'ODDS_API_KEY не задан (ни в env, ни override)' };
   }
 
   // Кеш чтобы не сжигать квоту

@@ -17,9 +17,10 @@ import { logger } from '../lib/logger';
 const PINNACLE_BASE = 'https://guest.api.arcadia.pinnacle.com/0.1';
 const DOTA_LEAGUE_ID = '12'; // E-Sports → Dota 2 находится через /sports/12
 
-// Pinnacle гостевой ключ берём из ENV. Это публично известный guest-ключ их веб-фронта,
-// но мы не хардкодим его в репозиторий (compliance). Без ключа эндпоинт вернёт [].
-const PINNACLE_GUEST_API_KEY = process.env['PINNACLE_GUEST_API_KEY'] ?? '';
+// Pinnacle guest-ключ берём из ApiKeysService (override из admin-web → ENV).
+// Это публично известный guest-ключ их веб-фронта, но мы не хардкодим его в
+// репозиторий (compliance). Без ключа эндпоинт вернёт [].
+import { getApiKey } from './ApiKeysService';
 
 export interface PinnacleMatchOdds {
   externalEventId: string;
@@ -50,12 +51,13 @@ interface PinnacleMatchup {
 }
 
 async function pinnacleFetch(path: string): Promise<unknown> {
-  if (!PINNACLE_GUEST_API_KEY) {
+  const guestKey = getApiKey('PINNACLE_GUEST_API_KEY');
+  if (!guestKey) {
     throw new Error('PINNACLE_GUEST_API_KEY not configured');
   }
   const url = `${PINNACLE_BASE}${path}`;
   const headers: Record<string, string> = {
-    'X-API-Key': PINNACLE_GUEST_API_KEY,
+    'X-API-Key': guestKey,
     'User-Agent':
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
     Accept: 'application/json',

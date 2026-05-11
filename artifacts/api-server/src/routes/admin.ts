@@ -1,5 +1,7 @@
 /**
- * Admin-роуты. Все защищены заголовком X-Admin-Token (значение из ENV ADMIN_TOKEN).
+ * Admin-роуты. Все защищены cookie-сессией (выдаётся через POST /api/admin/login,
+ * см. routes/adminAuth.ts). Использует артефакт admin-web (React+Vite) — старый
+ * inline /api/admin-ui удалён.
  *
  * Эндпоинты:
  *   GET  /api/admin/settings         — текущие глобальные настройки + статус Odds API
@@ -8,35 +10,32 @@
  *   POST /api/admin/retrain          — ручной триггер переобучения
  *   POST /api/admin/prune-snapshots  — ручной триггер чистки live_snapshots
  *   GET  /api/admin/odds-status      — состояние Odds API (есть ли ключ, последняя выборка)
+ *   GET  /api/admin/scheduler/state  — текущее состояние scheduler-воркера
+ *   GET  /api/admin/models           — список активных ML-моделей
+ *   GET  /api/admin/integrations     — список внешних API-интеграций + статус ключей
+ *   PUT  /api/admin/integrations     — задать/очистить override ENV-ключа
  */
 
 import { Router, type IRouter } from 'express';
 import { getAppSettings, updateAppSettings } from '../services/AppSettings';
-import { triggerManualRetrain } from '../services/SchedulerWorker';
+import { triggerManualRetrain, getSchedulerState } from '../services/SchedulerWorker';
 import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/OutcomeTracker';
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
+import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
+import { requireAdminSession } from './adminAuth';
+import { db, modelVersionsTable } from '@workspace/db';
+import { desc, eq } from 'drizzle-orm';
 
 const router: IRouter = Router();
 
-router.use((req, res, next) => {
-  const expected = process.env['ADMIN_TOKEN'];
-  if (!expected) {
-    res.status(503).json({ error: 'ADMIN_TOKEN не настроен на сервере' });
-    return;
-  }
-  const provided = req.header('x-admin-token');
-  if (provided !== expected) {
-    res.status(401).json({ error: 'unauthorized' });
-    return;
-  }
-  next();
-});
+// Cookie session required (see adminAuth.ts).
+router.use(requireAdminSession);
 
 router.get('/settings', async (_req, res) => {
   const settings = await getAppSettings(true);
   res.json({
     settings,
-    oddsApiKeyConfigured: !!process.env['ODDS_API_KEY'],
+    oddsApiKeyConfigured: !!getApiKey('ODDS_API_KEY'),
   });
 });
 
@@ -94,6 +93,88 @@ router.post('/prune-snapshots', async (req, res) => {
 router.get('/odds-status', async (_req, res) => {
   const result = await fetchDota2Odds();
   res.json(result);
+});
+
+/**
+ * Snapshot of background scheduler state (last tick, retrain status, step results).
+ * Mirrors what /api/analytics/scheduler-status exposes but lives under /admin
+ * so admin-web has a single auth domain.
+ */
+router.get('/scheduler/state', async (_req, res) => {
+  const state = await getSchedulerState();
+  res.json(state);
+});
+
+/**
+ * List active model versions (kind, fv, engine, accuracy, brier, sample sizes).
+ * Used by admin-web to show what's currently deployed in inference.
+ */
+/**
+ * GET /api/admin/integrations
+ * Список всех известных внешних интеграций (data sources / odds feeds / network)
+ * с указанием статуса ключа: настроен ли, источник (env/override), маскированный
+ * preview, и метаданные (label/description/docUrl/category).
+ */
+router.get('/integrations', async (_req, res) => {
+  const integrations = await listIntegrations();
+  res.json({ integrations });
+});
+
+/**
+ * PUT /api/admin/integrations
+ * Установить override для известного env_name. Пустая строка / null → удалить
+ * override и вернуться к значению из ENV. Возвращает обновлённый статус.
+ */
+router.put('/integrations', async (req, res) => {
+  const body = req.body as { envName?: unknown; value?: unknown };
+  if (typeof body.envName !== 'string') {
+    res.status(400).json({ error: 'envName (string) required' });
+    return;
+  }
+  const meta = KNOWN_INTEGRATIONS.find((m) => m.envName === body.envName);
+  if (!meta) {
+    res.status(400).json({ error: `unknown integration: ${body.envName}` });
+    return;
+  }
+  const value =
+    body.value === null || body.value === undefined
+      ? null
+      : typeof body.value === 'string'
+        ? body.value
+        : null;
+  if (body.value !== null && body.value !== undefined && typeof body.value !== 'string') {
+    res.status(400).json({ error: 'value must be string or null' });
+    return;
+  }
+  try {
+    const integration = await setIntegrationOverride(body.envName, value);
+    res.json({ integration });
+  } catch (err) {
+    req.log.error({ err, envName: body.envName }, 'failed to update integration override');
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.get('/models', async (_req, res) => {
+  const rows = await db
+    .select({
+      id: modelVersionsTable.id,
+      kind: modelVersionsTable.kind,
+      version: modelVersionsTable.version,
+      algorithm: modelVersionsTable.algorithm,
+      engine: modelVersionsTable.engine,
+      featuresVersion: modelVersionsTable.featuresVersion,
+      trainAccuracy: modelVersionsTable.trainAccuracy,
+      testAccuracy: modelVersionsTable.testAccuracy,
+      brierScore: modelVersionsTable.brierScore,
+      trainSampleSize: modelVersionsTable.trainSampleSize,
+      testSampleSize: modelVersionsTable.testSampleSize,
+      createdAt: modelVersionsTable.createdAt,
+    })
+    .from(modelVersionsTable)
+    .where(eq(modelVersionsTable.isActive, true))
+    .orderBy(desc(modelVersionsTable.createdAt));
+  res.json({ models: rows });
 });
 
 export default router;

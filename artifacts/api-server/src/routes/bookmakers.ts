@@ -22,11 +22,12 @@
  */
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
+import { getApiKey } from '../services/ApiKeysService';
 
 const router: IRouter = Router();
 
 const BOOKMAKERS_ENABLED = process.env['BOOKMAKERS_ENABLED'] === 'true';
-const PROXY_URL = process.env['PROXY_URL'] ?? '';
+// PROXY_URL резолвится динамически через `getApiKey('PROXY_URL')` (см. ниже).
 
 const REQUEST_DELAY_MS = 1500;
 const CACHE_TTL_MS = 60_000;
@@ -107,11 +108,12 @@ async function fetchWithProxy(url: string, extraHeaders: Record<string, string> 
     ...extraHeaders,
   };
 
-  if (PROXY_URL) {
+  const proxyUrl = getApiKey('PROXY_URL');
+  if (proxyUrl) {
     try {
       const { HttpsProxyAgent } = await import('https-proxy-agent');
       const { default: nodeFetch } = await import('node-fetch');
-      const agent = new HttpsProxyAgent(PROXY_URL);
+      const agent = new HttpsProxyAgent(proxyUrl);
       const resp = await nodeFetch(url, {
         headers,
         agent,
@@ -407,7 +409,7 @@ async function fetchSource(source: string): Promise<SourceResponse> {
       events: [],
       fetchedAt: new Date().toISOString(),
       error: err instanceof Error ? err.message : String(err),
-      hint: PROXY_URL
+      hint: getApiKey('PROXY_URL')
         ? 'Прокси настроен, но запрос не удался. Проверьте PROXY_URL и доступность букмекера.'
         : 'Установите PROXY_URL для обхода гео-блокировки (РФ-прокси).',
     };
@@ -432,7 +434,7 @@ router.get('/status', (_req, res) => {
   }
   res.json({
     enabled: BOOKMAKERS_ENABLED,
-    proxyConfigured: !!PROXY_URL,
+    proxyConfigured: !!getApiKey('PROXY_URL'),
     cacheTtlMs: CACHE_TTL_MS,
     sources,
     note: BOOKMAKERS_ENABLED

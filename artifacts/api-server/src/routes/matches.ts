@@ -3,6 +3,7 @@ import { db, teamsTable, leaguesTable } from '@workspace/db';
 import { inArray } from 'drizzle-orm';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
+import { getApiKey } from '../services/ApiKeysService';
 
 const router: IRouter = Router();
 
@@ -97,9 +98,9 @@ async function enrichWithLeagueNames(matches: unknown): Promise<unknown> {
 
 const OPENDOTA_BASE = 'https://api.opendota.com/api';
 const STRATZ_BASE = 'https://api.stratz.com/api/v1';
-const STRATZ_TOKEN = process.env['STRATZ_TOKEN'] ?? '';
-const PANDASCORE_KEY = process.env['PANDASCORE_API_KEY'] ?? '';
 const PANDASCORE_BASE = 'https://api.pandascore.co';
+// STRATZ_TOKEN / PANDASCORE_API_KEY — резолвим через ApiKeysService на каждый
+// запрос, чтобы admin-web мог менять override без рестарта api-server.
 
 interface RequestOptions {
   timeout?: number;
@@ -149,8 +150,9 @@ router.get('/live', async (req, res) => {
       })
       .catch(err => ({ source: 'opendota', data: [], error: String(err) }));
 
-    const stratzPromise = STRATZ_TOKEN
-      ? apiFetch(`${STRATZ_BASE}/League/live`, { headers: { Authorization: `Bearer ${STRATZ_TOKEN}` } })
+    const stratzToken = getApiKey('STRATZ_TOKEN');
+    const stratzPromise = stratzToken
+      ? apiFetch(`${STRATZ_BASE}/League/live`, { headers: { Authorization: `Bearer ${stratzToken}` } })
           .then(async r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const data = await r.json() as unknown;
@@ -174,7 +176,8 @@ router.get('/live', async (req, res) => {
 
 // upcoming тоже кэшируем — 60с (предматчевое расписание меняется медленно).
 router.get('/upcoming', async (req, res) => {
-  if (!PANDASCORE_KEY) {
+  const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
+  if (!pandascoreKey) {
     res.json({
       isMock: true,
       error: 'PANDASCORE_API_KEY не настроен. Получить: https://pandascore.co',
@@ -185,7 +188,7 @@ router.get('/upcoming', async (req, res) => {
   try {
     const data = await withCache('matches:upcoming', 60_000, async () => {
       const url = new URL(`${PANDASCORE_BASE}/dota2/matches/upcoming`);
-      url.searchParams.set('token', PANDASCORE_KEY);
+      url.searchParams.set('token', pandascoreKey);
       url.searchParams.set('page[size]', '20');
       url.searchParams.set('sort', 'begin_at');
       url.searchParams.set('filter[status]', 'not_started');

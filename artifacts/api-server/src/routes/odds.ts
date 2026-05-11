@@ -1,6 +1,7 @@
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { fetchPinnacleDotaOdds } from '../services/PinnacleScraper';
+import { getApiKey } from '../services/ApiKeysService';
 import { db, oddsSnapshotsTable } from '@workspace/db';
 
 const router: IRouter = Router();
@@ -55,9 +56,7 @@ router.get('/pinnacle/dota2', async (req, res) => {
   }
 });
 
-const ODDS_API_KEY = process.env['ODDS_API_KEY'] ?? '';
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-const PROXY_URL = process.env['PROXY_URL'] ?? '';
 
 async function fetchWithProxy(url: string, options: RequestInit = {}): Promise<Response> {
   const headers = {
@@ -67,11 +66,12 @@ async function fetchWithProxy(url: string, options: RequestInit = {}): Promise<R
     ...(options.headers as Record<string, string> ?? {}),
   };
 
-  if (PROXY_URL) {
+  const proxyUrl = getApiKey('PROXY_URL');
+  if (proxyUrl) {
     try {
       const { HttpsProxyAgent } = await import('https-proxy-agent');
       const { default: nodeFetch } = await import('node-fetch');
-      const agent = new HttpsProxyAgent(PROXY_URL);
+      const agent = new HttpsProxyAgent(proxyUrl);
       const resp = await nodeFetch(url, { ...options, headers, agent } as Parameters<typeof nodeFetch>[1]);
       return resp as unknown as Response;
     } catch {
@@ -83,7 +83,8 @@ async function fetchWithProxy(url: string, options: RequestInit = {}): Promise<R
 }
 
 router.get('/dota2', async (req, res) => {
-  if (!ODDS_API_KEY) {
+  const oddsApiKey = getApiKey('ODDS_API_KEY');
+  if (!oddsApiKey) {
     res.status(503).json({
       error: 'ODDS_API_KEY не настроен',
       hint: 'Добавьте ODDS_API_KEY в переменные окружения. Получить ключ: https://the-odds-api.com',
@@ -95,7 +96,7 @@ router.get('/dota2', async (req, res) => {
 
   try {
     const url = new URL(`${ODDS_API_BASE}/sports/esports_dota2/odds/`);
-    url.searchParams.set('apiKey', ODDS_API_KEY);
+    url.searchParams.set('apiKey', oddsApiKey);
     url.searchParams.set('regions', 'eu,us,uk');
     url.searchParams.set('markets', 'h2h');
     url.searchParams.set('oddsFormat', 'decimal');
@@ -127,13 +128,14 @@ router.get('/dota2', async (req, res) => {
 });
 
 router.get('/sports', async (req, res) => {
-  if (!ODDS_API_KEY) {
+  const oddsApiKey = getApiKey('ODDS_API_KEY');
+  if (!oddsApiKey) {
     res.json({ error: 'ODDS_API_KEY не настроен', sports: [] });
     return;
   }
 
   try {
-    const url = `${ODDS_API_BASE}/sports/?apiKey=${ODDS_API_KEY}`;
+    const url = `${ODDS_API_BASE}/sports/?apiKey=${oddsApiKey}`;
     const resp = await fetchWithProxy(url);
     const data = await resp.json();
     res.json(data);

@@ -33,9 +33,10 @@
 - `GET /api/analytics/model-status` — активная ML-модель + статистика live-worker
 - `GET /api/analytics/ml-predict?radiantTeamId=X&direTeamId=Y` — прямой ML-инференс
 - `GET /api/analytics/scheduler-status`
-- `POST /api/analytics/retrain` (header `X-Admin-Token: $ADMIN_TOKEN`)
+- `POST /api/analytics/retrain` (cookie-сессия админа)
 - `GET/POST /api/analytics/popular-markets`
-- `GET/POST /api/admin/settings`, `GET /api/admin/metrics`, `POST /api/admin/retrain`, `POST /api/admin/prune-snapshots`, `GET /api/admin/odds-status`
+- Admin auth (public): `POST /api/admin/login { token }`, `POST /api/admin/logout`, `GET /api/admin/whoami`
+- Admin (cookie-сессия): `GET/POST /api/admin/settings`, `GET /api/admin/metrics`, `POST /api/admin/retrain`, `POST /api/admin/prune-snapshots`, `GET /api/admin/odds-status`, `GET /api/admin/scheduler/state`, `GET /api/admin/models`
 - `GET /api/teams/tier1?limit=50`, `GET /api/teams/search?q=`, `GET /api/teams/:id`
 
 ## Admin & settings
@@ -43,8 +44,8 @@
 - Глобальные runtime-флаги хранятся в `app_settings` (single row). Кэш 5s в `AppSettings.ts`.
   - `useBookmakerOdds` — пока всегда `false` (см. Bookmakers roadmap ниже).
   - `liveSnapshotPruneDays` — default 7. Scheduler чистит `live_snapshots` ежедневно.
-- Все admin-роуты требуют `X-Admin-Token`.
-- Web admin panel — `/api/admin-ui/` (single-page vanilla JS, inline в `routes/adminUi.ts`).
+- Все `/api/admin/*` (кроме `/login`/`/logout`/`/whoami`) и `POST /api/analytics/retrain` требуют HttpOnly-сессию `aegis_admin_session`, выдаваемую `POST /api/admin/login { token }` (`timingSafeEqual` против `ADMIN_TOKEN`, брутфорс-троттл 10 попыток / 15 мин на IP, TTL 24h, in-memory store). Реализация — `routes/adminAuth.ts` (`requireAdminSession`). Legacy `X-Admin-Token` header удалён.
+- Web admin panel — артефакт `artifacts/admin-web` (React + Vite, slug `admin-web`, путь `/admin-web/`). Пять страниц: `/login`, `/` (scheduler-state + активные модели + общие метрики), `/settings`, `/metrics`, `/operations` (manual retrain + prune snapshots + odds-status). UI на русском, амбер на тёмном фоне. Все вызовы — через сгенерированные хуки `@workspace/api-client-react` (контракт в `lib/api-spec/openapi.yaml`); `customFetch` глобально шлёт `credentials: 'include'`. На 401 из любой защищённой query — редирект на `/admin-web/login` через `QueryCache.onError`.
 - `prematch_outcomes` — постоянный леджер прогнозов vs реальности. Не чистится — питает /admin/metrics и /api/analytics/backtest.
 
 ## Bookmakers roadmap

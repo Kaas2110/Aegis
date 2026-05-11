@@ -5,6 +5,7 @@ import { startLiveWorker } from "./services/LiveWorker";
 import { startScheduler } from "./services/SchedulerWorker";
 import { startOutcomeTracker } from "./services/OutcomeTracker";
 import { loadActiveLiveModel } from "./services/LiveWinnerModel";
+import { primeApiKeysCache } from "./services/ApiKeysService";
 
 const rawPort = process.env["PORT"];
 
@@ -32,6 +33,10 @@ app.listen(port, async (err) => {
   // автоматически прогоняем drizzle-kit push. Безопасно: idempotent, при
   // существующей схеме просто no-op.
   await ensureSchema();
+
+  // Прогреваем кеш overrides ключей API (admin-web → /api/admin/integrations).
+  // Не fatal: при ошибке `getApiKey()` всё равно отрабатывает по ENV.
+  await primeApiKeysCache().catch((err) => logger.warn({ err }, "ApiKeys cache prime failed"));
 
   // Поднимаем активную live-модель (не критично — может не существовать
   // на свежей системе, до первого ретрейна live-пайплайна).

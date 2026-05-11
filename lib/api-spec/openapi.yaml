@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Aegis API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: admin-auth
+    description: Admin login/session endpoints
+  - name: admin
+    description: Admin management endpoints (cookie session required)
 paths:
   /healthz:
     get:
@@ -24,6 +28,196 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin-auth]
+      summary: Exchange admin token for an HttpOnly session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginInput"
+      responses:
+        "200":
+          description: Logged in (Set-Cookie aegis_admin_session)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLoginResult"
+
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      tags: [admin-auth]
+      summary: Clear session cookie
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOkResult"
+
+  /admin/whoami:
+    get:
+      operationId: adminWhoami
+      tags: [admin-auth]
+      summary: Check current session status
+      responses:
+        "200":
+          description: Session status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWhoami"
+
+  /admin/settings:
+    get:
+      operationId: getAdminSettings
+      tags: [admin]
+      summary: Current global app settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettingsResponse"
+    post:
+      operationId: updateAdminSettings
+      tags: [admin]
+      summary: Patch global app settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSettingsInput"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettingsOnlyResponse"
+
+  /admin/metrics:
+    get:
+      operationId: getAdminMetrics
+      tags: [admin]
+      summary: Aggregated ML model accuracy metrics
+      responses:
+        "200":
+          description: Metrics payload (open shape)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMetricsResponse"
+
+  /admin/retrain:
+    post:
+      operationId: triggerAdminRetrain
+      tags: [admin]
+      summary: Manually trigger background retrain pipeline
+      responses:
+        "200":
+          description: Retrain trigger result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRetrainResult"
+
+  /admin/prune-snapshots:
+    post:
+      operationId: triggerAdminPrune
+      tags: [admin]
+      summary: Prune live_snapshots older than N days
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminPruneInput"
+      responses:
+        "200":
+          description: Prune result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPruneResult"
+
+  /admin/odds-status:
+    get:
+      operationId: getAdminOddsStatus
+      tags: [admin]
+      summary: The Odds API status (key configured, last fetch result)
+      responses:
+        "200":
+          description: Odds status payload (open shape)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
+  /admin/scheduler/state:
+    get:
+      operationId: getAdminSchedulerState
+      tags: [admin]
+      summary: Current scheduler/worker state and last tick details
+      responses:
+        "200":
+          description: Scheduler state payload (open shape)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
+  /admin/models:
+    get:
+      operationId: getAdminModels
+      tags: [admin]
+      summary: Active model versions currently used in inference
+      responses:
+        "200":
+          description: List of active models
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminModelsResponse"
+
+  /admin/integrations:
+    get:
+      operationId: getAdminIntegrations
+      tags: [admin]
+      summary: List external API integrations and their key status
+      responses:
+        "200":
+          description: List of integrations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIntegrationsResponse"
+    put:
+      operationId: updateAdminIntegration
+      tags: [admin]
+      summary: Set or clear an integration key override (empty value clears)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminIntegrationUpdateInput"
+      responses:
+        "200":
+          description: Updated integration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIntegrationUpdateResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +228,220 @@ components:
       required:
         - status
 
+    # ---- Admin auth ----
+    AdminLoginInput:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+    AdminLoginResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        expiresAt:
+          type: integer
+          description: Session expiry as unix epoch ms
+    AdminOkResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+    AdminWhoami:
+      type: object
+      required: [authenticated, tokenConfigured]
+      properties:
+        authenticated:
+          type: boolean
+        tokenConfigured:
+          type: boolean
+
+    # ---- Admin settings ----
+    AdminAppSettings:
+      type: object
+      required:
+        - id
+        - useBookmakerOdds
+        - liveSnapshotPruneDays
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        useBookmakerOdds:
+          type: boolean
+        liveSnapshotPruneDays:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          description: ISO-8601 timestamp
+    AdminSettingsResponse:
+      type: object
+      required: [settings, oddsApiKeyConfigured]
+      properties:
+        settings:
+          $ref: "#/components/schemas/AdminAppSettings"
+        oddsApiKeyConfigured:
+          type: boolean
+    AdminSettingsOnlyResponse:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          $ref: "#/components/schemas/AdminAppSettings"
+    AdminSettingsInput:
+      type: object
+      properties:
+        useBookmakerOdds:
+          type: boolean
+        liveSnapshotPruneDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        notes:
+          type: ["string", "null"]
+
+    # ---- Admin retrain / prune / metrics ----
+    AdminRetrainResult:
+      type: object
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+        status:
+          type: string
+        message:
+          type: string
+    AdminPruneInput:
+      type: object
+      properties:
+        days:
+          type: integer
+          minimum: 1
+          maximum: 365
+    AdminPruneResult:
+      type: object
+      required: [days, deleted]
+      properties:
+        days:
+          type: integer
+        deleted:
+          type: integer
+    AdminMetricsResponse:
+      type: object
+      additionalProperties: true
+
+    # ---- Admin models ----
+    AdminModelRow:
+      type: object
+      required:
+        - id
+        - kind
+        - version
+        - algorithm
+        - engine
+        - featuresVersion
+        - createdAt
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+        version:
+          type: string
+        algorithm:
+          type: string
+        engine:
+          type: string
+        featuresVersion:
+          type: integer
+        trainAccuracy:
+          type: ["number", "null"]
+        testAccuracy:
+          type: ["number", "null"]
+        brierScore:
+          type: ["number", "null"]
+        trainSampleSize:
+          type: ["integer", "null"]
+        testSampleSize:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+    AdminModelsResponse:
+      type: object
+      required: [models]
+      properties:
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminModelRow"
+
+    # ---- Admin integrations (external API keys) ----
+    AdminIntegrationStatus:
+      type: object
+      required:
+        - envName
+        - label
+        - description
+        - docUrl
+        - category
+        - sensitive
+        - configured
+        - source
+      properties:
+        envName:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        docUrl:
+          type: string
+        category:
+          type: string
+          enum: [data-source, odds-feed, network]
+        sensitive:
+          type: boolean
+        configured:
+          type: boolean
+        source:
+          type: string
+          enum: [override, env, none]
+        preview:
+          type: ["string", "null"]
+        overrideUpdatedAt:
+          type: ["string", "null"]
+    AdminIntegrationsResponse:
+      type: object
+      required: [integrations]
+      properties:
+        integrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminIntegrationStatus"
+    AdminIntegrationUpdateInput:
+      type: object
+      required: [envName]
+      properties:
+        envName:
+          type: string
+          minLength: 1
+        value:
+          type: ["string", "null"]
+          description: New value; empty string or null clears the override and falls back to ENV.
+    AdminIntegrationUpdateResponse:
+      type: object
+      required: [integration]
+      properties:
+        integration:
+          $ref: "#/components/schemas/AdminIntegrationStatus"
+
+    # ---- Open-shape payloads (scheduler state, odds status) ----
+    AdminOpenObject:
+      type: object
+      additionalProperties: true

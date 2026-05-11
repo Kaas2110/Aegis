@@ -13,6 +13,7 @@ import {
   triggerManualRetrain,
 } from '../services/SchedulerWorker';
 import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable } from '@workspace/db';
+import { requireAdminSession } from './adminAuth';
 import { eq, desc, sql, and, gte, isNotNull, inArray } from 'drizzle-orm';
 
 const router: IRouter = Router();
@@ -118,20 +119,11 @@ router.get('/scheduler-status', async (_req, res) => {
 
 /**
  * POST /api/analytics/retrain
- * Ручной запуск пайплайна ingest + train. Защищён простым токеном через
- * заголовок X-Admin-Token (значение из ENV ADMIN_TOKEN).
+ * Ручной запуск пайплайна ingest + train. Защищён cookie-сессией админа
+ * (выдаётся через POST /api/admin/login). Дублируется в POST /api/admin/retrain
+ * для admin-web — оба пути идут через `requireAdminSession`.
  */
-router.post('/retrain', async (req, res) => {
-  const adminToken = process.env['ADMIN_TOKEN'];
-  if (!adminToken) {
-    res.status(503).json({ error: 'ADMIN_TOKEN не настроен' });
-    return;
-  }
-  const provided = req.header('x-admin-token');
-  if (provided !== adminToken) {
-    res.status(401).json({ error: 'unauthorized' });
-    return;
-  }
+router.post('/retrain', requireAdminSession, async (_req, res) => {
   const result = await triggerManualRetrain();
   res.json(result);
 });

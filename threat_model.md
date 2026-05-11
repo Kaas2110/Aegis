@@ -23,16 +23,16 @@ Production assumptions for future scans:
 - **Mobile / browser to API** — all request data is attacker-controlled. Query params, JSON bodies, and headers must be validated and authorized server-side.
 - **API to PostgreSQL** — the API has broad database access. Injection or unsafe bulk operations here would expose or corrupt core analytics data.
 - **API to external providers** — OpenDota, Stratz, PandaScore, The Odds API, Pinnacle/bookmaker endpoints, and optional outbound proxy are outside the trust boundary. Their latency, availability, and returned data are not trustworthy.
-- **Public to admin boundary** — most API routes are public, while `/api/admin/*` and `/api/analytics/retrain` rely on `X-Admin-Token`. This boundary must resist brute force, cross-origin abuse, and client-side token theft.
-- **Inline admin UI to backend admin API** — `/api/admin-ui/` is public HTML/JS that stores the admin token in browser localStorage and then calls `/api/admin/*`. Any same-origin script execution issue can become admin-token compromise.
+- **Public to admin boundary** — most API routes are public, while `/api/admin/*` and `/api/analytics/retrain` are gated by an HttpOnly session cookie (`aegis_admin_session`) issued by `POST /api/admin/login` after a constant-time comparison against `ADMIN_TOKEN`. The legacy `X-Admin-Token` header is no longer accepted. This boundary must resist brute force (per-IP throttle on the login endpoint), cross-origin abuse (CORS allows credentialed requests only from same/explicit origins), and session-cookie theft (cookie is HttpOnly, sameSite=lax, `secure` in production).
+- **Admin web client to backend admin API** — `artifacts/admin-web` is a separate React+Vite SPA served from `/admin-web/` that talks to `/api/admin/*` via the typed React Query hooks generated from `lib/api-spec/openapi.yaml`. The admin token is held only inside the HttpOnly session cookie, never in localStorage and never reachable from page JavaScript, so a same-origin script injection cannot exfiltrate the token directly. The previous inline `/api/admin-ui/` page (which stored the token in localStorage) has been removed.
 - **Internal worker to production boundary** — in-process background jobs share the same server resources and secrets as request handlers. Public request amplification that starves CPU, DB, or outbound network impacts internal jobs too.
 
 ## Scan Anchors
 
 - **Production entry points:** `artifacts/api-server/src/app.ts`, `artifacts/api-server/src/index.ts`, `artifacts/api-server/src/routes/*.ts`
-- **Highest-risk areas:** admin/auth boundary in `routes/admin.ts`, `routes/analytics.ts`, inline admin page in `routes/adminUi.ts`, upstream proxy routes in `routes/matches.ts`, `routes/odds.ts`, `routes/bookmakers.ts`, and background workers in `services/LiveWorker.ts`, `services/SchedulerWorker.ts`, `services/OutcomeTracker.ts`
-- **Public surfaces:** `/api/healthz`, `/api/matches/*`, `/api/odds/*`, `/api/bookmakers/*`, `/api/analytics/*` except retrain, `/api/teams/*`, `/api/admin-ui/`
-- **Admin surfaces:** `/api/admin/*`, `POST /api/analytics/retrain`
+- **Highest-risk areas:** admin/auth boundary in `routes/admin.ts`, `routes/adminAuth.ts`, `routes/analytics.ts`, upstream proxy routes in `routes/matches.ts`, `routes/odds.ts`, `routes/bookmakers.ts`, and background workers in `services/LiveWorker.ts`, `services/SchedulerWorker.ts`, `services/OutcomeTracker.ts`
+- **Public surfaces:** `/api/healthz`, `/api/matches/*`, `/api/odds/*`, `/api/bookmakers/*`, `/api/analytics/*` except retrain, `/api/teams/*`, `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/whoami`
+- **Admin surfaces:** `/api/admin/*` except the auth endpoints above, `POST /api/analytics/retrain`. The admin web client lives at `/admin-web/` (artifact `admin-web`) and is otherwise just static SPA assets — it carries no privileged behavior on its own.
 - **Usually ignore as dev-only:** `artifacts/mockup-sandbox/**`, local build scripts, and dev artifact tooling unless production reachability is shown
 
 ## Threat Categories

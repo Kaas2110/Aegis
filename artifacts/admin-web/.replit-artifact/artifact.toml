@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/admin-web/"
+title = "Aegis Admin"
+version = "1.0.0"
+id = "artifacts/admin-web"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/admin-web/" ]
+localPort = 24276
+
+[services.development]
+run = "pnpm --filter @workspace/admin-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/admin-web", "run", "build" ]
+publicDir = "artifacts/admin-web/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24276"
+BASE_PATH = "/admin-web/"

@@ -6,7 +6,7 @@ import bookmakersRouter from "./bookmakers";
 import analyticsRouter from "./analytics";
 import teamsRouter from "./teams";
 import adminRouter from "./admin";
-import adminUiRouter from "./adminUi";
+import adminAuthRouter from "./adminAuth";
 
 const router: IRouter = Router();
 
@@ -16,10 +16,16 @@ router.use("/matches", matchesRouter);
 router.use("/bookmakers", bookmakersRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/teams", teamsRouter);
-// Веб-UI монтируется по отдельному пути ДО /admin (без auth-middleware
-// admin-роутера), чтобы саму страницу можно было открыть без токена — токен
-// вводится в форме и хранится в localStorage браузера.
-router.use("/admin-ui", adminUiRouter);
+
+// Auth endpoints (login/logout/whoami) — public, mounted BEFORE admin router so
+// they aren't gated by the admin auth middleware. They consume `req.body.token`
+// to compare against ADMIN_TOKEN and issue an HttpOnly session cookie.
+router.use("/admin", adminAuthRouter);
+
+// Admin business endpoints (settings, retrain, metrics, ...). Cookie session
+// from /admin/login is required; legacy X-Admin-Token header is no longer
+// accepted now that the inline /api/admin-ui surface has been removed in
+// favor of the standalone admin-web artifact.
 router.use("/admin", adminRouter);
 
 export default router;
