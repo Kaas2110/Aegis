@@ -30,7 +30,7 @@ Required env: `DATABASE_URL`. Optional: `ODDS_API_KEY`, `STRATZ_TOKEN`, `PANDASC
 
 ## Product
 
-Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (#080604 bg, #E8830A primary, #5DE8A0 radiant, #FF4433 dire). Two view modes (simple / detailed) and a glossary of 15 bet-market types. Backed by:
+Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (#080604 bg, #E8830A primary, #5DE8A0 radiant, #FF4433 dire). Detailed view как основной режим (simple-режим закомментирован под будущий Lite/Premium gating, см. Roadmap) и глоссарий из 15 типов рынков. Backed by:
 
 - Live ML predictions on currently-running pro matches (updated every 60s)
 - Match-winner model trained on OpenDota historical pro matches
@@ -51,3 +51,18 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`docs/architecture.md`** — полная архитектура: где что лежит, все API-эндпоинты, admin & settings, Bookmakers roadmap, performance, architecture decisions, gotchas.
 - **`threat_model.md`** — модель угроз для security-сканов.
 - См. skill `pnpm-workspace` — структура монорепо, TypeScript, project references.
+
+## Roadmap (после миграции в новый workspace, 2026-05-11)
+
+- **ML upgrade → gradient boosting.** Сейчас все prematch/live модели — pure-JS logistic regression в `services/PredictionModel.ts` + `scripts/src/train-model.ts`. План: вынести обучение в отдельный Python-сервис на LightGBM/XGBoost (фичи остаются прежними, формат `model_artifacts.weights` расширяем под tree-ensemble), inference либо через ONNX-runtime в Node, либо через сайдкар. Старые LR-модели остаются как fallback.
+- **Все модели — вероятностные.** Каждая активная модель (prematch_winner v1/v2/v3, prematch_winner_t2, live_winner, derived markets из `train:market-models`) выдаёт `p ∈ [0,1]` (или μ/σ для kills/duration с CDF-обёрткой). UI читает только `prediction.confidence` / `prediction.ev`.
+- **Backtest UI скрыт.** `app/(tabs)/backtest.tsx` файл оставлен, маршрут спрятан (`href: null` / `hidden`). Эндпоинт `/api/analytics/backtest` доступен — UI вернётся, когда `prematch_outcomes` накопит ≥200 строк.
+- **Detailed mode = primary на проде.** Simple-режим оставляем закомментированным под будущий gating Lite/Premium (RevenueCat). Все toggles `viewMode` пока ведут на `'detailed'`.
+- **Admin → отдельный web-артефакт.** Текущий inline `/api/admin-ui/` оставлен для оперативного доступа. Новый `admin-web` (React + Vite, кладётся в `artifacts/admin-web`) будет управлять iOS/Android релизами, моделями, лигами и whitelist'ами; общается с тем же `/api/admin/*` через `X-Admin-Token` (хранится в HttpOnly-cookie, не localStorage).
+
+## Миграция из старого workspace (2026-05-11)
+
+- Старый Postgres (`helium/heliumdb`) был внутренним и недоступен — DB пересобрана с нуля через `pnpm --filter @workspace/db run push`.
+- Код восстановлен из public GitHub repo (`Kaas2110/Market-Edge`) поверх scaffold'ов monorepo.
+- Первая ingest-пробежка scheduler'а (после рестарта) загрузила 1000 команд + ~2000 матчей и обучила v1 prematch модель (acc≈73.7% на tier-1, brier≈0.18). v2/v3 ждут `ingest:drafts` + `ingest:players-heroes`. Live-модель ждёт ~1-2 недели накопления `live_snapshots × prematch_outcomes`.
+- `ADMIN_TOKEN` перевыпущен (старый, утёкший в чате, инвалидирован). `SESSION_SECRET` уже был в workspace.
