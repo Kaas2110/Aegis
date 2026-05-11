@@ -120,8 +120,8 @@ export function buildHeroFeatures(
   ];
 }
 
-// ── Wave 3: player-skill / form / h2h / side advantage ───────────────────
-// Дополнительные 4 фичи поверх v2. v3 dim = team(5) + hero(7) + extra(4) = 16.
+// ── Wave 3: player-skill / form / h2h / side / glicko ────────────────────
+// 5 фичей поверх v2. v3 dim = team(5) + hero(7) + extra(5) = 17.
 
 export interface PlayerHeroStat { games: number; wins: number; }
 /** Map<accountId, Map<heroId, {games, wins}>> */
@@ -135,11 +135,16 @@ export interface H2HEntry { games: number; winsLow: number; }
 /** Map keyed by `${low}_${high}` (sorted teamIds). */
 export type H2HMap = Map<string, H2HEntry>;
 
+export interface PlayerGlicko { rating: number; rd: number; }
+/** Map<accountId, {rating, rd}> — Glicko-1 рейтинг игрока. */
+export type PlayerGlickoMap = Map<number, PlayerGlicko>;
+
 export const EXTRA_FEATURE_NAMES = [
   'player_skill_diff',     // Σ (winrate_on_hero - global_winrate_on_hero)·log(games+1) radiant - dire
   'recent_form_diff',      // form30.winRate(rad) - form30.winRate(dire)
   'h2h_advantage_radiant', // P(radiant wins h2h) - 0.5, scaled by log(games+1)
-  'side_advantage',        // 1 (radiant always plays radiant in this match) — модель выучит вес
+  'side_advantage',        // 1 (radiant always plays radiant в этом матче) — модель выучит вес
+  'player_glicko_diff',    // (avg(rad glicko) - avg(dire glicko)) / 200
 ] as const;
 
 export const EXTRA_FEATURE_DIM = EXTRA_FEATURE_NAMES.length;
@@ -171,7 +176,25 @@ function teamPlayerSkill(
   return sum;
 }
 
-/** Возвращает 4 v3-extra фичи. Аргументы могут быть null — тогда фича = 0. */
+/**
+ * Avg Glicko рейтинг команды (используя только игроков, у которых есть запись).
+ * Игроки без записи трактуются как DEFAULT_GLICKO (1500) — нейтрально.
+ */
+function teamAvgGlicko(
+  accountIds: number[] | null | undefined,
+  playerGlicko: PlayerGlickoMap,
+): number {
+  if (!accountIds || accountIds.length === 0) return 1500;
+  let sum = 0;
+  for (const a of accountIds) {
+    if (!a || a <= 0) { sum += 1500; continue; }
+    const g = playerGlicko.get(a);
+    sum += g ? g.rating : 1500;
+  }
+  return sum / accountIds.length;
+}
+
+/** Возвращает 5 v3-extra фичей. Аргументы могут быть null — тогда фича = 0. */
 export function buildExtraFeatures(args: {
   radiantTeamId: number;
   direTeamId: number;
@@ -183,6 +206,7 @@ export function buildExtraFeatures(args: {
   heroStats: HeroStatsMap;
   recentForm: RecentFormMap;
   h2h: H2HMap;
+  playerGlicko: PlayerGlickoMap;
 }): number[] {
   const radSkill = teamPlayerSkill(args.radiantPicks, args.radiantAccountIds, args.playerHeroStats, args.heroStats);
   const dirSkill = teamPlayerSkill(args.direPicks, args.direAccountIds, args.playerHeroStats, args.heroStats);
@@ -206,5 +230,13 @@ export function buildExtraFeatures(args: {
     }
   }
 
-  return [playerSkillDiff, recentFormDiff, h2hAdv, 1];
+  // Glicko-diff: только если хотя бы одна сторона имеет account_ids; иначе 0.
+  let glickoDiff = 0;
+  if (args.radiantAccountIds || args.direAccountIds) {
+    const radG = teamAvgGlicko(args.radiantAccountIds, args.playerGlicko);
+    const dirG = teamAvgGlicko(args.direAccountIds, args.playerGlicko);
+    glickoDiff = (radG - dirG) / 200;
+  }
+
+  return [playerSkillDiff, recentFormDiff, h2hAdv, 1, glickoDiff];
 }

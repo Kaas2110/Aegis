@@ -106,11 +106,15 @@ export type RecentFormMap = Map<number, RecentForm>;
 export interface H2HEntry { games: number; winsLow: number; }
 export type H2HMap = Map<string, H2HEntry>;
 
+export interface PlayerGlicko { rating: number; rd: number; }
+export type PlayerGlickoMap = Map<number, PlayerGlicko>;
+
 export const EXTRA_FEATURE_NAMES = [
   'player_skill_diff',
   'recent_form_diff',
   'h2h_advantage_radiant',
   'side_advantage',
+  'player_glicko_diff',
 ] as const;
 
 export const EXTRA_FEATURE_DIM = EXTRA_FEATURE_NAMES.length;
@@ -141,6 +145,20 @@ function teamPlayerSkill(
   return sum;
 }
 
+function teamAvgGlicko(
+  accountIds: number[] | null | undefined,
+  playerGlicko: PlayerGlickoMap,
+): number {
+  if (!accountIds || accountIds.length === 0) return 1500;
+  let sum = 0;
+  for (const a of accountIds) {
+    if (!a || a <= 0) { sum += 1500; continue; }
+    const g = playerGlicko.get(a);
+    sum += g ? g.rating : 1500;
+  }
+  return sum / accountIds.length;
+}
+
 export function buildExtraFeatures(args: {
   radiantTeamId: number;
   direTeamId: number;
@@ -152,6 +170,7 @@ export function buildExtraFeatures(args: {
   heroStats: HeroStatsMap;
   recentForm: RecentFormMap;
   h2h: H2HMap;
+  playerGlicko: PlayerGlickoMap;
 }): number[] {
   const radSkill = teamPlayerSkill(args.radiantPicks, args.radiantAccountIds, args.playerHeroStats, args.heroStats);
   const dirSkill = teamPlayerSkill(args.direPicks, args.direAccountIds, args.playerHeroStats, args.heroStats);
@@ -174,5 +193,12 @@ export function buildExtraFeatures(args: {
     }
   }
 
-  return [playerSkillDiff, recentFormDiff, h2hAdv, 1];
+  let glickoDiff = 0;
+  if (args.radiantAccountIds || args.direAccountIds) {
+    const radG = teamAvgGlicko(args.radiantAccountIds, args.playerGlicko);
+    const dirG = teamAvgGlicko(args.direAccountIds, args.playerGlicko);
+    glickoDiff = (radG - dirG) / 200;
+  }
+
+  return [playerSkillDiff, recentFormDiff, h2hAdv, 1, glickoDiff];
 }

@@ -216,6 +216,23 @@ export const playerHeroStatsTable = pgTable('player_hero_stats', {
   heroIdx: index('player_hero_stats_hero_idx').on(t.heroId),
 }));
 
+// ── ВОЛНА 3: PER-PLAYER GLICKO-1 РЕЙТИНГ ─────────────────────────────────
+// Считается локально из pro_matches × match_drafts (никаких внешних API).
+// Используется фичей v3 модели `player_glicko_diff` = avg(rad glicko) - avg(dire glicko) / 200.
+// Дефолты при создании строки: rating=1500, RD=350.
+export const playerRatingsTable = pgTable('player_ratings', {
+  accountId: bigint('account_id', { mode: 'number' }).primaryKey(),
+  rating: real('rating').notNull().default(1500),
+  rd: real('rd').notNull().default(350),
+  games: integer('games').notNull().default(0),
+  wins: integer('wins').notNull().default(0),
+  lastMatchTime: bigint('last_match_time', { mode: 'number' }),
+  lastMatchId: bigint('last_match_id', { mode: 'number' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  ratingIdx: index('player_ratings_rating_idx').on(t.rating),
+}));
+
 // ── ВОЛНА 3: НЕДАВНЯЯ ФОРМА КОМАНД ───────────────────────────────────────
 // Агрегация по pro_matches за окно. Пересчитывается локальной SQL-джобой
 // (никаких внешних API). period_days = 30 / 90.

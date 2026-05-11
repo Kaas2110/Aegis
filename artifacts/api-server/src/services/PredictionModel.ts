@@ -28,6 +28,7 @@ import {
   heroStatsTable,
   heroMatchupsTable,
   playerHeroStatsTable,
+  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
@@ -43,6 +44,7 @@ import {
   type HeroStatsMap,
   type HeroMatchupsMap,
   type PlayerHeroStatsMap,
+  type PlayerGlickoMap,
   type RecentFormMap,
   type H2HMap,
 } from '../lib/hero-features';
@@ -147,6 +149,7 @@ let lastHeroLoad = 0;
 let playerHeroStatsCache: PlayerHeroStatsMap = new Map();
 let recentFormCache: RecentFormMap = new Map();
 let h2hCache: H2HMap = new Map();
+let playerGlickoCache: PlayerGlickoMap = new Map();
 let lastWave3Load = 0;
 const WAVE3_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -351,7 +354,7 @@ async function refreshTeamRatings(): Promise<void> {
 async function refreshWave3Data(): Promise<void> {
   if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && playerHeroStatsCache.size > 0) return;
   try {
-    const [phs, form, h2hRows] = await Promise.all([
+    const [phs, form, h2hRows, prRows] = await Promise.all([
       db.select({
         accountId: playerHeroStatsTable.accountId,
         heroId: playerHeroStatsTable.heroId,
@@ -373,6 +376,11 @@ async function refreshWave3Data(): Promise<void> {
       })
         .from(teamH2HTable)
         .where(eq(teamH2HTable.periodDays, 365)),
+      db.select({
+        accountId: playerRatingsTable.accountId,
+        rating: playerRatingsTable.rating,
+        rd: playerRatingsTable.rd,
+      }).from(playerRatingsTable),
     ]);
     const phsMap: PlayerHeroStatsMap = new Map();
     for (const r of phs) {
@@ -386,12 +394,16 @@ async function refreshWave3Data(): Promise<void> {
     for (const r of h2hRows) {
       h2hMap.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
     }
+    const prMap: PlayerGlickoMap = new Map();
+    for (const r of prRows) prMap.set(r.accountId, { rating: r.rating, rd: r.rd });
+
     playerHeroStatsCache = phsMap;
     recentFormCache = formMap;
     h2hCache = h2hMap;
+    playerGlickoCache = prMap;
     lastWave3Load = Date.now();
     logger.info(
-      { phsAccounts: phsMap.size, formTeams: formMap.size, h2hPairs: h2hMap.size },
+      { phsAccounts: phsMap.size, formTeams: formMap.size, h2hPairs: h2hMap.size, glickoPlayers: prMap.size },
       '[PredictionModel] Wave 3 data refreshed',
     );
   } catch (err) {
@@ -611,12 +623,26 @@ export async function predictMatchWinner(
       heroStats: heroStatsCache,
       recentForm: recentFormCache,
       h2h: h2hCache,
+      playerGlicko: playerGlickoCache,
     });
+    const v3Dim = teamFeats.length + heroFeats.length + extraFeats.length;
     const v3Model = pickModel(tier, 3);
-    if (v3Model && v3Model.featureDim === teamFeats.length + heroFeats.length + extraFeats.length) {
+    if (v3Model && v3Model.featureDim === v3Dim) {
       model = v3Model;
       features = [...teamFeats, ...heroFeats, ...extraFeats];
       usedFv = 3;
+    } else if (v3Model && v3Model.engine === 'lightgbm') {
+      // LightGBM v3 устарел (другая dim) — пробуем v3 LR того же tier/generic перед v2 fallback.
+      const v3LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 3, v3Dim);
+      if (v3LR) {
+        logger.info(
+          { lgbmVersion: v3Model.version, lgbmDim: v3Model.featureDim, lrVersion: v3LR.version, lrDim: v3LR.weights.length },
+          '[PredictionModel] v3 LightGBM dim mismatch, falling back to v3 LR (kept Wave 3 features)',
+        );
+        model = v3LR;
+        features = [...teamFeats, ...heroFeats, ...extraFeats];
+        usedFv = 3;
+      }
     }
   }
 

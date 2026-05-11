@@ -31,6 +31,7 @@ import {
   heroStatsTable,
   heroMatchupsTable,
   playerHeroStatsTable,
+  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
@@ -49,6 +50,7 @@ import {
   type PlayerHeroStatsMap,
   type RecentFormMap,
   type H2HMap,
+  type PlayerGlickoMap,
 } from './lib/hero-features';
 
 const TRAIN_WINDOW_DAYS = 180;
@@ -348,6 +350,16 @@ async function main() {
     `[train-model] playerHeroAccounts=${playerHeroStats.size}, recentForm=${recentForm.size}, h2hPairs=${h2h.size}`,
   );
 
+  // Wave 3 v3-extra: per-player Glicko-1 ratings.
+  const prRows = await db.select({
+    accountId: playerRatingsTable.accountId,
+    rating: playerRatingsTable.rating,
+    rd: playerRatingsTable.rd,
+  }).from(playerRatingsTable);
+  const playerGlicko: PlayerGlickoMap = new Map();
+  for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
+  console.log(`[train-model] playerGlickoRatings=${playerGlicko.size}`);
+
   // Wave 3 матч-уровневые account_ids читаем из match_drafts (отдельно — основная
   // загрузка drafts уже была сделана через select без account_ids).
   const accRows = await db.select({
@@ -438,6 +450,7 @@ async function main() {
       heroStats,
       recentForm,
       h2h,
+      playerGlicko,
     });
     const v3Sample: Sample = {
       features: [...teamFeats, ...heroFeats, ...extraFeats],

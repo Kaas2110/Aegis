@@ -15,6 +15,7 @@
     "ingest:players-heroes": "tsx ./src/ingest-players-heroes.ts",
     "compute:recent-form": "tsx ./src/compute-recent-form.ts",
     "compute:h2h": "tsx ./src/compute-h2h.ts",
+    "compute:player-glicko": "tsx ./src/compute-player-glicko.ts",
     "compute:bo3-series": "tsx ./src/compute-bo3-series.ts",
     "train:model": "tsx ./src/train-model.ts",
     "train:market-models": "tsx ./src/train-market-models.ts",

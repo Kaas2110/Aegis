@@ -29,10 +29,12 @@ import {
   heroStatsTable,
   heroMatchupsTable,
   playerHeroStatsTable,
+  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
 import { asc, gte, and, eq, inArray } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier } from './lib/tier';
 import {
   buildHeroFeatures,
@@ -46,6 +48,7 @@ import {
   type PlayerHeroStatsMap,
   type RecentFormMap,
   type H2HMap,
+  type PlayerGlickoMap,
 } from './lib/hero-features';
 
 const TRAIN_WINDOW_DAYS = 180;
@@ -58,9 +61,7 @@ function mlServiceToken(): string | null {
   const env = (process.env.ML_SERVICE_TOKEN ?? '').trim();
   if (env) return env;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('node:fs') as typeof import('node:fs');
-    const v = fs.readFileSync(ML_TOKEN_FILE, 'utf8').trim();
+    const v = readFileSync(ML_TOKEN_FILE, 'utf8').trim();
     return v || null;
   } catch { return null; }
 }
@@ -245,8 +246,16 @@ async function main() {
   const h2h: H2HMap = new Map();
   for (const r of h2hRows) h2h.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
 
+  const prRows = await db.select({
+    accountId: playerRatingsTable.accountId,
+    rating: playerRatingsTable.rating,
+    rd: playerRatingsTable.rd,
+  }).from(playerRatingsTable);
+  const playerGlicko: PlayerGlickoMap = new Map();
+  for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
+
   console.log(
-    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size}`,
+    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size}`,
   );
 
   // Сборка бакетов
@@ -286,7 +295,7 @@ async function main() {
       radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
       radiantPicks: draft.radiantPicks, direPicks: draft.direPicks,
       radiantAccountIds: draft.radiantAccountIds, direAccountIds: draft.direAccountIds,
-      playerHeroStats, heroStats, recentForm, h2h,
+      playerHeroStats, heroStats, recentForm, h2h, playerGlicko,
     });
     const v3S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats], label };
     v3All.push(v3S); if (tier) v3Bucket[tier].push(v3S);
