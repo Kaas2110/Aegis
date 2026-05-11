@@ -1,0 +1,144 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "ABC Diatype",
+      "role": "body"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "role": "heading"
+    }
+  ],
+  "colors": {
+    "primary": "#F03800",
+    "secondary": "#2492FF",
+    "accent": "#F03800",
+    "background": "#F6F5F4",
+    "textPrimary": "#28292C",
+    "link": "#7E2A01"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "ABC Diatype",
+      "heading": "IBM Plex Sans"
+    },
+    "fontStacks": {
+      "heading": [
+        "ABC Diatype",
+        "sans-serif"
+      ],
+      "body": [
+        "IBM Plex Sans",
+        "sans-serif"
+      ],
+      "paragraph": [
+        "IBM Plex Sans",
+        "sans-serif"
+      ]
+    },
+    "fontSizes": {
+      "h1": "24px",
+      "h2": "24px",
+      "body": "14px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "12px"
+  },
+  "components": {
+    "input": {
+      "background": "#EDECE8",
+      "textColor": "#0E0E0F",
+      "borderColor": "#F6F5F4",
+      "borderRadius": "8px",
+      "borderRadiusCorners": {
+        "topLeft": "8px",
+        "topRight": "8px",
+        "bottomRight": "8px",
+        "bottomLeft": "8px"
+      },
+      "shadow": "none"
+    },
+    "buttonPrimary": {
+      "background": "#F03800",
+      "textColor": "#FFEDE8",
+      "borderRadius": "6px",
+      "borderRadiusCorners": {
+        "topLeft": "6px",
+        "topRight": "6px",
+        "bottomRight": "6px",
+        "bottomLeft": "6px"
+      },
+      "shadow": "none"
+    },
+    "buttonSecondary": {
+      "background": "#F6F5F4",
+      "textColor": "#36373B",
+      "borderColor": "#D3D1C9",
+      "borderRadius": "6px",
+      "borderRadiusCorners": {
+        "topLeft": "6px",
+        "topRight": "6px",
+        "bottomRight": "6px",
+        "bottomLeft": "6px"
+      },
+      "shadow": "none"
+    }
+  },
+  "images": {
+    "favicon": "File saved at: attached_assets/favicon.webp",
+    "ogImage": "File saved at: attached_assets/ogImage.jpg",
+    "logoHref": "File saved at: attached_assets/logoHref.html"
+  },
+  "__llm_logo_reasoning": {
+    "selectedIndex": 0,
+    "reasoning": "Selected #0 because it is visible, medium-sized, and links to the homepage, aligning with the brand 'Replit'.",
+    "confidence": 0.9,
+    "source": "llm"
+  },
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": 6,
+      "text": "Log In",
+      "reasoning": "Button #6 has a vibrant background color (#F03800) which matches the brand's primary color, making it the most prominent and action-oriented button on the page."
+    },
+    "secondary": {
+      "index": 0,
+      "text": "Use SSO login",
+      "reasoning": "Button #0 has a different background color (#F6F5F4) and serves a secondary function ('Use SSO login'), making it suitable as a secondary button."
+    },
+    "confidence": 0.95
+  },
+  "personality": {
+    "tone": "modern",
+    "energy": "medium",
+    "targetAudience": "developers and tech-savvy users"
+  },
+  "designSystem": {
+    "framework": "custom",
+    "componentLibrary": ""
+  },
+  "confidence": {
+    "buttons": 0.95,
+    "colors": 0.9,
+    "overall": 0.925
+  },
+  "__llm_metadata": {
+    "logoSelection": {
+      "llmCalled": true,
+      "llmSucceeded": true,
+      "finalSource": "llm",
+      "rawLogoSelection": {
+        "selectedLogoIndex": 0,
+        "selectedLogoReasoning": "Selected #0 because it is visible, medium-sized, and links to the homepage, aligning with the brand 'Replit'.",
+        "confidence": 0.9
+      }
+    },
+    "buttonClassification": {
+      "llmCalled": true,
+      "llmSucceeded": true
+    }
+  }
+}
