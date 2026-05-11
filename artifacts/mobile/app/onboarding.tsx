@@ -98,23 +98,23 @@ export default function OnboardingScreen() {
             <View style={[styles.iconWrap, { borderColor: p + '30' }]}>
               <View style={[styles.iconOuter, { backgroundColor: p + '18' }]}>
                 <View style={[styles.iconInner, { backgroundColor: p + '30' }]}>
-                  <Text style={[styles.iconText, { color: p }]}>DEA</Text>
+                  <Text style={[styles.iconText, { color: p }]}>AE</Text>
                 </View>
               </View>
             </View>
 
-            <Text style={[styles.appTitle, { color: fg }]}>Dota Edge Analyzer</Text>
+            <Text style={[styles.appTitle, { color: fg }]}>Aegis</Text>
             <Text style={[styles.appSubtitle, { color: colors.mutedForeground }]}>
-              Профессиональный инструмент аналитики для Dota 2 Esports
+              Профессиональная аналитика матчей Dota 2
             </Text>
 
             {/* Преимущества */}
             <View style={[styles.featuresList, { backgroundColor: colors.card, borderColor: colors.border }]}>
               {[
                 { icon: 'activity', text: 'Реальные live-данные с OpenDota' },
-                { icon: 'cpu', text: '15 типов ставок · математические модели' },
-                { icon: 'bell', text: 'Алерты на высокое ОЦ (>10%)' },
-                { icon: 'bar-chart-2', text: 'Бэктест стратегий' },
+                { icon: 'cpu', text: '15 типов ставок · ML-модели' },
+                { icon: 'bell', text: 'Алерты по уверенности модели' },
+                { icon: 'trending-up', text: 'Прематч + лайв прогнозы' },
               ].map(({ icon, text }) => (
                 <View key={text} style={styles.featureRow}>
                   <View style={[styles.featureIcon, { backgroundColor: p + '18' }]}>

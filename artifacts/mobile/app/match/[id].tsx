@@ -14,6 +14,7 @@ import {
   getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker,
 } from '@/services/LiveDataService';
 import { MarketCard } from '@/components/MarketCard';
+import { TotalsLadder } from '@/components/TotalsLadder';
 import { ProbabilityBar } from '@/components/ProbabilityBar';
 import { ProbabilityTimeline } from '@/components/ProbabilityTimeline';
 import { FreshnessIndicator } from '@/components/FreshnessIndicator';
@@ -682,18 +683,48 @@ export default function MatchDetailScreen() {
             )}
 
             {sortedMarkets.length > 0 ? (
-              sortedMarkets.map(mkt => (
-                <MarketCard
-                  key={mkt.id}
-                  market={mkt}
-                  team1Name={match.team1.name}
-                  team2Name={match.team2.name}
-                  onPress={async () => {
-                    await logProductEvent('market_card_viewed', 'match_detail', { matchId: match.id, marketId: mkt.id });
-                    router.push({ pathname: '/market-compare/[id]', params: { id: match.id } });
-                  }}
-                />
-              ))
+              sortedMarkets.map(mkt => {
+                // Тоталы рендерим лестницей ТБ/ТМ (как у буков), а не П1/П2.
+                // Нужны числовые team_id (OpenDota) — у mock-матчей их нет, поэтому
+                // показываем ladder только когда есть оба ID.
+                if (mkt.type === 'total_kills' || mkt.type === 'total_duration') {
+                  const t1Id = Number(match.team1.id);
+                  const t2Id = Number(match.team2.id);
+                  if (Number.isInteger(t1Id) && Number.isInteger(t2Id) && t1Id > 0 && t2Id > 0) {
+                    const ladderType = mkt.type === 'total_kills' ? 'kills' : 'duration';
+                    const liveCurrent = isLive && snap
+                      ? (ladderType === 'kills'
+                          ? snap.radiantKills + snap.direKills
+                          : Math.floor(snap.gameTimeSeconds / 60))
+                      : null;
+                    const liveMinute = isLive && snap ? Math.floor(snap.gameTimeSeconds / 60) : null;
+                    const fmt = (match.format ?? 'BO3').toUpperCase() as 'BO1' | 'BO3' | 'BO5';
+                    return (
+                      <TotalsLadder
+                        key={mkt.id}
+                        radiantTeamId={t1Id}
+                        direTeamId={t2Id}
+                        type={ladderType}
+                        format={fmt}
+                        liveCurrent={liveCurrent}
+                        liveMinute={liveMinute}
+                      />
+                    );
+                  }
+                }
+                return (
+                  <MarketCard
+                    key={mkt.id}
+                    market={mkt}
+                    team1Name={match.team1.name}
+                    team2Name={match.team2.name}
+                    onPress={async () => {
+                      await logProductEvent('market_card_viewed', 'match_detail', { matchId: match.id, marketId: mkt.id });
+                      router.push({ pathname: '/market-compare/[id]', params: { id: match.id } });
+                    }}
+                  />
+                );
+              })
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.emptyCard}>

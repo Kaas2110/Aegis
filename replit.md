@@ -36,6 +36,7 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - Match-winner model trained on OpenDota historical pro matches
 - Bookmaker odds aggregation (when configured — currently hidden in UI, see Bookmakers roadmap in `docs/architecture.md`)
 - 15 mathematical models for derivative markets
+- Тоталы (kills/duration) показываются ladder-UI (несколько линий ТБ/ТМ как у буков). Эндпоинт `/api/analytics/totals-ladder?type=kills|duration&radiantTeamId=&direTeamId=&format=&liveCurrent=&liveMinute=&lineCount=` отдаёт массив линий с вероятностью модели, на live центрируется вокруг проекции текущего темпа. Компонент `components/TotalsLadder.tsx`, рендерится в `app/match/[id].tsx` для `total_kills`/`total_duration`.
 
 ## User preferences
 

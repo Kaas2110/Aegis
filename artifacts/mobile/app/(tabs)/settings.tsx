@@ -256,7 +256,7 @@ export default function SettingsScreen() {
       <DisclaimerBanner />
 
       <View style={styles.version}>
-        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Dota Edge Analyzer · 1.0.0</Text>
+        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Aegis · 1.0.0</Text>
         <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Модель: baseline_v1.0.0</Text>
         <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · Коэффициенты: demo (до подключения API)</Text>
       </View>

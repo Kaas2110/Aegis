@@ -360,6 +360,136 @@ router.get('/bet-types', (_req, res) => {
 });
 
 /**
+ * GET /api/analytics/totals-ladder
+ * Лестница тоталов — для UI «как у букмекеров». Возвращает несколько линий
+ * (49.5, 50.5, …) с вероятностью ТБ/ТМ от модели.
+ *   ?type=kills|duration                          (обязательно)
+ *   ?radiantTeamId=X&direTeamId=Y                 (обязательно)
+ *   ?format=BO1|BO3|BO5                           (по умолчанию BO3)
+ *   ?liveCurrent=N&liveMinute=M                   (опц., для live-центрирования)
+ *   ?lineCount=7                                  (опц., 3..15, по умолчанию 7)
+ */
+router.get('/totals-ladder', async (req, res) => {
+  const type = String(req.query.type ?? '');
+  if (type !== 'kills' && type !== 'duration') {
+    res.status(400).json({ error: 'type must be "kills" or "duration"' });
+    return;
+  }
+  const radiantId = Number(req.query.radiantTeamId);
+  const direId = Number(req.query.direTeamId);
+  if (!Number.isInteger(radiantId) || !Number.isInteger(direId) || radiantId <= 0 || direId <= 0 || radiantId === direId) {
+    res.status(400).json({ error: 'radiantTeamId & direTeamId must be different positive integers' });
+    return;
+  }
+  const formatRaw = String(req.query.format ?? 'BO3');
+  if (formatRaw !== 'BO1' && formatRaw !== 'BO3' && formatRaw !== 'BO5') {
+    res.status(400).json({ error: 'format must be BO1, BO3 or BO5' });
+    return;
+  }
+  const rawLineCount = Number(req.query.lineCount);
+  const lineCount = Math.min(15, Math.max(3, Number.isFinite(rawLineCount) && rawLineCount > 0 ? Math.floor(rawLineCount) : 7));
+  const liveCurrent = req.query.liveCurrent != null ? Number(req.query.liveCurrent) : null;
+  const liveMinute = req.query.liveMinute != null ? Number(req.query.liveMinute) : null;
+  const isLive = liveCurrent != null && liveMinute != null && liveCurrent >= 0 && liveMinute > 0;
+
+  const { predictTotalKills, predictTotalDuration } = await import('../services/BetTypeModels');
+  const { predictMatchWinner } = await import('../services/PredictionModel');
+
+  // ELO-сдвиг как в /popular-markets (используем активную ML-модель)
+  let elo1 = 1700;
+  let elo2 = 1700;
+  try {
+    const mlPred = await predictMatchWinner(radiantId, direId);
+    if (mlPred) {
+      const p = Math.min(0.99, Math.max(0.01, mlPred.probRadiantWin));
+      const eloDiff = -400 * Math.log10(1 / p - 1);
+      elo1 = 1700 + eloDiff / 2;
+      elo2 = 1700 - eloDiff / 2;
+    }
+  } catch (err) {
+    req.log.warn({ err }, 'totals-ladder: ML predict failed, using neutral ELO');
+  }
+
+  const fv = {
+    elo1, elo2,
+    form1: 0.55, form2: 0.5,
+    h2hWinRate1: 0.5,
+    draftSynergy1: 0.5, draftSynergy2: 0.5,
+    draftCounter1: 0.5, draftCounter2: 0.5,
+    scalingScore1: 0.5, scalingScore2: 0.5,
+    earlyScore1: 0.5, earlyScore2: 0.5,
+    matchFormat: formatRaw as 'BO1' | 'BO3' | 'BO5',
+    tournamentTier: 1 as 1 | 2 | 3,
+    isLive,
+    gameTimeSec: isLive ? (liveMinute as number) * 60 : undefined,
+  };
+
+  // Базовое μ модели (тот же расчёт, что внутри predictTotalKills/Duration)
+  const pace = (fv.earlyScore1 * 0.7 + fv.form1 * 0.3 + fv.earlyScore2 * 0.7 + fv.form2 * 0.3) / 2;
+  const baseExpectedKills = 38 + pace * 30;
+  const scalingAvg = (fv.scalingScore1 + fv.scalingScore2) / 2;
+  const baseExpectedDuration = 28 + scalingAvg * 24;
+
+  // Live-проекция: текущий темп → ожидаемый финал
+  let projection: { current: number; minute: number; projected: number; remainingMin: number } | null = null;
+  if (isLive) {
+    const currentVal = liveCurrent as number;
+    const minute = liveMinute as number;
+    if (type === 'kills') {
+      const killsPerMin = Math.max(0.4, currentVal / Math.max(1, minute));
+      const estimatedFinalMin = Math.max(minute + 5, baseExpectedDuration);
+      const projectedKills = currentVal + killsPerMin * (estimatedFinalMin - minute);
+      projection = { current: currentVal, minute, projected: projectedKills, remainingMin: estimatedFinalMin - minute };
+    } else {
+      // duration: показываем, сколько уже прошло; «projected» = ожид. финал
+      projection = { current: minute, projected: Math.max(minute + 1, baseExpectedDuration), minute, remainingMin: Math.max(1, baseExpectedDuration - minute) };
+    }
+  }
+
+  // Центр лестницы: для прематч — μ модели, для live — projection.projected
+  const center = projection ? projection.projected : (type === 'kills' ? baseExpectedKills : baseExpectedDuration);
+  const step = type === 'kills' ? 1 : 0.5;
+  // Линии у буков:
+  //   kills — всегда X.5 (49.5, 50.5, 51.5...) — snap к ближайшему X.5
+  //   duration — шаг 0.5, допускаются и .0 и .5 (42.0, 42.5, 43.0...) — snap к ближайшему .5
+  let snappedCenter: number;
+  if (type === 'kills') {
+    snappedCenter = Math.round(center - 0.5) + 0.5;
+  } else {
+    snappedCenter = Math.round(center * 2) / 2;
+  }
+  const startOffset = -Math.floor(lineCount / 2);
+  const lineValues: number[] = [];
+  for (let i = 0; i < lineCount; i++) {
+    lineValues.push(snappedCenter + (startOffset + i) * step);
+  }
+
+  const lines = lineValues.map(line => {
+    const pred = type === 'kills' ? predictTotalKills(fv, line) : predictTotalDuration(fv, line);
+    const pOver = pred.probTeam1;
+    return {
+      line: Number(line.toFixed(1)),
+      pOver: Number(pOver.toFixed(4)),
+      pUnder: Number((1 - pOver).toFixed(4)),
+    };
+  });
+
+  // Confidence у моделей фиксированный (0.62/0.64) — берём из первой строки
+  const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0]) : predictTotalDuration(fv, lineValues[0]);
+
+  res.json({
+    type,
+    expectedValue: Number(center.toFixed(2)),
+    isLive,
+    projection,
+    lines,
+    confidence: sample.confidence,
+    modelVersion: sample.modelVersion,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+/**
  * POST /api/analytics/batch
  * Предсказания для нескольких матчей сразу.
  */
