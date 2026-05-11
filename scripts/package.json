@@ -5,7 +5,24 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "ingest:teams": "tsx ./src/ingest-teams.ts",
+    "ingest:leagues": "tsx ./src/ingest-leagues.ts",
+    "ingest:matches": "tsx ./src/ingest-matches.ts",
+    "ingest:drafts": "tsx ./src/ingest-drafts.ts",
+    "ingest:hero-stats": "tsx ./src/ingest-hero-stats.ts",
+    "ingest:hero-matchups": "tsx ./src/ingest-hero-matchups.ts",
+    "ingest:players-heroes": "tsx ./src/ingest-players-heroes.ts",
+    "compute:recent-form": "tsx ./src/compute-recent-form.ts",
+    "compute:h2h": "tsx ./src/compute-h2h.ts",
+    "compute:bo3-series": "tsx ./src/compute-bo3-series.ts",
+    "train:model": "tsx ./src/train-model.ts",
+    "train:market-models": "tsx ./src/train-market-models.ts",
+    "train:live-model": "tsx ./src/train-live-model.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

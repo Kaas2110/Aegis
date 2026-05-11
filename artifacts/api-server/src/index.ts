@@ -1,5 +1,9 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startLiveWorker } from "./services/LiveWorker";
+import { startScheduler } from "./services/SchedulerWorker";
+import { startOutcomeTracker } from "./services/OutcomeTracker";
+import { loadActiveLiveModel } from "./services/LiveWinnerModel";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +26,33 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Поднимаем активную live-модель (не критично — может не существовать
+  // на свежей системе, до первого ретрейна live-пайплайна).
+  loadActiveLiveModel().catch((err) => logger.error({ err }, "Live model load failed"));
+
+  // Запускаем live-воркер: опрос OpenDota раз в минуту,
+  // запись снапшотов и предсказаний в БД.
+  if (process.env["DISABLE_LIVE_WORKER"] !== "true") {
+    startLiveWorker();
+  } else {
+    logger.warn("LiveWorker disabled via DISABLE_LIVE_WORKER=true");
+  }
+
+  // Шедулер: ежедневная проверка патчей, переобучение через 7 дней после нового
+  // патча или раз в 30 дней.
+  if (process.env["DISABLE_SCHEDULER"] !== "true") {
+    startScheduler();
+  } else {
+    logger.warn("Scheduler disabled via DISABLE_SCHEDULER=true");
+  }
+
+  // OutcomeTracker: раз в 6 часов добивает незарезолвленные прематч-предсказания,
+  // подтягивая финальные исходы из OpenDota /matches/{id}. Эти данные питают
+  // метрики качества модели в админке.
+  if (process.env["DISABLE_OUTCOME_TRACKER"] !== "true") {
+    startOutcomeTracker();
+  } else {
+    logger.warn("OutcomeTracker disabled via DISABLE_OUTCOME_TRACKER=true");
+  }
 });

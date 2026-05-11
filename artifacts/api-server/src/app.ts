@@ -1,10 +1,15 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import compression from "compression";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+
+// Gzip/Brotli — JSON-ответы /api/matches/live и /api/analytics/popular-markets
+// бывают по 30-100 KB; на мобильной сети это ощутимая экономия трафика и задержки.
+app.use(compression());
 
 app.use(
   pinoHttp({
