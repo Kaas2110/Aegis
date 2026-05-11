@@ -14,10 +14,10 @@ Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle
 - `pnpm --filter @workspace/scripts run ingest:teams` — load OpenDota team ratings (~1000 teams)
 - `pnpm --filter @workspace/scripts run ingest:matches [pages=20]` — load pro matches (~100/page, 1.1s/req)
 - `pnpm --filter @workspace/scripts run ingest:leagues` — load OpenDota league names → `leagues` table (used to humanize tournament names in mobile lists)
-- `pnpm --filter @workspace/scripts run ingest:hero-stats` — hero meta winrates / pickrates (current patch)
+- `pnpm --filter @workspace/scripts run ingest:hero-stats` — hero meta winrates / pickrates (current patch). **Stratz-supplemented** если `STRATZ_TOKEN` задан (CAPTAINS_MODE winrates точнее OpenDota pro_pick).
 - `pnpm --filter @workspace/scripts run ingest:hero-matchups` — pairwise hero matchup matrix (incremental)
-- `pnpm --filter @workspace/scripts run ingest:drafts [limit]` — picks/bans + radiant/dire account_ids (v2/v3-eligible only). `--backfill-accounts` re-fetches account_ids for pre-Wave-3 rows.
-- `pnpm --filter @workspace/scripts run ingest:players-heroes` — per-player per-hero stats (7-day freshness)
+- `pnpm --filter @workspace/scripts run ingest:drafts [limit]` — picks/bans + radiant/dire account_ids (v2/v3-eligible only). `--backfill-accounts` re-fetches account_ids for pre-Wave-3 rows. **Stratz-primary** если `STRATZ_TOKEN` задан (250 req/min, ~4× быстрее OpenDota). `--no-stratz` форсирует OpenDota.
+- `pnpm --filter @workspace/scripts run ingest:players-heroes` — per-player per-hero stats (7-day freshness). **Stratz-primary** если `STRATZ_TOKEN` задан (isLeague=true, ~4× быстрее).
 - `pnpm --filter @workspace/scripts run compute:recent-form` — recompute `team_recent_form` (30/90-day)
 - `pnpm --filter @workspace/scripts run compute:h2h` — recompute `team_h2h` (365-day)
 - `pnpm --filter @workspace/scripts run compute:player-glicko` — пересчёт `player_ratings` (Glicko-1, c=63, period=30d). Идемпотентно; флаг `--reset` пересоздаёт с нуля. Запускать после `ingest:drafts`/`ingest:matches`.
@@ -29,6 +29,8 @@ Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle
 - `pnpm run typecheck` — full typecheck (libs first via `typecheck:libs`)
 
 Required env: `DATABASE_URL`. Optional: `ODDS_API_KEY`, `STRATZ_TOKEN`, `PANDASCORE_API_KEY`, `PINNACLE_GUEST_API_KEY`, `ADMIN_TOKEN`, `DISABLE_LIVE_WORKER`, `DISABLE_SCHEDULER`, `BOOKMAKERS_ENABLED` (default false), `PROXY_URL` (РФ-прокси для букмекеров с не-РФ IP).
+
+**STRATZ_TOKEN** — бесплатный JWT с stratz.com/api (вход через Steam). Даёт 250 req/min / 20 000 req/day. На Replit Node.js fetch блокируется Cloudflare (TLS JA3); клиент автоматически падает на curl-fallback. На РФ-проде Node fetch работает напрямую. Клиент: `scripts/src/lib/stratz.ts`. Тест: `pnpm --filter @workspace/scripts run test:stratz`.
 
 ## Product
 

@@ -1,68 +1,128 @@
 /**
- * Загружает статистику героев в про-сцене из OpenDota /api/heroStats.
- * Один запрос — список 138 героев со счётчиками pick/ban/win.
+ * Загружает статистику героев в про-сцене.
  *
- * Вычисляем нормализованные ставки:
- *   totalProMatches = Σ pro_pick / 10  (на матч 10 пиков)
- *   proPickRate = pro_pick / totalProMatches
- *   proBanRate  = pro_ban  / totalProMatches
- *   proWinRate  = pro_win  / pro_pick    (по умолчанию 0.5 если пиков 0)
+ * Источники:
+ *   - Stratz GraphQL (если STRATZ_TOKEN задан) — professional bracket,
+ *     winWeek с точными счётчиками текущего патча. РЕКОМЕНДУЕТСЯ.
+ *   - OpenDota REST (fallback / всегда) — /api/heroStats, агрегат за всё время,
+ *     также тянет patch из /constants/patch.
+ *
+ * Если STRATZ_TOKEN задан: берём winRate/pickRate из Stratz (точнее),
+ * имена/primaryAttr/attackType — из OpenDota (один запрос, бесплатно).
+ * Если токен не задан: полностью OpenDota (как раньше).
  */
 
 import { db, heroStatsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
+import { fetchHeroStatsPro, StratzUnavailableError } from './lib/stratz.js';
 
 interface OpenDotaHeroStat {
   id: number;
-  name: string;             // npc_dota_hero_antimage
-  localized_name: string;   // Anti-Mage
-  primary_attr: string;     // 'str' | 'agi' | 'int' | 'all'
-  attack_type: string;      // 'Melee' | 'Ranged'
+  name: string;
+  localized_name: string;
+  primary_attr: string;
+  attack_type: string;
   pro_pick?: number;
   pro_ban?: number;
   pro_win?: number;
 }
 
-async function main() {
-  console.log('[ingest-hero-stats] GET /api/heroStats …');
-  const resp = await fetch('https://api.opendota.com/api/heroStats');
+async function fetchOpenDotaHeroStats(): Promise<OpenDotaHeroStat[]> {
+  const resp = await fetch('https://api.opendota.com/api/heroStats', {
+    signal: AbortSignal.timeout(15_000),
+  });
   if (!resp.ok) throw new Error(`OpenDota /api/heroStats: HTTP ${resp.status}`);
-  const heroes = (await resp.json()) as OpenDotaHeroStat[];
-  console.log(`[ingest-hero-stats] Got ${heroes.length} heroes`);
+  return (await resp.json()) as OpenDotaHeroStat[];
+}
 
-  // OpenDota не отдаёт текущий патч в /heroStats — берём из /constants/patch
-  let patch: string | null = null;
+async function fetchCurrentPatch(): Promise<string | null> {
   try {
-    const pResp = await fetch('https://api.opendota.com/api/constants/patch');
-    if (pResp.ok) {
-      const patches = (await pResp.json()) as Array<{ name: string; date: string }>;
-      patch = patches[patches.length - 1]?.name ?? null;
+    const resp = await fetch('https://api.opendota.com/api/constants/patch', {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) return null;
+    const patches = (await resp.json()) as Array<{ name: string; date: string }>;
+    return patches[patches.length - 1]?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function main() {
+  const useStratz = !!process.env['STRATZ_TOKEN'];
+  console.log(`[ingest-hero-stats] source=${useStratz ? 'Stratz (pro bracket) + OpenDota (meta)' : 'OpenDota only'}`);
+
+  // Всегда тянем OpenDota — там имена, атрибуты, attack_type и бан-статистика.
+  console.log('[ingest-hero-stats] GET OpenDota /api/heroStats …');
+  const [heroes, patch] = await Promise.all([
+    fetchOpenDotaHeroStats(),
+    fetchCurrentPatch(),
+  ]);
+  console.log(`[ingest-hero-stats] OpenDota: ${heroes.length} heroes, patch=${patch}`);
+
+  // Индекс по id
+  const odMap = new Map<number, OpenDotaHeroStat>(heroes.map(h => [h.id, h]));
+
+  // Stratz professional winrate (более точный, по текущему патчу)
+  let stratzWinMap: Map<number, { winCount: number; matchCount: number }> | null = null;
+  if (useStratz) {
+    try {
+      const stratzRows = await fetchHeroStatsPro();
+      stratzWinMap = new Map(stratzRows.map(r => [r.heroId, { winCount: r.winCount, matchCount: r.matchCount }]));
+      console.log(`[ingest-hero-stats] Stratz: ${stratzRows.length} heroes in PROFESSIONAL bracket`);
+    } catch (e) {
+      if (e instanceof StratzUnavailableError) {
+        console.warn(`[ingest-hero-stats] Stratz unavailable (${e.message}), using OpenDota only`);
+      } else {
+        throw e;
+      }
     }
-  } catch (e) {
-    console.warn('[ingest-hero-stats] patch fetch failed (non-fatal):', e);
   }
 
-  const totalPicks = heroes.reduce((s, h) => s + (h.pro_pick ?? 0), 0);
-  const totalProMatches = totalPicks / 10;
-  console.log(`[ingest-hero-stats] Σ pro_pick=${totalPicks} → ~${totalProMatches.toFixed(0)} matches, patch=${patch}`);
+  // Собираем строки: берём winRate/pickRate из Stratz если есть, иначе OpenDota.
+  const totalOdPicks = heroes.reduce((s, h) => s + (h.pro_pick ?? 0), 0);
+  const totalOdMatches = totalOdPicks / 10;
 
   const rows = heroes.map(h => {
-    const pick = h.pro_pick ?? 0;
-    const ban = h.pro_ban ?? 0;
-    const win = h.pro_win ?? 0;
+    const odPick = h.pro_pick ?? 0;
+    const odBan  = h.pro_ban  ?? 0;
+    const odWin  = h.pro_win  ?? 0;
+
+    let pickCount: number;
+    let winCount: number;
+    let pickRate: number;
+    let winRate: number;
+
+    if (stratzWinMap) {
+      const s = stratzWinMap.get(h.id);
+      pickCount = s?.matchCount ?? odPick;
+      winCount  = s?.winCount  ?? odWin;
+      // pickRate нормализуем по Stratz тотал (сумма matchCount / 10)
+      const totalStratz = [...stratzWinMap.values()].reduce((a, v) => a + v.matchCount, 0) / 10;
+      pickRate = totalStratz > 0 ? pickCount / totalStratz : (totalOdMatches > 0 ? odPick / totalOdMatches : 0);
+      winRate  = pickCount > 0 ? winCount / pickCount : 0.5;
+    } else {
+      pickCount = odPick;
+      winCount  = odWin;
+      pickRate  = totalOdMatches > 0 ? odPick / totalOdMatches : 0;
+      winRate   = odPick > 0 ? odWin / odPick : 0.5;
+    }
+
+    const banRate = totalOdMatches > 0 ? odBan / totalOdMatches : 0;
+
     return {
-      heroId: h.id,
-      name: h.localized_name,
-      primaryAttr: h.primary_attr,
-      attackType: h.attack_type,
-      proPickCount: pick,
-      proBanCount: ban,
-      proWinCount: win,
-      proPickRate: totalProMatches > 0 ? pick / totalProMatches : 0,
-      proBanRate: totalProMatches > 0 ? ban / totalProMatches : 0,
-      proWinRate: pick > 0 ? win / pick : 0.5,
+      heroId:       h.id,
+      name:         h.localized_name,
+      primaryAttr:  h.primary_attr,
+      attackType:   h.attack_type,
+      proPickCount: pickCount,
+      proBanCount:  odBan,
+      proWinCount:  winCount,
+      proPickRate:  pickRate,
+      proBanRate:   banRate,
+      proWinRate:   winRate,
       patch,
-      updatedAt: new Date(),
+      updatedAt:    new Date(),
     };
   });
 
@@ -72,21 +132,21 @@ async function main() {
     .onConflictDoUpdate({
       target: heroStatsTable.heroId,
       set: {
-        name: sql`excluded.name`,
-        primaryAttr: sql`excluded.primary_attr`,
-        attackType: sql`excluded.attack_type`,
+        name:         sql`excluded.name`,
+        primaryAttr:  sql`excluded.primary_attr`,
+        attackType:   sql`excluded.attack_type`,
         proPickCount: sql`excluded.pro_pick_count`,
-        proBanCount: sql`excluded.pro_ban_count`,
-        proWinCount: sql`excluded.pro_win_count`,
-        proPickRate: sql`excluded.pro_pick_rate`,
-        proBanRate: sql`excluded.pro_ban_rate`,
-        proWinRate: sql`excluded.pro_win_rate`,
-        patch: sql`excluded.patch`,
-        updatedAt: sql`excluded.updated_at`,
+        proBanCount:  sql`excluded.pro_ban_count`,
+        proWinCount:  sql`excluded.pro_win_count`,
+        proPickRate:  sql`excluded.pro_pick_rate`,
+        proBanRate:   sql`excluded.pro_ban_rate`,
+        proWinRate:   sql`excluded.pro_win_rate`,
+        patch:        sql`excluded.patch`,
+        updatedAt:    sql`excluded.updated_at`,
       },
     });
 
-  console.log(`[ingest-hero-stats] Upserted ${rows.length} heroes.`);
+  console.log(`[ingest-hero-stats] Upserted ${rows.length} heroes (Stratz=${stratzWinMap ? 'yes' : 'no'}).`);
   process.exit(0);
 }
 

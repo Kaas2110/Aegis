@@ -1,24 +1,35 @@
 /**
  * Wave 3: загружает per-hero статистику для каждого pro-игрока.
  *
- * Шаги:
- *  1. Собирает уникальные account_id из match_drafts (radiant_account_ids + dire_account_ids).
- *  2. Для каждого account_id дёргает OpenDota /players/{id}/heroes (все герои сразу).
- *  3. Upsert в player_hero_stats.
- *  4. Также подтягивает /players/{id} для personaName/proName в players.
+ * Источники (в порядке приоритета):
+ *   1. Stratz GraphQL (если STRATZ_TOKEN задан):
+ *      - 1 запрос на игрока → heroesPerformance (PROFESSIONAL + DIVINE + IMMORTAL)
+ *      - ~260ms/игрок вместо 2×1100ms
+ *   2. OpenDota REST (fallback или --no-stratz):
+ *      - 2 запроса: /players/{id}/heroes + /players/{id} (профиль)
+ *      - 1100ms каждый
  *
- * Идемпотентно: пропускает игроков, у которых player_hero_stats обновлены < freshDays назад.
+ * Профиль (personaName, proName, countryCode) тянется из OpenDota в обоих случаях —
+ * Stratz не возвращает pro-имена через публичное API.
+ *
+ * Идемпотентно: пропускает игроков, у которых данные свежее freshDays.
  *
  * Запуск:
  *   pnpm --filter @workspace/scripts run ingest:players-heroes
- *   pnpm --filter @workspace/scripts run ingest:players-heroes 100        # только первые 100
+ *   pnpm --filter @workspace/scripts run ingest:players-heroes 100
  *   pnpm --filter @workspace/scripts run ingest:players-heroes --fresh-days 30
+ *   pnpm --filter @workspace/scripts run ingest:players-heroes --no-stratz
  */
 
 import { db, matchDraftsTable, playersTable, playerHeroStatsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
+import {
+  fetchPlayerHeroes as fetchStratzPlayerHeroes,
+  stratzSleep,
+  StratzUnavailableError,
+} from './lib/stratz.js';
 
-const SLEEP_MS = 1100;
+const OD_SLEEP_MS = 1100;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface OpenDotaPlayerHero {
@@ -32,31 +43,89 @@ interface OpenDotaPlayerProfile {
   profile?: {
     account_id?: number;
     personaname?: string | null;
-    name?: string | null;          // pro name
+    name?: string | null;
     loccountrycode?: string | null;
   };
   last_match_time?: number | null;
 }
 
-async function fetchPlayerHeroes(accountId: number): Promise<OpenDotaPlayerHero[]> {
-  const r = await fetch(`https://api.opendota.com/api/players/${accountId}/heroes`);
+async function fetchOdPlayerHeroes(accountId: number): Promise<OpenDotaPlayerHero[]> {
+  const r = await fetch(`https://api.opendota.com/api/players/${accountId}/heroes`, {
+    signal: AbortSignal.timeout(15_000),
+  });
   if (!r.ok) throw new Error(`HTTP ${r.status} for /players/${accountId}/heroes`);
   return (await r.json()) as OpenDotaPlayerHero[];
 }
 
 async function fetchPlayerProfile(accountId: number): Promise<OpenDotaPlayerProfile> {
-  const r = await fetch(`https://api.opendota.com/api/players/${accountId}`);
+  const r = await fetch(`https://api.opendota.com/api/players/${accountId}`, {
+    signal: AbortSignal.timeout(15_000),
+  });
   if (!r.ok) throw new Error(`HTTP ${r.status} for /players/${accountId}`);
   return (await r.json()) as OpenDotaPlayerProfile;
 }
 
+async function upsertProfile(accountId: number): Promise<void> {
+  try {
+    const profile = await fetchPlayerProfile(accountId);
+    const p = profile.profile;
+    await db
+      .insert(playersTable)
+      .values({
+        accountId,
+        personaName: p?.personaname ?? null,
+        proName:     p?.name ?? null,
+        countryCode: p?.loccountrycode ?? null,
+        lastSeen:    profile.last_match_time ?? null,
+      })
+      .onConflictDoUpdate({
+        target: playersTable.accountId,
+        set: {
+          personaName: sql`EXCLUDED.persona_name`,
+          proName:     sql`EXCLUDED.pro_name`,
+          countryCode: sql`EXCLUDED.country_code`,
+          lastSeen:    sql`EXCLUDED.last_seen`,
+          updatedAt:   sql`NOW()`,
+        },
+      });
+    await sleep(OD_SLEEP_MS);
+  } catch {
+    // best-effort, не критично
+  }
+}
+
+async function upsertHeroRows(
+  accountId: number,
+  rows: Array<{ heroId: number; games: number; wins: number; lastPlayed: number | null }>,
+) {
+  if (rows.length === 0) return;
+  await db
+    .insert(playerHeroStatsTable)
+    .values(rows.map(r => ({ accountId, ...r })))
+    .onConflictDoUpdate({
+      target: [playerHeroStatsTable.accountId, playerHeroStatsTable.heroId],
+      set: {
+        games:      sql`EXCLUDED.games`,
+        wins:       sql`EXCLUDED.wins`,
+        lastPlayed: sql`EXCLUDED.last_played`,
+        updatedAt:  sql`NOW()`,
+      },
+    });
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  const limit = args.find(a => /^\d+$/.test(a)) ? Number(args.find(a => /^\d+$/.test(a))) : null;
+  const limitArg = args.find(a => /^\d+$/.test(a));
+  const limit = limitArg ? Number(limitArg) : null;
   const freshDaysIdx = args.indexOf('--fresh-days');
   const freshDays = freshDaysIdx >= 0 && args[freshDaysIdx + 1] ? Number(args[freshDaysIdx + 1]) : 7;
+  const forceOpenDota = args.includes('--no-stratz');
 
-  console.log(`[ingest-players-heroes] freshDays=${freshDays} limit=${limit ?? 'all'}`);
+  const useStratz = !forceOpenDota && !!process.env['STRATZ_TOKEN'];
+  console.log(`[ingest-players-heroes] freshDays=${freshDays} limit=${limit ?? 'all'} source=${useStratz ? 'Stratz+OD' : 'OpenDota'}`);
+  if (!useStratz && !forceOpenDota) {
+    console.log('[ingest-players-heroes] Tip: добавьте STRATZ_TOKEN в Replit Secrets для 4× ускорения.');
+  }
 
   // 1) Уникальные account_ids из drafts.
   const accountsRows = await db.execute(sql`
@@ -71,7 +140,7 @@ async function main() {
   const allAccountIds = (accountsRows.rows as Array<{ acc: string | number }>).map(r => Number(r.acc));
   console.log(`[ingest-players-heroes] ${allAccountIds.length} distinct accounts in drafts`);
 
-  // 2) Из них пропускаем тех, у кого свежие данные.
+  // 2) Пропускаем свежие.
   const stale = await db.execute(sql`
     SELECT account_id, MAX(updated_at) AS last_upd
       FROM player_hero_stats
@@ -85,7 +154,11 @@ async function main() {
   }
   let todo = allAccountIds.filter(a => !fresh.has(a));
   if (limit !== null) todo = todo.slice(0, limit);
-  console.log(`[ingest-players-heroes] ${todo.length} to fetch (skipped ${fresh.size} fresh, ≈${(todo.length * 2.2 / 60).toFixed(1)} min)`);
+
+  const etaMins = useStratz
+    ? (todo.length * 0.52 / 60).toFixed(1)   // ~260ms heroes + 260ms profile (OD)
+    : (todo.length * 2.2 / 60).toFixed(1);    // 2×1100ms
+  console.log(`[ingest-players-heroes] ${todo.length} to fetch (skipped ${fresh.size} fresh, ≈${etaMins} min)`);
 
   if (todo.length === 0) {
     console.log('[ingest-players-heroes] Nothing to do.');
@@ -95,77 +168,78 @@ async function main() {
   let okHeroes = 0;
   let okProfile = 0;
   let failed = 0;
+  let stratzFallbacks = 0;
 
   for (let i = 0; i < todo.length; i++) {
     const accountId = todo[i];
     try {
-      const heroes = await fetchPlayerHeroes(accountId);
-      if (heroes.length > 0) {
+      if (useStratz) {
+        try {
+          const data = await fetchStratzPlayerHeroes(accountId);
+          const perf = data.heroesPerformance ?? [];
+          const rows = perf
+            .filter(p => p.heroId && Number(p.matchCount) > 0)
+            .map(p => ({
+              heroId:     p.heroId,
+              games:      Number(p.matchCount) || 0,
+              wins:       Number(p.winCount) || 0,
+              lastPlayed: p.lastPlayedDateTime ?? null,
+            }));
+          await upsertHeroRows(accountId, rows);
+          okHeroes++;
+          await stratzSleep();
+        } catch (e) {
+          if (e instanceof StratzUnavailableError) {
+            stratzFallbacks++;
+            // Fallback: OpenDota для этого игрока
+            const heroes = await fetchOdPlayerHeroes(accountId);
+            const rows = heroes
+              .filter(h => Number(h.games) > 0)
+              .map(h => ({
+                heroId:     Number(h.hero_id),
+                games:      Number(h.games) || 0,
+                wins:       Number(h.win) || 0,
+                lastPlayed: h.last_played ?? null,
+              }));
+            await upsertHeroRows(accountId, rows);
+            okHeroes++;
+            await sleep(OD_SLEEP_MS);
+          } else {
+            throw e;
+          }
+        }
+      } else {
+        // OpenDota-only
+        const heroes = await fetchOdPlayerHeroes(accountId);
         const rows = heroes
           .filter(h => Number(h.games) > 0)
           .map(h => ({
-            accountId,
-            heroId: Number(h.hero_id),
-            games: Number(h.games) || 0,
-            wins: Number(h.win) || 0,
+            heroId:     Number(h.hero_id),
+            games:      Number(h.games) || 0,
+            wins:       Number(h.win) || 0,
             lastPlayed: h.last_played ?? null,
           }));
-        if (rows.length > 0) {
-          await db
-            .insert(playerHeroStatsTable)
-            .values(rows)
-            .onConflictDoUpdate({
-              target: [playerHeroStatsTable.accountId, playerHeroStatsTable.heroId],
-              set: {
-                games: sql`EXCLUDED.games`,
-                wins: sql`EXCLUDED.wins`,
-                lastPlayed: sql`EXCLUDED.last_played`,
-                updatedAt: sql`NOW()`,
-              },
-            });
-        }
+        await upsertHeroRows(accountId, rows);
         okHeroes++;
+        await sleep(OD_SLEEP_MS);
       }
-      await sleep(SLEEP_MS);
 
-      // Профиль игрока (best-effort, не критично)
-      try {
-        const profile = await fetchPlayerProfile(accountId);
-        const p = profile.profile;
-        await db
-          .insert(playersTable)
-          .values({
-            accountId,
-            personaName: p?.personaname ?? null,
-            proName: p?.name ?? null,
-            countryCode: p?.loccountrycode ?? null,
-            lastSeen: profile.last_match_time ?? null,
-          })
-          .onConflictDoUpdate({
-            target: playersTable.accountId,
-            set: {
-              personaName: sql`EXCLUDED.persona_name`,
-              proName: sql`EXCLUDED.pro_name`,
-              countryCode: sql`EXCLUDED.country_code`,
-              lastSeen: sql`EXCLUDED.last_seen`,
-              updatedAt: sql`NOW()`,
-            },
-          });
-        okProfile++;
-      } catch {
-        // ignore
-      }
+      // Профиль игрока — всегда из OpenDota (pro-имена там точнее)
+      await upsertProfile(accountId);
+      okProfile++;
     } catch {
       failed++;
     }
+
     if ((i + 1) % 10 === 0 || i === todo.length - 1) {
+      const fb = stratzFallbacks > 0 ? ` fb=${stratzFallbacks}` : '';
       process.stdout.write(
-        `\r[ingest-players-heroes] ${i + 1}/${todo.length} · heroes:${okHeroes} profile:${okProfile} failed:${failed}`,
+        `\r[ingest-players-heroes] ${i + 1}/${todo.length} · heroes=${okHeroes} profile=${okProfile} failed=${failed}${fb}`,
       );
     }
-    await sleep(SLEEP_MS);
   }
-  console.log(`\n[ingest-players-heroes] Done. heroes=${okHeroes} profile=${okProfile} failed=${failed}`);
+
+  console.log(`\n[ingest-players-heroes] Done. heroes=${okHeroes} profile=${okProfile} failed=${failed} stratz_fallbacks=${stratzFallbacks}`);
   process.exit(0);
 }
 
