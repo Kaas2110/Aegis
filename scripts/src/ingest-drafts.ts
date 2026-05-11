@@ -1,32 +1,44 @@
 /**
- * Загружает picks/bans для исторических про-матчей из OpenDota /api/matches/:id.
+ * Загружает picks/bans для исторических про-матчей.
+ *
+ * Источники (в порядке приоритета):
+ *   1. Stratz GraphQL — STRATZ_TOKEN в env → 250 req/min, 1 запрос на матч,
+ *      picks/bans + steamAccountId всех игроков сразу. ~260ms/матч.
+ *   2. OpenDota REST  — fallback если токен не задан → 1.1s/матч (rate-limit).
  *
  * Идемпотентно: только матчи без записи в match_drafts.
- * 1.1 сек/запрос (rate limit OpenDota free tier).
  *
  * Запуск:
- *   pnpm --filter @workspace/scripts run ingest:drafts          # все необработанные
- *   pnpm --filter @workspace/scripts run ingest:drafts 500      # лимит 500 матчей
- *
- * Можно безопасно прерывать и перезапускать — продолжит с того же места.
+ *   pnpm --filter @workspace/scripts run ingest:drafts           # все
+ *   pnpm --filter @workspace/scripts run ingest:drafts 500       # лимит 500
+ *   pnpm --filter @workspace/scripts run ingest:drafts --backfill-accounts
+ *   pnpm --filter @workspace/scripts run ingest:drafts --no-stratz  # форс OpenDota
  */
 
 import { db, proMatchesTable, matchDraftsTable, teamsTable } from '@workspace/db';
 import { sql, isNull, and } from 'drizzle-orm';
+import {
+  fetchMatchDetail,
+  stratzSleep,
+  StratzUnavailableError,
+  type StratzPickBan,
+  type StratzPlayerSlot,
+} from './lib/stratz.js';
 
-// Должно совпадать с MIN_AVG_GLICKO в train-model.ts.
 const MIN_AVG_GLICKO = 1200;
+
+// ---------- OpenDota types ----------
 
 interface OpenDotaPickBan {
   is_pick: boolean;
   hero_id: number;
-  team: 0 | 1;             // 0 = radiant, 1 = dire
+  team: 0 | 1;
   order: number;
 }
 
 interface OpenDotaPlayer {
   account_id?: number | null;
-  player_slot: number;        // 0..4 = radiant, 128..132 = dire
+  player_slot: number;
   hero_id: number;
 }
 
@@ -34,72 +46,110 @@ interface OpenDotaMatch {
   match_id: number;
   picks_bans: OpenDotaPickBan[] | null;
   players?: OpenDotaPlayer[];
-  first_blood_time?: number | null;
-  barracks_status_radiant?: number | null;
-  barracks_status_dire?: number | null;
-  tower_status_radiant?: number | null;
-  tower_status_dire?: number | null;
 }
 
-/** Вытаскивает account_ids в порядке pick'ов команды (radiant/dire). */
-function extractAccountIds(
-  players: OpenDotaPlayer[] | undefined,
-  picks: { radiantPicks: number[]; direPicks: number[] },
-): { radiantAccountIds: number[] | null; direAccountIds: number[] | null } {
-  if (!players || players.length === 0) {
-    return { radiantAccountIds: null, direAccountIds: null };
-  }
-  const heroToAccount = new Map<number, { radiant: number | null; dire: number | null }>();
-  for (const p of players) {
-    if (!p.hero_id || p.hero_id <= 0) continue;
-    const isRadiant = p.player_slot < 128;
-    const cur = heroToAccount.get(p.hero_id) ?? { radiant: null, dire: null };
-    if (isRadiant) cur.radiant = p.account_id ?? null;
-    else cur.dire = p.account_id ?? null;
-    heroToAccount.set(p.hero_id, cur);
-  }
-  const rIds = picks.radiantPicks.map(h => heroToAccount.get(h)?.radiant ?? 0);
-  const dIds = picks.direPicks.map(h => heroToAccount.get(h)?.dire ?? 0);
-  // Если все 0 (анонимные) — храним null чтобы playerSkill фича не считалась.
-  const r = rIds.every(x => x === 0) ? null : rIds;
-  const d = dIds.every(x => x === 0) ? null : dIds;
-  return { radiantAccountIds: r, direAccountIds: d };
-}
+// ---------- OpenDota helpers ----------
 
-const SLEEP_MS = 1100;
+const OD_SLEEP_MS = 1100;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-async function fetchMatch(matchId: number): Promise<OpenDotaMatch> {
-  const url = `https://api.opendota.com/api/matches/${matchId}`;
-  const resp = await fetch(url);
+async function fetchMatchOpenDota(matchId: number): Promise<OpenDotaMatch> {
+  const resp = await fetch(`https://api.opendota.com/api/matches/${matchId}`, {
+    signal: AbortSignal.timeout(15_000),
+  });
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for match ${matchId}`);
   return (await resp.json()) as OpenDotaMatch;
 }
 
-function partition(pb: OpenDotaPickBan[]): {
-  radiantPicks: number[];
-  direPicks: number[];
-  radiantBans: number[];
-  direBans: number[];
-} {
+function partitionOD(pb: OpenDotaPickBan[]) {
   const radiantPicks: number[] = [];
   const direPicks: number[] = [];
   const radiantBans: number[] = [];
   const direBans: number[] = [];
   for (const p of pb) {
-    if (p.is_pick) {
-      (p.team === 0 ? radiantPicks : direPicks).push(p.hero_id);
-    } else {
-      (p.team === 0 ? radiantBans : direBans).push(p.hero_id);
-    }
+    if (p.is_pick) (p.team === 0 ? radiantPicks : direPicks).push(p.hero_id);
+    else (p.team === 0 ? radiantBans : direBans).push(p.hero_id);
   }
   return { radiantPicks, direPicks, radiantBans, direBans };
 }
 
+function extractAccountIdsOD(
+  players: OpenDotaPlayer[] | undefined,
+  picks: { radiantPicks: number[]; direPicks: number[] },
+) {
+  if (!players?.length) return { radiantAccountIds: null, direAccountIds: null };
+  const heroToAccount = new Map<number, { radiant: number | null; dire: number | null }>();
+  for (const p of players) {
+    if (!p.hero_id || p.hero_id <= 0) continue;
+    const isR = p.player_slot < 128;
+    const cur = heroToAccount.get(p.hero_id) ?? { radiant: null, dire: null };
+    if (isR) cur.radiant = p.account_id ?? null;
+    else cur.dire = p.account_id ?? null;
+    heroToAccount.set(p.hero_id, cur);
+  }
+  const rIds = picks.radiantPicks.map(h => heroToAccount.get(h)?.radiant ?? 0);
+  const dIds = picks.direPicks.map(h => heroToAccount.get(h)?.dire ?? 0);
+  return {
+    radiantAccountIds: rIds.every(x => x === 0) ? null : rIds,
+    direAccountIds: dIds.every(x => x === 0) ? null : dIds,
+  };
+}
+
+// ---------- Stratz helpers ----------
+
+function partitionStratz(pickBans: StratzPickBan[]) {
+  const radiantPicks: number[] = [];
+  const direPicks: number[] = [];
+  const radiantBans: number[] = [];
+  const direBans: number[] = [];
+  // Stratz отдаёт пики/баны в порядке order — сохраняем как есть.
+  const sorted = [...pickBans].sort((a, b) => a.order - b.order);
+  for (const p of sorted) {
+    if (!p.heroId) continue;
+    if (p.isPick) (p.isRadiant ? radiantPicks : direPicks).push(p.heroId);
+    else (p.isRadiant ? radiantBans : direBans).push(p.heroId);
+  }
+  return { radiantPicks, direPicks, radiantBans, direBans };
+}
+
+function extractAccountIdsStratz(
+  players: StratzPlayerSlot[],
+  picks: { radiantPicks: number[]; direPicks: number[] },
+) {
+  // steamAccountId в Stratz — это Steam64 сдвинутый в Steam32 (или уже Steam32?).
+  // Stratz возвращает 32-битный steamAccountId (тот же что account_id в OpenDota).
+  const heroToAccount = new Map<number, { radiant: number | null; dire: number | null }>();
+  for (const p of players) {
+    const heroId = p.hero?.id;
+    if (!heroId) continue;
+    const cur = heroToAccount.get(heroId) ?? { radiant: null, dire: null };
+    const accId = p.steamAccountId && p.steamAccountId > 0 ? p.steamAccountId : null;
+    if (p.isRadiant) cur.radiant = accId;
+    else cur.dire = accId;
+    heroToAccount.set(heroId, cur);
+  }
+  const rIds = picks.radiantPicks.map(h => heroToAccount.get(h)?.radiant ?? 0);
+  const dIds = picks.direPicks.map(h => heroToAccount.get(h)?.dire ?? 0);
+  return {
+    radiantAccountIds: rIds.every(x => x === 0) ? null : rIds,
+    direAccountIds: dIds.every(x => x === 0) ? null : dIds,
+  };
+}
+
+// ---------- main ----------
+
 async function main() {
   const args = process.argv.slice(2);
   const backfill = args.includes('--backfill-accounts');
-  const limit = args.find(a => /^\d+$/.test(a)) ? Number(args.find(a => /^\d+$/.test(a))) : null;
+  const forceOpenDota = args.includes('--no-stratz');
+  const limitArg = args.find(a => /^\d+$/.test(a));
+  const limit = limitArg ? Number(limitArg) : null;
+
+  const useStratz = !forceOpenDota && !!process.env['STRATZ_TOKEN'];
+  console.log(`[ingest-drafts] source=${useStratz ? 'Stratz (primary) + OpenDota (fallback)' : 'OpenDota only'}`);
+  if (!useStratz && !forceOpenDota) {
+    console.log('[ingest-drafts] Tip: добавьте STRATZ_TOKEN в Replit Secrets для 4× ускорения (250 req/min вместо ~60).');
+  }
 
   let todo: { matchId: number }[];
 
@@ -118,7 +168,6 @@ async function main() {
     todo = limit !== null ? await q.limit(limit) : await q;
   } else {
     console.log('[ingest-drafts] Selecting v2-eligible matches without drafts …');
-    // Только матчи где обе команды есть в teams и avg Glicko >= MIN_AVG_GLICKO.
     const tR = teamsTable;
     const radiantTeams = db.$with('rt').as(
       db.select({ teamId: tR.teamId, rating: tR.rating }).from(tR),
@@ -142,7 +191,11 @@ async function main() {
       .orderBy(sql`${proMatchesTable.startTime} DESC`);
     todo = limit !== null ? await q.limit(limit) : await q;
   }
-  console.log(`[ingest-drafts] ${todo.length} matches to fetch (≈${(todo.length * 1.1 / 60).toFixed(1)} min)`);
+
+  const etaMins = useStratz
+    ? (todo.length * 0.26 / 60).toFixed(1)
+    : (todo.length * 1.1 / 60).toFixed(1);
+  console.log(`[ingest-drafts] ${todo.length} matches to fetch (≈${etaMins} min)`);
 
   if (todo.length === 0) {
     console.log('[ingest-drafts] Nothing to do.');
@@ -152,70 +205,114 @@ async function main() {
   let saved = 0;
   let nullDraft = 0;
   let failed = 0;
+  let stratzFallbacks = 0;
 
   for (let i = 0; i < todo.length; i++) {
     const matchId = todo[i].matchId;
+    let usedSource = 'opendota';
+
     try {
-      const m = await fetchMatch(matchId);
-      if (!m.picks_bans || m.picks_bans.length === 0) {
-        nullDraft++;
-        // Записываем пустые массивы — чтобы не дёргать этот матч повторно.
-        await db
-          .insert(matchDraftsTable)
-          .values({
-            matchId,
-            radiantPicks: [],
-            direPicks: [],
-            radiantBans: [],
-            direBans: [],
-          })
-          .onConflictDoNothing();
-      } else {
-        const parts = partition(m.picks_bans);
-        const accs = extractAccountIds(m.players, parts);
-        if (backfill) {
-          // Только обновляем account_ids; picks/bans не трогаем.
-          await db
-            .update(matchDraftsTable)
-            .set({
-              radiantAccountIds: accs.radiantAccountIds,
-              direAccountIds: accs.direAccountIds,
-            })
-            .where(sql`${matchDraftsTable.matchId} = ${matchId}`);
-        } else {
-          await db
-            .insert(matchDraftsTable)
-            .values({ matchId, ...parts, ...accs })
-            .onConflictDoNothing();
+      if (useStratz) {
+        usedSource = 'stratz';
+        try {
+          const m = await fetchMatchDetail(matchId);
+          const pb = m.pickBans ?? [];
+          if (pb.length === 0) {
+            nullDraft++;
+            await db.insert(matchDraftsTable)
+              .values({ matchId, radiantPicks: [], direPicks: [], radiantBans: [], direBans: [] })
+              .onConflictDoNothing();
+          } else {
+            const parts = partitionStratz(pb);
+            const accs = extractAccountIdsStratz(m.players ?? [], parts);
+            if (backfill) {
+              await db.update(matchDraftsTable)
+                .set({ radiantAccountIds: accs.radiantAccountIds, direAccountIds: accs.direAccountIds })
+                .where(sql`${matchDraftsTable.matchId} = ${matchId}`);
+            } else {
+              await db.insert(matchDraftsTable)
+                .values({ matchId, ...parts, ...accs })
+                .onConflictDoNothing();
+            }
+            saved++;
+          }
+          await stratzSleep();
+        } catch (stratzErr) {
+          if (stratzErr instanceof StratzUnavailableError) {
+            // Stratz не отвечает — уходим на OpenDota для этого матча
+            stratzFallbacks++;
+            usedSource = 'opendota(fallback)';
+            const m = await fetchMatchOpenDota(matchId);
+            if (!m.picks_bans?.length) {
+              nullDraft++;
+              await db.insert(matchDraftsTable)
+                .values({ matchId, radiantPicks: [], direPicks: [], radiantBans: [], direBans: [] })
+                .onConflictDoNothing();
+            } else {
+              const parts = partitionOD(m.picks_bans);
+              const accs = extractAccountIdsOD(m.players, parts);
+              if (backfill) {
+                await db.update(matchDraftsTable)
+                  .set({ radiantAccountIds: accs.radiantAccountIds, direAccountIds: accs.direAccountIds })
+                  .where(sql`${matchDraftsTable.matchId} = ${matchId}`);
+              } else {
+                await db.insert(matchDraftsTable)
+                  .values({ matchId, ...parts, ...accs })
+                  .onConflictDoNothing();
+              }
+              saved++;
+            }
+            await sleep(OD_SLEEP_MS);
+          } else {
+            throw stratzErr;
+          }
         }
-        saved++;
+      } else {
+        // OpenDota-only path
+        const m = await fetchMatchOpenDota(matchId);
+        if (!m.picks_bans?.length) {
+          nullDraft++;
+          await db.insert(matchDraftsTable)
+            .values({ matchId, radiantPicks: [], direPicks: [], radiantBans: [], direBans: [] })
+            .onConflictDoNothing();
+        } else {
+          const parts = partitionOD(m.picks_bans);
+          const accs = extractAccountIdsOD(m.players, parts);
+          if (backfill) {
+            await db.update(matchDraftsTable)
+              .set({ radiantAccountIds: accs.radiantAccountIds, direAccountIds: accs.direAccountIds })
+              .where(sql`${matchDraftsTable.matchId} = ${matchId}`);
+          } else {
+            await db.insert(matchDraftsTable)
+              .values({ matchId, ...parts, ...accs })
+              .onConflictDoNothing();
+          }
+          saved++;
+        }
+        await sleep(OD_SLEEP_MS);
       }
     } catch (e) {
       failed++;
       const msg = (e as Error).message;
-      // 404 — матч удалён из OpenDota; помечаем пустым драфтом чтобы не повторять.
-      if (msg.includes('HTTP 404')) {
-        await db
-          .insert(matchDraftsTable)
-          .values({
-            matchId,
-            radiantPicks: [],
-            direPicks: [],
-            radiantBans: [],
-            direBans: [],
-          })
+      // 404 — матч удалён из источника; помечаем пустым чтобы не повторять.
+      if (msg.includes('HTTP 404') || msg.includes('not found')) {
+        await db.insert(matchDraftsTable)
+          .values({ matchId, radiantPicks: [], direPicks: [], radiantBans: [], direBans: [] })
           .onConflictDoNothing();
       }
+      // При ошибке Stratz делаем небольшую паузу чтобы не долбить эндпоинт
+      if (usedSource.startsWith('stratz')) await stratzSleep();
     }
+
     if ((i + 1) % 10 === 0 || i === todo.length - 1) {
+      const fb = stratzFallbacks > 0 ? ` fb=${stratzFallbacks}` : '';
       process.stdout.write(
-        `\r[ingest-drafts] ${i + 1}/${todo.length} · saved: ${saved} · null: ${nullDraft} · failed: ${failed}`,
+        `\r[ingest-drafts] ${i + 1}/${todo.length} · saved=${saved} null=${nullDraft} failed=${failed}${fb}`,
       );
     }
-    await sleep(SLEEP_MS);
   }
 
-  console.log(`\n[ingest-drafts] Done. saved=${saved} null=${nullDraft} failed=${failed}`);
+  console.log(`\n[ingest-drafts] Done. saved=${saved} null=${nullDraft} failed=${failed} stratz_fallbacks=${stratzFallbacks}`);
   process.exit(0);
 }
 

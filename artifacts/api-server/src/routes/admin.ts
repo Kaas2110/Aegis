@@ -14,6 +14,7 @@
  *   GET  /api/admin/models           — список активных ML-моделей
  *   GET  /api/admin/integrations     — список внешних API-интеграций + статус ключей
  *   PUT  /api/admin/integrations     — задать/очистить override ENV-ключа
+ *   POST /api/admin/bookmakers/probe — diagnostic: live-probe букмекерских адаптеров
  */
 
 import { Router, type IRouter } from 'express';
@@ -23,6 +24,7 @@ import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/Outcome
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
+import { KNOWN_SOURCE_IDS, probeSource, type SourceProbeResult } from './bookmakers';
 import { db, modelVersionsTable } from '@workspace/db';
 import { desc, eq } from 'drizzle-orm';
 
@@ -153,6 +155,33 @@ router.put('/integrations', async (req, res) => {
     req.log.error({ err, envName: body.envName }, 'failed to update integration override');
     res.status(500).json({ error: String(err) });
   }
+});
+
+/**
+ * POST /api/admin/bookmakers/probe
+ * Diagnostic: 1 raw запрос к каждому букмекеру (либо к указанному `source`).
+ * Возвращает HTTP-код, content-type, размер, latency, первые байты, флаг
+ * proxyUsed. Per-source rate-limit 30s, чтобы пользователь не залупил
+ * заблокированный источник в десятки запросов подряд.
+ */
+router.post('/bookmakers/probe', async (req, res) => {
+  const body = req.body as { source?: unknown };
+  const requested =
+    typeof body.source === 'string' && body.source.length > 0
+      ? [body.source]
+      : KNOWN_SOURCE_IDS;
+  for (const id of requested) {
+    if (!KNOWN_SOURCE_IDS.includes(id)) {
+      res.status(400).json({ error: `unknown source: ${id}`, knownSources: KNOWN_SOURCE_IDS });
+      return;
+    }
+  }
+  const results: SourceProbeResult[] = await Promise.all(requested.map((id) => probeSource(id)));
+  res.json({
+    probedAt: new Date().toISOString(),
+    proxyConfigured: !!getApiKey('PROXY_URL'),
+    results,
+  });
 });
 
 router.get('/models', async (_req, res) => {

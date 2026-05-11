@@ -18,6 +18,14 @@
  *   - totalKills / totalDuration / firstBlood — типы зарезервированы, маппинг
  *     добавим вместе с EV-merge (отдельная сессия после Wave «B»).
  *
+ * Реальность с не-РФ IP (Replit): все 6 источников блочат гео либо через DNS
+ * (line.ligastavok.ru / line34.fonbet.ru не резолвятся), либо через Cloudflare
+ * (1xstavka 403), либо отдают HTML-челлендж главной страницы вместо JSON.
+ * **Без `PROXY_URL` (РФ-прокси) бэк не получит данные.** Это не баг кода —
+ * это фундаментальное ограничение площадки. Для диагностики на проде есть
+ * admin-эндпоинт `POST /api/admin/bookmakers/probe` — делает по 1 запросу
+ * и возвращает HTTP-код, content-type, размер, latency и первые байты.
+ *
  * ToS: использование этих API находится в серой зоне — пользователь предупреждён.
  */
 import { Router, type IRouter } from 'express';
@@ -339,6 +347,37 @@ async function adapterOlimp(): Promise<SourceResponse> {
   return { source: 'olimp', isMock: false, events, fetchedAt: new Date().toISOString() };
 }
 
+// URL-ы держим в отдельной таблице, чтобы probe-эндпоинт мог дёргать ровно тот
+// же URL что и адаптер (без парсинга).
+const SOURCE_URLS: Record<string, string> = {
+  fonbet: 'https://line34.fonbet.ru/api/v1/line/sport/events?sport=12&count=50',
+  liga_stavok:
+    'https://line.ligastavok.ru/lsbets/api/v3/line/championships?sportFamilyKind=Esports&take=200',
+  pari: 'https://pari.ru/api/v3/line/events?sportId=33&take=200',
+  betboom: 'https://betboom.ru/api/v3/sports/40/line?take=200',
+  x1stavka:
+    'https://1xstavka.ru/LineFeed/Get1x2_VZip?sports=1620&count=200&lng=ru&mode=4&country=1&getEmpty=true',
+  olimp: 'https://www.olimp.bet/ru/api/lines/get_events?sport=cybersport&subsport=dota-2&take=200',
+};
+
+const SOURCE_REFERERS: Record<string, { Origin: string; Referer: string }> = {
+  fonbet: { Origin: 'https://www.fonbet.ru', Referer: 'https://www.fonbet.ru/sports/esports/' },
+  liga_stavok: {
+    Origin: 'https://www.ligastavok.ru',
+    Referer: 'https://www.ligastavok.ru/bets/esports/dota',
+  },
+  pari: { Origin: 'https://pari.ru', Referer: 'https://pari.ru/cybersport/dota-2' },
+  betboom: { Origin: 'https://betboom.ru', Referer: 'https://betboom.ru/sport/cybersport/dota-2' },
+  x1stavka: {
+    Origin: 'https://1xstavka.ru',
+    Referer: 'https://1xstavka.ru/line/esports/dota-2/',
+  },
+  olimp: {
+    Origin: 'https://www.olimp.bet',
+    Referer: 'https://www.olimp.bet/ru/cybersport/dota-2',
+  },
+};
+
 const ADAPTERS: Record<string, () => Promise<SourceResponse>> = {
   fonbet: adapterFonbet,
   liga_stavok: adapterLigaStavok,
@@ -356,6 +395,11 @@ const SOURCE_NAMES: Record<string, string> = {
   x1stavka: '1xStavka',
   olimp: 'Olimp.bet',
 };
+
+export const KNOWN_SOURCE_IDS = Object.keys(ADAPTERS);
+export function getSourceName(id: string): string {
+  return SOURCE_NAMES[id] ?? id;
+}
 
 // ---------- Helpers used by routes ----------
 
@@ -422,13 +466,25 @@ async function fetchSource(source: string): Promise<SourceResponse> {
 // ---------- Routes ----------
 
 router.get('/status', (_req, res) => {
-  const sources: Record<string, { name: string; available: boolean; cached: boolean; lastError?: string }> = {};
+  const sources: Record<
+    string,
+    {
+      name: string;
+      available: boolean;
+      cached: boolean;
+      lastFetchedAt?: string;
+      eventsCount?: number;
+      lastError?: string;
+    }
+  > = {};
   for (const id of Object.keys(ADAPTERS)) {
     const cached = cache[id]?.value;
     sources[id] = {
       name: SOURCE_NAMES[id] ?? id,
       available: BOOKMAKERS_ENABLED,
       cached: !!getCached(id),
+      ...(cached?.fetchedAt ? { lastFetchedAt: cached.fetchedAt } : {}),
+      ...(cached ? { eventsCount: cached.events.length } : {}),
       ...(cached?.error ? { lastError: cached.error } : {}),
     };
   }
@@ -442,6 +498,182 @@ router.get('/status', (_req, res) => {
       : 'Букмекерский функционал выключен. Установите BOOKMAKERS_ENABLED=true в ENV.',
   });
 });
+
+// ---------- Unified merge ----------
+// Нормализуем имя команды для дедупликации: убираем кавычки/тире/пробелы,
+// приводим к нижнему регистру. Простая эвристика, для EV-merge с pro_matches
+// будет более строгий matcher (по teamId), но для UI-агрегатора достаточно.
+function normalizeTeamName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[''`""«»]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .trim();
+}
+
+function pairKey(team1: string, team2: string): string {
+  const a = normalizeTeamName(team1);
+  const b = normalizeTeamName(team2);
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+interface MergedEvent {
+  team1: string;
+  team2: string;
+  startsAt: string | null;
+  sources: Array<{
+    source: string;
+    eventId: string;
+    winner?: UnifiedMarketWinner;
+  }>;
+  bestWinner?: { team1: { source: string; odds: number }; team2: { source: string; odds: number } };
+}
+
+router.get('/merged/dota2', async (_req, res) => {
+  if (!BOOKMAKERS_ENABLED) {
+    res.status(503).json({
+      enabled: false,
+      error: 'BOOKMAKERS_ENABLED=false',
+      hint: 'Букмекерский функционал выключен.',
+    });
+    return;
+  }
+  const all = await Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s)));
+  const byPair = new Map<string, MergedEvent>();
+  for (const src of all) {
+    if (!src.events.length) continue;
+    for (const ev of src.events) {
+      const orientation = normalizeTeamName(ev.team1) < normalizeTeamName(ev.team2);
+      const key = pairKey(ev.team1, ev.team2);
+      const team1 = orientation ? ev.team1 : ev.team2;
+      const team2 = orientation ? ev.team2 : ev.team1;
+      const winner = ev.markets.winner
+        ? orientation
+          ? ev.markets.winner
+          : { team1: ev.markets.winner.team2, team2: ev.markets.winner.team1 }
+        : undefined;
+      let merged = byPair.get(key);
+      if (!merged) {
+        merged = { team1, team2, startsAt: ev.startsAt, sources: [] };
+        byPair.set(key, merged);
+      }
+      merged.sources.push({ source: ev.source, eventId: ev.eventId, ...(winner ? { winner } : {}) });
+      if (winner) {
+        const cur = merged.bestWinner;
+        if (!cur || winner.team1 > cur.team1.odds) {
+          merged.bestWinner = {
+            team1: { source: ev.source, odds: winner.team1 },
+            team2: cur?.team2 ?? { source: ev.source, odds: winner.team2 },
+          };
+        }
+        if (!cur || winner.team2 > (merged.bestWinner?.team2.odds ?? 0)) {
+          merged.bestWinner = {
+            team1: merged.bestWinner?.team1 ?? { source: ev.source, odds: winner.team1 },
+            team2: { source: ev.source, odds: winner.team2 },
+          };
+        }
+      }
+    }
+  }
+  res.json({
+    enabled: true,
+    fetchedAt: new Date().toISOString(),
+    count: byPair.size,
+    events: Array.from(byPair.values()),
+  });
+});
+
+// ---------- Probe (admin-only diagnostic) ----------
+// Делает 1 сырой запрос к источнику, не кэширует ответ, возвращает диагностику.
+// Используется admin-роутом /api/admin/bookmakers/probe для троблшутинга прода.
+const probeRateLimit: Record<string, number> = {};
+const PROBE_MIN_INTERVAL_MS = 30_000;
+
+export interface SourceProbeResult {
+  source: string;
+  name: string;
+  url: string;
+  ok: boolean;
+  httpStatus: number | null;
+  contentType: string | null;
+  bodySize: number | null;
+  latencyMs: number;
+  proxyUsed: boolean;
+  bodyPreview: string;
+  error?: string;
+  rateLimited?: boolean;
+}
+
+export async function probeSource(id: string): Promise<SourceProbeResult> {
+  const url = SOURCE_URLS[id];
+  const name = getSourceName(id);
+  if (!url) {
+    return {
+      source: id,
+      name,
+      url: '',
+      ok: false,
+      httpStatus: null,
+      contentType: null,
+      bodySize: null,
+      latencyMs: 0,
+      proxyUsed: false,
+      bodyPreview: '',
+      error: 'unknown_source',
+    };
+  }
+  const now = Date.now();
+  if (now - (probeRateLimit[id] ?? 0) < PROBE_MIN_INTERVAL_MS) {
+    return {
+      source: id,
+      name,
+      url,
+      ok: false,
+      httpStatus: null,
+      contentType: null,
+      bodySize: null,
+      latencyMs: 0,
+      proxyUsed: false,
+      bodyPreview: '',
+      error: `rate_limited (min ${PROBE_MIN_INTERVAL_MS / 1000}s between probes)`,
+      rateLimited: true,
+    };
+  }
+  probeRateLimit[id] = now;
+  const proxyUsed = !!getApiKey('PROXY_URL');
+  const start = Date.now();
+  try {
+    const headers = SOURCE_REFERERS[id] ?? { Origin: '', Referer: '' };
+    const resp = await fetchWithProxy(url, headers);
+    const text = await resp.text();
+    return {
+      source: id,
+      name,
+      url,
+      ok: resp.ok,
+      httpStatus: resp.status,
+      contentType: resp.headers.get('content-type'),
+      bodySize: text.length,
+      latencyMs: Date.now() - start,
+      proxyUsed,
+      bodyPreview: text.slice(0, 200),
+    };
+  } catch (err) {
+    return {
+      source: id,
+      name,
+      url,
+      ok: false,
+      httpStatus: null,
+      contentType: null,
+      bodySize: null,
+      latencyMs: Date.now() - start,
+      proxyUsed,
+      bodyPreview: '',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
 
 router.get('/all/dota2', async (_req, res) => {
   if (!BOOKMAKERS_ENABLED) {

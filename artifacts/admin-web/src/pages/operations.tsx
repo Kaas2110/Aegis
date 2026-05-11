@@ -5,10 +5,12 @@ import {
   useGetAdminOddsStatus,
   useGetAdminIntegrations,
   useUpdateAdminIntegration,
+  useProbeAdminBookmakers,
   getGetAdminIntegrationsQueryKey,
   getGetAdminOddsStatusQueryKey,
   getGetAdminSettingsQueryKey,
   type AdminIntegrationStatus,
+  type AdminBookmakerProbeResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -75,6 +77,120 @@ const PUBLIC_SOURCES: { name: string; description: string; url: string }[] = [
     url: "https://www.olimp.bet",
   },
 ];
+
+function BookmakerProbePanel() {
+  const { toast } = useToast();
+  const probe = useProbeAdminBookmakers();
+  const [results, setResults] = useState<AdminBookmakerProbeResult[] | null>(null);
+  const [probedAt, setProbedAt] = useState<string | null>(null);
+  const [proxyConfigured, setProxyConfigured] = useState<boolean>(false);
+
+  const handleProbe = () => {
+    probe.mutate(
+      { data: {} },
+      {
+        onSuccess: (data) => {
+          setResults(data.results);
+          setProbedAt(data.probedAt);
+          setProxyConfigured(data.proxyConfigured);
+          const okCount = data.results.filter((r) => r.ok && (r.contentType ?? "").includes("json")).length;
+          toast({
+            title: "Probe завершён",
+            description: `Живых JSON-источников: ${okCount} / ${data.results.length}`,
+          });
+        },
+        onError: (err: unknown) => {
+          toast({
+            variant: "destructive",
+            title: "Ошибка probe",
+            description: err instanceof Error ? err.message : "—",
+          });
+        },
+      },
+    );
+  };
+
+  const verdict = (r: AdminBookmakerProbeResult): { label: string; color: string } => {
+    if (r.rateLimited) return { label: "RATE-LIMIT", color: "text-muted-foreground" };
+    if (r.error && r.httpStatus === null) return { label: "DNS / CONN", color: "text-dire" };
+    if (r.httpStatus && r.httpStatus >= 500) return { label: `HTTP ${r.httpStatus}`, color: "text-dire" };
+    if (r.httpStatus === 403) return { label: "BLOCKED 403", color: "text-dire" };
+    if (r.httpStatus === 404) return { label: "404 (URL устарел)", color: "text-dire" };
+    if (r.ok && r.contentType && !r.contentType.includes("json"))
+      return { label: "HTML (челлендж)", color: "text-primary" };
+    if (r.ok && r.contentType?.includes("json")) return { label: "OK JSON", color: "text-radiant" };
+    return { label: r.error ?? "?", color: "text-muted-foreground" };
+  };
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="border-b border-border pb-4">
+        <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+          Букмекеры — диагностика источников
+        </CardTitle>
+        <CardDescription className="font-mono text-xs">
+          1 запрос на источник, минимум 30 сек между probe одного источника. На не-РФ IP
+          без PROXY_URL все 6 источников будут заблокированы (DNS / Cloudflare / гео).
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-6 space-y-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            onClick={handleProbe}
+            disabled={probe.isPending}
+            className="rounded-none font-mono text-xs uppercase tracking-wider"
+          >
+            {probe.isPending ? "PROBING..." : "ЗАПУСТИТЬ PROBE (6 ИСТОЧНИКОВ)"}
+          </Button>
+          {probedAt ? (
+            <span className="font-mono text-[10px] text-muted-foreground uppercase">
+              Запущен: {formatDate(probedAt)} · proxy: {proxyConfigured ? "ON" : "OFF"}
+            </span>
+          ) : null}
+        </div>
+
+        {results ? (
+          <div className="border border-border bg-background overflow-x-auto">
+            <table className="w-full text-xs font-mono">
+              <thead className="bg-card border-b border-border">
+                <tr className="text-left text-muted-foreground uppercase text-[10px]">
+                  <th className="px-3 py-2">Источник</th>
+                  <th className="px-3 py-2">Статус</th>
+                  <th className="px-3 py-2">HTTP</th>
+                  <th className="px-3 py-2">Тип</th>
+                  <th className="px-3 py-2">Размер</th>
+                  <th className="px-3 py-2">Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => {
+                  const v = verdict(r);
+                  return (
+                    <tr key={r.source} className="border-t border-border">
+                      <td className="px-3 py-2 font-bold text-foreground">{r.name}</td>
+                      <td className={`px-3 py-2 font-bold ${v.color}`}>{v.label}</td>
+                      <td className="px-3 py-2">{r.httpStatus ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground truncate max-w-[160px]">
+                        {r.contentType ?? "—"}
+                      </td>
+                      <td className="px-3 py-2">{r.bodySize ?? "—"}b</td>
+                      <td className="px-3 py-2">{r.latencyMs}ms</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="font-mono text-xs text-muted-foreground">
+            Нажмите «Запустить probe» — увидите живой статус каждого источника. На Replit без
+            PROXY_URL ожидается «DNS / CONN», «BLOCKED 403» или «HTML (челлендж)» вместо JSON.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function IntegrationCard({ integration }: { integration: AdminIntegrationStatus }) {
   const { toast } = useToast();
@@ -431,6 +547,8 @@ export default function Operations() {
           )}
         </CardContent>
       </Card>
+
+      <BookmakerProbePanel />
 
       <Card className="rounded-none border-border bg-card">
         <CardHeader className="border-b border-border pb-4">

@@ -7,6 +7,9 @@
  */
 
 export * from "./adminAppSettings";
+export * from "./adminBookmakerProbeInput";
+export * from "./adminBookmakerProbeResponse";
+export * from "./adminBookmakerProbeResult";
 export * from "./adminIntegrationsResponse";
 export * from "./adminIntegrationStatus";
 export * from "./adminIntegrationStatusCategory";

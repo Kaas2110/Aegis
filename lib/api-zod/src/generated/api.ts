@@ -152,6 +152,39 @@ export const GetAdminModelsResponse = zod.object({
 });
 
 /**
+ * @summary Diagnostic — live single request to each bookmaker source
+ */
+export const ProbeAdminBookmakersBody = zod.object({
+  source: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional — probe only this source id. Empty = all known sources.",
+    ),
+});
+
+export const ProbeAdminBookmakersResponse = zod.object({
+  probedAt: zod.string(),
+  proxyConfigured: zod.boolean(),
+  results: zod.array(
+    zod.object({
+      source: zod.string(),
+      name: zod.string(),
+      url: zod.string(),
+      ok: zod.boolean(),
+      httpStatus: zod.number().nullish(),
+      contentType: zod.string().nullish(),
+      bodySize: zod.number().nullish(),
+      latencyMs: zod.number(),
+      proxyUsed: zod.boolean(),
+      bodyPreview: zod.string(),
+      error: zod.string().optional(),
+      rateLimited: zod.boolean().optional(),
+    }),
+  ),
+});
+
+/**
  * @summary List external API integrations and their key status
  */
 export const GetAdminIntegrationsResponse = zod.object({

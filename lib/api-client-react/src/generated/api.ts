@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdminBookmakerProbeInput,
+  AdminBookmakerProbeResponse,
   AdminIntegrationUpdateInput,
   AdminIntegrationUpdateResponse,
   AdminIntegrationsResponse,
@@ -991,6 +993,96 @@ export function useGetAdminModels<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Diagnostic — live single request to each bookmaker source
+ */
+export const getProbeAdminBookmakersUrl = () => {
+  return `/api/admin/bookmakers/probe`;
+};
+
+export const probeAdminBookmakers = async (
+  adminBookmakerProbeInput?: AdminBookmakerProbeInput,
+  options?: RequestInit,
+): Promise<AdminBookmakerProbeResponse> => {
+  return customFetch<AdminBookmakerProbeResponse>(
+    getProbeAdminBookmakersUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminBookmakerProbeInput),
+    },
+  );
+};
+
+export const getProbeAdminBookmakersMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof probeAdminBookmakers>>,
+    TError,
+    { data: BodyType<AdminBookmakerProbeInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof probeAdminBookmakers>>,
+  TError,
+  { data: BodyType<AdminBookmakerProbeInput> },
+  TContext
+> => {
+  const mutationKey = ["probeAdminBookmakers"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof probeAdminBookmakers>>,
+    { data: BodyType<AdminBookmakerProbeInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return probeAdminBookmakers(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ProbeAdminBookmakersMutationResult = NonNullable<
+  Awaited<ReturnType<typeof probeAdminBookmakers>>
+>;
+export type ProbeAdminBookmakersMutationBody =
+  BodyType<AdminBookmakerProbeInput>;
+export type ProbeAdminBookmakersMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Diagnostic — live single request to each bookmaker source
+ */
+export const useProbeAdminBookmakers = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof probeAdminBookmakers>>,
+    TError,
+    { data: BodyType<AdminBookmakerProbeInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof probeAdminBookmakers>>,
+  TError,
+  { data: BodyType<AdminBookmakerProbeInput> },
+  TContext
+> => {
+  return useMutation(getProbeAdminBookmakersMutationOptions(options));
+};
 
 /**
  * @summary List external API integrations and their key status

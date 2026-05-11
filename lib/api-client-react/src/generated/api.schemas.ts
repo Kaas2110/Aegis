@@ -158,6 +158,35 @@ export interface AdminIntegrationUpdateResponse {
   integration: AdminIntegrationStatus;
 }
 
+export interface AdminBookmakerProbeInput {
+  /** Optional — probe only this source id. Empty = all known sources. */
+  source?: string;
+}
+
+export interface AdminBookmakerProbeResult {
+  source: string;
+  name: string;
+  url: string;
+  ok: boolean;
+  /** @nullable */
+  httpStatus?: number | null;
+  /** @nullable */
+  contentType?: string | null;
+  /** @nullable */
+  bodySize?: number | null;
+  latencyMs: number;
+  proxyUsed: boolean;
+  bodyPreview: string;
+  error?: string;
+  rateLimited?: boolean;
+}
+
+export interface AdminBookmakerProbeResponse {
+  probedAt: string;
+  proxyConfigured: boolean;
+  results: AdminBookmakerProbeResult[];
+}
+
 export interface AdminOpenObject {
   [key: string]: unknown;
 }
