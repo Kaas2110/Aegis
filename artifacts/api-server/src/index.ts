@@ -4,6 +4,7 @@ import { ensureSchema } from "./lib/ensureSchema";
 import { startLiveWorker } from "./services/LiveWorker";
 import { startScheduler } from "./services/SchedulerWorker";
 import { startOutcomeTracker } from "./services/OutcomeTracker";
+import { startBackgroundPoller } from "./services/BackgroundPoller";
 import { loadActiveLiveModel } from "./services/LiveWinnerModel";
 import { loadActiveMarketModels } from "./services/MarketLgbm";
 import { primeApiKeysCache } from "./services/ApiKeysService";
@@ -68,4 +69,9 @@ app.listen(port, async (err) => {
   } else {
     logger.warn("OutcomeTracker disabled via DISABLE_OUTCOME_TRACKER=true");
   }
+
+  // BackgroundPoller: PandaScore upcoming каждые 30 мин + пре-вычисление
+  // ML-прогнозов. Делает мобильный клиент дешёвым: /api/matches/upcoming
+  // отдаёт готовый снэпшот вместо синхронного fetch.
+  startBackgroundPoller();
 });

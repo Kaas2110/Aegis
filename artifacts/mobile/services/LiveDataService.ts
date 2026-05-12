@@ -86,18 +86,26 @@ function formatBOFormat(seriesType?: number): 'BO1' | 'BO3' | 'BO5' {
   return 'BO3';
 }
 
+function cleanTeamName(raw: string): string {
+  // OpenDota иногда отдаёт имена с ведущим подчёркиванием («_PoWeRRangers»),
+  // отделом неудачного парсинга/нормализации на их стороне. Убираем
+  // лидирующие `_` / пробелы, чтобы UI не показывал «_PO» в hex-бейдже.
+  return raw.replace(/^[_\s]+/, '').replace(/\s+/g, ' ').trim();
+}
+
 function buildTeam(name: string, id: number | undefined, side: 'radiant' | 'dire'): Team {
   // Если ни OpenDota, ни локальный enrichment имени не дали — показываем
   // нейтральный «Без названия» вместо «Team Radiant»/«Team Dire», чтобы
   // пользователь не путал плейсхолдер с реальной фракционной меткой.
-  const hasRealName = !!name && name.trim().length > 0;
-  const displayName = hasRealName ? name : 'Без названия';
-  const shortBase = hasRealName ? name.replace(/^team\s+/i, '') : (side === 'radiant' ? 'R' : 'D');
+  const cleaned = cleanTeamName(name ?? '');
+  const hasRealName = cleaned.length > 0;
+  const displayName = hasRealName ? cleaned : 'Без названия';
+  const shortBase = hasRealName ? cleaned.replace(/^team\s+/i, '') : (side === 'radiant' ? 'R' : 'D');
   return {
     id: id ? String(id) : `${side}_anon`,
     name: displayName,
     shortName: shortBase.substring(0, 3).toUpperCase(),
-    logoPlaceholder: (hasRealName ? name : '?').substring(0, 2).toUpperCase(),
+    logoPlaceholder: (hasRealName ? cleaned : '?').substring(0, 2).toUpperCase(),
     region: 'Unknown',
     eloRating: 1720,
     recentForm: [],

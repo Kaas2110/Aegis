@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 const DEFAULT_FILTERS: Filters = {
-  bookmaker: 'all',
+  bookmaker: 'none',
   minOdds: 1.5,
   minEdge: 0.03,
   minConfidence: 60,
@@ -82,7 +82,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           setSettings({ ...DEFAULT_SETTINGS, ...parsed });
         }
-        if (fRaw) setFilters({ ...DEFAULT_FILTERS, ...JSON.parse(fRaw) });
+        if (fRaw) {
+          const parsed = JSON.parse(fRaw);
+          // Миграция: устаревшие значения 'all' / 'mock' схлопываем в 'none'
+          // (новый дефолт «без ставок, только вероятности»).
+          if (parsed.bookmaker === 'all' || parsed.bookmaker === 'mock' || parsed.bookmaker === 'betfair') {
+            parsed.bookmaker = 'none';
+          }
+          setFilters({ ...DEFAULT_FILTERS, ...parsed });
+        }
       } catch {
         // use defaults
       }

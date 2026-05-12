@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 import { db, teamsTable, leaguesTable } from '@workspace/db';
 import { inArray } from 'drizzle-orm';
 import { autoIngestTeamBackground } from '../services/TeamAutoIngestor';
+import { getUpcomingSnapshot, isUpcomingSnapshotStale } from '../services/BackgroundPoller';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
 import { getApiKey } from '../services/ApiKeysService';
@@ -175,7 +176,20 @@ router.get('/live', async (req, res) => {
   res.json(payload);
 });
 
-// upcoming тоже кэшируем — 60с (предматчевое расписание меняется медленно).
+/**
+ * GET /api/matches/upcoming
+ *
+ * Источник данных — `BackgroundPoller`, который тикает раз в 30 минут.
+ * Преимущества:
+ *   - мгновенный ответ (~1мс — чтение из памяти);
+ *   - нет амплификации: 1000 клиентов = 0 дополнительных запросов к PandaScore;
+ *   - предсказания модели уже посчитаны (см. /upcoming-with-predictions).
+ *
+ * Fallback на прямой fetch остаётся только для случая, когда поллер ещё не
+ * прогрелся (первые ~5с после старта процесса) ИЛИ принудительно выключен
+ * через `DISABLE_BACKGROUND_POLLER=true`. Это страхует от пустого экрана у
+ * первых пользователей в момент рестарта.
+ */
 router.get('/upcoming', async (req, res) => {
   const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
   if (!pandascoreKey) {
@@ -186,6 +200,22 @@ router.get('/upcoming', async (req, res) => {
     });
     return;
   }
+
+  // 1) Пробуем фоновый снэпшот. Если он протух (>2ч без успешного апдейта) —
+  // не отдаём, чтобы пользователь не увидел уже стартовавшие матчи как «upcoming».
+  const snap = getUpcomingSnapshot();
+  if (snap.fetchedAt && snap.matches.length > 0 && !snap.isMock && !isUpcomingSnapshotStale()) {
+    const enriched = await enrichWithLeagueNames(snap.matches).catch(() => snap.matches);
+    res.json({
+      isMock: false,
+      data: enriched,
+      cachedAt: snap.fetchedAt,
+      ageSec: snap.ageSec,
+    });
+    return;
+  }
+
+  // 2) Холодный старт / поллер выключен → разовый прямой fetch с дедупом.
   try {
     const data = await withCache('matches:upcoming', 60_000, async () => {
       const url = new URL(`${PANDASCORE_BASE}/dota2/matches/upcoming`);
@@ -197,8 +227,6 @@ router.get('/upcoming', async (req, res) => {
       if (!resp.ok) throw new Error(`PandaScore: HTTP ${resp.status}`);
       const raw = await resp.json() as unknown;
       const enriched = await enrichWithLeagueNames(raw).catch(() => raw);
-      // Фоновый авто-ингест команд которых нет в нашей БД.
-      // Fire-and-forget — не блокирует ответ клиенту.
       if (Array.isArray(enriched)) {
         for (const m of enriched as Record<string, unknown>[]) {
           const opps = m['opponents'] as Array<{ opponent?: { name?: string } }> | undefined;
@@ -210,11 +238,38 @@ router.get('/upcoming', async (req, res) => {
       }
       return enriched;
     });
-    res.json({ isMock: false, data });
+    res.json({ isMock: false, data, cachedAt: null, ageSec: null });
   } catch (err) {
     req.log.error({ err }, 'PandaScore upcoming error');
     res.json({ isMock: true, error: String(err), data: getMockUpcomingMatches() });
   }
+});
+
+/**
+ * GET /api/matches/upcoming-with-predictions
+ *
+ * Расширенная версия `/upcoming`: к каждому матчу прикладывает уже посчитанный
+ * ML-прогноз (или `null` если команды нет в нашей БД либо мало данных).
+ * Мобильный клиент использует это вместо отдельного похода в `/predict-by-name`
+ * на каждую карточку — экономит N сетевых вызовов на отрисовке списка.
+ *
+ * Зависит от BackgroundPoller. Если поллер выключен или ещё не прогрет,
+ * возвращает `predictions: []` — клиент при необходимости докинет запросы
+ * по требованию.
+ */
+router.get('/upcoming-with-predictions', async (_req, res) => {
+  const snap = getUpcomingSnapshot();
+  const enrichedMatches = snap.matches.length > 0
+    ? await enrichWithLeagueNames(snap.matches).catch(() => snap.matches)
+    : [];
+  res.json({
+    isMock: snap.isMock,
+    cachedAt: snap.fetchedAt,
+    ageSec: snap.ageSec,
+    matches: enrichedMatches,
+    predictions: snap.predictions,
+    ...(snap.error ? { error: snap.error } : {}),
+  });
 });
 
 // heroes/hero-stats — почти статические данные. Кэш 1 час.

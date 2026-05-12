@@ -362,7 +362,7 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, setOnboarded, setAgeConfirmed, isAdmin } = useApp();
+  const { settings, updateSettings, setOnboarded, setAgeConfirmed } = useApp();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   function Row({ label, value, onPress, danger, right }: { label: string; value?: string; onPress?: () => void; danger?: boolean; right?: React.ReactNode }) {
@@ -408,10 +408,6 @@ export default function SettingsScreen() {
   async function handleExportData() {
     await logProductEvent('privacy_export_requested', 'settings');
     Alert.alert('Экспорт данных', 'В MVP 1 данные хранятся локально в AsyncStorage. Функция полного экспорта доступна в следующих версиях.');
-  }
-
-  async function handleEnableAdmin() {
-    await updateSettings({ role: settings.role === 'admin' ? 'user' : 'admin' });
   }
 
   return (
@@ -498,20 +494,8 @@ export default function SettingsScreen() {
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="РАЗРАБОТКА" />
-        <Row
-          label={`Режим Admin ${isAdmin ? '(включен)' : ''}`}
-          right={
-            <Switch
-              value={isAdmin}
-              onValueChange={handleEnableAdmin}
-              trackColor={{ false: colors.muted, true: colors.warning + '88' }}
-              thumbColor={isAdmin ? colors.warning : colors.mutedForeground}
-            />
-          }
-        />
-        {isAdmin && (
-          <Row label="Debug: Sources & Logs" onPress={() => router.push('/admin')} />
-        )}
+        {/* Админ-функционал переехал в отдельный web-кабинет (/admin-web/).
+            В мобильном приложении остаётся только сброс онбординга. */}
         <Row label="Сброс онбординга" onPress={async () => { await setOnboarded(false); router.replace('/onboarding'); }} />
       </View>
 

@@ -88,14 +88,12 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
           team1Label={t1Label}
           team2Label={t2Label}
           modelProbTeam1={pred.modelProbability}
-          fairProbTeam1={odds.fairProbTeam1}
           oddsTeam1={odds.oddsTeam1}
           oddsTeam2={odds.oddsTeam2}
-          bookmakerName={odds.bookmakerName}
-          edgeTeam1={pred.edge}
-          evTeam1={pred.ev}
-          confidence={pred.confidence}
-          forceDetailed={expanded}
+          // На экране матча показываем кэфы всегда, чтобы дать максимум контекста.
+          // Если бук не выбран — пользователь увидит «?»; компонент сам обрабатывает
+          // невалидные кэфы и схлопывается до режима «только %».
+          showOdds
           onPressTeam1={onPress}
           onPressTeam2={onPress}
         />

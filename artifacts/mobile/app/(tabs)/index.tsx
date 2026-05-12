@@ -10,6 +10,7 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { MatchCard } from '@/components/MatchCard';
 import { FilterBar } from '@/components/FilterBar';
+import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { AegisLogo } from '@/components/AegisLogo';
 import { useSubscription } from '@/lib/revenuecat';
 import { TouchableOpacity as RNTouchable } from 'react-native';
@@ -67,7 +68,7 @@ export default function HomeScreen() {
   async function loadData(silent = false) {
     if (!silent) setLoading(true);
     try {
-      const bookmakerSource = filters.bookmaker !== 'all' ? filters.bookmaker : undefined;
+      const bookmakerSource = filters.bookmaker !== 'none' ? filters.bookmaker : undefined;
       const result = await fetchLiveData(bookmakerSource);
       setEnrichedLive(result.liveMatches);
       setEnrichedPrematch(result.prematchMatches);
@@ -235,10 +236,14 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
             <PremiumHeaderBadge />
-            <TouchableOpacity onPress={() => router.push('/admin')} style={styles.actionBtn}>
-              <Feather name="settings" size={18} color={colors.mutedForeground} />
-            </TouchableOpacity>
           </View>
+        </View>
+        {/* Букмекер-пикер вынесен под шапку: триггер занимает почти всю
+            ширину строки фильтров, чтобы пользователь сразу видел,
+            какой режим активен («Без ставок» / Fonbet / …). */}
+        <View style={styles.bookmakerRow}>
+          <Text style={[styles.bookmakerHint, { color: colors.mutedForeground }]}>Источник кэфов:</Text>
+          <BookmakerDropdown />
         </View>
         <FilterBar />
       </View>
@@ -408,6 +413,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { fontFamily: 'Inter_700Bold', fontSize: 9 },
+  bookmakerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 2,
+    gap: 8,
+  },
+  bookmakerHint: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
+    letterSpacing: 0.3,
+    flex: 1,
+  },
   list: { padding: 14, gap: 0 },
   sectionHeader: {
     flexDirection: 'row',
