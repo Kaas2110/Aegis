@@ -13,6 +13,8 @@ export interface AdminIntegrationStatus {
   label: string;
   description: string;
   docUrl: string;
+  /** Short Russian-language instruction on how to obtain the key/token. */
+  howToGet?: string;
   category: AdminIntegrationStatusCategory;
   sensitive: boolean;
   configured: boolean;

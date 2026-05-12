@@ -13,4 +13,5 @@ export const AdminIntegrationStatusCategory = {
   "data-source": "data-source",
   "odds-feed": "odds-feed",
   network: "network",
+  bookmaker: "bookmaker",
 } as const;

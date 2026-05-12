@@ -28,8 +28,9 @@ import { formatDate } from "@/lib/utils";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "data-source": "Источник данных",
-  "odds-feed": "Букмекерские котировки",
-  network: "Сетевая инфраструктура",
+  "odds-feed": "Котировки",
+  bookmaker: "Букмекер (RU)",
+  network: "Сеть",
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -44,42 +45,12 @@ const SOURCE_COLOR: Record<string, string> = {
   none: "text-muted-foreground",
 };
 
-// Публичные источники без ключей — показываем для прозрачности.
+// Публичные источники без ключей — только OpenDota; букмекеры перенесены в KNOWN_INTEGRATIONS.
 const PUBLIC_SOURCES: { name: string; description: string; url: string }[] = [
   {
     name: "OpenDota",
     description: "Live & pro-матчи, тимы, лиги, hero stats. Rate-limit ~60/мин. Без ключа.",
     url: "https://docs.opendota.com",
-  },
-  {
-    name: "Fonbet",
-    description: "Букмекер (RU). Публичный mobile API. Гео-блок не-РФ → нужен PROXY_URL.",
-    url: "https://www.fon.bet",
-  },
-  {
-    name: "Лига Ставок",
-    description: "Букмекер (RU). Публичный web JSON API. Гео-блок не-РФ → нужен PROXY_URL.",
-    url: "https://www.ligastavok.ru",
-  },
-  {
-    name: "PARI",
-    description: "Букмекер (RU). Публичный web JSON API. Гео-блок не-РФ → нужен PROXY_URL.",
-    url: "https://pari.ru",
-  },
-  {
-    name: "BetBoom",
-    description: "Букмекер (RU). Публичный web JSON API. Гео-блок не-РФ → нужен PROXY_URL.",
-    url: "https://betboom.ru",
-  },
-  {
-    name: "1xStavka",
-    description: "Букмекер (RU). Публичный mobile API. Гео-блок не-РФ → нужен PROXY_URL.",
-    url: "https://1xstavka.ru",
-  },
-  {
-    name: "Olimp.bet",
-    description: "Букмекер (RU). Публичный web JSON API. Гео-блок не-РФ → нужен PROXY_URL.",
-    url: "https://www.olimp.bet",
   },
 ];
 
@@ -404,20 +375,22 @@ function IntegrationCard({ integration }: { integration: AdminIntegrationStatus 
     );
   };
 
+  const [showHowTo, setShowHowTo] = useState(false);
+
   return (
     <div className="border border-border bg-background p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0">
+        <div className="space-y-1 min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-sm text-foreground">{integration.label}</span>
-            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider bg-card border border-border px-1.5 py-0.5">
               {CATEGORY_LABEL[integration.category] ?? integration.category}
             </span>
           </div>
           <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
             {integration.description}
           </p>
-          <div className="flex items-center gap-3 pt-1 flex-wrap">
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
             <code className="font-mono text-[10px] bg-card border border-border px-1.5 py-0.5 text-muted-foreground">
               {integration.envName}
             </code>
@@ -425,11 +398,25 @@ function IntegrationCard({ integration }: { integration: AdminIntegrationStatus 
               href={integration.docUrl}
               target="_blank"
               rel="noreferrer"
-              className="font-mono text-[10px] text-primary hover:underline uppercase tracking-wider"
+              className="inline-flex items-center gap-1 font-mono text-[10px] bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 px-2 py-0.5 uppercase tracking-wider transition-colors"
             >
-              docs ↗
+              Получить ключ ↗
             </a>
+            <button
+              type="button"
+              onClick={() => setShowHowTo((v) => !v)}
+              className="font-mono text-[10px] text-muted-foreground hover:text-foreground underline uppercase tracking-wider"
+            >
+              {showHowTo ? "Скрыть инструкцию" : "Инструкция"}
+            </button>
           </div>
+          {showHowTo && (integration as { howToGet?: string }).howToGet ? (
+            <div className="mt-2 p-2 bg-card border border-border/60 rounded-none">
+              <p className="font-mono text-[11px] text-foreground leading-relaxed">
+                {(integration as { howToGet?: string }).howToGet}
+              </p>
+            </div>
+          ) : null}
         </div>
         <div className="text-right shrink-0">
           <div

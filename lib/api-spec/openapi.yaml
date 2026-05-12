@@ -469,9 +469,12 @@ components:
           type: string
         docUrl:
           type: string
+        howToGet:
+          type: string
+          description: Short Russian-language instruction on how to obtain the key/token.
         category:
           type: string
-          enum: [data-source, odds-feed, network]
+          enum: [data-source, odds-feed, network, bookmaker]
         sensitive:
           type: boolean
         configured:

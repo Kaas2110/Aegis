@@ -222,7 +222,13 @@ export const GetAdminIntegrationsResponse = zod.object({
       label: zod.string(),
       description: zod.string(),
       docUrl: zod.string(),
-      category: zod.enum(["data-source", "odds-feed", "network"]),
+      howToGet: zod
+        .string()
+        .optional()
+        .describe(
+          "Short Russian-language instruction on how to obtain the key\/token.",
+        ),
+      category: zod.enum(["data-source", "odds-feed", "network", "bookmaker"]),
       sensitive: zod.boolean(),
       configured: zod.boolean(),
       source: zod.enum(["override", "env", "none"]),
@@ -252,7 +258,13 @@ export const UpdateAdminIntegrationResponse = zod.object({
     label: zod.string(),
     description: zod.string(),
     docUrl: zod.string(),
-    category: zod.enum(["data-source", "odds-feed", "network"]),
+    howToGet: zod
+      .string()
+      .optional()
+      .describe(
+        "Short Russian-language instruction on how to obtain the key\/token.",
+      ),
+    category: zod.enum(["data-source", "odds-feed", "network", "bookmaker"]),
     sensitive: zod.boolean(),
     configured: zod.boolean(),
     source: zod.enum(["override", "env", "none"]),

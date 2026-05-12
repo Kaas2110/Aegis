@@ -13,32 +13,29 @@ import { db, apiKeyOverridesTable } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 
-export type IntegrationCategory = 'data-source' | 'odds-feed' | 'network';
+export type IntegrationCategory = 'data-source' | 'odds-feed' | 'network' | 'bookmaker';
 
 export interface IntegrationDescriptor {
   envName: string;
   label: string;
   description: string;
+  /** Ссылка на страницу получения ключа / партнёрской программы. */
   docUrl: string;
+  /** Краткая инструкция как получить ключ (1-2 предложения). */
+  howToGet: string;
   category: IntegrationCategory;
   /** Чувствительные ключи маскируются; PROXY_URL — нет (URL это не секрет). */
   sensitive: boolean;
 }
 
 export const KNOWN_INTEGRATIONS: IntegrationDescriptor[] = [
-  {
-    envName: 'ODDS_API_KEY',
-    label: 'The Odds API',
-    description: 'Агрегатор букмекерских коэффициентов (h2h Dota 2). Бесплатный план ~500 req/мес.',
-    docUrl: 'https://the-odds-api.com',
-    category: 'odds-feed',
-    sensitive: true,
-  },
+  // ─── Источники данных ─────────────────────────────────────────────────────
   {
     envName: 'STRATZ_TOKEN',
     label: 'Stratz API',
-    description: 'Альтернативный источник live-матчей (дополняет OpenDota). Bearer-токен.',
+    description: 'Основной источник picks/bans, account_ids и hero-stats (Captains Mode). 250 req/min / 20k req/day. Бесплатно.',
     docUrl: 'https://stratz.com/api',
+    howToGet: 'Войдите через Steam на stratz.com → раздел API → «Generate Token». Токен выдаётся мгновенно, бесплатно.',
     category: 'data-source',
     sensitive: true,
   },
@@ -46,8 +43,19 @@ export const KNOWN_INTEGRATIONS: IntegrationDescriptor[] = [
     envName: 'PANDASCORE_API_KEY',
     label: 'PandaScore',
     description: 'Расписание pro-матчей (`/matches/upcoming`). Без ключа upcoming показывает мок.',
-    docUrl: 'https://pandascore.co',
+    docUrl: 'https://app.pandascore.co/signup',
+    howToGet: 'Зарегистрируйтесь на pandascore.co → войдите в Dashboard → раздел «API» → скопируйте ключ. Бесплатный план: 100 req/час.',
     category: 'data-source',
+    sensitive: true,
+  },
+  // ─── Котировки / коэффициенты ─────────────────────────────────────────────
+  {
+    envName: 'ODDS_API_KEY',
+    label: 'The Odds API',
+    description: 'Агрегатор букмекерских коэффициентов (h2h Dota 2). Бесплатный план ~500 req/мес.',
+    docUrl: 'https://the-odds-api.com/#get-access',
+    howToGet: 'Перейдите на the-odds-api.com → «Get Access» → зарегистрируйтесь → ключ появится в Dashboard. Бесплатный план: 500 запросов/месяц.',
+    category: 'odds-feed',
     sensitive: true,
   },
   {
@@ -55,14 +63,72 @@ export const KNOWN_INTEGRATIONS: IntegrationDescriptor[] = [
     label: 'Pinnacle (guest)',
     description: 'Публичный guest-ключ Pinnacle web (исп. в `services/PinnacleScraper.ts`). Best-effort.',
     docUrl: 'https://www.pinnacle.com',
+    howToGet: 'Официального API нет. Гостевой ключ извлекается из DevTools: откройте pinnacle.com → Network → найдите запросы к api.pinnacle.com → заголовок X-API-Key.',
     category: 'odds-feed',
     sensitive: true,
   },
+  // ─── Букмекеры (RU) — партнёрские API ────────────────────────────────────
+  {
+    envName: 'FONBET_API_KEY',
+    label: 'Fonbet',
+    description: 'Букмекер (RU). Публичный mobile API работает без ключа. Партнёрский API с ключом даёт live-линию и историю ставок.',
+    docUrl: 'https://partner.fon.bet',
+    howToGet: 'Перейдите на partner.fon.bet → «Стать партнёром» → оставьте заявку. После одобрения получите API-ключ в личном кабинете партнёра.',
+    category: 'bookmaker',
+    sensitive: true,
+  },
+  {
+    envName: 'LIGASTAVOK_API_KEY',
+    label: 'Лига Ставок',
+    description: 'Букмекер (RU). Публичный web JSON API работает без ключа. Партнёрский API — расширенная линия.',
+    docUrl: 'https://partner.ligastavok.ru',
+    howToGet: 'Перейдите на partner.ligastavok.ru → «Подключиться» → заполните форму. Ключ выдаётся после подписания договора.',
+    category: 'bookmaker',
+    sensitive: true,
+  },
+  {
+    envName: 'PARI_API_KEY',
+    label: 'PARI',
+    description: 'Букмекер (RU). Публичный web JSON API работает без ключа.',
+    docUrl: 'https://pari.ru/partners',
+    howToGet: 'Перейдите в раздел «Партнёрам» на pari.ru → подайте заявку на подключение партнёрского API.',
+    category: 'bookmaker',
+    sensitive: true,
+  },
+  {
+    envName: 'BETBOOM_API_KEY',
+    label: 'BetBoom',
+    description: 'Букмекер (RU). Публичный web JSON API работает без ключа.',
+    docUrl: 'https://betboom.ru/partners',
+    howToGet: 'Перейдите на betboom.ru → «Партнёрам» → зарегистрируйтесь как партнёр. API-ключ доступен после верификации.',
+    category: 'bookmaker',
+    sensitive: true,
+  },
+  {
+    envName: 'X1STAVKA_API_KEY',
+    label: '1xStavka',
+    description: 'Букмекер (RU). Публичный mobile API работает без ключа.',
+    docUrl: 'https://1xstavka.ru/partners',
+    howToGet: 'Перейдите на 1xstavka.ru → «Партнёрская программа» → оставьте заявку. API-ключ — в кабинете после одобрения.',
+    category: 'bookmaker',
+    sensitive: true,
+  },
+  {
+    envName: 'OLIMP_API_KEY',
+    label: 'Olimp.bet',
+    description: 'Букмекер (RU). Публичный web JSON API работает без ключа.',
+    docUrl: 'https://www.olimp.bet/partners',
+    howToGet: 'Перейдите на olimp.bet → «Партнёрам» → зарегистрируйте аккаунт партнёра. Ключ выдаётся менеджером.',
+    category: 'bookmaker',
+    sensitive: true,
+  },
+  // ─── Сетевая инфраструктура ───────────────────────────────────────────────
   {
     envName: 'PROXY_URL',
     label: 'Outbound proxy',
     description: 'РФ-прокси для гео-блокированных букмекеров и (опционально) The Odds API. Формат `http(s)://user:pass@host:port`.',
-    docUrl: 'https://docs.replit.com',
+    docUrl: 'https://2ip.ru/proxy/',
+    howToGet: 'Любой RU-прокси: купите у провайдера (например, proxys.io, proxy6.net) или используйте свой VPS в РФ с squid/3proxy. Формат: http://user:pass@host:port.',
     category: 'network',
     sensitive: false,
   },

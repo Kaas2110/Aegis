@@ -132,6 +132,7 @@ export const AdminIntegrationStatusCategory = {
   "data-source": "data-source",
   "odds-feed": "odds-feed",
   network: "network",
+  bookmaker: "bookmaker",
 } as const;
 
 export type AdminIntegrationStatusSource =
@@ -148,6 +149,8 @@ export interface AdminIntegrationStatus {
   label: string;
   description: string;
   docUrl: string;
+  /** Short Russian-language instruction on how to obtain the key/token. */
+  howToGet?: string;
   category: AdminIntegrationStatusCategory;
   sensitive: boolean;
   configured: boolean;
