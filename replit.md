@@ -79,18 +79,23 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`lib/api-spec/openapi.yaml`** — OpenAPI contract; codegen: `pnpm --filter @workspace/api-spec run codegen`
 - pnpm-workspace skill — monorepo structure, TypeScript, project references
 
-## ML state (as of 2026-05-12)
+## ML state (as of 2026-05-12, retrain #2)
 
 **Training window:** 365d optimal for all model types (540d worse due to meta drift ~9pp).
 
-**Active models (23 total, retrained 2026-05-12):**
+**Active models (25 total, retrained 2026-05-12 #2):**
 - Prematch winner: 9 LGB + 9 LR (v1/v2/v3 × winner/t1/t2)
-  - Best LGB: v3/prematch_winner 78.8% / brier 0.155 · v3/t2 77.5% / brier 0.148
-  - Best LR:  v3/prematch_winner 76.4% cal · v3/t2 77.0% cal
-- Market: 3 LGB (first_blood 61.3%, total_kills R²=0.031, total_duration R²=0.004)
-- Live winner: 1 LGB + 1 LR. **LR is primary** until trainSize > 10k (LGB overfits on correlated snapshots). Both models currently underperform vs prematch baseline (~69%) on holdout — live predictions stored as bonus signal only.
+  - Best LGB: v3/prematch_winner 78.5% / brier 0.1573 · v3/t2 78.9% / brier 0.1489
+  - v3/t1 69.0% — overfits (train 94.5%, only 840 t1 samples)
+- Market v3: 3 LGB (first_blood 60.0%, total_kills R²=0.063, total_duration R²=0.053)
+  - Improved from v2: first_blood 61.3%→60.0% (slight decline after strict dedup), kills R² 0.031→0.063 (+103%), duration R² 0.004→0.053 (+13×)
+- Live winner (fv=4, 10 features): 1 LGB + 1 LR
+  - LR: 68.63% (+0.71pp over prematch baseline 67.92%), brier 0.1790. **LR is primary.**
+  - LGB: 63.68% (-1.89pp) — temporal distribution shift (test radiant=65.6% vs train 51.9%)
+  - New live features: `total_kills_norm`, `game_phase`, `nw_x_phase`, `kill_diff_x_phase`
+  - Root issue: 518 training matches / 5483 bucketed snapshots — accumulates naturally
 
-**Data:** 44.6k matches total · 28.9k in 365d window · 5225 drafts (all ingested) · 4884 with player account_ids · 384 player_ratings · 21 prematch_outcomes.
+**Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · 21 prematch_outcomes · 18.7k live snapshots (5483 after 3-min bucket dedup).
 
 **Training dataset settings** (stored in `app_settings`):
 - `trainWindowDays` (default 365, range 30–730)
