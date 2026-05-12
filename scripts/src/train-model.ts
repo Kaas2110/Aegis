@@ -53,7 +53,7 @@ import {
   type PlayerGlickoMap,
 } from './lib/hero-features';
 
-const TRAIN_WINDOW_DAYS = 180;
+const TRAIN_WINDOW_DAYS = 365;
 const EPOCHS = 200;
 const LR = 0.05;
 const L2 = 0.001;

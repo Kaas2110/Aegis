@@ -35,7 +35,7 @@ import { gte, and, eq } from 'drizzle-orm';
 import { asc } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 
-const TRAIN_WINDOW_DAYS = 180;
+const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES = 60;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';

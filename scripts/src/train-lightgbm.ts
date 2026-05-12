@@ -51,7 +51,7 @@ import {
   type PlayerGlickoMap,
 } from './lib/hero-features';
 
-const TRAIN_WINDOW_DAYS = 180;
+const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES_PER_BUCKET = 80;  // LightGBM нужно чуть больше чем LR
 const MIN_AVG_GLICKO = 1200;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';

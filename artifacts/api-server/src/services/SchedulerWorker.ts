@@ -32,7 +32,7 @@ import { getAppSettings } from './AppSettings';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
 const PATCH_DELAY_DAYS = 7;                     // ждать 7 дней после нового патча
 const REGULAR_RETRAIN_DAYS = 30;                // плановое переобучение раз в месяц
-const TRAIN_WINDOW_DAYS = 180;                  // скользящее окно: храним и тренируем на матчах за 6 мес.
+const TRAIN_WINDOW_DAYS = 365;                  // скользящее окно: храним и тренируем на матчах за 12 мес.
 const PATCH_API = 'https://api.opendota.com/api/constants/patch';
 
 // Путь к корню workspace, где лежит package.json со scripts.
@@ -216,7 +216,7 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     if (teamsRun.code !== 0) throw new Error(`ingest:teams failed: ${teamsRun.tail}`);
     await updateState({ lastIngestAt: new Date() });
 
-    const matchesRun = await runPnpmScript('ingest:matches', ['15']);
+    const matchesRun = await runPnpmScript('ingest:matches', ['200']);
     stepResults['ingest:matches'] = matchesRun.code === 0;
     logger.info({ code: matchesRun.code }, '[Scheduler] ingest:matches done');
     if (matchesRun.code !== 0) throw new Error(`ingest:matches failed: ${matchesRun.tail}`);
@@ -346,7 +346,7 @@ async function runDailyRefresh(): Promise<void> {
   logger.info('[Scheduler] daily refresh: starting');
   try {
     await runScriptSafe('ingest:teams', 'daily/ingest:teams', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
-    await runScriptSafe('ingest:matches', 'daily/ingest:matches', ['5']);
+    await runScriptSafe('ingest:matches', 'daily/ingest:matches', ['20']);
     await runScriptSafe('ingest:drafts', 'daily/ingest:drafts');
     await runScriptSafe('ingest:players-heroes', 'daily/ingest:players-heroes');
     await runScriptSafe('compute:recent-form', 'daily/compute:recent-form', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
