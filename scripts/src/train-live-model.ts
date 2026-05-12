@@ -1,48 +1,61 @@
 /**
  * Обучение LIVE-модели победителя матча.
  *
- * Эта модель работает ВО ВРЕМЯ матча: получает текущий снапшот (NW lead, kills,
- * tower count, game_time) + прематч-вероятность из основной модели → выдаёт
- * P(Radiant победит) обновляемую каждую минуту.
+ * Модель работает ВО ВРЕМЯ матча: текущий снапшот (NW lead, kills,
+ * tower count, game_time) + прематч-вероятность → P(Radiant победит).
  *
- * Тренировочные данные — соединение трёх таблиц:
- *   live_snapshots (X)        — что происходило на минуте M матча
- *   prematch_outcomes (Y + prior) — кто победил (label) + что предсказала прематч-модель
- *
- * Фичи (5):
+ * Фичи (5 + bias = 6):
  *   x0 = 1                                    bias
- *   x1 = (gameTimeSec - 1800) / 1800          нормализованная минута, центр = 30мин
- *   x2 = radiantLead / 10000                  net worth преимущество в десятках k
+ *   x1 = (gameTimeSec - 1800) / 1800          нормализованная минута
+ *   x2 = radiantLead / 10000                  net worth преимущество
  *   x3 = (radiantScore - direScore) / 15      разница убийств
- *   x4 = towerDiff / 11                       разница оставшихся башен (по building_state)
+ *   x4 = towerDiff / 11                       разница башен
  *   x5 = logit(prematchProb)                  прематч как сильный приор
  *
- * Цель: P(radiant_win | snapshot) = sigmoid(w · x)
+ * Два движка:
+ *   - LightGBM (primary)  — обучается через ml-service, blob в DB
+ *   - LogReg   (fallback) — pure-JS, работает без ml-service
  *
- * Sampling: чтобы матч не доминировал в выборке, берём максимум 1 снапшот
- * на каждые 3 минуты игры (gameTime // 180).
+ * CLI:
+ *   --dry-run        не сохранять, только вывести метрики
+ *   --since-unix N   ограничить снапшоты по времени создания (unix)
+ *   --min-samples N  минимум сэмплов (default: 200 для LGB, 50 для LR)
  */
 
 import { db, modelVersionsTable } from '@workspace/db';
 import { sql, and, eq } from 'drizzle-orm';
-
-interface Sample {
-  features: number[];
-  label: number;
-  matchId: number;
-  bucket: number; // gameTime в 3-мин ведре, для сэмплирования
-}
+import { readFileSync } from 'node:fs';
 
 const EPOCHS = 200;
-const LR = 0.05;
+const LR_RATE = 0.05;
 const L2 = 0.001;
+const FEATURE_NAMES = ['bias', 'game_time_norm', 'nw_lead_norm', 'kill_diff_norm', 'tower_diff_norm', 'prematch_logit'];
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
+const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
+const TRAIN_TIMEOUT_MS = 60_000;
 
-// Парсит OpenDota building_state (bitmask) → счётчики башен.
-// Стандартное расположение бит:
-//   bits 0..10  — Radiant towers (11 штук: 4×T1+T2+T3 + 3 ancients)
-//   bits 11..21 — Dire towers
-// Это аппроксимация — точное соответствие зависит от версии OpenDota,
-// но как фича-индикатор «у кого больше построек цело» работает.
+function mlServiceToken(): string | null {
+  const env = (process.env.ML_SERVICE_TOKEN ?? '').trim();
+  if (env) return env;
+  try { return readFileSync(ML_TOKEN_FILE, 'utf8').trim() || null; } catch { return null; }
+}
+
+function isDryRun(): boolean { return process.argv.includes('--dry-run'); }
+
+function parseSinceUnix(): number | null {
+  const idx = process.argv.indexOf('--since-unix');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return null;
+}
+
+function parseMinSamples(def: number): number {
+  const idx = process.argv.indexOf('--min-samples');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return def;
+}
+
+interface Sample { features: number[]; label: number; matchId: number; bucket: number; }
+
 function towerCountsFromBuildingState(bs: number | null | undefined): { r: number; d: number } {
   if (bs == null || !Number.isFinite(bs)) return { r: 11, d: 11 };
   let r = 0, d = 0;
@@ -58,41 +71,27 @@ function logit(p: number): number {
 }
 
 function sigmoid(z: number): number {
-  if (z >= 0) {
-    const ez = Math.exp(-z);
-    return 1 / (1 + ez);
-  }
-  const ez = Math.exp(z);
-  return ez / (1 + ez);
+  if (z >= 0) { const ez = Math.exp(-z); return 1 / (1 + ez); }
+  const ez = Math.exp(z); return ez / (1 + ez);
 }
 
 function dot(w: number[], x: number[]): number {
-  let s = 0;
-  for (let i = 0; i < w.length; i++) s += w[i] * x[i];
-  return s;
+  let s = 0; for (let i = 0; i < w.length; i++) s += w[i] * x[i]; return s;
 }
 
 function trainLogisticRegression(samples: Sample[], dim: number): number[] {
   const w = new Array(dim).fill(0);
   for (let epoch = 0; epoch < EPOCHS; epoch++) {
-    let totalLoss = 0;
     for (let i = samples.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [samples[i], samples[j]] = [samples[j], samples[i]];
     }
     for (const s of samples) {
-      const z = dot(w, s.features);
-      const p = sigmoid(z);
+      const p = sigmoid(dot(w, s.features));
       const err = p - s.label;
       for (let i = 0; i < dim; i++) {
-        const grad = err * s.features[i] + (i === 0 ? 0 : L2 * w[i]);
-        w[i] -= LR * grad;
+        w[i] -= LR_RATE * (err * s.features[i] + (i === 0 ? 0 : L2 * w[i]));
       }
-      const eps = 1e-9;
-      totalLoss += -(s.label * Math.log(p + eps) + (1 - s.label) * Math.log(1 - p + eps));
-    }
-    if ((epoch + 1) % 20 === 0) {
-      console.log(`  epoch ${epoch + 1}/${EPOCHS} loss=${(totalLoss / samples.length).toFixed(4)}`);
     }
   }
   return w;
@@ -102,32 +101,92 @@ function evaluate(samples: Sample[], w: number[]): { acc: number; logLoss: numbe
   let correct = 0, logLoss = 0, brier = 0;
   for (const s of samples) {
     const p = sigmoid(dot(w, s.features));
-    const pred = p >= 0.5 ? 1 : 0;
-    if (pred === s.label) correct++;
+    if ((p >= 0.5 ? 1 : 0) === s.label) correct++;
     const eps = 1e-9;
     logLoss += -(s.label * Math.log(p + eps) + (1 - s.label) * Math.log(1 - p + eps));
     brier += (p - s.label) ** 2;
   }
-  return {
-    acc: correct / samples.length,
-    logLoss: logLoss / samples.length,
-    brier: brier / samples.length,
-  };
+  return { acc: correct / samples.length, logLoss: logLoss / samples.length, brier: brier / samples.length };
+}
+
+interface LgbmResult {
+  blobB64: string;
+  trainAcc: number;
+  testAcc: number;
+  brier: number;
+  trainN: number;
+  testN: number;
+  baselineAcc: number;
+  featureImportance: Record<string, number>;
+}
+
+async function trainLgbm(train: Sample[], calib: Sample[], test: Sample[]): Promise<LgbmResult | null> {
+  const token = mlServiceToken();
+  if (!token) { console.warn('[train-live-model] no ml-service token — skipping LGB'); return null; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TRAIN_TIMEOUT_MS);
+  try {
+    // Ping
+    const h = await fetch(`${ML_SERVICE_URL}/healthz`, { signal: ctrl.signal });
+    if (!h.ok) throw new Error(`ml-service unhealthy: ${h.status}`);
+
+    const res = await fetch(`${ML_SERVICE_URL}/train`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ml-token': token },
+      body: JSON.stringify({
+        label: 'live_winner',
+        feature_names: FEATURE_NAMES,
+        train: train.map(s => ({ features: s.features, label: s.label })),
+        calib: calib.map(s => ({ features: s.features, label: s.label })),
+        test: test.map(s => ({ features: s.features, label: s.label })),
+        task_type: 'classification',
+        // Меньше сложности: 5 фич, снапшоты коррелированы → лёгкая регуляризация
+        num_leaves: 15,
+        learning_rate: 0.05,
+        n_estimators: 100,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[train-live-model] ml-service ${res.status}: ${body.slice(0, 300)}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      blob_b64: string;
+      train_metrics: { accuracy: number; n: number };
+      test_metrics_calibrated: { accuracy: number; brier: number; n: number };
+      baseline_acc: number;
+      feature_importance: Record<string, number>;
+    };
+    return {
+      blobB64: data.blob_b64,
+      trainAcc: data.train_metrics.accuracy,
+      testAcc: data.test_metrics_calibrated.accuracy,
+      brier: data.test_metrics_calibrated.brier,
+      trainN: data.train_metrics.n,
+      testN: data.test_metrics_calibrated.n,
+      baselineAcc: data.baseline_acc,
+      featureImportance: data.feature_importance,
+    };
+  } catch (e) {
+    console.error(`[train-live-model] LGB training failed: ${(e as Error).message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function main() {
+  const dryRun = isDryRun();
+  const sinceUnix = parseSinceUnix();
+  const minSamples = parseMinSamples(200);
+
+  if (dryRun) console.log('[train-live-model] DRY-RUN mode');
+  if (sinceUnix) console.log(`[train-live-model] since_unix=${sinceUnix} (${new Date(sinceUnix * 1000).toISOString().slice(0, 10)})`);
+
   console.log('[train-live-model] Joining live_snapshots × prematch_outcomes …');
 
-  // SQL-джойн: для каждого снапшота с gameTime>=60 берём матч с известным
-  // исходом и прематч-прогнозом. Сразу фильтруем мусор (нулевые фичи).
-  // Лимитируем 200к строк — этого хватит для логистической регрессии и
-  // оперативной памяти node-процесса.
-  // LEFT JOIN с обеими таблицами:
-  //   po.predicted_radiant_win_prob — реальный прогноз модели (если матч был live-tracked)
-  //   pm.radiant_win — исход всегда известен для любого pro_match
-  //   COALESCE(po.predicted_radiant_win_prob, 0.5) — нейтральный приор для backfill
-  // Это позволяет использовать все live_snapshots (в т.ч. синтетические из backfill),
-  // не только те, для которых есть prematch_outcomes.
   const rows = await db.execute(sql`
     SELECT
       ls.match_id          AS "matchId",
@@ -151,30 +210,22 @@ async function main() {
 
   console.log(`[train-live-model] Joined ${rows.rows.length} snapshot rows`);
 
-  if (rows.rows.length < 50) {
+  if (rows.rows.length < minSamples) {
     console.error(
-      '[train-live-model] Not enough joined data (need 50+ resolved snapshots).\n' +
-      '  Это нормально на свежей системе — live-модель требует, чтобы\n' +
-      '  LiveWorker накопил снапшоты и OutcomeTracker их зарезолвил.\n' +
-      '  Запусти переобучение через 1-2 недели работы воркеров.',
+      `[train-live-model] Not enough joined data (${rows.rows.length} < ${minSamples}).\n` +
+      '  Это нормально на свежей системе — live-модель требует накопления снапшотов.',
     );
-    process.exit(0); // НЕ ошибка — не блокируем общий ретрейн-пайплайн.
+    process.exit(0);
   }
 
-  // Сэмплирование: 1 снапшот на 3-мин ведро каждого матча, чтобы не
-  // переобучаться на длинных матчах.
-  const seenBuckets = new Set<string>();
-  const samples: Sample[] = [];
-
-  // pg возвращает bigint как СТРОКУ по умолчанию (чтобы не терять precision).
-  // Здесь match_id — bigint, а radiant_lead/score/building_state — int4 (number).
-  // Явно нормализуем каждое поле, чтобы дальнейшая арифметика и Set-ключи
-  // не зависели от того, как именно драйвер сериализовал значение.
   const toNum = (v: unknown): number | null => {
     if (v == null) return null;
     const n = typeof v === 'number' ? v : Number(v);
     return Number.isFinite(n) ? n : null;
   };
+
+  const seenBuckets = new Set<string>();
+  const samples: Sample[] = [];
 
   for (const raw of rows.rows as unknown as Record<string, unknown>[]) {
     const matchId = toNum(raw.matchId);
@@ -193,16 +244,15 @@ async function main() {
     const killDiff = (toNum(raw.radiantScore) ?? 0) - (toNum(raw.direScore) ?? 0);
     const towerDiff = towers.r - towers.d;
 
-    const x = [
-      1,
-      (gameTimeSec - 1800) / 1800,
-      radiantLead / 10000,
-      killDiff / 15,
-      towerDiff / 11,
-      logit(prematchProb),
-    ];
     samples.push({
-      features: x,
+      features: [
+        1,
+        (gameTimeSec - 1800) / 1800,
+        radiantLead / 10000,
+        killDiff / 15,
+        towerDiff / 11,
+        logit(prematchProb),
+      ],
       label: raw.actualRadiantWin ? 1 : 0,
       matchId,
       bucket,
@@ -211,98 +261,144 @@ async function main() {
 
   console.log(`[train-live-model] After bucket sampling: ${samples.length} examples`);
 
-  if (samples.length < 50) {
-    console.error('[train-live-model] Not enough sampled data.');
+  if (samples.length < minSamples) {
+    console.error(`[train-live-model] Not enough sampled data (${samples.length} < ${minSamples}).`);
     process.exit(0);
   }
 
-  // Сплит ПО МАТЧАМ (не по снапшотам), чтобы не было утечки данных
-  // (один матч в train и test одновременно — это утечка).
-  const allMatches = Array.from(new Set(samples.map(s => s.matchId)));
-  // Хронологический порядок не сохранится — используем числовой порядок
-  // matchId как proxy (более новые матчи = большие id).
-  allMatches.sort((a, b) => a - b);
-  const splitIdx = Math.floor(allMatches.length * 0.8);
-  const trainMatches = new Set(allMatches.slice(0, splitIdx));
+  // Сплит ПО МАТЧАМ (не по снапшотам), чтобы не было утечки данных.
+  const allMatches = Array.from(new Set(samples.map(s => s.matchId))).sort((a, b) => a - b);
+  const trainEnd = Math.floor(allMatches.length * 0.8);
+  const calibEnd = Math.floor(allMatches.length * 0.9);
+  const trainMatches = new Set(allMatches.slice(0, trainEnd));
+  const calibMatches = new Set(allMatches.slice(trainEnd, calibEnd));
 
-  const train = samples.filter(s => trainMatches.has(s.matchId));
-  const test = samples.filter(s => !trainMatches.has(s.matchId));
-  console.log(`[train-live-model] Matches train/test: ${trainMatches.size}/${allMatches.length - trainMatches.size}`);
-  console.log(`[train-live-model] Samples train/test: ${train.length}/${test.length}`);
+  const trainSamples = samples.filter(s => trainMatches.has(s.matchId));
+  const calibSamples = samples.filter(s => calibMatches.has(s.matchId));
+  const testSamples  = samples.filter(s => !trainMatches.has(s.matchId) && !calibMatches.has(s.matchId));
 
-  if (train.length < 30 || test.length < 5) {
+  console.log(
+    `[train-live-model] Matches train/calib/test: ${trainMatches.size}/${calibMatches.size}/${allMatches.length - trainEnd}`,
+  );
+  console.log(
+    `[train-live-model] Samples train/calib/test: ${trainSamples.length}/${calibSamples.length}/${testSamples.length}`,
+  );
+
+  if (trainSamples.length < 30 || testSamples.length < 5) {
     console.error('[train-live-model] Too few samples after split.');
     process.exit(0);
   }
 
-  console.log('[train-live-model] Training logistic regression …');
-  const w = trainLogisticRegression([...train], 6);
-  console.log('[train-live-model] Weights:', w.map(x => x.toFixed(4)));
+  // === LightGBM (primary) ===
+  console.log('[train-live-model] Training LightGBM via ml-service …');
+  const lgbm = await trainLgbm(trainSamples, calibSamples, testSamples);
+  if (lgbm) {
+    console.log(`[train-live-model] [LGB] TRAIN acc=${(lgbm.trainAcc * 100).toFixed(2)}%`);
+    console.log(`[train-live-model] [LGB] TEST  acc=${(lgbm.testAcc * 100).toFixed(2)}%  brier=${lgbm.brier.toFixed(4)}  (baseline=${(lgbm.baselineAcc * 100).toFixed(2)}%)`);
+    console.log(`[train-live-model] [LGB] lift: Δacc=+${((lgbm.testAcc - lgbm.baselineAcc) * 100).toFixed(2)}pp`);
+    const fi = lgbm.featureImportance;
+    console.log('[train-live-model] [LGB] Feature importance:', Object.entries(fi).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(' '));
+  } else {
+    console.warn('[train-live-model] LGB skipped — will only save LR fallback');
+  }
 
-  const trainMetrics = evaluate(train, w);
-  const testMetrics = evaluate(test, w);
-  console.log(`[train-live-model] TRAIN  acc=${(trainMetrics.acc * 100).toFixed(2)}%  logloss=${trainMetrics.logLoss.toFixed(4)}  brier=${trainMetrics.brier.toFixed(4)}`);
-  console.log(`[train-live-model] TEST   acc=${(testMetrics.acc * 100).toFixed(2)}%  logloss=${testMetrics.logLoss.toFixed(4)}  brier=${testMetrics.brier.toFixed(4)}`);
+  // === Logistic Regression (fallback) ===
+  console.log('[train-live-model] Training logistic regression (fallback) …');
+  const w = trainLogisticRegression([...trainSamples], 6);
+  const trainMetrics = evaluate(trainSamples, w);
+  const testMetrics  = evaluate(testSamples, w);
+  console.log(`[train-live-model] [LR]  TRAIN acc=${(trainMetrics.acc * 100).toFixed(2)}%  brier=${trainMetrics.brier.toFixed(4)}`);
+  console.log(`[train-live-model] [LR]  TEST  acc=${(testMetrics.acc * 100).toFixed(2)}%  brier=${testMetrics.brier.toFixed(4)}`);
 
-  // Baseline: использовать ТОЛЬКО прематч-прогноз (без снапшота).
-  // Так мы видим, даёт ли live-модель прибавку поверх прематча.
-  let baselineCorrect = 0;
-  let baselineBrier = 0;
-  for (const s of test) {
-    const prematchProb = sigmoid(s.features[5]); // логит → обратно
-    const pred = prematchProb >= 0.5 ? 1 : 0;
-    if (pred === s.label) baselineCorrect++;
+  // Baseline: только прематч (без live-фич)
+  let baselineCorrect = 0, baselineBrier = 0;
+  for (const s of testSamples) {
+    const prematchProb = sigmoid(s.features[5]);
+    if ((prematchProb >= 0.5 ? 1 : 0) === s.label) baselineCorrect++;
     baselineBrier += (prematchProb - s.label) ** 2;
   }
-  const baselineAcc = baselineCorrect / test.length;
-  const baselineBrierAvg = baselineBrier / test.length;
-  console.log(
-    `[train-live-model] Baseline (только прематч): acc=${(baselineAcc * 100).toFixed(2)}%  brier=${baselineBrierAvg.toFixed(4)}`,
-  );
-  console.log(
-    `[train-live-model] Live model lift: Δacc=${((testMetrics.acc - baselineAcc) * 100).toFixed(2)}pp  Δbrier=${(baselineBrierAvg - testMetrics.brier).toFixed(4)}`,
-  );
+  const baselineAcc = baselineCorrect / testSamples.length;
+  const baselineBrierAvg = baselineBrier / testSamples.length;
+  console.log(`[train-live-model] Baseline (только прематч): acc=${(baselineAcc * 100).toFixed(2)}%  brier=${baselineBrierAvg.toFixed(4)}`);
+  console.log(`[train-live-model] [LR]  lift: Δacc=+${((testMetrics.acc - baselineAcc) * 100).toFixed(2)}pp`);
 
-  const version = `lr-live-v${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
-  console.log(`[train-live-model] Saving as ${version} …`);
+  if (dryRun) {
+    console.log('[train-live-model] DRY-RUN — не сохраняем.');
+    process.exit(0);
+  }
 
-  // Атомарно: деактивируем старые LIVE-модели (НЕ трогаем prematch_winner!)
-  // и вставляем новую активную.
+  const versionStem = `live-v${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+  const commonMeta = {
+    baselineAcc,
+    baselineBrier: baselineBrierAvg,
+    matchesTrain: trainMatches.size,
+    matchesCalib: calibMatches.size,
+    matchesTest: allMatches.length - calibEnd,
+    bucketingSeconds: 180,
+    sinceUnix,
+  };
+
   await db.transaction(async tx => {
+    // Деактивируем старые live_winner модели per-engine
     await tx
       .update(modelVersionsTable)
       .set({ isActive: false })
       .where(and(eq(modelVersionsTable.kind, 'live_winner'), eq(modelVersionsTable.isActive, true)));
-    await tx.insert(modelVersionsTable).values({
-      version,
+
+    const toInsert: (typeof modelVersionsTable.$inferInsert)[] = [];
+
+    // LR fallback — всегда сохраняем
+    toInsert.push({
+      version: `lr-${versionStem}`,
       kind: 'live_winner',
       algorithm: 'logistic_regression_live',
-      features: ['bias', 'game_time_norm', 'nw_lead_norm', 'kill_diff_norm', 'tower_diff_norm', 'prematch_logit'],
+      engine: 'logreg',
+      features: FEATURE_NAMES,
       weights: { w0: w[0], w1: w[1], w2: w[2], w3: w[3], w4: w[4], w5: w[5] },
       trainAccuracy: trainMetrics.acc,
       testAccuracy: testMetrics.acc,
       brierScore: testMetrics.brier,
-      trainSampleSize: train.length,
-      testSampleSize: test.length,
+      trainSampleSize: trainSamples.length,
+      testSampleSize: testSamples.length,
       metadata: {
+        ...commonMeta,
         logLossTrain: trainMetrics.logLoss,
         logLossTest: testMetrics.logLoss,
-        baselineAcc,
-        baselineBrier: baselineBrierAvg,
         liftAcc: testMetrics.acc - baselineAcc,
         liftBrier: baselineBrierAvg - testMetrics.brier,
         epochs: EPOCHS,
-        learningRate: LR,
-        l2: L2,
-        matchesTrain: trainMatches.size,
-        matchesTest: allMatches.length - trainMatches.size,
-        bucketingSeconds: 180,
       },
       isActive: true,
     });
+
+    // LGB primary — если ml-service отвечал
+    if (lgbm) {
+      toInsert.push({
+        version: `lgbm-${versionStem}`,
+        kind: 'live_winner',
+        algorithm: 'lightgbm_live',
+        engine: 'lightgbm',
+        features: FEATURE_NAMES,
+        weights: {},
+        binaryBlob: Buffer.from(lgbm.blobB64, 'base64'),
+        trainAccuracy: lgbm.trainAcc,
+        testAccuracy: lgbm.testAcc,
+        brierScore: lgbm.brier,
+        trainSampleSize: lgbm.trainN,
+        testSampleSize: lgbm.testN,
+        metadata: {
+          ...commonMeta,
+          liftAcc: lgbm.testAcc - lgbm.baselineAcc,
+          featureImportance: lgbm.featureImportance,
+        },
+        isActive: true,
+      });
+    }
+
+    await tx.insert(modelVersionsTable).values(toInsert);
   });
 
-  console.log(`[train-live-model] ✅ Live model ${version} saved and activated.`);
+  console.log(`[train-live-model] ✅ Saved: lr-${versionStem}${lgbm ? `, lgbm-${versionStem}` : ''}`);
   process.exit(0);
 }
 

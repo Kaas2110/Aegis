@@ -608,7 +608,7 @@ async function main() {
     console.log('\n[train-model] DRY-RUN results (not saved):');
     for (const r of toInsert) {
       console.log(
-        `   ${r.kind} v${r.featuresVersion} ${r.engine ?? 'logreg'} ` +
+        `   ${r.kind} v${r.featuresVersion} logreg ` +
         `test_acc=${(r.testAccuracy * 100).toFixed(2)}% brier=${r.brierScore.toFixed(4)} train=${r.trainSampleSize}`,
       );
     }

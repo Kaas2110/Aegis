@@ -169,9 +169,8 @@ async function pollOnce(): Promise<void> {
       // обновлённую вероятность с учётом текущего снапшота. Сохраняем как
       // отдельную строку в predictions с marketType='live_match_winner',
       // чтобы потом сравнивать и калибровать.
-      const liveModel = getActiveLiveModel();
-      if (liveModel && (m.game_time ?? -1) >= 60) {
-        const livePred = predictLiveWinner(
+      if ((m.game_time ?? -1) >= 60) {
+        const livePred = await predictLiveWinner(
           {
             gameTimeSec: m.game_time ?? null,
             radiantLead: m.radiant_lead ?? null,
