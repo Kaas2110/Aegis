@@ -7,7 +7,7 @@
 
 import { db, liveSnapshotsTable, predictionsTable } from '@workspace/db';
 import { logger } from '../lib/logger';
-import { predictMatchWinner, loadActiveModel, getActiveModel, computeHeroMatchupAdvantage, getTeamLiveContext, type DraftInput } from './PredictionModel';
+import { predictMatchWinner, loadActiveModel, getActiveModel, computeHeroMatchupAdvantage, computeHeroPowerSpike, getTeamLiveContext, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
 
@@ -175,6 +175,14 @@ async function pollOnce(): Promise<void> {
           heroAdvantage = await computeHeroMatchupAdvantage(draft.radiantPicks, draft.direPicks);
         }
         const { eloDiffNorm, formDiff } = getTeamLiveContext(m.team_id_radiant, m.team_id_dire);
+        const nwLeadNorm = (m.radiant_lead ?? 0) / 10000;
+        const { powerSpikeDelta, spikeXNw } = draft && draft.radiantPicks.length === 5
+          ? await computeHeroPowerSpike(
+              draft.radiantPicks, draft.direPicks,
+              m.game_time ?? 0,
+              nwLeadNorm,
+            )
+          : { powerSpikeDelta: 0, spikeXNw: 0 };
         const livePred = await predictLiveWinner(
           {
             gameTimeSec: m.game_time ?? null,
@@ -184,6 +192,8 @@ async function pollOnce(): Promise<void> {
             heroAdvantage,
             eloDiffNorm,
             formDiff,
+            powerSpikeDelta,
+            spikeXNw,
           },
           pred.probRadiantWin,
         );

@@ -42,8 +42,8 @@ const EPOCHS = 300;
 const LR_RATE = 0.03;
 const L2 = 0.01;
 
-// Версия фич: 6 (14 фич — убраны башни; добавлены nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff)
-const FEATURES_VERSION = 6;
+// Версия фич: 7 (16 фич — fv6 + power_spike_delta + spike_x_nw)
+const FEATURES_VERSION = 7;
 
 const FEATURE_NAMES = [
   'bias',
@@ -56,10 +56,12 @@ const FEATURE_NAMES = [
   'nw_x_phase',
   'kill_diff_x_phase',
   'hero_advantage',
-  'nw_lead_per_min',     // новая: темп накопления NW (nw_lead / min / 1000)
-  'kill_ratio',          // новая: доля убийств radiant (rScore / total, bounded [0,1])
-  'elo_diff_norm',       // новая: (elo_r − elo_d) / 200
-  'form_diff',           // новая: form30_r − form30_d
+  'nw_lead_per_min',     // темп накопления NW (nw_lead / min / 1000)
+  'kill_ratio',          // доля убийств radiant (rScore / total, bounded [0,1])
+  'elo_diff_norm',       // (elo_r − elo_d) / 200
+  'form_diff',           // form30_r − form30_d
+  'power_spike_delta',   // x14 НОВАЯ: разность spike-score команд (Gaussian, σ=8мин)
+  'spike_x_nw',          // x15 НОВАЯ: power_spike_delta × nw_lead_norm (взаимодействие)
 ];
 const FEATURE_DIM = FEATURE_NAMES.length;
 
@@ -273,8 +275,8 @@ async function main() {
   if (dryRun) console.log('[train-live-model] DRY-RUN mode');
   if (sinceUnix) console.log(`[train-live-model] since_unix=${sinceUnix} (${new Date(sinceUnix * 1000).toISOString().slice(0, 10)})`);
 
-  console.log('[train-live-model] Loading team ratings, form & hero matchups …');
-  const [teamsRows, formRows, matchupRows] = await Promise.all([
+  console.log('[train-live-model] Loading team ratings, form, hero matchups & power timings …');
+  const [teamsRows, formRows, matchupRows, powerTimingResult] = await Promise.all([
     db.select({
       teamId: teamsTable.teamId,
       rating: teamsTable.rating,
@@ -291,6 +293,21 @@ async function main() {
       games: heroMatchupsTable.games,
       winRate: heroMatchupsTable.winRate,
     }).from(heroMatchupsTable),
+    // hero power timing: avg winning game duration per hero (proxy for power peak minute)
+    db.execute(sql`
+      WITH wins AS (
+        SELECT (jsonb_array_elements(md.radiant_picks))::int AS hero_id, pm.duration
+        FROM match_drafts md JOIN pro_matches pm ON pm.match_id = md.match_id
+        WHERE pm.radiant_win = true
+        UNION ALL
+        SELECT (jsonb_array_elements(md.dire_picks))::int AS hero_id, pm.duration
+        FROM match_drafts md JOIN pro_matches pm ON pm.match_id = md.match_id
+        WHERE pm.radiant_win = false
+      )
+      SELECT hero_id::int AS "heroId", AVG(duration)::float / 60.0 AS "avgWinMin"
+      FROM wins
+      GROUP BY hero_id HAVING COUNT(*) >= 5
+    `),
   ]);
 
   const teamMap = new Map<number, { rating: number; wins: number; losses: number }>();
@@ -301,6 +318,23 @@ async function main() {
   for (const f of formRows) {
     if (f.winRate != null) formMap.set(f.teamId, f.winRate);
   }
+
+  // Hero power timing map: heroId → avg winning game duration in minutes
+  const heroPowerTiming = new Map<number, number>();
+  let totalWinMin = 0;
+  let totalWinCount = 0;
+  for (const row of (powerTimingResult.rows as { heroId: number; avgWinMin: number }[])) {
+    const min = Number(row.avgWinMin);
+    if (Number.isFinite(min) && min > 0) {
+      heroPowerTiming.set(Number(row.heroId), min);
+      totalWinMin += min;
+      totalWinCount++;
+    }
+  }
+  const globalAvgWinMin = totalWinCount > 0 ? totalWinMin / totalWinCount : 39;
+  console.log(
+    `[train-live-model] power timing: ${heroPowerTiming.size} heroes (global avg ${globalAvgWinMin.toFixed(1)} min)`,
+  );
 
   // Build hero matchups cache: heroId → vsHeroId → { games, winRate }
   const heroMatchups: HeroMatchupsMap = new Map();
@@ -437,17 +471,32 @@ async function main() {
 
     // Group B: hero_advantage от matchup-матрицы (0 когда драфт неизвестен)
     let heroAdvantage = 0;
+    let powerSpikeDelta = 0;
+    let spikeXNw = 0;
     const rPicks = raw['radiantPicks'];
     const dPicks = raw['direPicks'];
-    if (
+    const hasDraft = (
       Array.isArray(rPicks) && Array.isArray(dPicks) &&
-      rPicks.length === 5 && dPicks.length === 5 &&
-      heroMatchups.size > 0
-    ) {
+      rPicks.length === 5 && dPicks.length === 5
+    );
+    if (hasDraft && heroMatchups.size > 0) {
       heroAdvantage = computeHeroAdvantage(
         rPicks as number[], dPicks as number[], heroMatchups,
       );
       heroAdvCount++;
+    }
+    if (hasDraft && heroPowerTiming.size > 0) {
+      const SIGMA = 8; // minutes
+      const spike = (heroIds: number[]) =>
+        heroIds.reduce((sum, h) => {
+          const peak = heroPowerTiming.get(h) ?? globalAvgWinMin;
+          const d = gameTimeMins - peak;
+          return sum + Math.exp(-0.5 * (d / SIGMA) ** 2);
+        }, 0) / heroIds.length;
+      const rSpike = spike(rPicks as number[]);
+      const dSpike = spike(dPicks as number[]);
+      powerSpikeDelta = rSpike - dSpike;
+      spikeXNw = powerSpikeDelta * nwNorm;
     }
 
     samples.push({
@@ -466,6 +515,8 @@ async function main() {
         killRatio,                                // x11 kill_ratio
         eloDiffNorm,                              // x12 elo_diff_norm
         formDiff,                                 // x13 form_diff
+        powerSpikeDelta,                          // x14 power_spike_delta
+        spikeXNw,                                 // x15 spike_x_nw
       ],
       label: raw['actualRadiantWin'] ? 1 : 0,
       matchId,

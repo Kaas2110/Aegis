@@ -27,7 +27,7 @@ const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const LIGHTGBM_BACKOFF_MS = 60_000;
 const GLOBAL_KPM = 1.1;
 
-// Feature names — must match training script exactly (fv=6, 14 features)
+// Feature names — must match training script exactly (fv=7, 16 features)
 const LIVE_FEATURE_NAMES = [
   'bias',
   'game_time_norm',
@@ -43,6 +43,8 @@ const LIVE_FEATURE_NAMES = [
   'kill_ratio',
   'elo_diff_norm',
   'form_diff',
+  'power_spike_delta',
+  'spike_x_nw',
 ] as const;
 const LIVE_FEATURE_DIM = LIVE_FEATURE_NAMES.length;
 
@@ -209,6 +211,10 @@ export interface LiveSnapshotInput {
   eloDiffNorm?: number;
   /** form30_r − form30_d; 0 если нет данных */
   formDiff?: number;
+  /** разность team spike scores (Gaussian, σ=8мин); 0 если нет драфта */
+  powerSpikeDelta?: number;
+  /** power_spike_delta × nw_lead_norm; 0 если нет драфта */
+  spikeXNw?: number;
 }
 
 async function predictViaLgbm(blobB64: string, features: number[]): Promise<number | null> {
@@ -288,6 +294,8 @@ function buildFeatureVec(
   const killRatio = totalKills > 0 ? radiantScore / totalKills : 0.5;
   const eloDiffNorm = snap.eloDiffNorm ?? 0;
   const formDiff = snap.formDiff ?? 0;
+  const powerSpikeDelta = snap.powerSpikeDelta ?? 0;
+  const spikeXNw = snap.spikeXNw ?? 0;
 
   const vec = [
     1,                            // x0  bias
@@ -304,6 +312,8 @@ function buildFeatureVec(
     killRatio,                    // x11 kill_ratio
     eloDiffNorm,                  // x12 elo_diff_norm
     formDiff,                     // x13 form_diff
+    powerSpikeDelta,              // x14 power_spike_delta
+    spikeXNw,                     // x15 spike_x_nw
   ];
 
   const named: Record<string, number> = {};

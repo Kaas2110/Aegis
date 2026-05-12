@@ -93,15 +93,17 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - Market v3 (retrained #4, 2026-05-12): 3 LGB — first_blood 58.8%, total_kills R²=0.059, total_duration R²=0.039
   - **Bug fix: `patch_kpm` was a global constant (importance=0 in all 3 models). Replaced with `expected_tempo_norm` = (avgKillsR + avgKillsD) / (2×GLOBAL_AVG_KILLS) — varies per matchup, non-zero importance.**
   - expected_tempo_norm: top-5 for total_duration (importance=32). total_kills top: elo_diff, winrate_diff, experience_diff, draft_aggression_r/d
-- Live winner (fv=6, 14 features): 1 LGB + 1 LR — **retrained #5 (2026-05-12)**
-  - **LR: 71.13% (+4.62pp over prematch baseline 66.51%), brier 0.1834. LR is primary (testAcc > LGB).**
-  - LGB: 61.66% (−2.54pp vs baseline) — severe overfit (train 98.3%), temporal shift; LGB deprioritised
+- Live winner (fv=7, 16 features): 1 LGB + 1 LR — **retrained #6 (2026-05-12)**
+  - **LR: 72.29% (+5.77pp over prematch baseline 66.51%), brier 0.1740. LR is primary (testAcc > LGB).**
+  - LGB: 65.36% (+1.15pp, train 98.6%) — still overfits; LGB secondary
   - Primary selection: auto by testAccuracy
   - `prematch_logit` sources: stored=1415, elo=22, neutral=4068
-  - LR weights: `kill_diff_norm=3.071, kill_diff_x_phase=0.635, kill_ratio=1.488, nw_lead_norm=0.192, elo_diff_norm=0.151, nw_lead_per_min=0.143`
-  - LGB feature importance top-5: `form_diff=295, kill_pace_norm=231, kill_ratio=197, kill_diff_norm=52, hero_advantage=52`
-  - **Features (14, fv=6):** `bias, game_time_norm, nw_lead_norm, kill_diff_norm, prematch_logit, kill_pace_norm, game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage, nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff`
-  - Changes vs fv=5: removed r/d_towers_lost_ratio (importance=0, 68.4% null → noise); added nw_lead_per_min (NW tempo), kill_ratio (radiant share), elo_diff_norm ((elo_r−elo_d)/200), form_diff (form30_r−form30_d)
+  - LR weights: `kill_diff_norm=3.087, kill_ratio=1.566, kill_diff_x_phase=0.645, kill_pace_norm=0.157, nw_lead_norm=0.152, elo_diff_norm=0.174, nw_lead_per_min=0.131, form_diff=-0.155`
+  - LGB feature importance top-5: `form_diff=305, kill_ratio=231, kill_pace_norm=228, kill_diff_norm=53, hero_advantage=48`
+  - **Features (16, fv=7):** `bias, game_time_norm, nw_lead_norm, kill_diff_norm, prematch_logit, kill_pace_norm, game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage, nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff, power_spike_delta, spike_x_nw`
+  - fv=6→7 changes: +power_spike_delta (Gaussian team spike score diff, σ=8min), +spike_x_nw (spike×nw interaction); power timing = avg winning game duration per hero from match history (127 heroes, global avg 39.7 min)
+  - Late heroes (≥41 min): Spectre(68), Morphling(70), Terrorblade(135), Doom(69); early (≤36 min): Brewmaster(91), Juggernaut(8), Zeus(22), Clockwerk(14)
+  - power_spike_delta weight tiny (0.003) — sparse signal (19% draft coverage); will improve with more draft data
   - **50/50 train balance:** undersample majority class in train set only (test unbalanced = real distribution); raw 4480 → balanced 4294 (2147/class, dropped 186)
   - Group C: class_weight='balanced' in LGB retained
   - Root data: 519 training matches / 5505 bucketed snapshots

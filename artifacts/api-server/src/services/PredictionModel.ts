@@ -32,7 +32,7 @@ import {
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { eq, desc, and, inArray, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { applyCalibration, type CalibrationModel } from '../lib/isotonic';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier, type PrematchKind } from '../lib/tier';
@@ -143,6 +143,8 @@ const HERO_CACHE_TTL_MS = 60 * 60 * 1000;
 
 let heroStatsCache: HeroStatsMap = new Map();
 let heroMatchupsCache: HeroMatchupsMap = new Map();
+let heroPowerTimingCache: Map<number, number> = new Map(); // heroId → avg win minutes
+let globalAvgWinMin = 39;
 let lastHeroLoad = 0;
 
 // Wave 3 caches (загружаются лениво при первом v3-запросе).
@@ -414,7 +416,7 @@ async function refreshWave3Data(): Promise<void> {
 async function refreshHeroData(): Promise<void> {
   if (Date.now() - lastHeroLoad < HERO_CACHE_TTL_MS && heroStatsCache.size > 0) return;
   try {
-    const [statRows, matchRows] = await Promise.all([
+    const [statRows, matchRows, timingResult] = await Promise.all([
       db
         .select({
           heroId: heroStatsTable.heroId,
@@ -430,6 +432,20 @@ async function refreshHeroData(): Promise<void> {
           winRate: heroMatchupsTable.winRate,
         })
         .from(heroMatchupsTable),
+      // hero power timing: avg winning game duration = proxy for power peak minute
+      db.execute(sql`
+        WITH wins AS (
+          SELECT (jsonb_array_elements(md.radiant_picks))::int AS hero_id, pm.duration
+          FROM match_drafts md JOIN pro_matches pm ON pm.match_id = md.match_id
+          WHERE pm.radiant_win = true
+          UNION ALL
+          SELECT (jsonb_array_elements(md.dire_picks))::int AS hero_id, pm.duration
+          FROM match_drafts md JOIN pro_matches pm ON pm.match_id = md.match_id
+          WHERE pm.radiant_win = false
+        )
+        SELECT hero_id::int AS "heroId", AVG(duration)::float / 60.0 AS "avgWinMin"
+        FROM wins GROUP BY hero_id HAVING COUNT(*) >= 5
+      `),
     ]);
     const stats: HeroStatsMap = new Map();
     for (const h of statRows) {
@@ -444,11 +460,23 @@ async function refreshHeroData(): Promise<void> {
       }
       inner.set(m.vsHeroId, { games: m.games, winRate: m.winRate });
     }
+    const timings = new Map<number, number>();
+    let tTotal = 0, tCount = 0;
+    for (const row of (timingResult.rows as { heroId: number; avgWinMin: number }[])) {
+      const min = Number(row.avgWinMin);
+      if (Number.isFinite(min) && min > 0) {
+        timings.set(Number(row.heroId), min);
+        tTotal += min;
+        tCount++;
+      }
+    }
     heroStatsCache = stats;
     heroMatchupsCache = matchups;
+    heroPowerTimingCache = timings;
+    globalAvgWinMin = tCount > 0 ? tTotal / tCount : 39;
     lastHeroLoad = Date.now();
     logger.info(
-      { heroes: stats.size, matchupPairs: matchRows.length },
+      { heroes: stats.size, matchupPairs: matchRows.length, powerTimingHeroes: timings.size },
       '[PredictionModel] Hero data refreshed',
     );
   } catch (err) {
@@ -480,6 +508,42 @@ export function getTeamLiveContext(
       (recentFormCache.get(direTeamId)?.winRate ?? 0.5)
     : 0;
   return { eloDiffNorm, formDiff };
+}
+
+/**
+ * Вычисляет power_spike_delta и spike_x_nw для live-модели.
+ *
+ * Для каждого героя определяет "пик силы" = avg_win_min (среднее время побед
+ * с этим героем). Gaussian(currentMin − peakMin, σ=8) показывает, насколько
+ * герой близок к своему пику прямо сейчас.
+ *
+ * power_spike_delta = mean(R spike scores) − mean(D spike scores) → 0 без драфта
+ * spike_x_nw = power_spike_delta × nwLeadNorm (взаимодействие: пик + голд = решает)
+ */
+export async function computeHeroPowerSpike(
+  radiantPicks: number[],
+  direPicks: number[],
+  gameTimeSec: number,
+  nwLeadNorm: number,
+): Promise<{ powerSpikeDelta: number; spikeXNw: number }> {
+  if (radiantPicks.length !== 5 || direPicks.length !== 5) {
+    return { powerSpikeDelta: 0, spikeXNw: 0 };
+  }
+  await refreshHeroData();
+  if (heroPowerTimingCache.size === 0) return { powerSpikeDelta: 0, spikeXNw: 0 };
+
+  const gameTimeMins = gameTimeSec / 60;
+  const SIGMA = 8;
+  const teamSpike = (heroIds: number[]) =>
+    heroIds.reduce((sum, h) => {
+      const peak = heroPowerTimingCache.get(h) ?? globalAvgWinMin;
+      const d = gameTimeMins - peak;
+      return sum + Math.exp(-0.5 * (d / SIGMA) ** 2);
+    }, 0) / heroIds.length;
+
+  const powerSpikeDelta = teamSpike(radiantPicks) - teamSpike(direPicks);
+  const spikeXNw = powerSpikeDelta * nwLeadNorm;
+  return { powerSpikeDelta, spikeXNw };
 }
 
 /**
