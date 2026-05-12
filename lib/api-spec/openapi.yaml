@@ -219,6 +219,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminModelsResponse"
 
+  /admin/logs/stats:
+    get:
+      operationId: getAdminLogsStats
+      tags: [admin]
+      summary: In-memory log ring-buffer stats (count, range, levels)
+      responses:
+        "200":
+          description: Log buffer stats (open shape)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
   /admin/bookmakers/probe:
     post:
       operationId: probeAdminBookmakers
@@ -396,7 +409,7 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/TierAccess"
-          description: Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })
+          description: "Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })"
         features:
           type: array
           description: Catalog of feature keys with display labels (Russian)

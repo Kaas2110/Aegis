@@ -8,6 +8,7 @@ import {
   useProbeAdminBookmakers,
   useGetAdminModels,
   useTriggerAdminModelRetrain,
+  useGetAdminLogsStats,
   getGetAdminIntegrationsQueryKey,
   getGetAdminOddsStatusQueryKey,
   getGetAdminSettingsQueryKey,
@@ -221,6 +222,148 @@ function ActiveModelsPanel() {
             </table>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Плитка выгрузки серверных логов (in-memory ring-buffer, до 5000 записей).
+ * Формат — NDJSON pino. Можно скинуть прямо в чат поддержки/агенту для дебага.
+ */
+function LogsExportPanel() {
+  const { toast } = useToast();
+  const { data: stats, refetch } = useGetAdminLogsStats();
+  const [minutes, setMinutes] = useState("60");
+  const [minLevel, setMinLevel] = useState("30");
+  const [downloading, setDownloading] = useState(false);
+
+  const statsObj = (stats ?? {}) as Record<string, unknown>;
+  const count = typeof statsObj.count === "number" ? statsObj.count : 0;
+  const capacity = typeof statsObj.capacity === "number" ? statsObj.capacity : 20000;
+  const oldestTs = typeof statsObj.oldestTs === "number" ? statsObj.oldestTs : null;
+  const newestTs = typeof statsObj.newestTs === "number" ? statsObj.newestTs : null;
+  const byLevel = (statsObj.byLevel ?? {}) as Record<string, number>;
+
+  const handleDownload = async () => {
+    const m = Math.max(1, Math.min(7 * 24 * 60, parseInt(minutes, 10) || 60));
+    const lvl = Math.max(10, Math.min(60, parseInt(minLevel, 10) || 30));
+    setDownloading(true);
+    try {
+      const r = await fetch(
+        `/api/admin/logs/export?minutes=${m}&minLevel=${lvl}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const entries = r.headers.get("X-Log-Entries") ?? "?";
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const cd = r.headers.get("Content-Disposition") ?? "";
+      const fname = /filename="([^"]+)"/.exec(cd)?.[1] ?? `aegis-logs-${Date.now()}.ndjson`;
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "Файл скачан", description: `${entries} записей → ${fname}` });
+      refetch();
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Не удалось скачать",
+        description: err instanceof Error ? err.message : "—",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const fmt = (ts: number | null) =>
+    ts == null ? "—" : new Date(ts).toLocaleString("ru-RU");
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="border-b border-border pb-4">
+        <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+          Логи сервера — выгрузка
+        </CardTitle>
+        <CardDescription className="font-mono text-xs">
+          NDJSON-файл из in-memory буфера ({count}/{capacity} записей).
+          Если что-то сломается в проде — скачайте файл и пришлите его агенту/в поддержку.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-6 space-y-5">
+        <div className="grid gap-3 md:grid-cols-2 text-xs font-mono">
+          <div className="border border-border bg-background p-3 space-y-1">
+            <div className="text-[10px] uppercase text-muted-foreground tracking-wider">Период в буфере</div>
+            <div className="text-foreground">{fmt(oldestTs)}</div>
+            <div className="text-foreground">→ {fmt(newestTs)}</div>
+          </div>
+          <div className="border border-border bg-background p-3 space-y-1">
+            <div className="text-[10px] uppercase text-muted-foreground tracking-wider">По уровням</div>
+            <div className="text-foreground">
+              error: <span className="text-dire">{byLevel.error ?? 0}</span> ·
+              warn: <span className="text-primary">{byLevel.warn ?? 0}</span> ·
+              info: <span className="text-radiant">{byLevel.info ?? 0}</span>
+            </div>
+            <div className="text-muted-foreground">
+              fatal: {byLevel.fatal ?? 0} · debug: {byLevel.debug ?? 0} · trace: {byLevel.trace ?? 0}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3 items-end">
+          <div className="space-y-1">
+            <Label htmlFor="logs-minutes" className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Окно (минут назад)
+            </Label>
+            <Input
+              id="logs-minutes"
+              type="number"
+              min={1}
+              max={7 * 24 * 60}
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+              className="rounded-none font-mono text-xs"
+            />
+            <div className="font-mono text-[10px] text-muted-foreground">
+              макс 10080 = 7 дней. Подсказки: 60 (час), 1440 (сутки), 4320 (3 дня)
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="logs-level" className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Минимальный уровень
+            </Label>
+            <select
+              id="logs-level"
+              value={minLevel}
+              onChange={(e) => setMinLevel(e.target.value)}
+              className="w-full rounded-none border border-border bg-background px-3 py-2 font-mono text-xs"
+            >
+              <option value="10">10 — trace (всё)</option>
+              <option value="20">20 — debug</option>
+              <option value="30">30 — info (стандарт)</option>
+              <option value="40">40 — warn</option>
+              <option value="50">50 — error (только ошибки)</option>
+              <option value="60">60 — fatal</option>
+            </select>
+          </div>
+          <Button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="rounded-none font-mono text-xs uppercase tracking-wider"
+          >
+            {downloading ? "Готовлю файл…" : "Скачать .ndjson"}
+          </Button>
+        </div>
+
+        <div className="font-mono text-[10px] text-muted-foreground leading-relaxed border-l-2 border-border pl-3">
+          Буфер хранится в памяти процесса — после перезапуска/деплоя обнуляется.
+          Если приложение упало в проде, скачайте файл сразу как поднимется.
+          Полные логи также пишутся в stdout и доступны через консоль деплоя Replit.
+        </div>
       </CardContent>
     </Card>
   );
@@ -713,6 +856,8 @@ export default function Operations() {
           )}
         </CardContent>
       </Card>
+
+      <LogsExportPanel />
 
       <BookmakerProbePanel />
 

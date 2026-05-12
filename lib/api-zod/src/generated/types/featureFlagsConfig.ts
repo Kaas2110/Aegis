@@ -11,7 +11,7 @@ import type { MonetizationMode } from "./monetizationMode";
 
 export interface FeatureFlagsConfig {
   mode: MonetizationMode;
-  /** minTier per feature key (e.g. { backtest "premium" }) */
+  /** Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } }) */
   flags: FeatureFlagsConfigFlags;
   /** Catalog of feature keys with display labels (Russian) */
   features: FeatureFlagsConfigFeaturesItem[];

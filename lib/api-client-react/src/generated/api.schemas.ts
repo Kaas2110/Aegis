@@ -31,7 +31,7 @@ export interface TierAccess {
 }
 
 /**
- * Independent per-tier access per feature key
+ * Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })
  */
 export type FeatureFlagsConfigFlags = { [key: string]: TierAccess };
 
@@ -43,7 +43,7 @@ export type FeatureFlagsConfigFeaturesItem = {
 
 export interface FeatureFlagsConfig {
   mode: MonetizationMode;
-  /** Independent per-tier access per feature key */
+  /** Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } }) */
   flags: FeatureFlagsConfigFlags;
   /** Catalog of feature keys with display labels (Russian) */
   features: FeatureFlagsConfigFeaturesItem[];

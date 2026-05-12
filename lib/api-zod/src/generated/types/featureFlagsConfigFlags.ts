@@ -8,6 +8,6 @@
 import type { TierAccess } from "./tierAccess";
 
 /**
- * Independent per-tier access per feature key
+ * Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })
  */
 export type FeatureFlagsConfigFlags = { [key: string]: TierAccess };

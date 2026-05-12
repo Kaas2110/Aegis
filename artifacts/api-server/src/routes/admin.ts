@@ -44,6 +44,8 @@ import { requireAdminSession } from './adminAuth';
 import { KNOWN_SOURCE_IDS, probeSource, type SourceProbeResult } from './bookmakers';
 import { db, modelVersionsTable } from '@workspace/db';
 import { desc, eq } from 'drizzle-orm';
+import { getLogs, getLogStats, MAX_ENTRIES as LOG_BUF_MAX } from '../lib/logBuffer';
+import { Readable } from 'node:stream';
 
 const router: IRouter = Router();
 
@@ -389,6 +391,44 @@ router.get('/models', async (_req, res) => {
     .where(eq(modelVersionsTable.isActive, true))
     .orderBy(desc(modelVersionsTable.createdAt));
   res.json({ models: rows });
+});
+
+/**
+ * Логи: статистика in-memory ring-буфера (для подсказки админу, что есть в выгрузке).
+ */
+router.get('/logs/stats', async (_req, res) => {
+  res.json(getLogStats());
+});
+
+/**
+ * Логи: выгрузка NDJSON-файла за период / по уровню.
+ *   minutes — окно назад в минутах (1..10080 = 7д), default 60
+ *   minLevel — pino-числовой уровень (10 trace, 20 debug, 30 info, 40 warn, 50 error, 60 fatal), default 30
+ *   limit — максимум записей (1..MAX_ENTRIES=20000), default = MAX_ENTRIES
+ */
+router.get('/logs/export', async (req, res) => {
+  const minutes = Math.max(1, Math.min(7 * 24 * 60,
+    parseInt(String(req.query.minutes ?? '60'), 10) || 60));
+  const minLevel = Math.max(10, Math.min(60,
+    parseInt(String(req.query.minLevel ?? '30'), 10) || 30));
+  // Лимит ограничен размером ring-буфера: больше физически нет.
+  const limit = Math.max(1, Math.min(LOG_BUF_MAX,
+    parseInt(String(req.query.limit ?? String(LOG_BUF_MAX)), 10) || LOG_BUF_MAX));
+
+  const sinceMs = Date.now() - minutes * 60 * 1000;
+  const entries = getLogs({ sinceMs, minLevel, limit });
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Content-Disposition',
+    `attachment; filename="aegis-logs-${stamp}-${minutes}min-l${minLevel}.ndjson"`);
+  res.setHeader('X-Log-Entries', String(entries.length));
+  res.setHeader('X-Log-Buffer-Capacity', String(LOG_BUF_MAX));
+
+  // Стримим через Readable.from → корректный backpressure (важно при 20k строк).
+  Readable.from((function* () {
+    for (const e of entries) yield e.raw;
+  })()).pipe(res);
 });
 
 export default router;

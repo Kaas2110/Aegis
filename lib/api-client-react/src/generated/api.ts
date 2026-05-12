@@ -1090,6 +1090,81 @@ export function useGetAdminModels<
 }
 
 /**
+ * @summary In-memory log ring-buffer stats (count, range, levels)
+ */
+export const getGetAdminLogsStatsUrl = () => {
+  return `/api/admin/logs/stats`;
+};
+
+export const getAdminLogsStats = async (
+  options?: RequestInit,
+): Promise<AdminOpenObject> => {
+  return customFetch<AdminOpenObject>(getGetAdminLogsStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminLogsStatsQueryKey = () => {
+  return [`/api/admin/logs/stats`] as const;
+};
+
+export const getGetAdminLogsStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminLogsStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminLogsStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminLogsStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminLogsStats>>
+  > = ({ signal }) => getAdminLogsStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminLogsStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminLogsStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminLogsStats>>
+>;
+export type GetAdminLogsStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary In-memory log ring-buffer stats (count, range, levels)
+ */
+
+export function useGetAdminLogsStats<
+  TData = Awaited<ReturnType<typeof getAdminLogsStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminLogsStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminLogsStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Diagnostic — live single request to each bookmaker source
  */
 export const getProbeAdminBookmakersUrl = () => {

@@ -249,6 +249,14 @@ export const GetAdminModelsResponse = zod.object({
 });
 
 /**
+ * @summary In-memory log ring-buffer stats (count, range, levels)
+ */
+export const GetAdminLogsStatsResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+/**
  * @summary Diagnostic — live single request to each bookmaker source
  */
 export const ProbeAdminBookmakersBody = zod.object({
@@ -333,20 +341,25 @@ export const UpdateAdminSubscriptionPriceResponse = zod.object({
   message: zod.string().optional(),
 });
 
-const tierAccessSchema = zod.object({
-  free: zod.boolean(),
-  basic: zod.boolean(),
-  premium: zod.boolean(),
-});
-
 /**
  * @summary Current monetization mode + feature access matrix
  */
 export const GetAdminFeatureFlagsResponse = zod.object({
   mode: zod.enum(["freemium", "tiered"]),
   flags: zod
-    .record(zod.string(), tierAccessSchema)
-    .describe("Independent per-tier access per feature key"),
+    .record(
+      zod.string(),
+      zod
+        .object({
+          free: zod.boolean(),
+          basic: zod.boolean(),
+          premium: zod.boolean(),
+        })
+        .describe("Independent per-tier access flags for a single feature"),
+    )
+    .describe(
+      "Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })",
+    ),
   features: zod
     .array(
       zod.object({
@@ -363,14 +376,36 @@ export const GetAdminFeatureFlagsResponse = zod.object({
  */
 export const UpdateAdminFeatureFlagsBody = zod.object({
   mode: zod.enum(["freemium", "tiered"]).optional(),
-  flags: zod.record(zod.string(), tierAccessSchema).optional(),
+  flags: zod
+    .record(
+      zod.string(),
+      zod
+        .object({
+          free: zod.boolean(),
+          basic: zod.boolean(),
+          premium: zod.boolean(),
+        })
+        .describe("Independent per-tier access flags for a single feature"),
+    )
+    .optional(),
 });
 
 export const UpdateAdminFeatureFlagsResponse = zod.object({
   mode: zod.enum(["freemium", "tiered"]),
   flags: zod
-    .record(zod.string(), tierAccessSchema)
-    .describe("Independent per-tier access per feature key"),
+    .record(
+      zod.string(),
+      zod
+        .object({
+          free: zod.boolean(),
+          basic: zod.boolean(),
+          premium: zod.boolean(),
+        })
+        .describe("Independent per-tier access flags for a single feature"),
+    )
+    .describe(
+      "Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })",
+    ),
   features: zod
     .array(
       zod.object({
@@ -388,8 +423,19 @@ export const UpdateAdminFeatureFlagsResponse = zod.object({
 export const GetMonetizationConfigResponse = zod.object({
   mode: zod.enum(["freemium", "tiered"]),
   flags: zod
-    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
-    .describe('minTier per feature key (e.g. { backtest \"premium\" })'),
+    .record(
+      zod.string(),
+      zod
+        .object({
+          free: zod.boolean(),
+          basic: zod.boolean(),
+          premium: zod.boolean(),
+        })
+        .describe("Independent per-tier access flags for a single feature"),
+    )
+    .describe(
+      "Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })",
+    ),
   features: zod
     .array(
       zod.object({
