@@ -404,10 +404,10 @@ export const appSettingsTable = pgTable('app_settings', {
   trainMinSamples: integer('train_min_samples').notNull().default(1000),
   // ── Монетизация ───────────────────────────────────────────────────────
   // monetizationMode: 'freemium' (Free + Premium) | 'tiered' (Free + Basic + Premium)
-  // featureFlags: матрица доступа { [featureKey]: 'free' | 'basic' | 'premium' }
-  //   определяет минимальный тир для каждой функции. Меняется без деплоя.
+  // featureFlags: матрица доступа { [featureKey]: { free, basic, premium } }
+  //   независимые булевы per-tier per-feature. Меняется без деплоя.
   monetizationMode: text('monetization_mode').notNull().default('freemium'),
-  featureFlags: jsonb('feature_flags').$type<Record<string, 'free' | 'basic' | 'premium'>>().notNull().default({}),
+  featureFlags: jsonb('feature_flags').$type<Record<string, { free: boolean; basic: boolean; premium: boolean }>>().notNull().default({}),
   notes: text('notes'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -5,9 +5,9 @@
  * Aegis API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { FeatureTier } from "./featureTier";
+import type { TierAccess } from "./tierAccess";
 
 /**
- * minTier per feature key (e.g. { backtest "premium" })
+ * Independent per-tier access per feature key
  */
-export type FeatureFlagsConfigFlags = { [key: string]: FeatureTier };
+export type FeatureFlagsConfigFlags = { [key: string]: TierAccess };

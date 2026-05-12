@@ -26,7 +26,7 @@ async function getApiKey() {
         'X-Replit-Token': xReplitToken,
       },
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
+  ).then(res => res.json()).then((data: { items?: unknown[] }) => data.items?.[0]);
 
   const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
 

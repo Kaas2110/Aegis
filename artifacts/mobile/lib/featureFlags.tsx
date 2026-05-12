@@ -1,15 +1,15 @@
 /**
  * Чтение matrix фичей с бэкенда (/api/config/monetization) + удобный хук
- * для гейтинга UI. Источник истины: app_settings.feature_flags. Меняется
- * админом через /api/admin/feature-flags без релиза.
+ * для гейтинга UI. Источник истины: app_settings.feature_flags.
  *
- *  - mode 'freemium' — Free + Premium. Тир пользователя берётся из RevenueCat
+ * Модель: независимые булевы per-tier.
+ *   flags.win_probability = { free: false, basic: false, premium: true }
+ * Нет каскада «минимального тира» — каждый тир задаётся независимо.
+ *
+ *  - mode 'freemium' — Free + Premium. Тир пользователя из RevenueCat
  *    (isSubscribed → 'premium', иначе 'free').
  *  - mode 'tiered' — Free + Basic + Premium. Basic тир ещё не реализован
- *    (entitlement отсутствует), поэтому пока ведёт себя как freemium:
- *    isSubscribed → 'premium', иначе 'free'.
- *
- * canAccess: ранг пользователя >= ранга, требуемого для фичи.
+ *    (entitlement отсутствует), поэтому пока: isSubscribed → 'premium', иначе 'free'.
  */
 
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
@@ -28,23 +28,29 @@ export type FeatureKey =
   | 'alerts_edge'
   | 'live_predictions';
 
+export interface TierAccess {
+  free: boolean;
+  basic: boolean;
+  premium: boolean;
+}
+
 export interface FeatureFlagsConfig {
   mode: MonetizationMode;
-  flags: Record<FeatureKey, SubscriptionTier>;
+  flags: Record<FeatureKey, TierAccess>;
   features: Array<{ key: FeatureKey; label: string; description?: string }>;
 }
 
-const TIER_RANK: Record<SubscriptionTier, number> = { free: 0, basic: 1, premium: 2 };
+const DEFAULT_TIER_ACCESS: TierAccess = { free: false, basic: false, premium: true };
 
 const DEFAULT_CONFIG: FeatureFlagsConfig = {
   mode: 'freemium',
   flags: {
-    win_probability: 'premium',
-    market_predictions: 'premium',
-    draft_analysis: 'premium',
-    backtest: 'premium',
-    alerts_edge: 'premium',
-    live_predictions: 'premium',
+    win_probability:    { ...DEFAULT_TIER_ACCESS },
+    market_predictions: { ...DEFAULT_TIER_ACCESS },
+    draft_analysis:     { ...DEFAULT_TIER_ACCESS },
+    backtest:           { ...DEFAULT_TIER_ACCESS },
+    alerts_edge:        { ...DEFAULT_TIER_ACCESS },
+    live_predictions:   { ...DEFAULT_TIER_ACCESS },
   },
   features: [],
 };
@@ -73,14 +79,13 @@ export function useFeatureFlagsConfig(): FeatureFlagsConfig {
 
 export function useUserTier(): SubscriptionTier {
   const { isSubscribed } = useSubscription();
-  // Basic тир ещё не реализован (нет соответствующего entitlement в RC).
+  // Basic тир ещё не реализован (нет entitlement в RC).
   // Когда появится — добавить проверку active['basic'] здесь.
   return isSubscribed ? 'premium' : 'free';
 }
 
 /** Side-effect компонент: при потере доступа к alerts_edge глушит
- *  фоновые уведомления (push/in-app), чтобы persisted-правила не срабатывали
- *  у пользователей без подписки. */
+ *  фоновые уведомления (push/in-app). */
 export function FeatureFlagsSideEffects() {
   const access = useFeatureAccess('alerts_edge');
   useEffect(() => {
@@ -91,9 +96,9 @@ export function FeatureFlagsSideEffects() {
 
 export interface FeatureAccess {
   canAccess: boolean;
+  /** Первый тир, у которого есть доступ (для CTA «Доступно в X»). */
   required: SubscriptionTier;
   current: SubscriptionTier;
-  /** В freemium режиме показывает только free|premium колонки в paywall. */
   mode: MonetizationMode;
 }
 
@@ -101,15 +106,21 @@ export function useFeatureAccess(key: FeatureKey): FeatureAccess {
   const cfg = useFeatureFlagsConfig();
   const current = useUserTier();
   return useMemo<FeatureAccess>(() => {
-    let required = cfg.flags[key] ?? 'premium';
-    // В freemium тира `basic` не существует — поднимаем требование до premium,
-    // чтобы доступ нельзя было получить через несуществующий тир.
+    const tierAccess: TierAccess = cfg.flags[key] ?? DEFAULT_TIER_ACCESS;
+
+    // Доступ для текущего тира пользователя
+    const canAccess = tierAccess[current] === true;
+
+    // Первый (наименьший) тир с доступом — для CTA в paywall
+    const tiers: SubscriptionTier[] = ['free', 'basic', 'premium'];
+    let required: SubscriptionTier = 'premium';
+    for (const t of tiers) {
+      if (tierAccess[t]) { required = t; break; }
+    }
+
+    // В freemium тира `basic` не существует — повышаем до premium для CTA
     if (cfg.mode === 'freemium' && required === 'basic') required = 'premium';
-    return {
-      canAccess: TIER_RANK[current] >= TIER_RANK[required],
-      required,
-      current,
-      mode: cfg.mode,
-    };
+
+    return { canAccess, required, current, mode: cfg.mode };
   }, [cfg, current, key]);
 }

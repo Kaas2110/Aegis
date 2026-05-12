@@ -5,6 +5,6 @@
  * Aegis API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { FeatureTier } from "./featureTier";
+import type { TierAccess } from "./tierAccess";
 
-export type FeatureFlagsUpdateInputFlags = { [key: string]: FeatureTier };
+export type FeatureFlagsUpdateInputFlags = { [key: string]: TierAccess };

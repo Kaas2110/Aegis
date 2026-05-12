@@ -4,7 +4,7 @@ import {
   useUpdateAdminFeatureFlags,
   getGetAdminFeatureFlagsQueryKey,
   type FeatureFlagsConfig,
-  type FeatureTier,
+  type TierAccess,
   type MonetizationMode,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,13 +13,18 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
-const TIER_RANK: Record<FeatureTier, number> = { free: 0, basic: 1, premium: 2 };
+type FeatureTier = "free" | "basic" | "premium";
+
 const TIER_LABEL: Record<FeatureTier, string> = { free: "Free", basic: "Basic", premium: "Premium" };
 const TIER_COLOR: Record<FeatureTier, string> = {
-  free: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  basic: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  premium: "bg-primary/15 text-primary border-primary/30",
+  free:    "bg-emerald-500 text-black border-emerald-500",
+  basic:   "bg-amber-500   text-black border-amber-500",
+  premium: "bg-primary     text-black border-primary",
 };
+
+type DraftFlags = Record<string, TierAccess>;
+
+function emptyAccess(): TierAccess { return { free: false, basic: false, premium: false }; }
 
 export function FeatureFlagsCard() {
   const { data, isLoading, error } = useGetAdminFeatureFlags();
@@ -27,41 +32,50 @@ export function FeatureFlagsCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [draftMode, setDraftMode] = useState<MonetizationMode | null>(null);
-  const [draftFlags, setDraftFlags] = useState<Record<string, FeatureTier> | null>(null);
+  const [draftMode, setDraftMode]   = useState<MonetizationMode | null>(null);
+  const [draftFlags, setDraftFlags] = useState<DraftFlags | null>(null);
 
   useEffect(() => {
     if (data && draftMode === null) {
       setDraftMode(data.mode);
-      setDraftFlags({ ...data.flags } as Record<string, FeatureTier>);
+      setDraftFlags(Object.fromEntries(
+        Object.entries(data.flags as Record<string, TierAccess>).map(([k, v]) => [k, { ...v }]),
+      ));
     }
   }, [data, draftMode]);
 
   const mode: MonetizationMode = draftMode ?? data?.mode ?? "freemium";
-  const flags = (draftFlags ?? (data?.flags as Record<string, FeatureTier> | undefined) ?? {}) as Record<string, FeatureTier>;
+  const flags: DraftFlags = draftFlags ?? (data?.flags as Record<string, TierAccess> | undefined) ?? {};
   const features = data?.features ?? [];
 
   const tierColumns: FeatureTier[] = mode === "freemium" ? ["free", "premium"] : ["free", "basic", "premium"];
 
   const dirty = (() => {
-    if (!data) return false;
+    if (!data || !draftFlags) return false;
     if (draftMode !== null && draftMode !== data.mode) return true;
-    if (draftFlags) {
-      for (const k of Object.keys(draftFlags)) {
-        if ((data.flags as Record<string, FeatureTier>)[k] !== draftFlags[k]) return true;
-      }
+    for (const k of Object.keys(draftFlags)) {
+      const orig = (data.flags as Record<string, TierAccess>)[k];
+      const draft = draftFlags[k];
+      if (!orig || !draft) return true;
+      if (orig.free !== draft.free || orig.basic !== draft.basic || orig.premium !== draft.premium) return true;
     }
     return false;
   })();
 
-  function setFlag(key: string, tier: FeatureTier) {
-    setDraftFlags((prev) => ({ ...(prev ?? {}), [key]: tier }));
+  function toggle(featureKey: string, tier: FeatureTier) {
+    setDraftFlags(prev => {
+      const entry = { ...(prev?.[featureKey] ?? emptyAccess()) };
+      entry[tier] = !entry[tier];
+      return { ...(prev ?? {}), [featureKey]: entry };
+    });
   }
 
   function reset() {
     if (data) {
       setDraftMode(data.mode);
-      setDraftFlags({ ...data.flags } as Record<string, FeatureTier>);
+      setDraftFlags(Object.fromEntries(
+        Object.entries(data.flags as Record<string, TierAccess>).map(([k, v]) => [k, { ...v }]),
+      ));
     }
   }
 
@@ -72,8 +86,9 @@ export function FeatureFlagsCard() {
       {
         onSuccess: (res: FeatureFlagsConfig) => {
           toast({ title: "Доступ обновлён", description: `Режим: ${res.mode}` });
+          const resFlags = res.flags as Record<string, TierAccess>;
           setDraftMode(res.mode);
-          setDraftFlags({ ...res.flags } as Record<string, FeatureTier>);
+          setDraftFlags(Object.fromEntries(Object.entries(resFlags).map(([k, v]) => [k, { ...v }])));
           queryClient.invalidateQueries({ queryKey: getGetAdminFeatureFlagsQueryKey() });
         },
         onError: (err: unknown) => {
@@ -90,7 +105,7 @@ export function FeatureFlagsCard() {
           Доступ к функциям
         </CardTitle>
         <CardDescription className="font-mono text-xs">
-          Настройка матрицы фичей по тарифам. Минимальный тир, начиная с которого функция доступна. Меняется без релиза.
+          Настройка доступа к функциям по тарифам. Каждый тир — независимая галочка. Меняется без релиза.
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-6 space-y-5">
@@ -107,7 +122,7 @@ export function FeatureFlagsCard() {
         ) : (
           <>
             {/* Режим монетизации */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Режим монетизации
               </div>
@@ -129,11 +144,22 @@ export function FeatureFlagsCard() {
                   );
                 })}
               </div>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {mode === "freemium"
-                  ? "Активны только Free и Premium. Колонка Basic скрыта; если фича была закреплена за Basic — приравнивается к Premium."
-                  : "Активны три тира. Если фича включена для Free — автоматически доступна и в Basic/Premium (каскад вверх)."}
-              </p>
+
+              {/* Объяснение режимов */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`p-3 border font-mono text-[10px] leading-relaxed transition-colors ${
+                  mode === "freemium" ? "border-primary/40 bg-primary/5 text-foreground" : "border-border text-muted-foreground"
+                }`}>
+                  <div className="font-bold mb-1 text-[11px]">Freemium — Free + Premium</div>
+                  <div>Два тира. Бесплатный с минимальным набором функций и один платный Premium. Basic не существует — купить можно только Premium.</div>
+                </div>
+                <div className={`p-3 border font-mono text-[10px] leading-relaxed transition-colors ${
+                  mode === "tiered" ? "border-primary/40 bg-primary/5 text-foreground" : "border-border text-muted-foreground"
+                }`}>
+                  <div className="font-bold mb-1 text-[11px]">Tiered — Free + Basic + Premium</div>
+                  <div>Три тира. Free — минимум, Basic — средний уровень по меньшей цене, Premium — полный доступ. Позволяет строить ценовую лестницу.</div>
+                </div>
+              </div>
             </div>
 
             {/* Таблица фичей */}
@@ -145,7 +171,7 @@ export function FeatureFlagsCard() {
                       Функция
                     </th>
                     {tierColumns.map((tier) => (
-                      <th key={tier} className="p-3 font-bold uppercase tracking-wider text-[10px] text-muted-foreground text-center">
+                      <th key={tier} className="p-3 font-bold uppercase tracking-wider text-[10px] text-muted-foreground text-center min-w-[80px]">
                         {TIER_LABEL[tier]}
                       </th>
                     ))}
@@ -153,8 +179,7 @@ export function FeatureFlagsCard() {
                 </thead>
                 <tbody>
                   {features.map((f) => {
-                    let activeTier = (flags[f.key] ?? "premium") as FeatureTier;
-                    if (mode === "freemium" && activeTier === "basic") activeTier = "premium";
+                    const access: TierAccess = (flags[f.key] as TierAccess | undefined) ?? emptyAccess();
                     return (
                       <tr key={f.key} className="border-b border-border last:border-b-0 hover:bg-background/50">
                         <td className="p-3 align-top">
@@ -167,24 +192,19 @@ export function FeatureFlagsCard() {
                           <code className="text-[9px] text-muted-foreground mt-1 block">{f.key}</code>
                         </td>
                         {tierColumns.map((tier) => {
-                          const enabled = TIER_RANK[tier] >= TIER_RANK[activeTier];
-                          const isMinTier = tier === activeTier;
+                          const checked = access[tier] === true;
                           return (
                             <td key={tier} className="p-3 text-center align-middle">
                               <button
-                                onClick={() => setFlag(f.key, tier)}
-                                className={`inline-flex items-center justify-center w-9 h-9 border transition-colors ${
-                                  isMinTier
-                                    ? `${TIER_COLOR[tier]} border-2`
-                                    : enabled
-                                      ? "border-border bg-background text-muted-foreground hover:border-primary/50"
-                                      : "border-border/50 bg-background/30 text-muted-foreground/40 hover:border-primary/50"
+                                onClick={() => toggle(f.key, tier)}
+                                title={checked ? `Убрать доступ для ${TIER_LABEL[tier]}` : `Дать доступ для ${TIER_LABEL[tier]}`}
+                                className={`inline-flex items-center justify-center w-9 h-9 border-2 transition-all font-bold text-sm ${
+                                  checked
+                                    ? TIER_COLOR[tier]
+                                    : "border-border/50 bg-background/30 text-muted-foreground/40 hover:border-border hover:text-muted-foreground"
                                 }`}
-                                title={isMinTier
-                                  ? `Минимальный тир: ${TIER_LABEL[tier]}`
-                                  : `Сделать минимальным тиром: ${TIER_LABEL[tier]}`}
                               >
-                                {enabled ? "✓" : "·"}
+                                {checked ? "✓" : "·"}
                               </button>
                             </td>
                           );
@@ -197,8 +217,8 @@ export function FeatureFlagsCard() {
             </div>
 
             <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
-              ✓ — функция доступна на этом тире. Цветной квадрат — минимальный тир. Клик по квадрату назначает его минимальным;
-              функция автоматически становится доступна и на всех более высоких тирах.
+              Каждая галочка — независима. Можно дать функцию только Free, только Basic, только Premium, или любой комбинации.
+              В режиме Freemium колонка Basic скрыта.
             </p>
 
             <div className="flex gap-2 pt-2 border-t border-border">

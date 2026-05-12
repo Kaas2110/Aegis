@@ -333,14 +333,20 @@ export const UpdateAdminSubscriptionPriceResponse = zod.object({
   message: zod.string().optional(),
 });
 
+const tierAccessSchema = zod.object({
+  free: zod.boolean(),
+  basic: zod.boolean(),
+  premium: zod.boolean(),
+});
+
 /**
  * @summary Current monetization mode + feature access matrix
  */
 export const GetAdminFeatureFlagsResponse = zod.object({
   mode: zod.enum(["freemium", "tiered"]),
   flags: zod
-    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
-    .describe('minTier per feature key (e.g. { backtest \"premium\" })'),
+    .record(zod.string(), tierAccessSchema)
+    .describe("Independent per-tier access per feature key"),
   features: zod
     .array(
       zod.object({
@@ -357,16 +363,14 @@ export const GetAdminFeatureFlagsResponse = zod.object({
  */
 export const UpdateAdminFeatureFlagsBody = zod.object({
   mode: zod.enum(["freemium", "tiered"]).optional(),
-  flags: zod
-    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
-    .optional(),
+  flags: zod.record(zod.string(), tierAccessSchema).optional(),
 });
 
 export const UpdateAdminFeatureFlagsResponse = zod.object({
   mode: zod.enum(["freemium", "tiered"]),
   flags: zod
-    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
-    .describe('minTier per feature key (e.g. { backtest \"premium\" })'),
+    .record(zod.string(), tierAccessSchema)
+    .describe("Independent per-tier access per feature key"),
   features: zod
     .array(
       zod.object({

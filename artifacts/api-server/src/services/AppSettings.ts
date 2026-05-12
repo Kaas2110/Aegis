@@ -3,6 +3,10 @@
  * Single-row таблица app_settings (id=1). При первом обращении строка создаётся
  * с дефолтами. Используется in-memory кешированием для быстрого доступа из
  * горячих путей (популярные рынки, /api/odds/* и т.д.).
+ *
+ * featureFlags: независимые булевы per-tier per-feature.
+ *   { win_probability: { free: false, basic: false, premium: true } }
+ * Каждый тир задаётся независимо — нет каскада «минимального тира».
  */
 
 import { db, appSettingsTable, type AppSettings } from '@workspace/db';
@@ -22,13 +26,21 @@ export const FEATURE_KEYS = [
 ] as const;
 export type FeatureKey = typeof FEATURE_KEYS[number];
 
-export const DEFAULT_FEATURE_FLAGS: Record<FeatureKey, SubscriptionTier> = {
-  win_probability: 'premium',
-  market_predictions: 'premium',
-  draft_analysis: 'premium',
-  backtest: 'premium',
-  alerts_edge: 'premium',
-  live_predictions: 'premium',
+export interface TierAccess {
+  free: boolean;
+  basic: boolean;
+  premium: boolean;
+}
+
+export const DEFAULT_TIER_ACCESS: TierAccess = { free: false, basic: false, premium: true };
+
+export const DEFAULT_FEATURE_FLAGS: Record<FeatureKey, TierAccess> = {
+  win_probability:    { free: false, basic: false, premium: true },
+  market_predictions: { free: false, basic: false, premium: true },
+  draft_analysis:     { free: false, basic: false, premium: true },
+  backtest:           { free: false, basic: false, premium: true },
+  alerts_edge:        { free: false, basic: false, premium: true },
+  live_predictions:   { free: false, basic: false, premium: true },
 };
 
 export const FEATURE_CATALOG: Array<{ key: FeatureKey; label: string; description: string }> = [
@@ -40,31 +52,51 @@ export const FEATURE_CATALOG: Array<{ key: FeatureKey; label: string; descriptio
   { key: 'live_predictions',   label: 'Live прогнозы',       description: 'Обновляемые в реальном времени прогнозы по live матчам' },
 ];
 
-export function normalizeFeatureFlags(raw: unknown): Record<FeatureKey, SubscriptionTier> {
-  const out: Record<FeatureKey, SubscriptionTier> = { ...DEFAULT_FEATURE_FLAGS };
-  if (raw && typeof raw === 'object') {
-    for (const k of FEATURE_KEYS) {
-      const v = (raw as Record<string, unknown>)[k];
-      if (v === 'free' || v === 'basic' || v === 'premium') out[k] = v;
+/** Нормализует raw JSON из БД → строгий Record<FeatureKey, TierAccess>.
+ *  Поддерживает обратную совместимость: если в БД лежит старый формат
+ *  { key: 'premium' } — конвертирует в { free: false, basic: false, premium: true }. */
+export function normalizeFeatureFlags(raw: unknown): Record<FeatureKey, TierAccess> {
+  const out: Record<FeatureKey, TierAccess> = structuredClone(DEFAULT_FEATURE_FLAGS);
+  if (!raw || typeof raw !== 'object') return out;
+
+  const obj = raw as Record<string, unknown>;
+  for (const k of FEATURE_KEYS) {
+    const v = obj[k];
+    if (!v) continue;
+
+    if (typeof v === 'string') {
+      // Legacy format: minTier string → convert to independent flags
+      const all: TierAccess = { free: false, basic: false, premium: false };
+      if (v === 'free')    { all.free = true; all.basic = true; all.premium = true; }
+      if (v === 'basic')   { all.basic = true; all.premium = true; }
+      if (v === 'premium') { all.premium = true; }
+      out[k] = all;
+    } else if (typeof v === 'object' && v !== null) {
+      const ta = v as Record<string, unknown>;
+      out[k] = {
+        free:    ta['free']    === true,
+        basic:   ta['basic']   === true,
+        premium: ta['premium'] === true,
+      };
     }
   }
   return out;
 }
 
 /**
- * Канонизация под выбранный режим монетизации. В freemium режиме тира `basic`
- * не существует — любой флаг, поднятый до `basic`, сворачивается в `premium`,
- * чтобы клиент (мобилка/админка) не получил недоступный тир и UX не показывал
- * «Доступно в Basic», когда оплатить Basic нельзя.
+ * В freemium режиме тира `basic` не существует. Если basic включён для фичи,
+ * также включаем premium (пользователь не сможет купить Basic, поэтому доступ
+ * basic = доступ premium в freemium). Это не влияет на хранение — только на
+ * данные, возвращаемые клиенту через /api/config/monetization.
  */
 export function canonicalizeFlagsForMode(
-  flags: Record<FeatureKey, SubscriptionTier>,
+  flags: Record<FeatureKey, TierAccess>,
   mode: MonetizationMode,
-): Record<FeatureKey, SubscriptionTier> {
+): Record<FeatureKey, TierAccess> {
   if (mode !== 'freemium') return flags;
-  const out = { ...flags };
+  const out = structuredClone(flags);
   for (const k of FEATURE_KEYS) {
-    if (out[k] === 'basic') out[k] = 'premium';
+    if (out[k].basic) out[k].premium = true;
   }
   return out;
 }

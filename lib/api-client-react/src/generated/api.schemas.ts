@@ -22,9 +22,18 @@ export const MonetizationMode = {
 } as const;
 
 /**
- * minTier per feature key (e.g. { backtest "premium" })
+ * Independent per-tier access flags for a single feature
  */
-export type FeatureFlagsConfigFlags = { [key: string]: FeatureTier };
+export interface TierAccess {
+  free: boolean;
+  basic: boolean;
+  premium: boolean;
+}
+
+/**
+ * Independent per-tier access per feature key
+ */
+export type FeatureFlagsConfigFlags = { [key: string]: TierAccess };
 
 export type FeatureFlagsConfigFeaturesItem = {
   key: string;
@@ -34,13 +43,13 @@ export type FeatureFlagsConfigFeaturesItem = {
 
 export interface FeatureFlagsConfig {
   mode: MonetizationMode;
-  /** minTier per feature key (e.g. { backtest "premium" }) */
+  /** Independent per-tier access per feature key */
   flags: FeatureFlagsConfigFlags;
   /** Catalog of feature keys with display labels (Russian) */
   features: FeatureFlagsConfigFeaturesItem[];
 }
 
-export type FeatureFlagsUpdateInputFlags = { [key: string]: FeatureTier };
+export type FeatureFlagsUpdateInputFlags = { [key: string]: TierAccess };
 
 export interface FeatureFlagsUpdateInput {
   mode?: MonetizationMode;

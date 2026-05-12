@@ -313,7 +313,8 @@ router.get('/feature-flags', async (_req, res) => {
 
 /**
  * PUT /api/admin/feature-flags
- * Body: { mode?: 'freemium'|'tiered', flags?: { [FeatureKey]: 'free'|'basic'|'premium' } }
+ * Body: { mode?: 'freemium'|'tiered', flags?: { [FeatureKey]: { free, basic, premium } } }
+ * Независимые булевы per-tier — никакого каскада «минимального тира».
  */
 router.put('/feature-flags', async (req, res) => {
   const body = (req.body ?? {}) as { mode?: unknown; flags?: unknown };
@@ -334,18 +335,23 @@ router.put('/feature-flags', async (req, res) => {
     }
     const incoming = body.flags as Record<string, unknown>;
     const current = normalizeFeatureFlags((await getAppSettings(true)).featureFlags);
-    const next: Record<FeatureKey, SubscriptionTier> = { ...current };
+    const next = structuredClone(current);
     for (const k of Object.keys(incoming)) {
       if (!(FEATURE_KEYS as readonly string[]).includes(k)) {
         res.status(400).json({ error: `unknown feature: ${k}`, allowed: FEATURE_KEYS });
         return;
       }
       const v = incoming[k];
-      if (v !== 'free' && v !== 'basic' && v !== 'premium') {
-        res.status(400).json({ error: `invalid tier for ${k}: ${String(v)}` });
+      if (!v || typeof v !== 'object') {
+        res.status(400).json({ error: `flags.${k} must be { free, basic, premium } object` });
         return;
       }
-      next[k as FeatureKey] = v;
+      const ta = v as Record<string, unknown>;
+      next[k as FeatureKey] = {
+        free:    ta['free']    === true,
+        basic:   ta['basic']   === true,
+        premium: ta['premium'] === true,
+      };
     }
     patch.featureFlags = next;
   }

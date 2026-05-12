@@ -375,6 +375,17 @@ components:
     MonetizationMode:
       type: string
       enum: [freemium, tiered]
+    TierAccess:
+      type: object
+      description: Independent per-tier access flags for a single feature
+      required: [free, basic, premium]
+      properties:
+        free:
+          type: boolean
+        basic:
+          type: boolean
+        premium:
+          type: boolean
     FeatureFlagsConfig:
       type: object
       required: [mode, flags, features]
@@ -384,8 +395,8 @@ components:
         flags:
           type: object
           additionalProperties:
-            $ref: "#/components/schemas/FeatureTier"
-          description: minTier per feature key (e.g. { backtest "premium" })
+            $ref: "#/components/schemas/TierAccess"
+          description: Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })
         features:
           type: array
           description: Catalog of feature keys with display labels (Russian)
@@ -407,7 +418,7 @@ components:
         flags:
           type: object
           additionalProperties:
-            $ref: "#/components/schemas/FeatureTier"
+            $ref: "#/components/schemas/TierAccess"
 
     HealthStatus:
       type: object
