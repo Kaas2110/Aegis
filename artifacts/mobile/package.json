@@ -58,6 +58,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "expo-notifications": "~0.32.13"
+    "expo-notifications": "~0.32.13",
+    "react-native-purchases": "^10.1.0"
   }
 }

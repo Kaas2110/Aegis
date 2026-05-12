@@ -114,7 +114,7 @@ Remaining (deferred): EV-merge on frontend, full market coverage, `minEdge`/`min
 ## Roadmap
 
 - **Wave 3 LGB** — blocked: need ≥80 matches with full `radiant/dire_account_ids` (currently ~68). Auto-unblocks as `match_drafts` accumulates
-- **Backtest UI** — hidden (`href: null`). Endpoint `/api/analytics/backtest` ready. Un-hide when `prematch_outcomes ≥ 200`
+- **Backtest UI** — LIVE (2026-05-12). Tab visible, endpoint `/api/analytics/backtest` returns 14 bets from 21 outcomes. Will improve naturally as outcomes accumulate.
 - **Bookmaker EV-merge** — matching bookie events to `pro_matches`, `BookmakerDropdown` in home header, `minEdge`/`minOdds` in alerts
 - **RevenueCat / Lite vs Premium** — monetization, feature gating
 - **Live winner → full LGB** — auto when live trainSize > 10k snapshots
