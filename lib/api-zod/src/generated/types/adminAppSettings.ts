@@ -10,6 +10,24 @@ export interface AdminAppSettings {
   id: number;
   useBookmakerOdds: boolean;
   liveSnapshotPruneDays: number;
+  /**
+   * Максимальное окно истории матчей для обучения (дней)
+   * @minimum 30
+   * @maximum 730
+   */
+  trainWindowDays: number;
+  /**
+   * Максимальное число последних патчей в тренировочных данных
+   * @minimum 1
+   * @maximum 20
+   */
+  trainMaxPatches: number;
+  /**
+   * Минимальное число сэмплов для запуска обучения
+   * @minimum 50
+   * @maximum 100000
+   */
+  trainMinSamples: number;
   /** @nullable */
   notes?: string | null;
   /** ISO-8601 timestamp */

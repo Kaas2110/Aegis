@@ -392,6 +392,14 @@ export const appSettingsTable = pgTable('app_settings', {
   id: integer('id').primaryKey(),
   useBookmakerOdds: boolean('use_bookmaker_odds').notNull().default(false),
   liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(7),
+  // ── Настройки тренировочного датасета ─────────────────────────────────
+  // trainWindowDays:  максимальное кол-во дней истории (hard cap)
+  // trainMaxPatches:  максимальное кол-во последних патчей (берётся более
+  //                   строгий из двух: патч-граница или дата-граница)
+  // trainMinSamples:  минимум сэмплов для старта обучения (иначе skip)
+  trainWindowDays: integer('train_window_days').notNull().default(365),
+  trainMaxPatches: integer('train_max_patches').notNull().default(4),
+  trainMinSamples: integer('train_min_samples').notNull().default(1000),
   notes: text('notes'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

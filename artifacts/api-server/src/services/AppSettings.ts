@@ -13,6 +13,9 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   id: 1,
   useBookmakerOdds: false,
   liveSnapshotPruneDays: 7,
+  trainWindowDays: 365,
+  trainMaxPatches: 4,
+  trainMinSamples: 1000,
   notes: null,
 };
 
@@ -42,7 +45,14 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
 }
 
 export async function updateAppSettings(
-  patch: Partial<Pick<AppSettings, 'useBookmakerOdds' | 'liveSnapshotPruneDays' | 'notes'>>,
+  patch: Partial<Pick<AppSettings,
+    | 'useBookmakerOdds'
+    | 'liveSnapshotPruneDays'
+    | 'trainWindowDays'
+    | 'trainMaxPatches'
+    | 'trainMinSamples'
+    | 'notes'
+  >>,
 ): Promise<AppSettings> {
   await getAppSettings();
   await db

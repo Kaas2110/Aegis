@@ -55,6 +55,20 @@ import {
 
 const TRAIN_WINDOW_DAYS = 365;
 const EPOCHS = 200;
+
+/** Возвращает Unix-timestamp начала тренировочного окна. */
+function parseSinceUnix(): number {
+  const idx = process.argv.indexOf('--since-unix');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 24 * 60 * 60;
+}
+
+/** Возвращает минимум сэмплов на тир для обучения. */
+function parseMinSamplesTier(): number {
+  const idx = process.argv.indexOf('--min-samples');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return MIN_SAMPLES_PER_TIER;
+}
 const LR = 0.05;
 const L2 = 0.001;
 const MIN_SAMPLES_PER_TIER = 50;
@@ -188,8 +202,8 @@ function trainBucket(
   tier: Tier | null,
   dim: number,
 ): BucketResult | null {
-  if (samples.length < MIN_SAMPLES_PER_TIER) {
-    console.log(`  [v${featuresVersion}/${kind}] SKIP: only ${samples.length} samples (need ${MIN_SAMPLES_PER_TIER}+)`);
+  if (samples.length < parseMinSamplesTier()) {
+    console.log(`  [v${featuresVersion}/${kind}] SKIP: only ${samples.length} samples (need ${parseMinSamplesTier()}+)`);
     return null;
   }
 
@@ -257,8 +271,9 @@ async function main() {
   console.log(`[train-model] Loaded ${teams.size} teams with ratings`);
 
   // ── Загрузка матчей ────────────────────────────────────────────────────
-  const minStartTime = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 24 * 60 * 60;
-  console.log(`[train-model] Loading matches (window=${TRAIN_WINDOW_DAYS}d) …`);
+  const minStartTime = parseSinceUnix();
+  const effectiveMinSamplesTier = parseMinSamplesTier();
+  console.log(`[train-model] Loading matches (since=${new Date(minStartTime * 1000).toISOString().slice(0, 10)}) …`);
   const matches = await db
     .select({
       matchId: proMatchesTable.matchId,
@@ -493,7 +508,7 @@ async function main() {
   const v2Dim = TEAM_FEATURE_DIM + HERO_FEATURE_DIM;
   let v2Fallback: BucketResult | null = null;
   const v2Tiers: Record<Tier, BucketResult | null> = { t1: null, t2: null, t3: null };
-  if (v2All.length >= MIN_SAMPLES_PER_TIER) {
+  if (v2All.length >= parseMinSamplesTier()) {
     console.log(`\n[train-model] === TRAINING v2 (team+hero features, dim=${v2Dim}) ===`);
     v2Fallback = trainBucket(v2All, 'prematch_winner', 2, null, v2Dim);
     v2Tiers.t1 = trainBucket(v2Bucket.t1, tierKind('t1'), 2, 't1', v2Dim);
@@ -501,7 +516,7 @@ async function main() {
     v2Tiers.t3 = trainBucket(v2Bucket.t3, tierKind('t3'), 2, 't3', v2Dim);
   } else {
     console.log(
-      `\n[train-model] Skipping v2: only ${v2All.length} samples with drafts (need ${MIN_SAMPLES_PER_TIER}+). ` +
+      `\n[train-model] Skipping v2: only ${v2All.length} samples with drafts (need ${parseMinSamplesTier()}+). ` +
       `Run ingest:drafts and ingest:hero-stats first.`,
     );
   }
@@ -510,7 +525,7 @@ async function main() {
   const v3Dim = TEAM_FEATURE_DIM + HERO_FEATURE_DIM + EXTRA_FEATURE_DIM;
   let v3Fallback: BucketResult | null = null;
   const v3Tiers: Record<Tier, BucketResult | null> = { t1: null, t2: null, t3: null };
-  if (v3All.length >= MIN_SAMPLES_PER_TIER) {
+  if (v3All.length >= parseMinSamplesTier()) {
     console.log(`\n[train-model] === TRAINING v3 (team+hero+extras, dim=${v3Dim}) ===`);
     v3Fallback = trainBucket(v3All, 'prematch_winner', 3, null, v3Dim);
     v3Tiers.t1 = trainBucket(v3Bucket.t1, tierKind('t1'), 3, 't1', v3Dim);
@@ -518,7 +533,7 @@ async function main() {
     v3Tiers.t3 = trainBucket(v3Bucket.t3, tierKind('t3'), 3, 't3', v3Dim);
   } else {
     console.log(
-      `\n[train-model] Skipping v3: only ${v3All.length} samples with accounts (need ${MIN_SAMPLES_PER_TIER}+). ` +
+      `\n[train-model] Skipping v3: only ${v3All.length} samples with accounts (need ${parseMinSamplesTier()}+). ` +
       `Run ingest:drafts --backfill-accounts + ingest:players-heroes + compute:recent-form + compute:h2h.`,
     );
   }

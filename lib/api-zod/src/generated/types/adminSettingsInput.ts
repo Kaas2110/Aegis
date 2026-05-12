@@ -13,6 +13,21 @@ export interface AdminSettingsInput {
    * @maximum 365
    */
   liveSnapshotPruneDays?: number;
+  /**
+   * @minimum 30
+   * @maximum 730
+   */
+  trainWindowDays?: number;
+  /**
+   * @minimum 1
+   * @maximum 20
+   */
+  trainMaxPatches?: number;
+  /**
+   * @minimum 50
+   * @maximum 100000
+   */
+  trainMinSamples?: number;
   /** @nullable */
   notes?: string | null;
 }

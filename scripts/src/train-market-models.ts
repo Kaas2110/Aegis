@@ -37,6 +37,20 @@ import { readFileSync } from 'node:fs';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES = 60;
+
+/** Возвращает Unix-timestamp начала тренировочного окна. */
+function parseSinceUnix(): number {
+  const idx = process.argv.indexOf('--since-unix');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86_400;
+}
+
+/** Возвращает минимум сэмплов для обучения. */
+function parseMinSamples(): number {
+  const idx = process.argv.indexOf('--min-samples');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return MIN_SAMPLES;
+}
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const TRAIN_TIMEOUT_MS = 120_000;
@@ -116,7 +130,8 @@ function buildTeamFeatures(
 }
 
 async function loadData() {
-  const sinceTs = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86_400;
+  const sinceTs = parseSinceUnix();
+  const effectiveMinSamples = parseMinSamples();
   const matches = await db
     .select({
       matchId: proMatchesTable.matchId,
@@ -171,8 +186,9 @@ function buildSamples(market: MarketKey, matches: MatchRow[], teams: Map<number,
 
 async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainResponse | null> {
   const label = `market/${market}`;
-  if (samples.length < MIN_SAMPLES) {
-    console.log(`  [${label}] SKIP: only ${samples.length} samples (need ${MIN_SAMPLES}+)`);
+  const minSamples = parseMinSamples();
+  if (samples.length < minSamples) {
+    console.log(`  [${label}] SKIP: only ${samples.length} samples (need ${minSamples}+)`);
     return null;
   }
   const n = samples.length;
@@ -301,7 +317,7 @@ async function main(): Promise<void> {
   const { matches, teams } = await loadData();
   console.log(`[train-market-models] matches=${matches.length} teams=${teams.size}`);
 
-  if (matches.length < MIN_SAMPLES) {
+  if (matches.length < parseMinSamples()) {
     console.log('[train-market-models] not enough matches — exiting cleanly');
     return;
   }

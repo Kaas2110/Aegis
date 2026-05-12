@@ -49,11 +49,34 @@ export const AdminWhoamiResponse = zod.object({
 /**
  * @summary Current global app settings
  */
+export const getAdminSettingsResponseSettingsTrainWindowDaysMin = 30;
+export const getAdminSettingsResponseSettingsTrainWindowDaysMax = 730;
+
+export const getAdminSettingsResponseSettingsTrainMaxPatchesMax = 20;
+
+export const getAdminSettingsResponseSettingsTrainMinSamplesMin = 50;
+export const getAdminSettingsResponseSettingsTrainMinSamplesMax = 100000;
+
 export const GetAdminSettingsResponse = zod.object({
   settings: zod.object({
     id: zod.number(),
     useBookmakerOdds: zod.boolean(),
     liveSnapshotPruneDays: zod.number(),
+    trainWindowDays: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsTrainWindowDaysMin)
+      .max(getAdminSettingsResponseSettingsTrainWindowDaysMax)
+      .describe("Максимальное окно истории матчей для обучения (дней)"),
+    trainMaxPatches: zod
+      .number()
+      .min(1)
+      .max(getAdminSettingsResponseSettingsTrainMaxPatchesMax)
+      .describe("Максимальное число последних патчей в тренировочных данных"),
+    trainMinSamples: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsTrainMinSamplesMin)
+      .max(getAdminSettingsResponseSettingsTrainMinSamplesMax)
+      .describe("Минимальное число сэмплов для запуска обучения"),
     notes: zod.string().nullish(),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),
@@ -65,6 +88,14 @@ export const GetAdminSettingsResponse = zod.object({
  */
 export const updateAdminSettingsBodyLiveSnapshotPruneDaysMax = 365;
 
+export const updateAdminSettingsBodyTrainWindowDaysMin = 30;
+export const updateAdminSettingsBodyTrainWindowDaysMax = 730;
+
+export const updateAdminSettingsBodyTrainMaxPatchesMax = 20;
+
+export const updateAdminSettingsBodyTrainMinSamplesMin = 50;
+export const updateAdminSettingsBodyTrainMinSamplesMax = 100000;
+
 export const UpdateAdminSettingsBody = zod.object({
   useBookmakerOdds: zod.boolean().optional(),
   liveSnapshotPruneDays: zod
@@ -72,14 +103,52 @@ export const UpdateAdminSettingsBody = zod.object({
     .min(1)
     .max(updateAdminSettingsBodyLiveSnapshotPruneDaysMax)
     .optional(),
+  trainWindowDays: zod
+    .number()
+    .min(updateAdminSettingsBodyTrainWindowDaysMin)
+    .max(updateAdminSettingsBodyTrainWindowDaysMax)
+    .optional(),
+  trainMaxPatches: zod
+    .number()
+    .min(1)
+    .max(updateAdminSettingsBodyTrainMaxPatchesMax)
+    .optional(),
+  trainMinSamples: zod
+    .number()
+    .min(updateAdminSettingsBodyTrainMinSamplesMin)
+    .max(updateAdminSettingsBodyTrainMinSamplesMax)
+    .optional(),
   notes: zod.string().nullish(),
 });
+
+export const updateAdminSettingsResponseSettingsTrainWindowDaysMin = 30;
+export const updateAdminSettingsResponseSettingsTrainWindowDaysMax = 730;
+
+export const updateAdminSettingsResponseSettingsTrainMaxPatchesMax = 20;
+
+export const updateAdminSettingsResponseSettingsTrainMinSamplesMin = 50;
+export const updateAdminSettingsResponseSettingsTrainMinSamplesMax = 100000;
 
 export const UpdateAdminSettingsResponse = zod.object({
   settings: zod.object({
     id: zod.number(),
     useBookmakerOdds: zod.boolean(),
     liveSnapshotPruneDays: zod.number(),
+    trainWindowDays: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsTrainWindowDaysMin)
+      .max(updateAdminSettingsResponseSettingsTrainWindowDaysMax)
+      .describe("Максимальное окно истории матчей для обучения (дней)"),
+    trainMaxPatches: zod
+      .number()
+      .min(1)
+      .max(updateAdminSettingsResponseSettingsTrainMaxPatchesMax)
+      .describe("Максимальное число последних патчей в тренировочных данных"),
+    trainMinSamples: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsTrainMinSamplesMin)
+      .max(updateAdminSettingsResponseSettingsTrainMinSamplesMax)
+      .describe("Минимальное число сэмплов для запуска обучения"),
     notes: zod.string().nullish(),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),

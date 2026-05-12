@@ -51,12 +51,24 @@ router.post('/settings', async (req, res) => {
   const body = req.body as {
     useBookmakerOdds?: boolean;
     liveSnapshotPruneDays?: number;
+    trainWindowDays?: number;
+    trainMaxPatches?: number;
+    trainMinSamples?: number;
     notes?: string | null;
   };
   const patch: Parameters<typeof updateAppSettings>[0] = {};
   if (typeof body.useBookmakerOdds === 'boolean') patch.useBookmakerOdds = body.useBookmakerOdds;
   if (typeof body.liveSnapshotPruneDays === 'number' && body.liveSnapshotPruneDays >= 1 && body.liveSnapshotPruneDays <= 365) {
     patch.liveSnapshotPruneDays = body.liveSnapshotPruneDays;
+  }
+  if (typeof body.trainWindowDays === 'number' && body.trainWindowDays >= 30 && body.trainWindowDays <= 730) {
+    patch.trainWindowDays = body.trainWindowDays;
+  }
+  if (typeof body.trainMaxPatches === 'number' && body.trainMaxPatches >= 1 && body.trainMaxPatches <= 20) {
+    patch.trainMaxPatches = body.trainMaxPatches;
+  }
+  if (typeof body.trainMinSamples === 'number' && body.trainMinSamples >= 50 && body.trainMinSamples <= 100000) {
+    patch.trainMinSamples = body.trainMinSamples;
   }
   if (typeof body.notes === 'string' || body.notes === null) patch.notes = body.notes;
 

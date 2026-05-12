@@ -99,6 +99,36 @@ async function fetchCurrentPatch(): Promise<OpenDotaPatch | null> {
 }
 
 /**
+ * Вычисляет Unix-timestamp начала тренировочного окна как
+ * max(windowCutoff, patchCutoff) — более строгое из двух ограничений.
+ * Если запрос патчей не удался — возвращает только windowCutoff.
+ */
+async function computeTrainSinceUnix(windowDays: number, maxPatches: number): Promise<number> {
+  const windowCutoff = Math.floor(Date.now() / 1000) - windowDays * 86_400;
+  try {
+    const resp = await fetch(PATCH_API, { headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const raw = (await resp.json()) as OpenDotaPatch[] | OpenDotaPatch;
+    const patches: OpenDotaPatch[] = Array.isArray(raw) ? raw : [raw];
+    if (patches.length === 0) return windowCutoff;
+    const sorted = [...patches].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    const idx = Math.max(0, sorted.length - maxPatches);
+    const patchCutoffMs = Date.parse(sorted[idx].date);
+    if (!Number.isFinite(patchCutoffMs)) return windowCutoff;
+    const patchCutoff = Math.floor(patchCutoffMs / 1000);
+    const effective = Math.max(windowCutoff, patchCutoff);
+    logger.info(
+      { windowDays, maxPatches, windowCutoff, patchCutoff, effective, patchName: sorted[idx].name },
+      '[Scheduler] computeTrainSinceUnix',
+    );
+    return effective;
+  } catch (err) {
+    logger.warn({ err: String(err) }, '[Scheduler] computeTrainSinceUnix patch fetch failed, using window only');
+    return windowCutoff;
+  }
+}
+
+/**
  * Запускает pnpm-команду в корне workspace и резолвится при завершении.
  */
 function runPnpmScript(
@@ -229,7 +259,9 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     stepResults['ingest:leagues'] = await runScriptSafe('ingest:leagues', 'ingest:leagues', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
 
     // ── Phase 2: sliding window prune ────────────────────────────────────
-    const cutoffSec = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 24 * 60 * 60;
+    const pipelineSettings = await getAppSettings();
+    const trainWindowDaysCfg = pipelineSettings.trainWindowDays ?? TRAIN_WINDOW_DAYS;
+    const cutoffSec = Math.floor(Date.now() / 1000) - trainWindowDaysCfg * 24 * 60 * 60;
     const deleted = await db
       .delete(proMatchesTable)
       .where(lt(proMatchesTable.startTime, cutoffSec))
@@ -258,8 +290,17 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
       return true;
     }
 
+    // ── Phase 3.5: effective training window (patch-aware) ───────────────
+    const effectiveSinceUnix = await computeTrainSinceUnix(
+      trainWindowDaysCfg,
+      pipelineSettings.trainMaxPatches ?? 4,
+    );
+    const effectiveMinSamples = pipelineSettings.trainMinSamples ?? 1000;
+    const trainArgs = ['--since-unix', String(effectiveSinceUnix), '--min-samples', String(effectiveMinSamples)];
+    logger.info({ effectiveSinceUnix, effectiveMinSamples, trainWindowDaysCfg }, '[Scheduler] train dataset window computed');
+
     // ── Phase 4: train — train:model критичен, остальные non-fatal ───────
-    const trainRun = await runPnpmScript('train:model');
+    const trainRun = await runPnpmScript('train:model', trainArgs);
     stepResults['train:model'] = trainRun.code === 0;
     trainTail = trainRun.tail;
     logger.info({ code: trainRun.code, tail: trainRun.tail }, '[Scheduler] train:model done');
@@ -268,7 +309,7 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     await loadActiveModel();
 
     // train:lightgbm — non-fatal. Зависит от ml-service: при сбое останется LR.
-    stepResults['train:lightgbm'] = await runScriptSafe('train:lightgbm', 'train:lightgbm');
+    stepResults['train:lightgbm'] = await runScriptSafe('train:lightgbm', 'train:lightgbm', trainArgs);
     if (stepResults['train:lightgbm']) {
       try { await loadActiveModel(); } catch (err) {
         logger.warn({ err: String(err) }, '[Scheduler] reload after train:lightgbm failed');
@@ -276,7 +317,7 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     }
 
     // train:market-models — non-fatal
-    stepResults['train:market-models'] = await runScriptSafe('train:market-models', 'train:market-models', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['train:market-models'] = await runScriptSafe('train:market-models', 'train:market-models', trainArgs, { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
     if (stepResults['train:market-models']) {
       try { await loadActiveMarketModels(); } catch (err) {
         logger.warn({ err: String(err) }, '[Scheduler] reload after train:market-models failed');
@@ -284,7 +325,7 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     }
 
     // train:live-model — non-fatal (нужны накопленные снапшоты)
-    stepResults['train:live-model'] = await runScriptSafe('train:live-model', 'train:live-model', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    stepResults['train:live-model'] = await runScriptSafe('train:live-model', 'train:live-model', trainArgs, { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
     if (stepResults['train:live-model']) {
       try { await loadActiveLiveModel(); } catch (err) {
         logger.warn({ err: String(err) }, '[Scheduler] reload after train:live-model failed');
@@ -550,10 +591,10 @@ export async function triggerManualRetrain(): Promise<{ started: boolean; reason
  * whitelist отклоняется на уровне роута (см. POST /admin/models/retrain).
  */
 export const TRAIN_SCRIPT_WHITELIST: Record<string, { args: readonly string[] }> = {
-  'train:model':         { args: [] },
-  'train:lightgbm':      { args: ['--label'] },
-  'train:market-models': { args: ['--market'] },
-  'train:live-model':    { args: [] },
+  'train:model':         { args: ['--since-unix', '--min-samples'] },
+  'train:lightgbm':      { args: ['--label', '--since-unix', '--min-samples'] },
+  'train:market-models': { args: ['--market', '--since-unix', '--min-samples'] },
+  'train:live-model':    { args: ['--since-unix', '--min-samples'] },
 };
 export type TrainScriptName = 'train:model' | 'train:lightgbm' | 'train:market-models' | 'train:live-model';
 

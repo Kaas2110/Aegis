@@ -57,6 +57,16 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`threat_model.md`** — модель угроз для security-сканов.
 - См. skill `pnpm-workspace` — структура монорепо, TypeScript, project references.
 
+## Patch-aware training dataset settings (DONE 2026-05-12)
+
+`app_settings` хранит три настройки управления тренировочным окном:
+
+- **`trainWindowDays`** (INT, default 365, 30–730) — макс. глубина истории матчей (календарных дней).
+- **`trainMaxPatches`** (INT, default 4, 1–20) — макс. число последних патчей в датасете. Начало Nth патча вычисляется через OpenDota `/api/constants/patch`.
+- **`trainMinSamples`** (INT, default 1000, 50–100 000) — минимум сэмплов для запуска обучения (если меньше — скрипт выходит чисто без тренировки).
+
+Эффективная граница = `max(windowCutoff, patchCutoff)` — более строгое из двух. Вычисляется в `SchedulerWorker.computeTrainSinceUnix()` перед Phase 4, передаётся во все 4 train-скрипта как `--since-unix N --min-samples M`. Sliding-window prune в Phase 2 также использует `trainWindowDays` из БД. Все 4 скрипта (`train:model`, `train:lightgbm`, `train:market-models`, `train:live-model`) принимают `--since-unix` и `--min-samples` через CLI (fallback на константы, если не переданы). Whitelist в `TRAIN_SCRIPT_WHITELIST` расширен, так что per-model retrain из UI тоже принимает эти аргументы. Admin UI: `/settings` — секция «Тренировочный датасет» с тремя полями ввода.
+
 ## Production automation (Wave «C» — DONE 2026-05-11)
 
 Цель: «развернул на сервер/ноут → всё само работает». Реализовано в `services/SchedulerWorker.ts` + `lib/ensureSchema.ts`:

@@ -53,6 +53,22 @@ import {
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES_PER_BUCKET = 80;  // LightGBM нужно чуть больше чем LR
+
+/** Возвращает Unix-timestamp начала тренировочного окна.
+ *  Если передан --since-unix N — использует его; иначе вычисляет из TRAIN_WINDOW_DAYS. */
+function parseSinceUnix(): number {
+  const idx = process.argv.indexOf('--since-unix');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86_400;
+}
+
+/** Возвращает минимум сэмплов для обучения.
+ *  Если передан --min-samples N — использует его; иначе MIN_SAMPLES_PER_BUCKET. */
+function parseMinSamples(): number {
+  const idx = process.argv.indexOf('--min-samples');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return MIN_SAMPLES_PER_BUCKET;
+}
 const MIN_AVG_GLICKO = 1200;
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
@@ -113,8 +129,9 @@ async function trainBucket(
   featureNames: string[],
   label: string,
 ): Promise<TrainResponse | null> {
-  if (samples.length < MIN_SAMPLES_PER_BUCKET) {
-    console.log(`  [${label}] SKIP: only ${samples.length} samples (need ${MIN_SAMPLES_PER_BUCKET}+)`);
+  const minSamples = parseMinSamples();
+  if (samples.length < minSamples) {
+    console.log(`  [${label}] SKIP: only ${samples.length} samples (need ${minSamples}+)`);
     return null;
   }
   const n = samples.length;
@@ -188,7 +205,8 @@ async function main() {
   }
   console.log(`[train-lightgbm] teams=${teams.size}`);
 
-  const minStartTime = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86_400;
+  const minStartTime = parseSinceUnix();
+  const effectiveMinSamples = parseMinSamples();
   const matches = await db.select({
     matchId: proMatchesTable.matchId,
     radiantTeamId: proMatchesTable.radiantTeamId,
