@@ -351,7 +351,11 @@ async function main() {
 
   console.log('[train-live-model] Joining live_snapshots × pro_matches × prematch_outcomes × match_drafts …');
 
-  // Group B: LEFT JOIN match_drafts для hero_advantage фичи
+  // Group B: LEFT JOIN match_drafts для hero_advantage/power_spike фич.
+  // Двойной fallback для пиков: 1) match_drafts (авторитетный, picks+bans+accounts),
+  // 2) raw_payload->players (присутствует в ~22% снапшотов, team=0/1).
+  // После ingest:drafts match_drafts закроет большинство случаев,
+  // raw_payload добавляет покрытие для снапшотов у которых драфт ещё не доинджестен.
   const rows = await db.execute(sql`
     SELECT
       ls.match_id                   AS "matchId",
@@ -363,8 +367,22 @@ async function main() {
       pm.dire_team_id               AS "direTeamId",
       po.predicted_radiant_win_prob AS "storedPrematchProb",
       COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin",
-      md.radiant_picks              AS "radiantPicks",
-      md.dire_picks                 AS "direPicks"
+      COALESCE(
+        md.radiant_picks,
+        (SELECT jsonb_agg((p->>'hero_id')::int)
+         FROM jsonb_array_elements(ls.raw_payload->'players') p
+         WHERE (p->>'hero_id') IS NOT NULL AND (p->>'hero_id')::int > 0
+           AND p->>'team' = '0'
+         HAVING COUNT(*) = 5)
+      ) AS "radiantPicks",
+      COALESCE(
+        md.dire_picks,
+        (SELECT jsonb_agg((p->>'hero_id')::int)
+         FROM jsonb_array_elements(ls.raw_payload->'players') p
+         WHERE (p->>'hero_id') IS NOT NULL AND (p->>'hero_id')::int > 0
+           AND p->>'team' = '1'
+         HAVING COUNT(*) = 5)
+      ) AS "direPicks"
     FROM live_snapshots ls
     INNER JOIN pro_matches pm ON pm.match_id = ls.match_id
     LEFT JOIN prematch_outcomes po ON po.match_id = ls.match_id
