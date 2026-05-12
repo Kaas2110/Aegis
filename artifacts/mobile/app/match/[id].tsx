@@ -782,6 +782,15 @@ export default function MatchDetailScreen() {
                     const liveMinute = isLive && snap ? Math.floor(snap.gameTimeSeconds / 60) : null;
                     const fmt = (match.format ?? 'BO3').toUpperCase() as 'BO1' | 'BO3' | 'BO5';
                     const bkResult = ladderType === 'kills' ? bkKills : bkDuration;
+                    // Извлекаем числовые hero_id для draft-фич v3
+                    const draftRadiantPicks = draft?.picks
+                      .filter(p => p.side === 'radiant')
+                      .map(p => parseInt(p.heroId, 10))
+                      .filter(n => Number.isInteger(n) && n > 0);
+                    const draftDirePicks = draft?.picks
+                      .filter(p => p.side === 'dire')
+                      .map(p => parseInt(p.heroId, 10))
+                      .filter(n => Number.isInteger(n) && n > 0);
                     return (
                       <TotalsLadder
                         key={mkt.id}
@@ -793,6 +802,8 @@ export default function MatchDetailScreen() {
                         liveMinute={liveMinute}
                         bookmakerLines={bkResult?.lines}
                         bookmakerSource={bkResult?.sourceName}
+                        radiantPicks={draftRadiantPicks}
+                        direPicks={draftDirePicks}
                       />
                     );
                   }

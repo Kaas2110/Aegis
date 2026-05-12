@@ -1,22 +1,24 @@
 /**
  * Market models inference (Wave 4 — LightGBM via ml-service).
  *
- * v2 фичи (11): bias, elo_diff_norm, winrate_diff, experience_diff,
+ * v3 фичи (16): bias, elo_diff_norm, winrate_diff, experience_diff,
  * is_high_tier, avg_kills_r, avg_kills_d, avg_dur_h_r, avg_dur_h_d,
- * patch_kpm, format_norm.
+ * patch_kpm, format_norm,
+ * draft_aggression_r, draft_aggression_d, draft_scale_r, draft_scale_d, has_draft.
  *
  * Форма команд (avgKillsFor / avgDurationSec 30d) + patch_kpm кэшируются
  * с 1h TTL. При отсутствии данных — глобальные медианы.
  *
  * Inference:
  *   - 200ms timeout, свой circuit-breaker (не трогает prematch_winner).
- *   - Per-(rId, dId, market) кэш на 60s.
+ *   - Per-(rId, dId, market, picksHash) кэш на 60s.
  *   - При любой ошибке → null, caller использует эвристический fallback.
  */
 
 import { db, modelVersionsTable, teamsTable, teamRecentFormTable, proMatchesTable } from '@workspace/db';
 import { eq, and, inArray, gte } from 'drizzle-orm';
 import { logger } from '../lib/logger';
+import { teamDraftScores } from '../lib/heroDraftScores';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
@@ -230,10 +232,17 @@ async function refreshPatchKpm(): Promise<void> {
 }
 
 /**
- * Строит вектор из 11 фич для market-моделей v2.
+ * Строит вектор из 16 фич для market-моделей v3.
  * formatNorm: 0.0=BO1, 0.5=BO3, 1.0=BO5 (по умолчанию 0.5).
+ * radiantPicks/direPicks: опциональные hero_id массивы для draft-фич.
  */
-function buildTeamFeatures(rId: number, dId: number, formatNorm = 0.5): number[] | null {
+function buildTeamFeatures(
+  rId: number,
+  dId: number,
+  formatNorm = 0.5,
+  radiantPicks?: number[],
+  direPicks?: number[],
+): number[] | null {
   const r = teamRatings.get(rId);
   const d = teamRatings.get(dId);
   if (!r || !d) return null;
@@ -243,6 +252,10 @@ function buildTeamFeatures(rId: number, dId: number, formatNorm = 0.5): number[]
 
   const rf = teamForm.get(rId);
   const df = teamForm.get(dId);
+
+  const hasDraft = radiantPicks && direPicks && radiantPicks.length > 0 && direPicks.length > 0 ? 1 : 0;
+  const rDraft = teamDraftScores(radiantPicks ?? []);
+  const dDraft = teamDraftScores(direPicks ?? []);
 
   return [
     1,                                                          // bias
@@ -256,6 +269,11 @@ function buildTeamFeatures(rId: number, dId: number, formatNorm = 0.5): number[]
     (df?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,         // avg_dur_h_d
     patchKpm,                                                   // patch_kpm
     formatNorm,                                                 // format_norm
+    rDraft.aggression,                                          // draft_aggression_r
+    dDraft.aggression,                                          // draft_aggression_d
+    rDraft.scale,                                              // draft_scale_r
+    dDraft.scale,                                              // draft_scale_d
+    hasDraft,                                                   // has_draft
   ];
 }
 
@@ -320,19 +338,27 @@ interface CachedPrediction {
 }
 const predictCache: Map<string, CachedPrediction> = new Map();
 
-function cacheKey(rId: number, dId: number, fmt: number): string {
-  return `${rId}|${dId}|${fmt.toFixed(2)}`;
+function picksHash(picks?: number[]): string {
+  if (!picks || picks.length === 0) return '';
+  return picks.slice().sort((a, b) => a - b).join(',');
+}
+
+function cacheKey(rId: number, dId: number, fmt: number, rPicks?: number[], dPicks?: number[]): string {
+  return `${rId}|${dId}|${fmt.toFixed(2)}|${picksHash(rPicks)}|${picksHash(dPicks)}`;
 }
 
 /**
  * Возвращает все 3 market-предсказания для пары команд.
  * formatNorm: 0=BO1, 0.5=BO3, 1.0=BO5 (по умолчанию 0.5 = BO3).
+ * radiantPicks/direPicks: OpenDota hero_id массивы для draft-фич (опционально).
  * Никогда не бросает.
  */
 export async function predictMarketsFor(
   radiantTeamId: number,
   direTeamId: number,
   formatNorm = 0.5,
+  radiantPicks?: number[],
+  direPicks?: number[],
 ): Promise<CachedPrediction> {
   const empty: CachedPrediction = {
     ts: Date.now(),
@@ -342,14 +368,14 @@ export async function predictMarketsFor(
   };
   if (cached.size === 0) return empty;
 
-  const key = cacheKey(radiantTeamId, direTeamId, formatNorm);
+  const key = cacheKey(radiantTeamId, direTeamId, formatNorm, radiantPicks, direPicks);
   const hit = predictCache.get(key);
   if (hit && Date.now() - hit.ts < PREDICT_CACHE_TTL_MS) return hit;
 
   // Обновляем кэши параллельно
   await Promise.all([refreshTeams(), refreshForm(), refreshPatchKpm()]);
 
-  const features = buildTeamFeatures(radiantTeamId, direTeamId, formatNorm);
+  const features = buildTeamFeatures(radiantTeamId, direTeamId, formatNorm, radiantPicks, direPicks);
   if (!features) {
     predictCache.set(key, empty);
     return empty;

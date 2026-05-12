@@ -4,8 +4,9 @@
  *   - market_total_kills    : regression на log(radiant_score+dire_score)
  *   - market_total_duration : regression на log(duration_sec)
  *
- * v2 фичи (11 фич): team ELO, опыт, форма (avgKillsFor/avgDurationSec 30d),
- * patch_kpm (глобальный темп убийств за последние 30 дней), series_type.
+ * v3 фичи (16 фич): team ELO, опыт, форма (avgKillsFor/avgDurationSec 30d),
+ * patch_kpm (глобальный темп убийств за последние 30 дней), series_type +
+ * 5 draft-фич (aggression_r/d, scale_r/d, has_draft).
  *
  * CLI:
  *   pnpm --filter @workspace/scripts run train:market-models
@@ -18,14 +19,16 @@ import {
   teamsTable,
   teamRecentFormTable,
   modelVersionsTable,
+  matchDraftsTable,
 } from '@workspace/db';
 import { gte, and, eq } from 'drizzle-orm';
 import { asc } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import { teamDraftScores } from './lib/heroDraftScores';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES = 60;
-const FEATURES_VERSION = 2;
+const FEATURES_VERSION = 3;
 
 function parseSinceUnix(): number {
   const idx = process.argv.indexOf('--since-unix');
@@ -54,6 +57,11 @@ const TEAM_FEATURE_NAMES = [
   'avg_dur_h_d',
   'patch_kpm',
   'format_norm',
+  'draft_aggression_r',
+  'draft_aggression_d',
+  'draft_scale_r',
+  'draft_scale_d',
+  'has_draft',
 ] as const;
 
 interface MatchRow {
@@ -67,6 +75,8 @@ interface MatchRow {
   radiantTeamId: number | null;
   direTeamId: number | null;
   series_type: number | null;
+  radiantPicks: number[] | null;
+  direPicks: number[] | null;
 }
 
 interface TeamRating { rating: number; wins: number; losses: number; }
@@ -126,6 +136,8 @@ function buildTeamFeatures(
   teams: Map<number, TeamRating>,
   form: Map<number, TeamForm>,
   patchKpm: number,
+  radiantPicks: number[] | null,
+  direPicks: number[] | null,
 ): number[] | null {
   const r = teams.get(rId); const d = teams.get(dId);
   if (!r || !d) return null;
@@ -137,6 +149,11 @@ function buildTeamFeatures(
 
   // format_norm: 0=BO1, 0.5=BO3, 1.0=BO5 (series_type: 0=BO1, 1=BO3, 2=BO5)
   const formatNorm = seriesType != null ? Math.min(1, seriesType / 2) : 0.5;
+
+  // Draft features
+  const hasDraft = radiantPicks && direPicks && radiantPicks.length > 0 && direPicks.length > 0 ? 1 : 0;
+  const rDraft = teamDraftScores(radiantPicks ?? []);
+  const dDraft = teamDraftScores(direPicks ?? []);
 
   return [
     1,                                                        // bias
@@ -150,12 +167,19 @@ function buildTeamFeatures(
     (df?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,       // avg_dur_h_d
     patchKpm,                                                 // patch_kpm (kills/min)
     formatNorm,                                               // format_norm
+    rDraft.aggression,                                        // draft_aggression_r
+    dDraft.aggression,                                        // draft_aggression_d
+    rDraft.scale,                                             // draft_scale_r
+    dDraft.scale,                                             // draft_scale_d
+    hasDraft,                                                 // has_draft
   ];
 }
 
 async function loadData() {
   const sinceTs = parseSinceUnix();
-  const matches = await db
+
+  // Загружаем матчи с LEFT JOIN на драфты
+  const rawMatches = await db
     .select({
       matchId: proMatchesTable.matchId,
       startTime: proMatchesTable.startTime,
@@ -167,8 +191,11 @@ async function loadData() {
       radiantTeamId: proMatchesTable.radiantTeamId,
       direTeamId: proMatchesTable.direTeamId,
       series_type: proMatchesTable.series_type,
+      radiantPicks: matchDraftsTable.radiantPicks,
+      direPicks: matchDraftsTable.direPicks,
     })
     .from(proMatchesTable)
+    .leftJoin(matchDraftsTable, eq(proMatchesTable.matchId, matchDraftsTable.matchId))
     .where(gte(proMatchesTable.startTime, sinceTs))
     .orderBy(asc(proMatchesTable.startTime));
 
@@ -198,7 +225,7 @@ async function loadData() {
 
   // Patch KPM — глобальный темп убийств за последние 30 дней
   const since30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
-  const recentMatches = matches.filter(m => m.startTime >= since30d);
+  const recentMatches = rawMatches.filter(m => m.startTime >= since30d);
   let patchKpm = GLOBAL_KPM;
   if (recentMatches.length >= 10) {
     let totalKills = 0; let totalMin = 0;
@@ -211,14 +238,12 @@ async function loadData() {
     }
     if (totalMin > 0) patchKpm = totalKills / totalMin;
   }
-  console.log(`[train-market-models] form loaded: ${form.size} teams | patchKpm=${patchKpm.toFixed(3)} (${recentMatches.length} recent matches)`);
 
-  return {
-    matches: matches.filter((r): r is MatchRow => r.duration != null),
-    teams,
-    form,
-    patchKpm,
-  };
+  const draftCount = rawMatches.filter(m => m.radiantPicks && (m.radiantPicks as number[]).length > 0).length;
+  console.log(`[train-market-models] form loaded: ${form.size} teams | patchKpm=${patchKpm.toFixed(3)} (${recentMatches.length} recent) | drafts=${draftCount}/${rawMatches.length}`);
+
+  const matches = rawMatches.filter((r): r is MatchRow => r.duration != null);
+  return { matches, teams, form, patchKpm };
 }
 
 function buildSamples(
@@ -231,7 +256,12 @@ function buildSamples(
   const out: Sample[] = [];
   for (const m of matches) {
     if (!m.radiantTeamId || !m.direTeamId) continue;
-    const feats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, m.series_type, teams, form, patchKpm);
+    const feats = buildTeamFeatures(
+      m.radiantTeamId, m.direTeamId, m.series_type,
+      teams, form, patchKpm,
+      m.radiantPicks as number[] | null,
+      m.direPicks as number[] | null,
+    );
     if (!feats) continue;
 
     if (market === 'first_blood') {
@@ -316,7 +346,7 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
   const kind = KIND_BY_MARKET[market];
   const blob = Buffer.from(r.blob_b64, 'base64');
   const taskType = TASK_BY_MARKET[market];
-  const versionStem = `lgbm-${kind}-v2-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+  const versionStem = `lgbm-${kind}-v3-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
 
   await db.transaction(async (tx) => {
     // Деактивируем ВСЕ активные модели этого kind (все версии, все engine)

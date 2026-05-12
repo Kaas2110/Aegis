@@ -43,6 +43,10 @@ interface Props {
   bookmakerLines?: number[] | null;
   /** Название источника для бейджа (напр. «PARI»). */
   bookmakerSource?: string | null;
+  /** OpenDota hero_id пиков Radiant — для draft-фич v3. */
+  radiantPicks?: number[] | null;
+  /** OpenDota hero_id пиков Dire — для draft-фич v3. */
+  direPicks?: number[] | null;
 }
 
 const TYPE_LABEL: Record<TotalsType, { title: string; unit: string }> = {
@@ -54,6 +58,7 @@ export function TotalsLadder({
   radiantTeamId, direTeamId, type, format = 'BO3',
   liveCurrent, liveMinute, defaultExpanded = true,
   bookmakerLines, bookmakerSource,
+  radiantPicks, direPicks,
 }: Props) {
   const colors = useColors();
   const [data, setData] = useState<LadderResponse | null>(null);
@@ -82,6 +87,13 @@ export function TotalsLadder({
       params.set('lines', bookmakerLines.join(','));
       if (bookmakerSource) params.set('bookmakerSource', bookmakerSource);
     }
+    // Draft picks для v3 draft-фич
+    if (radiantPicks && radiantPicks.length > 0) {
+      params.set('radiantPicks', radiantPicks.join(','));
+    }
+    if (direPicks && direPicks.length > 0) {
+      params.set('direPicks', direPicks.join(','));
+    }
 
     fetch(getApiUrl(`/api/analytics/totals-ladder?${params.toString()}`))
       .then(async r => {
@@ -92,7 +104,7 @@ export function TotalsLadder({
       .catch(e => { if (!cancelled) { setError(String(e?.message ?? e)); setLoading(false); } });
 
     return () => { cancelled = true; };
-  }, [radiantTeamId, direTeamId, type, format, liveCurrent, liveMinute, bookmakerLines, bookmakerSource]);
+  }, [radiantTeamId, direTeamId, type, format, liveCurrent, liveMinute, bookmakerLines, bookmakerSource, radiantPicks, direPicks]);
 
   const meta = TYPE_LABEL[type];
   const usingRealLines = data?.linesSource === 'bookmaker';

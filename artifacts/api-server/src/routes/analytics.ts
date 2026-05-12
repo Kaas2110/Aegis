@@ -541,9 +541,27 @@ router.get('/totals-ladder', async (req, res) => {
     }
   }
 
-  // Wave 4 v2: LGB market-модель с 11 фичами (форма команд + patch_kpm + format)
+  // Опциональные picks для draft-фич: ?radiantPicks=1,2,3,4,5&direPicks=6,7,8,9,10
+  let radiantPickIds: number[] | undefined;
+  let direPickIds: number[] | undefined;
+  if (req.query.radiantPicks) {
+    const p = String(req.query.radiantPicks)
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isInteger(n) && n > 0);
+    if (p.length > 0) radiantPickIds = p;
+  }
+  if (req.query.direPicks) {
+    const p = String(req.query.direPicks)
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isInteger(n) && n > 0);
+    if (p.length > 0) direPickIds = p;
+  }
+
+  // Wave 4 v3: LGB market-модель с 16 фичами (форма + patch_kpm + format + draft)
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
-  const lgb = await predictMarketsFor(radiantId, direId, formatNorm).catch(() => null);
+  const lgb = await predictMarketsFor(radiantId, direId, formatNorm, radiantPickIds, direPickIds).catch(() => null);
   const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
   const linesScale = type === 'duration' ? 60 : 1;
 
@@ -564,7 +582,7 @@ router.get('/totals-ladder', async (req, res) => {
 
   const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0] ?? center) : predictTotalDuration(fv, lineValues[0] ?? center);
   const confidence = lgbLogN ? 0.72 : sample.confidence;
-  const modelVersion = lgbLogN ? 'lightgbm-market-v2' : sample.modelVersion;
+  const modelVersion = lgbLogN ? 'lightgbm-market-v3' : sample.modelVersion;
 
   res.json({
     type,
