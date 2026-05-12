@@ -67,7 +67,8 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - Pinnacle scraped manually (user warned about ToS)
 - Don't suggest Reserved VM deployment unless asked
 - The Odds API отключён полностью (RU/СНГ-фокус, нет российских буков). Не возвращать без явного запроса
-- Live snapshots prune window: 10 дней (default)
+- Live snapshots prune window: 365 дней (default) — НЕ путать с задержкой авто-ретрейна
+- Авто-ретрейн ML после нового патча: 10 дней (PATCH_DELAY_DAYS в SchedulerWorker)
 - Bookmaker UI hidden until first users (backend untouched, marked `TODO(bookmakers)`)
 - Alerts: `minConfidence` only; `minEdge`/`minOdds` return with bookmaker UI
 

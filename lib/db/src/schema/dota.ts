@@ -389,11 +389,11 @@ export const prematchOutcomesTable = pgTable('prematch_outcomes', {
 // Сейчас:
 //  - useBookmakerOdds: включает/отключает запросы к Odds API на бэкенде.
 //    Когда выключено, мобилка показывает «популярные рынки» вместо edge vs odds.
-//  - liveSnapshotPruneDays: за сколько дней чистить live_snapshots (default 7).
+//  - liveSnapshotPruneDays: за сколько дней чистить live_snapshots (default 365).
 export const appSettingsTable = pgTable('app_settings', {
   id: integer('id').primaryKey(),
   useBookmakerOdds: boolean('use_bookmaker_odds').notNull().default(false),
-  liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(10),
+  liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(365),
   // ── Настройки тренировочного датасета ─────────────────────────────────
   // trainWindowDays:  максимальное кол-во дней истории (hard cap)
   // trainMaxPatches:  максимальное кол-во последних патчей (берётся более
