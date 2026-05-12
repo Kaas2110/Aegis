@@ -9,15 +9,14 @@ import { Feather } from '@expo/vector-icons';
 import { getApiUrl } from '@/lib/api/baseUrl';
 import { useColors } from '@/hooks/useColors';
 import {
-  MOCK_MATCHES, buildMockMarkets, MOCK_TIMELINE,
+  MOCK_MATCHES, buildMockMarkets,
 } from '@/services/mock/mockData';
 import {
-  getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker,
+  getCachedMatch, rebuildMarketsForBookmaker,
 } from '@/services/LiveDataService';
 import { MarketCard } from '@/components/MarketCard';
 import { TotalsLadder } from '@/components/TotalsLadder';
 import { ProbabilityBar } from '@/components/ProbabilityBar';
-import { ProbabilityTimeline } from '@/components/ProbabilityTimeline';
 import { FreshnessIndicator } from '@/components/FreshnessIndicator';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { Match, Market } from '@/types';
@@ -468,18 +467,10 @@ export default function MatchDetailScreen() {
               </PremiumGate>
             )}
 
-            {isLive && (
-              <PremiumGate feature="live_predictions" variant="overlay">
-                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <SectionTitle title="Динамика вероятностей" colors={colors} />
-                  <ProbabilityTimeline
-                    data={MOCK_TIMELINE}
-                    team1Name={match.team1.shortName}
-                    team2Name={match.team2.shortName}
-                  />
-                </View>
-              </PremiumGate>
-            )}
+            {/* Блок «Динамика вероятностей» отключён: реальной таймсерии лайв-вероятностей
+                сейчас нет (есть только текущий снимок), а прежний MOCK_TIMELINE рисовал
+                неотличимый от реального график на основе фейковых точек. Включим, когда
+                бэк начнёт хранить полноценную historic-таймлайн вероятностей по матчу. */}
 
             {/* T006: гуманизированный обзор. Заменил собой сухой dump explanationJson. */}
             {explain && (

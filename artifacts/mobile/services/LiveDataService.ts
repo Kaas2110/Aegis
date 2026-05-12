@@ -4,7 +4,6 @@
  */
 
 import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
-import { buildFeaturedMatch } from '@/services/featuredMatch';
 import type { Match, Market, Team, Prediction, BookmakerOdds } from '@/types';
 
 const API_BASE = '/api';
@@ -416,7 +415,11 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
   const team2Name = isPandaScore
     ? (raw.opponents?.[1]?.opponent?.name ?? '').trim()
     : (raw.team2 ?? '').trim();
+  // Если у одного из соперников нет имени (например, PandaScore вернул TBD),
+  // прячем матч из списка вместо показа «Без названия». Для бьюера такие
+  // карточки бесполезны.
   if (!team1Name || !team2Name) return null;
+  if (/^tbd$/i.test(team1Name) || /^tbd$/i.test(team2Name)) return null;
 
   const team1Id = isPandaScore ? raw.opponents?.[0]?.opponent?.id : undefined;
   const team2Id = isPandaScore ? raw.opponents?.[1]?.opponent?.id : undefined;
@@ -451,9 +454,6 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
 
 export async function fetchLiveData(): Promise<LiveDataResult> {
   const fetchedAt = new Date().toISOString();
-  // Закреплённый featured-матч (PARIVISION vs PlayTime, 1W Essence) запрашиваем
-  // параллельно с остальными источниками — он всегда первый в списке live.
-  const featuredPromise = buildFeaturedMatch().catch(() => null);
   try {
     // 1. Fetch live + upcoming matches + odds
     const [liveResp, upcomingResp, oddsResp] = await Promise.allSettled([
@@ -491,11 +491,7 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
         const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
         return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
       };
-      const featured = await featuredPromise;
-      const liveList = [
-        ...(featured ? [featured] : []),
-        ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
-      ];
+      const liveList = MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock);
       // Реальные upcoming с PandaScore — если бэк отдал, используем
       // вместо mock prematch.
       const realUpcomingRaws = (upcomingData && !upcomingData.isMock && Array.isArray(upcomingData.data))
@@ -513,14 +509,13 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       cacheEnriched([...liveList, ...prematchList]);
       const hasRealUpcoming = realUpcomingMatches.length > 0;
       const sources: string[] = [];
-      if (featured) sources.push('featured');
       if (hasRealUpcoming) sources.push('pandascore');
-      sources.push('mock-live');
+      sources.push('demo-live');
       return {
         liveMatches: liveList,
         prematchMatches: prematchList,
-        // isMock=false если есть хотя бы один реальный источник (featured или upcoming)
-        isMock: !featured && !hasRealUpcoming,
+        // isMock=false если есть хотя бы один реальный источник (upcoming)
+        isMock: !hasRealUpcoming,
         sources,
         fetchedAt,
       };
@@ -549,8 +544,7 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       })
     );
 
-    const featured = await featuredPromise;
-    const finalLive = featured ? [featured, ...enriched] : enriched;
+    const finalLive = enriched;
 
     // Маппим upcoming PandaScore → Match. Без analytics (для prematch обычно
     // нет live-снапшота); markets пустые до старта матча. Этого достаточно для
@@ -571,7 +565,6 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       prematchMatches: prematchEnriched,
       isMock: false,
       sources: [
-        ...(featured ? ['featured'] : []),
         'opendota',
         ...(upcomingData && !upcomingData.isMock ? ['pandascore'] : []),
         ...(oddsData?.isMock === false ? ['the_odds_api'] : []),
@@ -585,18 +578,14 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
       return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
     };
-    const featured = await featuredPromise;
-    const liveList = [
-      ...(featured ? [featured] : []),
-      ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
-    ];
+    const liveList = MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock);
     const prematchList = MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
     cacheEnriched([...liveList, ...prematchList]);
     return {
       liveMatches: liveList,
       prematchMatches: prematchList,
-      isMock: !featured,
-      sources: featured ? ['featured', 'mock'] : ['mock'],
+      isMock: true,
+      sources: ['demo-live'],
       fetchedAt,
     };
   }

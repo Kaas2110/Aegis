@@ -337,13 +337,22 @@ function DataSourceBar({
     ? lastUpdated.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
 
+  // Внутренние идентификаторы источников → понятные пользователю русские лейблы.
+  const SOURCE_LABEL_RU: Record<string, string> = {
+    opendota: 'OpenDota (лайв)',
+    pandascore: 'PandaScore (расписание)',
+    the_odds_api: 'The Odds API',
+    'demo-live': 'демо-лайв',
+  };
+  const labels = sources.map(s => SOURCE_LABEL_RU[s] ?? s);
+
   return (
     <View style={[barStyles.bar, { backgroundColor: colors.muted, borderColor: colors.border }]}>
       <View style={[barStyles.dot, { backgroundColor: isMock ? colors.warning : colors.positive }]} />
-      <Text style={[barStyles.text, { color: colors.mutedForeground }]}>
+      <Text style={[barStyles.text, { color: colors.mutedForeground }]} numberOfLines={1}>
         {isMock
-          ? 'Demo-данные'
-          : `${sources.join(' · ')}`}
+          ? 'Демо-данные'
+          : `Источники: ${labels.join(' · ')}`}
       </Text>
       <Text style={[barStyles.time, { color: colors.mutedForeground }]}>{timeStr}</Text>
     </View>
