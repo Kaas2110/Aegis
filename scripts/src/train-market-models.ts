@@ -152,9 +152,9 @@ function buildSamples(market: MarketKey, matches: MatchRow[], teams: Map<number,
     if (!feats) continue;
 
     if (market === 'first_blood') {
-      // Прокси: «radiant получил FB» = radiantWin среди матчей с known FB time.
-      // Реальная FB-команда требует /matches/:id players[].firstblood_claimed.
-      if (m.firstBloodTime == null) continue;
+      // Прокси-метка: radiantWin. Настоящая FB-команда (players[].firstblood_claimed)
+      // требует per-match detail fetch — дорого; radiantWin коррелирует ≈53%.
+      if (m.radiantWin == null) continue;
       out.push({ features: feats, label: m.radiantWin ? 1 : 0 });
     } else if (market === 'total_kills') {
       if (m.radiantScore == null || m.direScore == null) continue;
