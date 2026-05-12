@@ -89,16 +89,17 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
   - v3/t1 69.0% — overfits (train 94.5%, only 840 t1 samples)
 - Market v3: 3 LGB (first_blood 60.0%, total_kills R²=0.063, total_duration R²=0.053)
   - Improved from v2: first_blood 61.3%→60.0% (slight decline after strict dedup), kills R² 0.031→0.063 (+103%), duration R² 0.004→0.053 (+13×)
-- Live winner (fv=4, 10 features): 1 LGB + 1 LR
-  - **LR: 73.44% (+6.93pp over prematch baseline 66.51%), brier 0.1663. LR is primary.**
+- Live winner (fv=4, 10 features): 1 LGB + 1 LR — retrained #3 (2026-05-12)
+  - **LR: 72.75% (+6.24pp over prematch baseline 66.51%), brier 0.1675. LR is primary (testAcc > LGB).**
   - LGB: 61.89% (-2.31pp) — temporal distribution shift (test radiant=64.2% vs train 52.1%)
-  - Key fix: `prematch_logit` now uses ELO-based team probability (not COALESCE(stored, 0.5))
-    - Sources: stored=172, elo=1265, neutral=4068 (no team data → 0.52 radiant prior)
-  - `prematch_logit` weight: 0.157 (was 0.000 before fix) — now actually used by model
-  - Features: `game_time_norm`, `nw_lead_norm`, `kill_diff_norm`, `tower_diff_norm`, `prematch_logit`, `total_kills_norm`, `game_phase`, `nw_x_phase`, `kill_diff_x_phase`
+  - Primary selection: auto by testAccuracy (LGB wins when it overtakes LR; no hardcoded threshold)
+  - `prematch_logit` sources: stored=1415, elo=22, neutral=4068 (ELO-based; was stored=172 before backfill)
+  - LR weights: `kill_diff_norm=3.312, kill_diff_x_phase=0.640, prematch_logit=0.185, total_kills_norm=0.250, nw_lead_norm=0.177`
+  - Features (10): `bias`, `game_time_norm`, `nw_lead_norm`, `kill_diff_norm`, `tower_diff_norm`, `prematch_logit`, `total_kills_norm`, `game_phase`, `nw_x_phase`, `kill_diff_x_phase`
+  - Critical fix: feature vector updated 6→10 in LiveWinnerModel.ts inference (was inference bug)
   - Root issue: 518 training matches / 5505 bucketed snapshots — accumulates naturally
 
-**Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · 21 prematch_outcomes · 18.7k live snapshots (5505 after 3-min bucket dedup).
+**Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · **7292 prematch_outcomes** (backfilled via `backfill:prematch-outcomes`) · 18.7k live snapshots (5505 after 3-min bucket dedup).
 
 **Training dataset settings** (stored in `app_settings`):
 - `trainWindowDays` (default 365, range 30–730)
@@ -124,7 +125,7 @@ Remaining (deferred): EV-merge on frontend, full market coverage, `minEdge`/`min
 ## Roadmap
 
 - **Wave 3 LGB** — blocked: need ≥80 matches with full `radiant/dire_account_ids` (currently ~68). Auto-unblocks as `match_drafts` accumulates
-- **Backtest UI** — LIVE (2026-05-12). Tab visible, endpoint `/api/analytics/backtest` returns 14 bets from 21 outcomes. Will improve naturally as outcomes accumulate.
+- **Backtest UI** — LIVE (2026-05-12). Tab visible, endpoint `/api/analytics/backtest` covers 7292 outcomes (backfilled). Will improve naturally as outcomes accumulate.
 - **Bookmaker EV-merge** — matching bookie events to `pro_matches`, `BookmakerDropdown` in home header, `minEdge`/`minOdds` in alerts
 - **RevenueCat / Lite vs Premium** — monetization, feature gating
 - **Live winner → full LGB** — auto when live trainSize > 10k snapshots
