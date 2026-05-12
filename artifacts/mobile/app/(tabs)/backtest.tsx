@@ -27,8 +27,57 @@ export default function BacktestScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const access = useFeatureAccess('backtest');
 
+  // Демо-результат для не-премиум пользователей: показываем красивую
+  // выдуманную equity-кривую с ватермаркой «ДЕМО», чтобы человек видел
+  // ЧТО он получает, а не пустой залоченный экран.
+  function buildDemoResult(): BacktestResult {
+    const n = 90;
+    const equity: BacktestResult['equityCurve'] = [];
+    let acc = 0;
+    let rng = 12345;
+    const next = () => { rng = (rng * 1103515245 + 12345) & 0x7fffffff; return rng / 0x7fffffff; };
+    const startTs = Date.now() - n * 24 * 3600 * 1000;
+    for (let i = 0; i < n; i++) {
+      const r = next();
+      const won = r > 0.45;
+      const delta = won ? (0.55 + next() * 0.6) : -(0.55 + next() * 0.5);
+      acc += delta;
+      equity.push({
+        date: new Date(startTs + i * 24 * 3600 * 1000).toISOString().slice(0, 10),
+        bet: 1,
+        result: won ? 'win' : 'loss',
+        units: Number(acc.toFixed(2)),
+      });
+    }
+    const profit = equity[equity.length - 1]!.units;
+    return {
+      ok: true,
+      params: { minConfidence: minConf / 100, minOdds, periodDays },
+      kpis: {
+        numberOfBets: n,
+        hitRate: 0.572,
+        avgOdds: 1.84,
+        profitUnits: profit,
+        roi: profit / n,
+        maxDrawdown: -6.2,
+        brierScore: 0.218,
+      },
+      equityCurve: equity,
+      confidenceBuckets: [
+        { label: '50–60%', count: 22, hitRate: 0.50 },
+        { label: '60–70%', count: 31, hitRate: 0.58 },
+        { label: '70–80%', count: 24, hitRate: 0.66 },
+        { label: '80%+',   count: 13, hitRate: 0.76 },
+      ],
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   async function handleRun() {
-    if (!access.canAccess) return;
+    if (!access.canAccess) {
+      setResult(buildDemoResult());
+      return;
+    }
     setIsRunning(true);
     setError(null);
     await logProductEvent('backtest_started', 'backtest', { periodDays, minConf, minOdds });
@@ -63,14 +112,27 @@ export default function BacktestScreen() {
       </Text>
 
       {!access.canAccess && (
-        <PremiumGate
-          feature="backtest"
-          variant="inline"
-          title="Бэктест доступен в Premium"
-          subtitle="Историческая equity-кривая и KPI стратегии. Открывается после оформления подписки."
-        >
-          {null}
-        </PremiumGate>
+        <>
+          <PremiumGate
+            feature="backtest"
+            variant="inline"
+            title="Бэктест доступен в Premium"
+            subtitle="Это демо-данные для предпросмотра. Подключите Premium чтобы запустить бэктест на реальной истории прогнозов."
+          >
+            {null}
+          </PremiumGate>
+          <View style={{
+            alignSelf: 'center',
+            flexDirection: 'row', alignItems: 'center', gap: 6,
+            backgroundColor: colors.warning + '22',
+            borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, marginTop: -6,
+          }}>
+            <Feather name="eye" size={11} color={colors.warning} />
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: colors.warning, letterSpacing: 0.8 }}>
+              ПРЕВЬЮ · ДЕМО-ДАННЫЕ
+            </Text>
+          </View>
+        </>
       )}
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, opacity: access.canAccess ? 1 : 0.4 }]}

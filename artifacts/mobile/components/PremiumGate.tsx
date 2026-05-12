@@ -50,6 +50,7 @@ export function PremiumGate({ feature, variant = 'overlay', title, subtitle, chi
       : access.required;
   const tierLabel = TIER_LABEL[effectiveRequired];
   const headline = title ?? `Доступно в ${tierLabel}`;
+  const ctaTrialNote = '7 дней бесплатно · отмена в любой момент';
 
   const goToPaywall = () => router.push('/(tabs)/settings');
 
@@ -70,6 +71,12 @@ export function PremiumGate({ feature, variant = 'overlay', title, subtitle, chi
               {subtitle}
             </Text>
           )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
+            <Feather name="gift" size={11} color={colors.positive} />
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: colors.positive, letterSpacing: 0.3 }}>
+              {ctaTrialNote}
+            </Text>
+          </View>
         </View>
         <Feather name="chevron-right" size={18} color={colors.primary} />
       </TouchableOpacity>

@@ -676,7 +676,27 @@ router.get('/explain', async (req, res) => {
  * Body: { minConfidence: 50..95, minOdds: 1.0..5.0, periodDays: 7..365 }
  * Ответ: KPI + equity-кривая + распределения по типам/уверенности.
  */
+// Простой in-memory rate-limit на /backtest: эндпоинт публичный (нет user-identity слоя),
+// но премиум-замок в мобильном UI чисто конверсионный. Защищаем от тривиального DoS/скрейпа:
+// 30 req/мин на IP. TODO(auth): когда появится identity, заменить на subscription gate.
+const _backtestRl = new Map<string, { count: number; resetAt: number }>();
+function backtestRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const e = _backtestRl.get(ip);
+  if (!e || e.resetAt < now) {
+    _backtestRl.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  e.count += 1;
+  return e.count > 30;
+}
+
 router.post('/backtest', async (req, res) => {
+  const ip = (req.ip ?? req.socket.remoteAddress ?? 'unknown').toString();
+  if (backtestRateLimit(ip)) {
+    res.status(429).json({ ok: false, message: 'Too many requests, try again in a minute' });
+    return;
+  }
   const body = req.body as { minConfidence?: number; minOdds?: number; periodDays?: number };
   // NaN-guard: Number(undefined) и Number('abc') → NaN, Math.max/min их не отфильтрует.
   // Используем дефолты при невалидном/отсутствующем входе.

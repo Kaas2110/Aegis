@@ -91,6 +91,30 @@ function useSubscriptionContext() {
   };
 }
 
+/**
+ * Возвращает количество дней бесплатного триала для пакета, если он есть.
+ * RevenueCat / StoreKit обычно возвращает period вида { unit: 'DAY', numberOfUnits: 7 }.
+ * На вебе и в test-режиме introPrice часто отсутствует — тогда возвращаем
+ * 7 как дефолт «7 дней бесплатно», который мы продвигаем в UI всегда
+ * (триал всё равно настраивается в App Store Connect / Play Console на стороне продукта).
+ */
+export function getTrialDays(pkg: { product?: any } | null | undefined): number {
+  if (!pkg) return 0;
+  const intro = pkg.product?.introPrice;
+  if (intro && typeof intro === 'object') {
+    const u = String(intro.periodUnit ?? intro.period?.unit ?? '').toUpperCase();
+    const n = Number(intro.periodNumberOfUnits ?? intro.period?.numberOfUnits ?? 0);
+    if (n > 0) {
+      if (u.startsWith('DAY')) return n;
+      if (u.startsWith('WEEK')) return n * 7;
+      if (u.startsWith('MONTH')) return n * 30;
+    }
+  }
+  // Fallback: на тест-окружении RC отдаёт null, но в App Store Connect
+  // мы всегда настраиваем 7-дневный free trial для всех тарифов.
+  return 7;
+}
+
 type SubscriptionContextValue = ReturnType<typeof useSubscriptionContext>;
 const Context = createContext<SubscriptionContextValue | null>(null);
 

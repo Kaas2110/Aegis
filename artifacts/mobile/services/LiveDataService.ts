@@ -481,10 +481,13 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
     const hasRealData = !liveData?.isMock && Array.isArray(rawMatches) && rawMatches.length > 0;
 
     if (!hasRealData) {
+      // Live упал (OpenDota недоступен) — но это не повод показывать пустой
+      // экран. Берём upcoming с PandaScore (если есть) как prematch-список,
+      // а live дополняем mock-матчами + featured. Так пользователь видит
+      // настоящие будущие матчи реальных команд, а не только mock.
       const mockMarkets = buildMockMarkets();
       const buildMock = (match: Match): EnrichedMatch => {
         const mkts = mockMarkets.filter(mkt => mkt.matchId === match.id);
-        // Берём всех букмекеров из первого рынка — у mock-данных там полный список.
         const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
         return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
       };
@@ -493,12 +496,33 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
         ...(featured ? [featured] : []),
         ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
       ];
-      const prematchList = MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
+      // Реальные upcoming с PandaScore — если бэк отдал, используем
+      // вместо mock prematch.
+      const realUpcomingRaws = (upcomingData && !upcomingData.isMock && Array.isArray(upcomingData.data))
+        ? upcomingData.data
+        : [];
+      const realUpcomingMatches: Match[] = realUpcomingRaws
+        .map(upcomingToMatch)
+        .filter((m): m is Match => m !== null)
+        .slice(0, 30);
+      const prematchList: EnrichedMatch[] = realUpcomingMatches.length > 0
+        ? realUpcomingMatches.map(match => ({
+            match, markets: [], availableBookmakers: [], dataSource: 'real' as const,
+          }))
+        : MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
       cacheEnriched([...liveList, ...prematchList]);
+      const hasRealUpcoming = realUpcomingMatches.length > 0;
+      const sources: string[] = [];
+      if (featured) sources.push('featured');
+      if (hasRealUpcoming) sources.push('pandascore');
+      sources.push('mock-live');
       return {
         liveMatches: liveList,
         prematchMatches: prematchList,
-        isMock: !featured, sources: featured ? ['featured', 'mock'] : ['mock'], fetchedAt,
+        // isMock=false если есть хотя бы один реальный источник (featured или upcoming)
+        isMock: !featured && !hasRealUpcoming,
+        sources,
+        fetchedAt,
       };
     }
     // 2. Convert OpenDota data to our Match format

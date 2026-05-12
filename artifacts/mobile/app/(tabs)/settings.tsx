@@ -8,7 +8,7 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
-import { useSubscription } from '@/lib/revenuecat';
+import { useSubscription, getTrialDays } from '@/lib/revenuecat';
 import { getApiUrl } from '@/lib/api/baseUrl';
 import type { PurchasesPackage } from 'react-native-purchases';
 
@@ -166,11 +166,25 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
   }
 
   const bestPriceStr = activePkg?.product.priceString ?? '—';
+  const trialDays = getTrialDays(activePkg);
 
   return (
     <>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '55', borderWidth: 1.5 }]}>
         <View style={{ padding: 16, gap: 10 }}>
+          {trialDays > 0 && (
+            <View style={{
+              alignSelf: 'flex-start',
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              backgroundColor: colors.positive + '22', borderRadius: 6,
+              paddingHorizontal: 10, paddingVertical: 5,
+            }}>
+              <Feather name="gift" size={12} color={colors.positive} />
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: colors.positive, letterSpacing: 0.5 }}>
+                {trialDays} ДНЕЙ БЕСПЛАТНО
+              </Text>
+            </View>
+          )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Feather name="zap" size={18} color={colors.primary} />
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.foreground }}>Aegis Premium</Text>
@@ -188,18 +202,27 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
           </View>
           <TouchableOpacity
             onPress={() => setShowPaywall(true)}
-            style={{ backgroundColor: colors.primary, borderRadius: 12, height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}
+            style={{ backgroundColor: colors.primary, borderRadius: 12, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}
           >
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.primaryForeground }}>
-              {bestPriceStr !== '—' ? `от ${bestPriceStr} / нед` : 'Попробовать Premium'}
+              {trialDays > 0
+                ? `Попробовать ${trialDays} дней бесплатно`
+                : (bestPriceStr !== '—' ? `Подключить за ${bestPriceStr}` : 'Попробовать Premium')}
             </Text>
           </TouchableOpacity>
+          {trialDays > 0 && bestPriceStr !== '—' && (
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.mutedForeground, textAlign: 'center' }}>
+              Затем {bestPriceStr} {activePkg ? getPlanLabel(activePkg) : ''} · отмена в любой момент
+            </Text>
+          )}
           <TouchableOpacity
             onPress={async () => { try { await restore(); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
             disabled={isRestoring}
-            style={{ alignItems: 'center' }}
+            style={{ alignItems: 'center', paddingVertical: 8 }}
           >
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.mutedForeground }}>Восстановить покупки</Text>
+            <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.primary, textDecorationLine: 'underline' }}>
+              Восстановить покупки
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -302,19 +325,33 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
                 }
               }}
               disabled={isPurchasing || !activePkg}
-              style={{ backgroundColor: colors.primary, borderRadius: 14, height: 54, alignItems: 'center', justifyContent: 'center' }}
+              style={{ backgroundColor: colors.primary, borderRadius: 14, height: 56, alignItems: 'center', justifyContent: 'center' }}
             >
               {isPurchasing
                 ? <ActivityIndicator color={colors.primaryForeground} />
                 : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.primaryForeground }}>
-                    {activePkg ? `Подключить за ${activePkg.product.priceString}` : 'Подключить Premium'}
+                    {trialDays > 0 && activePkg
+                      ? `Начать ${trialDays} дней бесплатно`
+                      : (activePkg ? `Подключить за ${activePkg.product.priceString}` : 'Подключить Premium')}
                   </Text>
               }
             </TouchableOpacity>
 
             <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.mutedForeground, textAlign: 'center', lineHeight: 16 }}>
-              Оплата через App Store / Google Play. Отмена в любое время в настройках магазина.
+              {trialDays > 0 && activePkg
+                ? `Бесплатный пробный период ${trialDays} дней. Затем ${activePkg.product.priceString} ${getPlanLabel(activePkg)}. Отмена в любой момент в настройках магазина — деньги не спишутся.`
+                : 'Оплата через App Store / Google Play. Отмена в любое время в настройках магазина.'}
             </Text>
+
+            <TouchableOpacity
+              onPress={async () => { try { await restore(); setShowPaywall(false); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
+              disabled={isRestoring}
+              style={{ alignItems: 'center', paddingVertical: 6 }}
+            >
+              <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.primary, textDecorationLine: 'underline' }}>
+                Восстановить покупки
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
