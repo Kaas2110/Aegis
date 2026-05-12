@@ -334,6 +334,113 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
   }
 }
 
+/** A10: Quantile training for total_duration (alpha = 0.25/0.5/0.75).
+ *  Возвращает 3 модели для построения интервала прогноза:
+ *  P(duration ∈ [q25, q75]) ≈ 50% — позволяет показывать «50%-интервал»
+ *  на UI вместо точечного прогноза + рассчитывать вероятность over/under
+ *  для конкретной линии без нормальностей-предположений на residual_std. */
+async function trainQuantile(
+  market: MarketKey,
+  alpha: number,
+  samples: Sample[],
+): Promise<TrainResponse | null> {
+  const label = `market/${market}_q${Math.round(alpha * 100)}`;
+  const minSamples = parseMinSamples();
+  if (samples.length < minSamples) {
+    console.log(`  [${label}] SKIP: only ${samples.length} samples (need ${minSamples}+)`);
+    return null;
+  }
+  const n = samples.length;
+  const trainEnd = Math.floor(n * 0.8);
+  const calibEnd = Math.floor(n * 0.9);
+  const train = samples.slice(0, trainEnd);
+  const calib = samples.slice(trainEnd, calibEnd);
+  const test = samples.slice(calibEnd);
+  console.log(`  [${label}] training task=quantile alpha=${alpha} n=${train.length}/calib=${calib.length}/test=${test.length}`);
+
+  const token = mlServiceToken();
+  if (!token) {
+    console.error(`  [${label}] no ML_SERVICE_TOKEN — restart ml-service first`);
+    return null;
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TRAIN_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${ML_SERVICE_URL}/train`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ml-token': token },
+      body: JSON.stringify({
+        label,
+        feature_names: TEAM_FEATURE_NAMES,
+        task_type: 'quantile',
+        quantile_alpha: alpha,
+        train, calib, test,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`  [${label}] ml-service ${res.status}: ${body.slice(0, 300)}`);
+      return null;
+    }
+    const data = (await res.json()) as TrainResponse;
+    const tm = data.test_metrics_calibrated;
+    // Для quantile метрики из ml-service: accuracy = pinball loss (lower better),
+    // brier = coverage rate (доля test-точек ниже квантиля; цель = alpha).
+    console.log(`  [${label}] TEST pinball=${tm.accuracy.toFixed(4)} coverage=${tm.brier.toFixed(3)} (target=${alpha}, n=${tm.n})`);
+    return data;
+  } catch (e) {
+    console.error(`  [${label}] training failed: ${(e as Error).message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function activateQuantileModel(market: MarketKey, alpha: number, r: TrainResponse): Promise<void> {
+  const baseKind = KIND_BY_MARKET[market];
+  const kind = `${baseKind}_q${Math.round(alpha * 100)}`;
+  const blob = Buffer.from(r.blob_b64, 'base64');
+  const versionStem = `lgbm-${kind}-v3-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+  await db.transaction(async (tx) => {
+    await tx.update(modelVersionsTable)
+      .set({ isActive: false })
+      .where(and(eq(modelVersionsTable.kind, kind), eq(modelVersionsTable.isActive, true)));
+    await tx.insert(modelVersionsTable).values({
+      version: versionStem,
+      kind,
+      featuresVersion: FEATURES_VERSION,
+      algorithm: 'lightgbm',
+      engine: 'lightgbm',
+      binaryBlob: blob,
+      features: r.feature_names,
+      weights: {},
+      trainAccuracy: r.train_metrics.accuracy,
+      testAccuracy: r.test_metrics_calibrated.accuracy,
+      brierScore: r.test_metrics_calibrated.brier,
+      trainSampleSize: r.train_metrics.n,
+      testSampleSize: r.test_metrics_calibrated.n,
+      metadata: {
+        market,
+        taskType: 'quantile',
+        quantileAlpha: alpha,
+        engine: 'lightgbm',
+        featuresVersion: FEATURES_VERSION,
+        featureNames: r.feature_names,
+        testRaw: r.test_metrics_raw,
+        testCalibrated: r.test_metrics_calibrated,
+        baselineAcc: r.baseline_acc,
+        featureImportance: r.feature_importance,
+        windowDays: TRAIN_WINDOW_DAYS,
+        trainSeconds: r.train_seconds,
+        blobBytes: blob.length,
+      },
+      isActive: true,
+    });
+  });
+  console.log(`  [${kind}] ✅ activated ${versionStem} (blob=${blob.length}b, alpha=${alpha})`);
+}
+
 async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise<void> {
   const kind = KIND_BY_MARKET[market];
   const blob = Buffer.from(r.blob_b64, 'base64');
@@ -419,16 +526,30 @@ async function main(): Promise<void> {
   }
 
   let trained = 0;
+  let quantilesTrained = 0;
   for (const market of targets) {
     console.log(`\n[train-market-models] === ${market} ===`);
     const samples = buildSamples(market, matches, teams, form);
     const r = await trainMarket(market, samples);
-    if (!r) continue;
-    await activateMarketModel(market, r);
-    trained++;
+    if (r) {
+      await activateMarketModel(market, r);
+      trained++;
+    }
+    // A10: для total_duration дополнительно тренируем 3 quantile-модели
+    // (q25/q50/q75) для построения интервалов и точных over/under.
+    if (market === 'total_duration' && samples.length >= parseMinSamples()) {
+      for (const alpha of [0.25, 0.5, 0.75]) {
+        console.log(`\n[train-market-models] --- ${market} quantile α=${alpha} ---`);
+        const qr = await trainQuantile(market, alpha, samples);
+        if (qr) {
+          await activateQuantileModel(market, alpha, qr);
+          quantilesTrained++;
+        }
+      }
+    }
   }
 
-  console.log(`\n[train-market-models] done — trained ${trained}/${targets.length}`);
+  console.log(`\n[train-market-models] done — trained ${trained}/${targets.length} regression + ${quantilesTrained} quantile`);
 }
 
 main()

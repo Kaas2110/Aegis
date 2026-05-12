@@ -27,7 +27,7 @@ const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const LIGHTGBM_BACKOFF_MS = 60_000;
 const GLOBAL_KPM = 1.1;
 
-// Feature names — must match training script exactly (fv=7, 16 features)
+// Feature names — must match training script exactly (fv=8, 20 features)
 const LIVE_FEATURE_NAMES = [
   'bias',
   'game_time_norm',
@@ -45,8 +45,13 @@ const LIVE_FEATURE_NAMES = [
   'form_diff',
   'power_spike_delta',
   'spike_x_nw',
+  'is_real_live',
+  'tower_diff_norm',
+  'has_draft',
+  'recency_days_norm',
 ] as const;
 const LIVE_FEATURE_DIM = LIVE_FEATURE_NAMES.length;
+const LIVE_TRAIN_WINDOW_DAYS = 365;
 
 // --- Circuit-breaker state ---
 let lgbmDisabled = false;
@@ -97,6 +102,9 @@ interface LoadedLiveModel {
 
 let cachedLgbm: LoadedLiveModel | null = null;
 let cachedLr: LoadedLiveModel | null = null;
+// A1: какая модель выбрана primary по composite score; используется в predictLiveWinner
+// для корректной диспетчеризации (LGB-first vs LR-first).
+let cachedPrimaryEngine: 'lightgbm' | 'logreg' | null = null;
 
 function rowToModel(m: typeof modelVersionsTable.$inferSelect): LoadedLiveModel {
   const engine: 'lightgbm' | 'logreg' = m.engine === 'lightgbm' ? 'lightgbm' : 'logreg';
@@ -140,6 +148,7 @@ export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
 
     cachedLgbm = null;
     cachedLr = null;
+    cachedPrimaryEngine = null;
 
     for (const m of rows) {
       const model = rowToModel(m);
@@ -150,15 +159,34 @@ export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
       }
     }
 
-    // Primary выбирается по testAccuracy: LGB когда точнее LR, иначе LR.
+    // A1: Primary выбирается по composite score (lower is better):
+    //   composite = brier + 0.3 * logLossTest  — если у ОБОИХ моделей есть logloss
+    //   composite = brier                       — иначе (apples-to-apples)
+    // brier — основной критерий калибровки; logloss — штраф за уверенность ошибок.
+    // Если только у одной модели есть logloss, добавление штрафа было бы нечестным
+    // (LGB не записывает logLossTest в metadata текущим тренером, поэтому де-факто
+    // всегда падает на brier-only — что корректно: brier и есть calibration metric).
+    function getLogLoss(m: LoadedLiveModel): number | null {
+      const meta = (m.metadata ?? {}) as Record<string, unknown>;
+      return typeof meta['logLossTest'] === 'number' ? meta['logLossTest'] : null;
+    }
+    function compositeScore(m: LoadedLiveModel, useLogloss: boolean): number {
+      const brier = m.brierScore ?? 0.25;
+      if (!useLogloss) return brier;
+      const ll = getLogLoss(m);
+      return ll != null ? brier + 0.3 * ll : brier;
+    }
+    const bothHaveLogloss = cachedLgbm != null && cachedLr != null
+      && getLogLoss(cachedLgbm) != null && getLogLoss(cachedLr) != null;
     let primary: LoadedLiveModel | null;
-    const lgbmAcc = cachedLgbm?.testAccuracy ?? 0;
-    const lrAcc = cachedLr?.testAccuracy ?? 0;
-    if (cachedLgbm && lgbmAcc >= lrAcc) {
+    const lgbmScore = cachedLgbm ? compositeScore(cachedLgbm, bothHaveLogloss) : Infinity;
+    const lrScore = cachedLr ? compositeScore(cachedLr, bothHaveLogloss) : Infinity;
+    if (cachedLgbm && lgbmScore <= lrScore) {
       primary = cachedLgbm;
     } else {
       primary = cachedLr ?? cachedLgbm;
     }
+    cachedPrimaryEngine = primary?.engine === 'lightgbm' ? 'lightgbm' : (primary?.engine === 'logreg' ? 'logreg' : null);
 
     if (!primary) {
       logger.info('[LiveWinnerModel] No active live model — will fallback to prematch prob.');
@@ -170,10 +198,12 @@ export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
         primary: primary.version,
         primaryEngine: primary.engine,
         primaryTestAcc: primary.testAccuracy.toFixed(4),
+        primaryComposite: (primary === cachedLgbm ? lgbmScore : lrScore).toFixed(4),
         featureDim: primary.featureDim,
-        lgbm: cachedLgbm ? `${cachedLgbm.version} acc=${cachedLgbm.testAccuracy.toFixed(3)}` : 'none',
-        lr: cachedLr ? `${cachedLr.version} acc=${cachedLr.testAccuracy.toFixed(3)}` : 'none',
-        reason: cachedLgbm && lgbmAcc >= lrAcc ? 'lgbm_wins' : 'lr_wins',
+        lgbm: cachedLgbm ? `${cachedLgbm.version} acc=${cachedLgbm.testAccuracy.toFixed(3)} comp=${lgbmScore.toFixed(4)}` : 'none',
+        lr: cachedLr ? `${cachedLr.version} acc=${cachedLr.testAccuracy.toFixed(3)} comp=${lrScore.toFixed(4)}` : 'none',
+        composite: bothHaveLogloss ? 'brier+0.3*logloss' : 'brier_only',
+        reason: cachedLgbm && lgbmScore <= lrScore ? 'lgbm_wins_composite' : 'lr_wins_composite',
       },
       '[LiveWinnerModel] Active live model loaded',
     );
@@ -215,6 +245,14 @@ export interface LiveSnapshotInput {
   powerSpikeDelta?: number;
   /** power_spike_delta × nw_lead_norm; 0 если нет драфта */
   spikeXNw?: number;
+  /** 1 = real /api/live снапшот; 0 = backfill (синтетический). По умолчанию 1 в проде. */
+  isRealLive?: number;
+  /** (r_towers_alive - d_towers_alive)/11; 0 если building_state неизвестен. */
+  towerDiffNorm?: number;
+  /** 1 если 5+5 пиков известны, 0 иначе. */
+  hasDraft?: number;
+  /** Возраст матча в нормированных днях (now-startTime)/365 ∈ [0,1]; 0 в проде (свежий live). */
+  recencyDaysNorm?: number;
 }
 
 async function predictViaLgbm(blobB64: string, features: number[]): Promise<number | null> {
@@ -296,6 +334,11 @@ function buildFeatureVec(
   const formDiff = snap.formDiff ?? 0;
   const powerSpikeDelta = snap.powerSpikeDelta ?? 0;
   const spikeXNw = snap.spikeXNw ?? 0;
+  // fv8: defaults для прода — реальный live снапшот, без gap-данных.
+  const isRealLive = snap.isRealLive ?? 1;
+  const towerDiffNorm = snap.towerDiffNorm ?? 0;
+  const hasDraft = snap.hasDraft ?? 0;
+  const recencyDaysNorm = snap.recencyDaysNorm ?? 0;
 
   const vec = [
     1,                            // x0  bias
@@ -314,6 +357,10 @@ function buildFeatureVec(
     formDiff,                     // x13 form_diff
     powerSpikeDelta,              // x14 power_spike_delta
     spikeXNw,                     // x15 spike_x_nw
+    isRealLive,                   // x16 is_real_live
+    towerDiffNorm,                // x17 tower_diff_norm
+    hasDraft,                     // x18 has_draft
+    recencyDaysNorm,              // x19 recency_days_norm
   ];
 
   const named: Record<string, number> = {};
@@ -334,20 +381,26 @@ export async function predictLiveWinner(
 
   const { vec, named } = buildFeatureVec(snap, prematchProb);
 
-  // Try LGB primary (circuit-breaker trips to LR on ml-service failure)
-  if (cachedLgbm?.blobB64) {
-    // Проверяем совместимость по размерности — legacy модели (fv=4, 10 фич) уже не используем
-    if (cachedLgbm.featureDim === vec.length) {
-      const p = await predictViaLgbm(cachedLgbm.blobB64, vec);
-      if (p !== null) {
-        return { probRadiantWin: p, modelVersion: cachedLgbm.version, engine: 'lightgbm', features: named };
-      }
-    }
+  // A1: respect composite-score primary selection from loadActiveLiveModel().
+  // LR-primary (typical when LR has lower brier than LGB) → LR-first, fallback to LGB.
+  // LGB-primary → LGB-first via ml-service, fallback to LR if ml-service fails / dim mismatch.
+  const lgbCompatible = cachedLgbm?.blobB64 && cachedLgbm.featureDim === vec.length;
+  const lrCompatible = cachedLr && cachedLr.weights.length > 0 && cachedLr.featureDim === vec.length;
+
+  if (cachedPrimaryEngine === 'logreg' && lrCompatible) {
+    const p = predictViaLr(cachedLr!.weights, vec);
+    return { probRadiantWin: p, modelVersion: cachedLr!.version, engine: 'logreg', features: named };
   }
 
-  // Fallback: LR hot-standby — works without ml-service
+  // Default / LGB-primary path: try LGB, then any LR fallback.
+  if (lgbCompatible) {
+    const p = await predictViaLgbm(cachedLgbm!.blobB64!, vec);
+    if (p !== null) {
+      return { probRadiantWin: p, modelVersion: cachedLgbm!.version, engine: 'lightgbm', features: named };
+    }
+  }
   const lrModel = cachedLr ?? (cachedLgbm?.engine === 'logreg' ? cachedLgbm : null);
-  if (lrModel && lrModel.weights.length > 0) {
+  if (lrModel && lrModel.weights.length > 0 && lrModel.featureDim === vec.length) {
     const p = predictViaLr(lrModel.weights, vec);
     return { probRadiantWin: p, modelVersion: lrModel.version, engine: 'logreg', features: named };
   }

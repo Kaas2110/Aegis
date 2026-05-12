@@ -42,28 +42,35 @@ const EPOCHS = 300;
 const LR_RATE = 0.03;
 const L2 = 0.01;
 
-// Версия фич: 7 (16 фич — fv6 + power_spike_delta + spike_x_nw)
-const FEATURES_VERSION = 7;
+// Версия фич: 8 (20 фич — fv7 + is_real_live + tower_diff_norm + has_draft + recency_days_norm)
+const FEATURES_VERSION = 8;
 
 const FEATURE_NAMES = [
   'bias',
   'game_time_norm',
   'nw_lead_norm',
   'kill_diff_norm',
-  'prematch_logit',       // x4 (сдвинут с x6: убраны 2 башенные фичи)
+  'prematch_logit',
   'kill_pace_norm',
   'game_phase',
   'nw_x_phase',
   'kill_diff_x_phase',
   'hero_advantage',
-  'nw_lead_per_min',     // темп накопления NW (nw_lead / min / 1000)
-  'kill_ratio',          // доля убийств radiant (rScore / total, bounded [0,1])
-  'elo_diff_norm',       // (elo_r − elo_d) / 200
-  'form_diff',           // form30_r − form30_d
-  'power_spike_delta',   // x14 НОВАЯ: разность spike-score команд (Gaussian, σ=8мин)
-  'spike_x_nw',          // x15 НОВАЯ: power_spike_delta × nw_lead_norm (взаимодействие)
+  'nw_lead_per_min',
+  'kill_ratio',
+  'elo_diff_norm',
+  'form_diff',
+  'power_spike_delta',
+  'spike_x_nw',
+  'is_real_live',        // x16 НОВАЯ: 1 если ls.source='live', 0 если backfill
+  'tower_diff_norm',     // x17 НОВАЯ: (r_towers_alive - d_towers_alive)/11; 0 если нет building_state
+  'has_draft',           // x18 НОВАЯ: 1 если 5+5 пиков известны, 0 иначе
+  'recency_days_norm',   // x19 НОВАЯ: (now-startTime)/365 ∈ [0,1]; прокси для patch_age
 ];
 const FEATURE_DIM = FEATURE_NAMES.length;
+const TRAIN_WINDOW_DAYS = 365;
+// Зазор между train и test по времени (избежать leakage между матчами одной серии).
+const TEST_GAP_DAYS = 1;
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
@@ -92,7 +99,17 @@ function parseMinSamples(def: number): number {
   return def;
 }
 
-interface Sample { features: number[]; label: number; matchId: number; bucket: number; }
+interface Sample { features: number[]; label: number; matchId: number; bucket: number; startTime: number; }
+
+/** Bitmap popcount (Brian Kernighan), для bits >= 32 — безопасно через BigInt. */
+function popcountBig(n: bigint): number {
+  let count = 0;
+  let x = n;
+  while (x > 0n) { x &= x - 1n; count++; }
+  return count;
+}
+const RADIANT_TOWER_MASK = (1n << 11n) - 1n;          // bits 0..10
+const DIRE_TOWER_MASK = ((1n << 22n) - 1n) ^ RADIANT_TOWER_MASK; // bits 11..21
 
 function logit(p: number): number {
   const eps = 1e-4;
@@ -363,6 +380,9 @@ async function main() {
       ls.radiant_lead               AS "radiantLead",
       ls.radiant_score              AS "radiantScore",
       ls.dire_score                 AS "direScore",
+      ls.source                     AS "lsSource",
+      ls.building_state             AS "buildingState",
+      pm.start_time                 AS "startTime",
       pm.radiant_team_id            AS "radiantTeamId",
       pm.dire_team_id               AS "direTeamId",
       po.predicted_radiant_win_prob AS "storedPrematchProb",
@@ -415,6 +435,10 @@ async function main() {
   let eloPrematchCount = 0;
   let unknownPrematchCount = 0;
   let heroAdvCount = 0;
+  let isRealLiveCount = 0;
+  let towerDataCount = 0;
+  let hasDraftCount = 0;
+  const nowSec = Math.floor(Date.now() / 1000);
 
   const seenBuckets = new Set<string>();
   const samples: Sample[] = [];
@@ -517,6 +541,34 @@ async function main() {
       spikeXNw = powerSpikeDelta * nwNorm;
     }
 
+    // НОВЫЕ ФИЧИ (fv8)
+    const lsSource = String(raw['lsSource'] ?? '');
+    const isRealLive = lsSource === 'live' ? 1 : 0;
+    if (isRealLive) isRealLiveCount++;
+
+    let towerDiffNorm = 0;
+    const buildingStateRaw = raw['buildingState'];
+    if (buildingStateRaw != null) {
+      try {
+        const bs = typeof buildingStateRaw === 'bigint'
+          ? buildingStateRaw
+          : BigInt(String(buildingStateRaw));
+        if (bs > 0n) {
+          const rAlive = popcountBig(bs & RADIANT_TOWER_MASK);
+          const dAlive = popcountBig(bs & DIRE_TOWER_MASK);
+          towerDiffNorm = (rAlive - dAlive) / 11;
+          towerDataCount++;
+        }
+      } catch { /* invalid bigint — skip */ }
+    }
+
+    const hasDraftFeat = hasDraft ? 1 : 0;
+    if (hasDraftFeat) hasDraftCount++;
+
+    const startTime = toNum(raw['startTime']) ?? nowSec;
+    const ageDays = Math.max(0, (nowSec - startTime) / 86_400);
+    const recencyDaysNorm = Math.min(1, ageDays / TRAIN_WINDOW_DAYS);
+
     samples.push({
       features: [
         1,                                        // x0  bias
@@ -535,12 +587,20 @@ async function main() {
         formDiff,                                 // x13 form_diff
         powerSpikeDelta,                          // x14 power_spike_delta
         spikeXNw,                                 // x15 spike_x_nw
+        isRealLive,                               // x16 is_real_live
+        towerDiffNorm,                            // x17 tower_diff_norm
+        hasDraftFeat,                             // x18 has_draft
+        recencyDaysNorm,                          // x19 recency_days_norm
       ],
       label: raw['actualRadiantWin'] ? 1 : 0,
       matchId,
       bucket,
+      startTime,
     });
   }
+  console.log(
+    `[train-live-model] new fv8 fields: is_real_live=${isRealLiveCount}/${samples.length} | tower_data=${towerDataCount}/${samples.length} | has_draft=${hasDraftCount}/${samples.length}`,
+  );
 
   console.log(
     `[train-live-model] prematch_logit sources: stored=${storedPrematchCount} elo=${eloPrematchCount} neutral=${unknownPrematchCount}`,
@@ -555,16 +615,43 @@ async function main() {
     process.exit(0);
   }
 
-  // Сплит ПО МАТЧАМ (не по снапшотам)
-  const allMatches = Array.from(new Set(samples.map(s => s.matchId))).sort((a, b) => a - b);
+  // B6: Сплит ПО МАТЧАМ, упорядоченным по start_time (chronological), с зазором между train и test.
+  // Это закрывает leakage между матчами одной серии (разные карты BO3 идут в одну сторону split'а
+  // только если их start_time разделены на TEST_GAP_DAYS).
+  const matchTimes = new Map<number, number>();
+  for (const s of samples) {
+    const cur = matchTimes.get(s.matchId);
+    if (cur == null || s.startTime < cur) matchTimes.set(s.matchId, s.startTime);
+  }
+  const allMatches = Array.from(matchTimes.entries())
+    .sort((a, b) => a[1] - b[1])
+    .map(([id]) => id);
   const trainEnd = Math.floor(allMatches.length * 0.8);
   const calibEnd = Math.floor(allMatches.length * 0.9);
   const trainMatches = new Set(allMatches.slice(0, trainEnd));
   const calibMatches = new Set(allMatches.slice(trainEnd, calibEnd));
+  const testMatchesArr = allMatches.slice(calibEnd);
+
+  // Зазор: убрать из train матчи, чьё время в пределах TEST_GAP_DAYS до начала test-периода.
+  const testStartTime = testMatchesArr.length > 0 ? matchTimes.get(testMatchesArr[0]!)! : nowSec;
+  const gapCutoff = testStartTime - TEST_GAP_DAYS * 86_400;
+  let droppedByGap = 0;
+  for (const id of Array.from(trainMatches)) {
+    const t = matchTimes.get(id)!;
+    if (t > gapCutoff) { trainMatches.delete(id); droppedByGap++; }
+  }
+  for (const id of Array.from(calibMatches)) {
+    const t = matchTimes.get(id)!;
+    if (t > gapCutoff) { calibMatches.delete(id); droppedByGap++; }
+  }
+  console.log(
+    `[train-live-model] B6 chronological split: gap=${TEST_GAP_DAYS}d, dropped ${droppedByGap} matches near boundary`,
+  );
 
   const rawTrainSamples = samples.filter(s => trainMatches.has(s.matchId));
   const calibSamples    = samples.filter(s => calibMatches.has(s.matchId));
-  const testSamples     = samples.filter(s => !trainMatches.has(s.matchId) && !calibMatches.has(s.matchId));
+  const testSamples     = samples.filter(s => !trainMatches.has(s.matchId) && !calibMatches.has(s.matchId)
+    && !(matchTimes.get(s.matchId)! > gapCutoff && matchTimes.get(s.matchId)! < testStartTime));
 
   // Балансировка 50/50 в тренировочной выборке (undersample мажоритарного класса)
   // Тест НЕ балансируем — отражает реальное распределение.

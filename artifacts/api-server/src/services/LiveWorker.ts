@@ -24,6 +24,7 @@ interface LiveMatch {
   radiant_score?: number;
   dire_score?: number;
   radiant_lead?: number;
+  building_state?: number | string;
   // OpenDota /api/live раскрывает массив игроков с hero_id и team (0=R, 1=D)
   // как только драфт завершён. Используем это для v2-фичей.
   players?: Array<{ account_id?: number; hero_id?: number; team?: 0 | 1; team_slot?: number }>;
@@ -133,6 +134,12 @@ async function pollOnce(): Promise<void> {
       radiantScore: m.radiant_score ?? null,
       direScore: m.dire_score ?? null,
       radiantLead: m.radiant_lead ?? null,
+      // fv8: persist building_state — нужно train-live-model для tower_diff_norm.
+      // OpenDota /api/live возвращает 32-bit int (но JS не дотянет до >2^31, поэтому
+      // safety: фиксируем как nullable integer; train-time клампим к Int32Array).
+      buildingState: typeof m.building_state === 'number' && Number.isFinite(m.building_state)
+        ? Math.trunc(m.building_state)
+        : null,
       rawPayload: m as unknown as Record<string, unknown>,
     }));
     await db.insert(liveSnapshotsTable).values(rows);
@@ -183,6 +190,22 @@ async function pollOnce(): Promise<void> {
               nwLeadNorm,
             )
           : { powerSpikeDelta: 0, spikeXNw: 0 };
+        // fv8: tower_diff_norm из bitmap building_state (биты 0..10 = R, 11..21 = D).
+        let towerDiffNorm = 0;
+        if (m.building_state != null) {
+          try {
+            const bs = BigInt(typeof m.building_state === 'number' ? Math.trunc(m.building_state) : m.building_state);
+            if (bs > 0n) {
+              const RMASK = (1n << 11n) - 1n;
+              const DMASK = ((1n << 22n) - 1n) ^ RMASK;
+              let r = bs & RMASK, d = bs & DMASK;
+              let rA = 0, dA = 0;
+              while (r > 0n) { r &= r - 1n; rA++; }
+              while (d > 0n) { d &= d - 1n; dA++; }
+              towerDiffNorm = (rA - dA) / 11;
+            }
+          } catch { /* ignore */ }
+        }
         const livePred = await predictLiveWinner(
           {
             gameTimeSec: m.game_time ?? null,
@@ -194,6 +217,10 @@ async function pollOnce(): Promise<void> {
             formDiff,
             powerSpikeDelta,
             spikeXNw,
+            isRealLive: 1,
+            towerDiffNorm,
+            hasDraft: draft && draft.radiantPicks.length === 5 && draft.direPicks.length === 5 ? 1 : 0,
+            recencyDaysNorm: 0,
           },
           pred.probRadiantWin,
         );

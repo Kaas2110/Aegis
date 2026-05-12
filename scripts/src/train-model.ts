@@ -81,8 +81,27 @@ function parseMinGlicko(): number {
   return MIN_AVG_GLICKO;
 }
 
-const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
+// fv9 (12 фич): прежние 5 + 4 контекстные (radiant_side_logit, recency_days_norm,
+// series_type_norm, map_no_norm) + 3 hierarchical tier-флага (constant в tier-моделях,
+// сигнал в fallback prematch_winner). См. deep-research-report items 5,7,8,9.
+const TEAM_FEATURE_NAMES = [
+  'bias',
+  'elo_diff_norm',
+  'winrate_diff',
+  'experience_diff',
+  'is_high_tier',
+  'radiant_side_logit',
+  'recency_days_norm',
+  'series_type_norm',
+  'map_no_norm',
+  'tier_t1',
+  'tier_t2',
+  'tier_t3',
+] as const;
 const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
+// Константа стороны (pro-сцена ~52% radiant winrate). logit(0.52) ≈ 0.0800.
+const RADIANT_SIDE_LOGIT = 0.08;
+const TRAIN_WINDOW_DAYS_PREMATCH = 365;
 
 interface Sample {
   features: number[];
@@ -110,10 +129,18 @@ function dot(w: number[], x: number[]): number {
   return s;
 }
 
+interface TeamCtx {
+  seriesType: number | null;
+  mapNo: number | null;
+  recencyDaysNorm: number;
+  tier: Tier | null;
+}
+
 function buildTeamFeatures(
   radiantId: number,
   direId: number,
   teams: Map<number, TeamRating>,
+  ctx?: TeamCtx,
 ): number[] | null {
   const r = teams.get(radiantId);
   const d = teams.get(direId);
@@ -130,7 +157,22 @@ function buildTeamFeatures(
   const expDiff = Math.log(rGames + 1) - Math.log(dGames + 1);
   const isHighTier = rGames >= 50 && dGames >= 50 ? 1 : 0;
 
-  return [1, eloDiff, wrDiff, expDiff, isHighTier];
+  // Контекстные фичи (defaults для inference без матч-контекста)
+  const seriesType = ctx?.seriesType ?? null;
+  const seriesTypeNorm = seriesType != null ? Math.min(1, Math.max(0, seriesType / 2)) : 0.5;
+  const mapNo = ctx?.mapNo ?? null;
+  const mapNoNorm = mapNo != null ? Math.min(1, Math.max(0, (mapNo - 1) / 4)) : 0;
+  const recency = ctx?.recencyDaysNorm ?? 0;
+  const tier = ctx?.tier ?? null;
+  const tT1 = tier === 't1' ? 1 : 0;
+  const tT2 = tier === 't2' ? 1 : 0;
+  const tT3 = tier === 't3' ? 1 : 0;
+
+  return [
+    1, eloDiff, wrDiff, expDiff, isHighTier,
+    RADIANT_SIDE_LOGIT, recency, seriesTypeNorm, mapNoNorm,
+    tT1, tT2, tT3,
+  ];
 }
 
 function trainLogisticRegression(samples: Sample[], dim: number, label: string): number[] {
@@ -291,11 +333,30 @@ async function main() {
       direTeamId: proMatchesTable.direTeamId,
       radiantWin: proMatchesTable.radiantWin,
       startTime: proMatchesTable.startTime,
+      seriesId: proMatchesTable.series_id,
+      seriesType: proMatchesTable.series_type,
     })
     .from(proMatchesTable)
     .where(gte(proMatchesTable.startTime, minStartTime))
     .orderBy(asc(proMatchesTable.startTime));
   console.log(`[train-model] Loaded ${matches.length} matches in window`);
+
+  // map_no per match: для каждой series_id нумеруем матчи по startTime начиная с 1.
+  // Матчи без series_id или с series_id=0 трактуем как single-game (mapNo=1).
+  const mapNoMap = new Map<number, number>();
+  const bySeries = new Map<number, Array<{ matchId: number; t: number }>>();
+  for (const m of matches) {
+    const sid = m.seriesId ?? 0;
+    if (!sid) { mapNoMap.set(m.matchId, 1); continue; }
+    let arr = bySeries.get(sid);
+    if (!arr) { arr = []; bySeries.set(sid, arr); }
+    arr.push({ matchId: m.matchId, t: m.startTime ?? 0 });
+  }
+  for (const arr of bySeries.values()) {
+    arr.sort((a, b) => a.t - b.t || a.matchId - b.matchId);
+    arr.forEach((it, i) => mapNoMap.set(it.matchId, i + 1));
+  }
+  const nowSecPrematch = Math.floor(Date.now() / 1000);
 
   // ── Загрузка драфтов и hero stats для v2 ──────────────────────────────
   console.log('[train-model] Loading drafts/hero_stats/matchups for v2 …');
@@ -419,11 +480,18 @@ async function main() {
       droppedByMmr++;
       continue;
     }
-    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
+    const tier = classifyTier(r.rating, d.rating);
+    const ageDaysNorm = Math.min(1, Math.max(0, (nowSecPrematch - (m.startTime ?? nowSecPrematch)) / 86_400 / TRAIN_WINDOW_DAYS_PREMATCH));
+    const ctx: TeamCtx = {
+      seriesType: m.seriesType ?? null,
+      mapNo: mapNoMap.get(m.matchId) ?? null,
+      recencyDaysNorm: ageDaysNorm,
+      tier,
+    };
+    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams, ctx);
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
-    const tier = classifyTier(r.rating, d.rating);
 
     const v1Sample: Sample = { features: teamFeats, label };
     v1All.push(v1Sample);

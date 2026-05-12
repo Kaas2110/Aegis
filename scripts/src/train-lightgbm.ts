@@ -83,8 +83,24 @@ function mlServiceToken(): string | null {
 }
 const TRAIN_TIMEOUT_MS = 120_000;  // тренировка может быть долгой
 
-const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
+// fv9 (12 фич, см. train-model.ts).
+const TEAM_FEATURE_NAMES = [
+  'bias',
+  'elo_diff_norm',
+  'winrate_diff',
+  'experience_diff',
+  'is_high_tier',
+  'radiant_side_logit',
+  'recency_days_norm',
+  'series_type_norm',
+  'map_no_norm',
+  'tier_t1',
+  'tier_t2',
+  'tier_t3',
+] as const;
 const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
+const RADIANT_SIDE_LOGIT = 0.08;
+const TRAIN_WINDOW_DAYS_PREMATCH = 365;
 
 interface Sample { features: number[]; label: number; }
 interface TeamRating { rating: number; wins: number; losses: number; }
@@ -108,19 +124,40 @@ interface TrainResponse {
   train_seconds: number;
 }
 
+interface TeamCtx {
+  seriesType: number | null;
+  mapNo: number | null;
+  recencyDaysNorm: number;
+  tier: Tier | null;
+}
+
 function buildTeamFeatures(
   rId: number, dId: number, teams: Map<number, TeamRating>,
+  ctx?: TeamCtx,
 ): number[] | null {
   const r = teams.get(rId); const d = teams.get(dId);
   if (!r || !d) return null;
   const rG = r.wins + r.losses; const dG = d.wins + d.losses;
   if (rG < 5 || dG < 5) return null;
+  const seriesType = ctx?.seriesType ?? null;
+  const seriesTypeNorm = seriesType != null ? Math.min(1, Math.max(0, seriesType / 2)) : 0.5;
+  const mapNo = ctx?.mapNo ?? null;
+  const mapNoNorm = mapNo != null ? Math.min(1, Math.max(0, (mapNo - 1) / 4)) : 0;
+  const recency = ctx?.recencyDaysNorm ?? 0;
+  const tier = ctx?.tier ?? null;
   return [
     1,
     (r.rating - d.rating) / 200,
     r.wins / rG - d.wins / dG,
     Math.log(rG + 1) - Math.log(dG + 1),
     rG >= 50 && dG >= 50 ? 1 : 0,
+    RADIANT_SIDE_LOGIT,
+    recency,
+    seriesTypeNorm,
+    mapNoNorm,
+    tier === 't1' ? 1 : 0,
+    tier === 't2' ? 1 : 0,
+    tier === 't3' ? 1 : 0,
   ];
 }
 
@@ -213,11 +250,29 @@ async function main() {
     direTeamId: proMatchesTable.direTeamId,
     radiantWin: proMatchesTable.radiantWin,
     startTime: proMatchesTable.startTime,
+    seriesId: proMatchesTable.series_id,
+    seriesType: proMatchesTable.series_type,
   })
     .from(proMatchesTable)
     .where(gte(proMatchesTable.startTime, minStartTime))
     .orderBy(asc(proMatchesTable.startTime));
   console.log(`[train-lightgbm] matches in window=${matches.length}`);
+
+  // map_no per match (см. train-model.ts).
+  const mapNoMap = new Map<number, number>();
+  const bySeries = new Map<number, Array<{ matchId: number; t: number }>>();
+  for (const m of matches) {
+    const sid = m.seriesId ?? 0;
+    if (!sid) { mapNoMap.set(m.matchId, 1); continue; }
+    let arr = bySeries.get(sid);
+    if (!arr) { arr = []; bySeries.set(sid, arr); }
+    arr.push({ matchId: m.matchId, t: m.startTime ?? 0 });
+  }
+  for (const arr of bySeries.values()) {
+    arr.sort((a, b) => a.t - b.t || a.matchId - b.matchId);
+    arr.forEach((it, i) => mapNoMap.set(it.matchId, i + 1));
+  }
+  const nowSecPrematch = Math.floor(Date.now() / 1000);
 
   const draftsRows = await db.select({
     matchId: matchDraftsTable.matchId,
@@ -290,11 +345,18 @@ async function main() {
     const d = teams.get(m.direTeamId);
     if (!r || !d) continue;
     if ((r.rating + d.rating) / 2 < MIN_AVG_GLICKO) continue;
-    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
+    const tier = classifyTier(r.rating, d.rating);
+    const ageDaysNorm = Math.min(1, Math.max(0, (nowSecPrematch - (m.startTime ?? nowSecPrematch)) / 86_400 / TRAIN_WINDOW_DAYS_PREMATCH));
+    const ctx: TeamCtx = {
+      seriesType: m.seriesType ?? null,
+      mapNo: mapNoMap.get(m.matchId) ?? null,
+      recencyDaysNorm: ageDaysNorm,
+      tier,
+    };
+    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams, ctx);
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
-    const tier = classifyTier(r.rating, d.rating);
     const v1S: Sample = { features: teamFeats, label };
     v1All.push(v1S); if (tier) v1Bucket[tier].push(v1S);
 

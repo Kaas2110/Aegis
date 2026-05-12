@@ -95,7 +95,9 @@ class TrainRequest(BaseModel):
 
     label: str  # человекочитаемый ярлык, напр. "v3/prematch_winner_t1"
     feature_names: list[str]
-    task_type: Literal["classification", "regression"] = "classification"
+    task_type: Literal["classification", "regression", "quantile"] = "classification"
+    # alpha используется только для task_type='quantile' (0..1).
+    quantile_alpha: float = 0.5
     train: list[TrainSample]
     calib: list[TrainSample]
     test: list[TrainSample]
@@ -119,7 +121,7 @@ class TrainMetrics(BaseModel):
 
 class TrainResponse(BaseModel):
     label: str
-    task_type: Literal["classification", "regression"] = "classification"
+    task_type: Literal["classification", "regression", "quantile"] = "classification"
     blob_b64: str  # base64-encoded joblib bundle
     feature_names: list[str]
     train_metrics: TrainMetrics
@@ -143,7 +145,7 @@ class PredictResponse(BaseModel):
     calibrated_prob: float | None = None
     mean: float | None = None
     std: float | None = None
-    task_type: Literal["classification", "regression"] = "classification"
+    task_type: Literal["classification", "regression", "quantile"] = "classification"
 
 
 # ── Bundle helpers ──────────────────────────────────────────────────────
@@ -232,6 +234,20 @@ def _reg_metrics(preds: np.ndarray, labels: np.ndarray) -> TrainMetrics:
     return TrainMetrics(accuracy=r2, log_loss=mae, brier=rmse, n=n)
 
 
+def _quantile_metrics(preds: np.ndarray, labels: np.ndarray, alpha: float) -> TrainMetrics:
+    """Quantile metrics. accuracy = pinball loss (lower better),
+    brier = empirical coverage P(label <= pred) — should approach alpha,
+    log_loss = MAE для совместимости c regression-логированием."""
+    n = len(labels)
+    if n == 0:
+        return TrainMetrics(accuracy=0.0, log_loss=0.0, brier=0.0, n=0)
+    err = labels - preds
+    pinball = float(np.mean(np.maximum(alpha * err, (alpha - 1.0) * err)))
+    coverage = float(np.mean(labels <= preds))
+    mae = float(np.mean(np.abs(err)))
+    return TrainMetrics(accuracy=pinball, log_loss=mae, brier=coverage, n=n)
+
+
 # ── FastAPI app ─────────────────────────────────────────────────────────
 
 
@@ -267,7 +283,8 @@ def train(req: TrainRequest) -> TrainResponse:
 
     t0 = time.perf_counter()
 
-    is_reg = req.task_type == "regression"
+    is_reg = req.task_type in ("regression", "quantile")
+    is_quantile = req.task_type == "quantile"
 
     X_train = np.array([s.features for s in req.train], dtype=np.float64)
     y_dtype = np.float64 if is_reg else np.int32
@@ -287,8 +304,14 @@ def train(req: TrainRequest) -> TrainResponse:
     callbacks.append(lgb.log_evaluation(0))
 
     if is_reg:
+        reg_kwargs = {}
+        if is_quantile:
+            reg_kwargs["objective"] = "quantile"
+            reg_kwargs["alpha"] = float(req.quantile_alpha)
+        else:
+            reg_kwargs["objective"] = "regression"
         model = lgb.LGBMRegressor(
-            objective="regression",
+            **reg_kwargs,
             num_leaves=req.num_leaves,
             learning_rate=req.learning_rate,
             n_estimators=req.n_estimators,
@@ -337,18 +360,34 @@ def train(req: TrainRequest) -> TrainResponse:
         residuals = ref_y - ref_pred
         residual_std = float(np.std(residuals, ddof=1)) if len(residuals) >= 2 else 0.0
 
-        train_pred = model.predict(X_train)
-        train_metrics = _reg_metrics(train_pred, y_train)
-        calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
-        if len(X_calib) > 0:
-            calib_pred = model.predict(X_calib)
-            calib_metrics = _reg_metrics(calib_pred, y_calib)
-        test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
-        test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
-        if len(X_test) > 0:
-            test_pred = model.predict(X_test)
-            test_metrics_raw = _reg_metrics(test_pred, y_test)
-            test_metrics_calibrated = test_metrics_raw
+        # Для quantile используем pinball/coverage; для обычной регрессии — R²/RMSE.
+        if is_quantile:
+            alpha = float(req.quantile_alpha)
+            train_pred = model.predict(X_train)
+            train_metrics = _quantile_metrics(train_pred, y_train, alpha)
+            calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+            if len(X_calib) > 0:
+                calib_pred = model.predict(X_calib)
+                calib_metrics = _quantile_metrics(calib_pred, y_calib, alpha)
+            test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+            test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+            if len(X_test) > 0:
+                test_pred = model.predict(X_test)
+                test_metrics_raw = _quantile_metrics(test_pred, y_test, alpha)
+                test_metrics_calibrated = test_metrics_raw
+        else:
+            train_pred = model.predict(X_train)
+            train_metrics = _reg_metrics(train_pred, y_train)
+            calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+            if len(X_calib) > 0:
+                calib_pred = model.predict(X_calib)
+                calib_metrics = _reg_metrics(calib_pred, y_calib)
+            test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+            test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+            if len(X_test) > 0:
+                test_pred = model.predict(X_test)
+                test_metrics_raw = _reg_metrics(test_pred, y_test)
+                test_metrics_calibrated = test_metrics_raw
         baseline_acc = float(y_test.mean()) if len(y_test) > 0 else 0.0
     else:
         if len(X_calib) >= 20 and len(np.unique(y_calib)) >= 2:
@@ -429,10 +468,10 @@ def predict(req: PredictRequest) -> PredictResponse:
 
     X = np.array([req.features], dtype=np.float64)
 
-    if task_type == "regression":
+    if task_type in ("regression", "quantile"):
         mean = float(model.predict(X)[0])
         std = float(bundle.get("residual_std") or 0.0)
-        return PredictResponse(mean=mean, std=std, task_type="regression")
+        return PredictResponse(mean=mean, std=std, task_type=task_type)
 
     raw = float(model.predict_proba(X)[0, 1])
     cal = float(calibrator.predict(np.array([raw]))[0]) if calibrator is not None else raw
