@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { getApiUrl } from '@/lib/api/baseUrl';
 import { useColors } from '@/hooks/useColors';
 import {
   MOCK_MATCHES, buildMockMarkets, MOCK_TIMELINE,
@@ -236,7 +237,7 @@ export default function MatchDetailScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`/api/analytics/explain?radiantTeamId=${tR}&direTeamId=${tD}`);
+        const r = await fetch(getApiUrl(`/api/analytics/explain?radiantTeamId=${tR}&direTeamId=${tD}`));
         if (!r.ok) return;
         const json = await r.json() as ExplainResp;
         if (!cancelled) {

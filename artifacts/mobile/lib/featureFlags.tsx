@@ -15,6 +15,7 @@
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSubscription } from './revenuecat';
+import { getApiUrl } from './api/baseUrl';
 import { notificationService } from '@/services/notifications/NotificationService';
 
 export type SubscriptionTier = 'free' | 'basic' | 'premium';
@@ -61,7 +62,7 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
   const { data } = useQuery({
     queryKey: ['monetization-config'],
     queryFn: async (): Promise<FeatureFlagsConfig> => {
-      const r = await fetch('/api/config/monetization');
+      const r = await fetch(getApiUrl('/api/config/monetization'));
       if (!r.ok) throw new Error(`config: HTTP ${r.status}`);
       return (await r.json()) as FeatureFlagsConfig;
     },

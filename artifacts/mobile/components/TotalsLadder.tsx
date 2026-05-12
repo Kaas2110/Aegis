@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { getApiUrl } from '@/lib/api/baseUrl';
 import { FreshnessIndicator } from './FreshnessIndicator';
 
 export type TotalsType = 'kills' | 'duration';
@@ -69,7 +70,7 @@ export function TotalsLadder({
       params.set('liveMinute', String(liveMinute));
     }
 
-    fetch(`/api/analytics/totals-ladder?${params.toString()}`)
+    fetch(getApiUrl(`/api/analytics/totals-ladder?${params.toString()}`))
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<LadderResponse>;

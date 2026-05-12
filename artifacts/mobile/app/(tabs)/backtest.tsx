@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Activit
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Line, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
+import { getApiUrl } from '@/lib/api/baseUrl';
 import { useColors } from '@/hooks/useColors';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { BacktestResult } from '@/types';
@@ -32,7 +33,7 @@ export default function BacktestScreen() {
     setError(null);
     await logProductEvent('backtest_started', 'backtest', { periodDays, minConf, minOdds });
     try {
-      const resp = await fetch('/api/analytics/backtest', {
+      const resp = await fetch(getApiUrl('/api/analytics/backtest'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ minConfidence: minConf, minOdds, periodDays }),

@@ -9,6 +9,7 @@ import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
 import { useSubscription } from '@/lib/revenuecat';
+import { getApiUrl } from '@/lib/api/baseUrl';
 import type { PurchasesPackage } from 'react-native-purchases';
 
 interface Tier1Team {
@@ -30,7 +31,7 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
     if (!expanded || teams !== null || loading) return;
     setLoading(true);
     setError(null);
-    fetch('/api/teams/tier1?limit=50')
+    fetch(getApiUrl('/api/teams/tier1?limit=50'))
       .then(r => r.json())
       .then((data: { teams: Tier1Team[] }) => {
         setTeams(data.teams ?? []);

@@ -1,0 +1,34 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": ""
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
