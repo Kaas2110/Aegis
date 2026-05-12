@@ -90,12 +90,15 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - Market v3: 3 LGB (first_blood 60.0%, total_kills R²=0.063, total_duration R²=0.053)
   - Improved from v2: first_blood 61.3%→60.0% (slight decline after strict dedup), kills R² 0.031→0.063 (+103%), duration R² 0.004→0.053 (+13×)
 - Live winner (fv=4, 10 features): 1 LGB + 1 LR
-  - LR: 68.63% (+0.71pp over prematch baseline 67.92%), brier 0.1790. **LR is primary.**
-  - LGB: 63.68% (-1.89pp) — temporal distribution shift (test radiant=65.6% vs train 51.9%)
-  - New live features: `total_kills_norm`, `game_phase`, `nw_x_phase`, `kill_diff_x_phase`
-  - Root issue: 518 training matches / 5483 bucketed snapshots — accumulates naturally
+  - **LR: 73.44% (+6.93pp over prematch baseline 66.51%), brier 0.1663. LR is primary.**
+  - LGB: 61.89% (-2.31pp) — temporal distribution shift (test radiant=64.2% vs train 52.1%)
+  - Key fix: `prematch_logit` now uses ELO-based team probability (not COALESCE(stored, 0.5))
+    - Sources: stored=172, elo=1265, neutral=4068 (no team data → 0.52 radiant prior)
+  - `prematch_logit` weight: 0.157 (was 0.000 before fix) — now actually used by model
+  - Features: `game_time_norm`, `nw_lead_norm`, `kill_diff_norm`, `tower_diff_norm`, `prematch_logit`, `total_kills_norm`, `game_phase`, `nw_x_phase`, `kill_diff_x_phase`
+  - Root issue: 518 training matches / 5505 bucketed snapshots — accumulates naturally
 
-**Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · 21 prematch_outcomes · 18.7k live snapshots (5483 after 3-min bucket dedup).
+**Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · 21 prematch_outcomes · 18.7k live snapshots (5505 after 3-min bucket dedup).
 
 **Training dataset settings** (stored in `app_settings`):
 - `trainWindowDays` (default 365, range 30–730)

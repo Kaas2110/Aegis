@@ -26,7 +26,7 @@
  *   --min-samples N  минимум сэмплов (default: 50 для обоих)
  */
 
-import { db, modelVersionsTable } from '@workspace/db';
+import { db, modelVersionsTable, teamsTable, teamRecentFormTable } from '@workspace/db';
 import { sql, and, eq } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 
@@ -200,6 +200,26 @@ async function trainLgbm(train: Sample[], calib: Sample[], test: Sample[]): Prom
   }
 }
 
+/**
+ * ELO-based prematch probability.
+ * Сигмоида от нормализованной разницы рейтингов + поправка на 30-дн. винрейт.
+ * Используется когда в prematch_outcomes нет сохранённой вероятности.
+ */
+function eloPrematchProb(
+  rRating: number, dRating: number,
+  rWins: number, rLosses: number,
+  dWins: number, dLosses: number,
+  rWinrate30: number | null, dWinrate30: number | null,
+): number {
+  const eloDiff = (rRating - dRating) / 200;
+  const rWr = rWins / Math.max(rWins + rLosses, 1);
+  const dWr = dWins / Math.max(dWins + dLosses, 1);
+  // Поправка на форму: берём среднее между ELO-сигналом и разницей винрейтов
+  const wrDiff = (rWinrate30 ?? rWr) - (dWinrate30 ?? dWr);
+  const combined = eloDiff * 0.7 + wrDiff * 0.3;
+  return sigmoid(combined);
+}
+
 async function main() {
   const dryRun = isDryRun();
   const sinceUnix = parseSinceUnix();
@@ -208,17 +228,44 @@ async function main() {
   if (dryRun) console.log('[train-live-model] DRY-RUN mode');
   if (sinceUnix) console.log(`[train-live-model] since_unix=${sinceUnix} (${new Date(sinceUnix * 1000).toISOString().slice(0, 10)})`);
 
-  console.log('[train-live-model] Joining live_snapshots × prematch_outcomes …');
+  // Загружаем рейтинги команд для вычисления prematch_logit на лету
+  console.log('[train-live-model] Loading team ratings & form …');
+  const [teamsRows, formRows] = await Promise.all([
+    db.select({
+      teamId: teamsTable.teamId,
+      rating: teamsTable.rating,
+      wins: teamsTable.wins,
+      losses: teamsTable.losses,
+    }).from(teamsTable),
+    db.select({
+      teamId: teamRecentFormTable.teamId,
+      winRate: teamRecentFormTable.winRate,
+    }).from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30)),
+  ]);
+
+  const teamMap = new Map<number, { rating: number; wins: number; losses: number }>();
+  for (const t of teamsRows) {
+    if (t.rating != null) teamMap.set(t.teamId, { rating: t.rating, wins: t.wins ?? 0, losses: t.losses ?? 0 });
+  }
+  const formMap = new Map<number, number>();  // teamId → winRate30d
+  for (const f of formRows) {
+    if (f.winRate != null) formMap.set(f.teamId, f.winRate);
+  }
+  console.log(`[train-live-model] teams=${teamMap.size} with ratings, form=${formMap.size} with 30d winrate`);
+
+  console.log('[train-live-model] Joining live_snapshots × pro_matches × prematch_outcomes …');
 
   const rows = await db.execute(sql`
     SELECT
-      ls.match_id          AS "matchId",
-      ls.game_time_sec     AS "gameTimeSec",
-      ls.radiant_lead      AS "radiantLead",
-      ls.radiant_score     AS "radiantScore",
-      ls.dire_score        AS "direScore",
-      ls.building_state    AS "buildingState",
-      COALESCE(po.predicted_radiant_win_prob, 0.5) AS "prematchProb",
+      ls.match_id                   AS "matchId",
+      ls.game_time_sec              AS "gameTimeSec",
+      ls.radiant_lead               AS "radiantLead",
+      ls.radiant_score              AS "radiantScore",
+      ls.dire_score                 AS "direScore",
+      ls.building_state             AS "buildingState",
+      pm.radiant_team_id            AS "radiantTeamId",
+      pm.dire_team_id               AS "direTeamId",
+      po.predicted_radiant_win_prob AS "storedPrematchProb",
       COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin"
     FROM live_snapshots ls
     INNER JOIN pro_matches pm ON pm.match_id = ls.match_id
@@ -247,21 +294,51 @@ async function main() {
     return Number.isFinite(n) ? n : null;
   };
 
+  let storedPrematchCount = 0;
+  let eloPrematchCount = 0;
+  let unknownPrematchCount = 0;
+
   const seenBuckets = new Set<string>();
   const samples: Sample[] = [];
 
   for (const raw of rows.rows as unknown as Record<string, unknown>[]) {
     const matchId = toNum(raw['matchId']);
     const gameTimeSec = toNum(raw['gameTimeSec']);
-    const prematchProb = toNum(raw['prematchProb']);
-    if (matchId == null || gameTimeSec == null || prematchProb == null) continue;
-    if (prematchProb <= 0 || prematchProb >= 1) continue;
+    if (matchId == null || gameTimeSec == null) continue;
 
     // 1 снапшот на 3-минутный bucket → предотвращаем утечку через коррелированные снапшоты
     const bucket = Math.floor(gameTimeSec / 180);
     const key = `${matchId}:${bucket}`;
     if (seenBuckets.has(key)) continue;
     seenBuckets.add(key);
+
+    // Prematch probability: приоритет — сохранённый результат из prematch_outcomes,
+    // fallback — ELO-оценка по рейтингам команд (реальный сигнал, не 0.5).
+    let prematchProb: number;
+    const storedProb = toNum(raw['storedPrematchProb']);
+    if (storedProb != null && storedProb > 0 && storedProb < 1) {
+      prematchProb = storedProb;
+      storedPrematchCount++;
+    } else {
+      const rId = toNum(raw['radiantTeamId']);
+      const dId = toNum(raw['direTeamId']);
+      const rTeam = rId != null ? teamMap.get(rId) : undefined;
+      const dTeam = dId != null ? teamMap.get(dId) : undefined;
+      if (rTeam && dTeam) {
+        prematchProb = eloPrematchProb(
+          rTeam.rating, dTeam.rating,
+          rTeam.wins, rTeam.losses,
+          dTeam.wins, dTeam.losses,
+          rId != null ? (formMap.get(rId) ?? null) : null,
+          dId != null ? (formMap.get(dId) ?? null) : null,
+        );
+        eloPrematchCount++;
+      } else {
+        // Команды не найдены — используем нейтральный приор
+        prematchProb = 0.52;   // ~историческое преимущество Radiant в Dota 2
+        unknownPrematchCount++;
+      }
+    }
 
     const towers = towerCountsFromBuildingState(toNum(raw['buildingState']));
     const radiantLead = toNum(raw['radiantLead']) ?? 0;
@@ -270,13 +347,12 @@ async function main() {
     const killDiff = radiantScore - direScore;
     const towerDiff = towers.r - towers.d;
 
-    // Новые фичи
-    const gamePhase = Math.min(gameTimeSec / 3600, 1.0);          // 0→1 (early/mid/late)
+    const gamePhase = Math.min(gameTimeSec / 3600, 1.0);
     const nwNorm = radiantLead / 10000;
     const killDiffNorm = killDiff / 15;
-    const totalKillsNorm = (radiantScore + direScore) / 30;        // темп убийств
-    const nwXPhase = nwNorm * gamePhase;                           // NW важнее в лейте
-    const killXPhase = killDiffNorm * gamePhase;                   // убийства важнее в лейте
+    const totalKillsNorm = (radiantScore + direScore) / 30;
+    const nwXPhase = nwNorm * gamePhase;
+    const killXPhase = killDiffNorm * gamePhase;
 
     samples.push({
       features: [
@@ -285,7 +361,7 @@ async function main() {
         nwNorm,                                   // nw_lead_norm
         killDiffNorm,                             // kill_diff_norm
         towerDiff / 11,                           // tower_diff_norm
-        logit(prematchProb),                      // prematch_logit
+        logit(prematchProb),                      // prematch_logit (ELO или stored)
         totalKillsNorm,                           // total_kills_norm
         gamePhase,                                // game_phase
         nwXPhase,                                 // nw_x_phase
@@ -297,6 +373,9 @@ async function main() {
     });
   }
 
+  console.log(
+    `[train-live-model] prematch_logit sources: stored=${storedPrematchCount} elo=${eloPrematchCount} neutral=${unknownPrematchCount}`,
+  );
   console.log(`[train-live-model] After bucket dedup (180s): ${samples.length} examples from ${seenBuckets.size} unique match-buckets`);
 
   if (samples.length < minSamples) {
