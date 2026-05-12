@@ -29,7 +29,9 @@ SplashScreen.preventAutoHideAsync();
 try {
   initializeRevenueCat();
 } catch (err: any) {
-  Alert.alert("RevenueCat Unavailable", err?.message ?? "Unknown error");
+  // Молча проглатываем на web и в dev (ключи не заданы).
+  // На реальном устройстве падение RC не должно ронять весь layout.
+  if (__DEV__) console.warn('[RevenueCat] init skipped:', err?.message ?? err);
 }
 
 const queryClient = new QueryClient();
