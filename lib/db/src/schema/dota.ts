@@ -303,6 +303,8 @@ export const liveSnapshotsTable = pgTable('live_snapshots', {
   direScore: integer('dire_score'),
   radiantLead: integer('radiant_lead'),
   buildingState: integer('building_state'),
+  /** 'live' = реальный онлайн-снапшот; 'backfill' = синтетический из истории OpenDota */
+  source: text('source').default('live'),
   rawPayload: jsonb('raw_payload').$type<Record<string, unknown>>(),
 }, (t) => ({
   matchIdx: index('live_snapshots_match_idx').on(t.matchId),

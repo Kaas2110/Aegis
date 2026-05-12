@@ -57,6 +57,15 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`threat_model.md`** — модель угроз для security-сканов.
 - См. skill `pnpm-workspace` — структура монорепо, TypeScript, project references.
 
+## Live-snapshot backfill + авто-обогащение (DONE 2026-05-12)
+
+`live_snapshots` теперь имеет колонку `source` ('live' | 'backfill'). Backfill-снапшоты не прунятся автоматически.
+
+- **`pnpm --filter @workspace/scripts run backfill:live-snapshots [-- --limit N --since-unix T --min-pairs N --force]`** — разовый или incremental backfill из OpenDota `/api/matches/{id}`. Для каждого матча с prematch_outcome, у которого нет backfill-снапшотов, фетчит `radiant_gold_adv[]` поминутно и вставляет синтетические строки. Rate-limit: 1200ms/req (~50 матчей/мин). Идемпотентен (пропускает уже обработанные match_id).
+- **Авто-обогащение в SchedulerWorker**: Phase 4.5 — перед `train:live-model` считает distinct snapshot-outcome пары. Если < 100 матчей — запускает backfill автоматически (--limit 300, ~6 мин). Обеспечивает что live-модель всегда обучена на достаточном объёме данных.
+- **`pruneLiveSnapshots`** обновлён — удаляет только `source='live'` строки (backfill не трогает).
+- **`liveSnapshotPruneDays`** установлен в 365 дней.
+
 ## Patch-aware training dataset settings (DONE 2026-05-12)
 
 `app_settings` хранит три настройки управления тренировочным окном:

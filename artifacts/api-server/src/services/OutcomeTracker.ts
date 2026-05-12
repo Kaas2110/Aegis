@@ -247,11 +247,14 @@ export async function getModelAccuracyMetrics(): Promise<{
   };
 }
 
-/** Удалить snapshot'ы старше N дней. Возвращает кол-во удалённых строк. */
+/** Удалить snapshot'ы старше N дней.
+ *  Backfill-снапшоты (source='backfill') не прунятся — они синтетические
+ *  исторические данные и должны жить до ручного удаления. */
 export async function pruneLiveSnapshots(days: number): Promise<number> {
   const result = await db.execute(sql`
     DELETE FROM live_snapshots
     WHERE captured_at < now() - (${days}::int * interval '1 day')
+      AND (source = 'live' OR source IS NULL)
   `);
   // node-postgres .execute() возвращает {rowCount} но Drizzle обернул, проверим
   const count = (result as unknown as { rowCount?: number }).rowCount ?? 0;

@@ -324,6 +324,34 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
       }
     }
 
+    // ── Phase 4.5: авто-обогащение live-снапшотов если данных мало ─────────
+    // Считаем distinct match_ids с известным исходом в live_snapshots.
+    // Если < MIN_LIVE_MATCH_PAIRS — запускаем backfill из OpenDota истории
+    // (равномерная выборка по trainWindow, до 300 матчей за раз, ~6 мин).
+    const MIN_LIVE_MATCH_PAIRS = 100;
+    try {
+      const liveRes = await db.execute(sql`
+        SELECT COUNT(DISTINCT ls.match_id) AS cnt
+        FROM live_snapshots ls
+        JOIN pro_matches pm ON pm.match_id = ls.match_id
+        WHERE pm.radiant_win IS NOT NULL AND ls.game_time_sec >= 60
+      `);
+      const liveMatchPairs = Number((liveRes.rows[0] as Record<string, unknown>)?.cnt ?? 0);
+      logger.info({ liveMatchPairs, MIN_LIVE_MATCH_PAIRS }, '[Scheduler] live snapshot-outcome pairs');
+      if (liveMatchPairs < MIN_LIVE_MATCH_PAIRS) {
+        logger.info('[Scheduler] running backfill:live-snapshots for auto-enrichment');
+        stepResults['backfill:live-snapshots'] = await runScriptSafe(
+          'backfill:live-snapshots', 'backfill:live-snapshots',
+          ['--since-unix', String(effectiveSinceUnix), '--min-pairs', String(MIN_LIVE_MATCH_PAIRS), '--limit', '300'],
+          { timeoutMs: 30 * 60 * 1000 },
+        );
+      } else {
+        stepResults['backfill:live-snapshots'] = true; // достаточно данных, пропускаем
+      }
+    } catch (err) {
+      logger.warn({ err: String(err) }, '[Scheduler] backfill:live-snapshots check failed');
+    }
+
     // train:live-model — non-fatal (нужны накопленные снапшоты)
     stepResults['train:live-model'] = await runScriptSafe('train:live-model', 'train:live-model', trainArgs, { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
     if (stepResults['train:live-model']) {

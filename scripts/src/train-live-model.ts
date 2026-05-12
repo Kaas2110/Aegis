@@ -122,6 +122,12 @@ async function main() {
   // исходом и прематч-прогнозом. Сразу фильтруем мусор (нулевые фичи).
   // Лимитируем 200к строк — этого хватит для логистической регрессии и
   // оперативной памяти node-процесса.
+  // LEFT JOIN с обеими таблицами:
+  //   po.predicted_radiant_win_prob — реальный прогноз модели (если матч был live-tracked)
+  //   pm.radiant_win — исход всегда известен для любого pro_match
+  //   COALESCE(po.predicted_radiant_win_prob, 0.5) — нейтральный приор для backfill
+  // Это позволяет использовать все live_snapshots (в т.ч. синтетические из backfill),
+  // не только те, для которых есть prematch_outcomes.
   const rows = await db.execute(sql`
     SELECT
       ls.match_id          AS "matchId",
@@ -130,11 +136,12 @@ async function main() {
       ls.radiant_score     AS "radiantScore",
       ls.dire_score        AS "direScore",
       ls.building_state    AS "buildingState",
-      po.predicted_radiant_win_prob AS "prematchProb",
-      po.actual_radiant_win         AS "actualRadiantWin"
+      COALESCE(po.predicted_radiant_win_prob, 0.5) AS "prematchProb",
+      COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin"
     FROM live_snapshots ls
-    INNER JOIN prematch_outcomes po ON po.match_id = ls.match_id
-    WHERE po.actual_radiant_win IS NOT NULL
+    INNER JOIN pro_matches pm ON pm.match_id = ls.match_id
+    LEFT JOIN prematch_outcomes po ON po.match_id = ls.match_id
+    WHERE pm.radiant_win IS NOT NULL
       AND ls.game_time_sec IS NOT NULL
       AND ls.game_time_sec >= 60
       AND ls.game_time_sec <= 7200

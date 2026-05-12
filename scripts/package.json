@@ -20,6 +20,7 @@
     "train:model": "tsx ./src/train-model.ts",
     "train:market-models": "tsx ./src/train-market-models.ts",
     "train:live-model": "tsx ./src/train-live-model.ts",
+    "backfill:live-snapshots": "tsx ./src/backfill-live-snapshots.ts",
     "import:snapshot": "tsx ./src/import-snapshot.ts",
     "test:stratz": "tsx ./src/test-stratz.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
