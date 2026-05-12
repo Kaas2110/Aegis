@@ -461,6 +461,43 @@ export async function getTeamRating(teamId: number) {
   return teamRatings.get(teamId) ?? null;
 }
 
+/**
+ * Возвращает взвешенное matchup-преимущество Radiant над Dire.
+ * Формат: log-weighted среднее (winRate - 0.5) для 25 пар героев.
+ * Возвращает 0 если данных недостаточно.
+ * Используется LiveWorker для подготовки hero_advantage фичи live-модели.
+ */
+export async function computeHeroMatchupAdvantage(
+  radiantPicks: number[],
+  direPicks: number[],
+): Promise<number> {
+  if (radiantPicks.length !== 5 || direPicks.length !== 5) return 0;
+  await refreshHeroData();
+  const matchups = heroMatchupsCache;
+  if (matchups.size === 0) return 0;
+  let totalAdv = 0;
+  let totalWeight = 0;
+  for (const r of radiantPicks) {
+    const outerMap = matchups.get(r);
+    for (const d of direPicks) {
+      const direct = outerMap?.get(d);
+      if (direct && direct.games >= 5) {
+        const w = Math.log(direct.games + 1);
+        totalAdv += (direct.winRate - 0.5) * w;
+        totalWeight += w;
+        continue;
+      }
+      const inverse = matchups.get(d)?.get(r);
+      if (inverse && inverse.games >= 5) {
+        const w = Math.log(inverse.games + 1);
+        totalAdv += (0.5 - inverse.winRate) * w;
+        totalWeight += w;
+      }
+    }
+  }
+  return totalWeight > 0 ? totalAdv / totalWeight : 0;
+}
+
 function sigmoid(z: number): number {
   if (z >= 0) {
     const ez = Math.exp(-z);

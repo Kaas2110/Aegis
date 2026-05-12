@@ -9,9 +9,11 @@
  * При отсутствии любой live-модели → возвращаем null (вызывающий код
  * использует прематч-вероятность как fallback).
  *
- * Фичи (10) — должны точно соответствовать train-live-model.ts:
- *   bias, game_time_norm, nw_lead_norm, kill_diff_norm, tower_diff_norm,
- *   prematch_logit, total_kills_norm, game_phase, nw_x_phase, kill_diff_x_phase
+ * Фичи (12) — должны точно соответствовать train-live-model.ts:
+ *   bias, game_time_norm, nw_lead_norm, kill_diff_norm,
+ *   r_towers_lost_ratio, d_towers_lost_ratio,
+ *   prematch_logit, kill_pace_norm,
+ *   game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage
  */
 
 import { db, modelVersionsTable } from '@workspace/db';
@@ -23,6 +25,7 @@ const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const LIGHTGBM_BACKOFF_MS = 60_000;
+const GLOBAL_KPM = 1.1;
 
 // Feature names — must match training script exactly
 const LIVE_FEATURE_NAMES = [
@@ -30,12 +33,14 @@ const LIVE_FEATURE_NAMES = [
   'game_time_norm',
   'nw_lead_norm',
   'kill_diff_norm',
-  'tower_diff_norm',
+  'r_towers_lost_ratio',
+  'd_towers_lost_ratio',
   'prematch_logit',
-  'total_kills_norm',
+  'kill_pace_norm',
   'game_phase',
   'nw_x_phase',
   'kill_diff_x_phase',
+  'hero_advantage',
 ] as const;
 const LIVE_FEATURE_DIM = LIVE_FEATURE_NAMES.length;
 
@@ -74,9 +79,9 @@ interface LoadedLiveModel {
   version: string;
   engine: 'lightgbm' | 'logreg';
   algorithm: string;
-  blobB64: string | null;    // lightgbm only
-  weights: number[];         // logreg only [w0..w9]
-  featureDim: number;        // expected feature vector length
+  blobB64: string | null;
+  weights: number[];
+  featureDim: number;
   trainAccuracy: number;
   testAccuracy: number;
   brierScore: number;
@@ -97,12 +102,10 @@ function rowToModel(m: typeof modelVersionsTable.$inferSelect): LoadedLiveModel 
   const blobB64 = blobRaw
     ? (Buffer.isBuffer(blobRaw) ? blobRaw : Buffer.from(blobRaw)).toString('base64')
     : null;
-  // Parse weights w0..wN in order
   const keys = Object.keys(wRaw).filter(k => /^w\d+$/.test(k))
     .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
   const weights = keys.map(k => wRaw[k] ?? 0);
 
-  // Detect feature dimension from stored features array or weights count
   const storedFeatures = (m.features as string[] | null) ?? [];
   const featureDim = storedFeatures.length > 0 ? storedFeatures.length : Math.max(weights.length, LIVE_FEATURE_DIM);
 
@@ -143,11 +146,7 @@ export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
       }
     }
 
-    // Primary выбирается эмпирически по testAccuracy:
-    //   - Если LGB точнее LR → LGB (с circuit-breaker fallback на LR при сбое ml-service)
-    //   - Если LR точнее     → LR (LGB хранится как резерв и переключится автоматически
-    //                              когда накопится достаточно данных)
-    // Это позволяет не хардкодить порог обучающих сэмплов.
+    // Primary выбирается по testAccuracy: LGB когда точнее LR, иначе LR.
     let primary: LoadedLiveModel | null;
     const lgbmAcc = cachedLgbm?.testAccuracy ?? 0;
     const lrAcc = cachedLr?.testAccuracy ?? 0;
@@ -211,6 +210,8 @@ export interface LiveSnapshotInput {
   radiantScore: number | null;
   direScore: number | null;
   buildingState: number | null;
+  /** Group B: matchup advantage от героев (вычисляется в LiveWorker, 0 если драфт неизвестен) */
+  heroAdvantage?: number;
 }
 
 async function predictViaLgbm(blobB64: string, features: number[]): Promise<number | null> {
@@ -251,8 +252,14 @@ function predictViaLr(weights: number[], features: number[]): number {
 }
 
 /**
- * Строит вектор фич для live-снапшота.
- * 10 фич — должно совпадать с train-live-model.ts FEATURE_NAMES.
+ * Строит вектор фич для live-снапшота (12 фич, fv=5).
+ * Должно совпадать с train-live-model.ts FEATURE_NAMES.
+ *
+ * Изменения vs fv=4 (10 фич):
+ *   - tower_diff_norm убран (был 0 в 68.4% снапшотов → шум)
+ *   + r_towers_lost_ratio + d_towers_lost_ratio (оба=0 когда buildingState=null)
+ *   - total_kills_norm заменён на kill_pace_norm (time-нормированный темп)
+ *   + hero_advantage (от matchup-матрицы, 0 если драфт неизвестен)
  */
 function buildFeatureVec(
   snap: LiveSnapshotInput,
@@ -260,31 +267,45 @@ function buildFeatureVec(
 ): { vec: number[]; named: Record<string, number> } {
   const gameTimeSec = snap.gameTimeSec!;
   const towers = towerCountsFromBuildingState(snap.buildingState);
+  const buildingStateKnown = snap.buildingState != null && Number.isFinite(snap.buildingState);
+
   const radiantLead = snap.radiantLead ?? 0;
   const radiantScore = snap.radiantScore ?? 0;
   const direScore = snap.direScore ?? 0;
   const killDiff = radiantScore - direScore;
-  const towerDiff = towers.r - towers.d;
+
+  // Group A: split tower features (0 = no info, not "equal")
+  const rTowersLostRatio = buildingStateKnown ? (11 - towers.r) / 11 : 0;
+  const dTowersLostRatio = buildingStateKnown ? (11 - towers.d) / 11 : 0;
+
+  // Group A: time-normalized kill pace
+  const killPaceNorm = gameTimeSec > 0
+    ? ((radiantScore + direScore) / (gameTimeSec / 60)) / GLOBAL_KPM
+    : 0;
 
   const gamePhase = Math.min(gameTimeSec / 3600, 1.0);
   const nwNorm = radiantLead / 10000;
   const killDiffNorm = killDiff / 15;
-  const totalKillsNorm = (radiantScore + direScore) / 30;
   const nwXPhase = nwNorm * gamePhase;
   const killXPhase = killDiffNorm * gamePhase;
   const prematchLogit = logit(prematchProb);
+
+  // Group B: hero_advantage (0 when draft unknown)
+  const heroAdvantage = snap.heroAdvantage ?? 0;
 
   const vec = [
     1,                                          // bias
     (gameTimeSec - 1800) / 1800,                // game_time_norm
     nwNorm,                                     // nw_lead_norm
     killDiffNorm,                               // kill_diff_norm
-    towerDiff / 11,                             // tower_diff_norm
+    rTowersLostRatio,                           // r_towers_lost_ratio
+    dTowersLostRatio,                           // d_towers_lost_ratio
     prematchLogit,                              // prematch_logit
-    totalKillsNorm,                             // total_kills_norm
+    killPaceNorm,                               // kill_pace_norm
     gamePhase,                                  // game_phase
     nwXPhase,                                   // nw_x_phase
     killXPhase,                                 // kill_diff_x_phase
+    heroAdvantage,                              // hero_advantage
   ];
 
   const named: Record<string, number> = {};
@@ -295,8 +316,6 @@ function buildFeatureVec(
 /**
  * Считает P(radiant_win) с учётом текущего состояния матча и прематч-приора.
  * Возвращает null если нет модели или снапшот не валиден (game_time < 60).
- *
- * Приоритет: LGB (primary) → LR (hot-standby fallback при сбое circuit-breaker).
  */
 export async function predictLiveWinner(
   snap: LiveSnapshotInput,
@@ -309,9 +328,12 @@ export async function predictLiveWinner(
 
   // Try LGB primary (circuit-breaker trips to LR on ml-service failure)
   if (cachedLgbm?.blobB64) {
-    const p = await predictViaLgbm(cachedLgbm.blobB64, vec);
-    if (p !== null) {
-      return { probRadiantWin: p, modelVersion: cachedLgbm.version, engine: 'lightgbm', features: named };
+    // Проверяем совместимость по размерности — legacy модели (fv=4, 10 фич) уже не используем
+    if (cachedLgbm.featureDim === vec.length) {
+      const p = await predictViaLgbm(cachedLgbm.blobB64, vec);
+      if (p !== null) {
+        return { probRadiantWin: p, modelVersion: cachedLgbm.version, engine: 'lightgbm', features: named };
+      }
     }
   }
 

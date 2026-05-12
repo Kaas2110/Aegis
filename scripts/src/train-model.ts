@@ -615,6 +615,8 @@ async function main() {
     process.exit(0);
   }
   await db.transaction(async tx => {
+    // Деактивируем ТОЛЬКО logreg — LGB-модели остаются активными как primary.
+    // Иначе LR-ретрейн убивает актуальные LGB-блобы (train:lightgbm их сохраняет отдельно).
     await tx
       .update(modelVersionsTable)
       .set({ isActive: false })
@@ -622,6 +624,7 @@ async function main() {
         and(
           inArray(modelVersionsTable.kind, [...ALL_PREMATCH_KINDS]),
           eq(modelVersionsTable.isActive, true),
+          eq(modelVersionsTable.engine, 'logreg'),
         ),
       );
     if (toInsert.length > 0) {

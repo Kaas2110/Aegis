@@ -5,8 +5,13 @@
  *   - market_total_duration : regression на log(duration_sec)
  *
  * v3 фичи (16 фич): team ELO, опыт, форма (avgKillsFor/avgDurationSec 30d),
- * patch_kpm (глобальный темп убийств за последние 30 дней), series_type +
- * 5 draft-фич (aggression_r/d, scale_r/d, has_draft).
+ * expected_tempo_norm (per-matchup ожидаемый темп убийств, varies per match),
+ * series_type + 5 draft-фич (aggression_r/d, scale_r/d, has_draft).
+ *
+ * Замена patch_kpm → expected_tempo_norm: patch_kpm был КОНСТАНТОЙ на весь
+ * трейн-ран (одна глобальная scalar) → LGB importance=0 во всех моделях.
+ * expected_tempo_norm = (avgKillsFor_R + avgKillsFor_D) / (2 * GLOBAL_AVG_KILLS)
+ * варьируется per-matchup (разные команды → разный темп) и реально полезен.
  *
  * CLI:
  *   pnpm --filter @workspace/scripts run train:market-models
@@ -55,7 +60,7 @@ const TEAM_FEATURE_NAMES = [
   'avg_kills_d',
   'avg_dur_h_r',
   'avg_dur_h_d',
-  'patch_kpm',
+  'expected_tempo_norm',   // per-matchup: (avgKillsR + avgKillsD) / (2 * GLOBAL_AVG_KILLS)
   'format_norm',
   'draft_aggression_r',
   'draft_aggression_d',
@@ -127,7 +132,6 @@ function mlServiceToken(): string | null {
 // Нормализационные константы (медиана про-сцены)
 const GLOBAL_AVG_KILLS = 52;   // avg kills per map
 const GLOBAL_AVG_DUR_SEC = 2200; // avg duration sec (~37 min)
-const GLOBAL_KPM = 1.1;         // kills per minute
 
 function buildTeamFeatures(
   rId: number,
@@ -135,7 +139,6 @@ function buildTeamFeatures(
   seriesType: number | null,
   teams: Map<number, TeamRating>,
   form: Map<number, TeamForm>,
-  patchKpm: number,
   radiantPicks: number[] | null,
   direPicks: number[] | null,
 ): number[] | null {
@@ -155,17 +158,23 @@ function buildTeamFeatures(
   const rDraft = teamDraftScores(radiantPicks ?? []);
   const dDraft = teamDraftScores(direPicks ?? []);
 
+  // expected_tempo_norm: per-matchup expected kills rate (varies per matchup, unlike old patch_kpm).
+  // Captures that some teams play fast kill-heavy games, others slow macro.
+  const rAvgKills = rf?.avgKillsFor ?? GLOBAL_AVG_KILLS;
+  const dAvgKills = df?.avgKillsFor ?? GLOBAL_AVG_KILLS;
+  const expectedTempoNorm = (rAvgKills + dAvgKills) / (2 * GLOBAL_AVG_KILLS);
+
   return [
     1,                                                        // bias
     (r.rating - d.rating) / 200,                             // elo_diff_norm
     r.wins / rG - d.wins / dG,                               // winrate_diff
     Math.log(rG + 1) - Math.log(dG + 1),                    // experience_diff
     rG >= 50 && dG >= 50 ? 1 : 0,                           // is_high_tier
-    (rf?.avgKillsFor ?? GLOBAL_AVG_KILLS) / 60,              // avg_kills_r (normalized)
-    (df?.avgKillsFor ?? GLOBAL_AVG_KILLS) / 60,              // avg_kills_d
+    rAvgKills / 60,                                          // avg_kills_r (normalized)
+    dAvgKills / 60,                                          // avg_kills_d
     (rf?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,       // avg_dur_h_r (in hours ~0.6)
     (df?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,       // avg_dur_h_d
-    patchKpm,                                                 // patch_kpm (kills/min)
+    expectedTempoNorm,                                        // expected_tempo_norm (per-matchup)
     formatNorm,                                               // format_norm
     rDraft.aggression,                                        // draft_aggression_r
     dDraft.aggression,                                        // draft_aggression_d
@@ -223,27 +232,11 @@ async function loadData() {
     });
   }
 
-  // Patch KPM — глобальный темп убийств за последние 30 дней
-  const since30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
-  const recentMatches = rawMatches.filter(m => m.startTime >= since30d);
-  let patchKpm = GLOBAL_KPM;
-  if (recentMatches.length >= 10) {
-    let totalKills = 0; let totalMin = 0;
-    for (const m of recentMatches) {
-      const kills = (m.radiantScore ?? 0) + (m.direScore ?? 0);
-      if (kills > 0 && m.duration > 0) {
-        totalKills += kills;
-        totalMin += m.duration / 60;
-      }
-    }
-    if (totalMin > 0) patchKpm = totalKills / totalMin;
-  }
-
   const draftCount = rawMatches.filter(m => m.radiantPicks && (m.radiantPicks as number[]).length > 0).length;
-  console.log(`[train-market-models] form loaded: ${form.size} teams | patchKpm=${patchKpm.toFixed(3)} (${recentMatches.length} recent) | drafts=${draftCount}/${rawMatches.length}`);
+  console.log(`[train-market-models] form loaded: ${form.size} teams | drafts=${draftCount}/${rawMatches.length}`);
 
   const matches = rawMatches.filter((r): r is MatchRow => r.duration != null);
-  return { matches, teams, form, patchKpm };
+  return { matches, teams, form };
 }
 
 function buildSamples(
@@ -251,14 +244,13 @@ function buildSamples(
   matches: MatchRow[],
   teams: Map<number, TeamRating>,
   form: Map<number, TeamForm>,
-  patchKpm: number,
 ): Sample[] {
   const out: Sample[] = [];
   for (const m of matches) {
     if (!m.radiantTeamId || !m.direTeamId) continue;
     const feats = buildTeamFeatures(
       m.radiantTeamId, m.direTeamId, m.series_type,
-      teams, form, patchKpm,
+      teams, form,
       m.radiantPicks as number[] | null,
       m.direPicks as number[] | null,
     );
@@ -418,8 +410,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const { matches, teams, form, patchKpm } = await loadData();
-  console.log(`[train-market-models] matches=${matches.length} teams=${teams.size} form=${form.size} patchKpm=${patchKpm.toFixed(3)}`);
+  const { matches, teams, form } = await loadData();
+  console.log(`[train-market-models] matches=${matches.length} teams=${teams.size} form=${form.size}`);
 
   if (matches.length < parseMinSamples()) {
     console.log('[train-market-models] not enough matches — exiting cleanly');
@@ -429,7 +421,7 @@ async function main(): Promise<void> {
   let trained = 0;
   for (const market of targets) {
     console.log(`\n[train-market-models] === ${market} ===`);
-    const samples = buildSamples(market, matches, teams, form, patchKpm);
+    const samples = buildSamples(market, matches, teams, form);
     const r = await trainMarket(market, samples);
     if (!r) continue;
     await activateMarketModel(market, r);

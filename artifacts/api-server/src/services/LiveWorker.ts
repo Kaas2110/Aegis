@@ -7,7 +7,7 @@
 
 import { db, liveSnapshotsTable, predictionsTable } from '@workspace/db';
 import { logger } from '../lib/logger';
-import { predictMatchWinner, loadActiveModel, getActiveModel, type DraftInput } from './PredictionModel';
+import { predictMatchWinner, loadActiveModel, getActiveModel, computeHeroMatchupAdvantage, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
 
@@ -170,6 +170,12 @@ async function pollOnce(): Promise<void> {
       // отдельную строку в predictions с marketType='live_match_winner',
       // чтобы потом сравнивать и калибровать.
       if ((m.game_time ?? -1) >= 60) {
+        // Group B: hero_advantage — вычисляем из живого драфта (доступен через players[])
+        // extractDraftFromLive уже распарсил heroId. Используем matchup-кеш PredictionModel.
+        let heroAdvantage: number | undefined;
+        if (draft && draft.radiantPicks.length === 5 && draft.direPicks.length === 5) {
+          heroAdvantage = await computeHeroMatchupAdvantage(draft.radiantPicks, draft.direPicks);
+        }
         const livePred = await predictLiveWinner(
           {
             gameTimeSec: m.game_time ?? null,
@@ -177,6 +183,7 @@ async function pollOnce(): Promise<void> {
             radiantScore: m.radiant_score ?? null,
             direScore: m.dire_score ?? null,
             buildingState: m.building_state ?? null,
+            heroAdvantage,
           },
           pred.probRadiantWin,
         );

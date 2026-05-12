@@ -79,27 +79,32 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`lib/api-spec/openapi.yaml`** — OpenAPI contract; codegen: `pnpm --filter @workspace/api-spec run codegen`
 - pnpm-workspace skill — monorepo structure, TypeScript, project references
 
-## ML state (as of 2026-05-12, retrain #2)
+## ML state (as of 2026-05-12, retrain #4)
 
 **Training window:** 365d optimal for all model types (540d worse due to meta drift ~9pp).
 
-**Active models (25 total, retrained 2026-05-12 #3):**
-- Prematch winner: 9 LGB + 9 LR (v1/v2/v3 × winner/t1/t2)
+**Active models (25 total, retrained 2026-05-12 #4):**
+- Prematch winner: 9 LGB + 9 LR (v1/v2/v3 × winner/t1/t2) — all 18 active
   - Best LGB: v3/prematch_winner 78.5% / brier 0.1573 · v3/t2 78.9% / brier 0.1489
   - v3/t1 69.0% — overfits (train 94.5%, only 840 t1 samples)
-  - Best LR (retrained #3): v3/winner 76.4% / brier 0.164 · v3/t2 77.0% / brier 0.156 · v3/t1 63.1%
+  - Best LR: v3/winner 76.4% / brier 0.164 · v3/t2 77.0% / brier 0.156 · v3/t1 63.1%
   - LGB margin over LR: winner +2.1pp · t2 +1.9pp · t1 +5.9pp → LGB correctly primary
-- Market v3: 3 LGB (first_blood 60.0%, total_kills R²=0.063, total_duration R²=0.053)
-  - Improved from v2: first_blood 61.3%→60.0% (slight decline after strict dedup), kills R² 0.031→0.063 (+103%), duration R² 0.004→0.053 (+13×)
-- Live winner (fv=4, 10 features): 1 LGB + 1 LR — retrained #3 (2026-05-12)
-  - **LR: 72.75% (+6.24pp over prematch baseline 66.51%), brier 0.1675. LR is primary (testAcc > LGB).**
-  - LGB: 61.89% (-2.31pp) — temporal distribution shift (test radiant=64.2% vs train 52.1%)
-  - Primary selection: auto by testAccuracy (LGB wins when it overtakes LR; no hardcoded threshold)
-  - `prematch_logit` sources: stored=1415, elo=22, neutral=4068 (ELO-based; was stored=172 before backfill)
-  - LR weights: `kill_diff_norm=3.312, kill_diff_x_phase=0.640, prematch_logit=0.185, total_kills_norm=0.250, nw_lead_norm=0.177`
-  - Features (10): `bias`, `game_time_norm`, `nw_lead_norm`, `kill_diff_norm`, `tower_diff_norm`, `prematch_logit`, `total_kills_norm`, `game_phase`, `nw_x_phase`, `kill_diff_x_phase`
-  - Critical fix: feature vector updated 6→10 in LiveWinnerModel.ts inference (was inference bug)
-  - Root issue: 518 training matches / 5505 bucketed snapshots — accumulates naturally
+  - **Bug fix: train:model (LR) no longer deactivates LGB models** (added engine='logreg' filter to deactivation WHERE)
+- Market v3 (retrained #4, 2026-05-12): 3 LGB — first_blood 58.8%, total_kills R²=0.059, total_duration R²=0.039
+  - **Bug fix: `patch_kpm` was a global constant (importance=0 in all 3 models). Replaced with `expected_tempo_norm` = (avgKillsR + avgKillsD) / (2×GLOBAL_AVG_KILLS) — varies per matchup, non-zero importance.**
+  - expected_tempo_norm: top-5 for total_duration (importance=32). total_kills top: elo_diff, winrate_diff, experience_diff, draft_aggression_r/d
+- Live winner (fv=5, 12 features): 1 LGB + 1 LR — **retrained #4 (2026-05-12)**
+  - **LR: 71.36% (+4.85pp over prematch baseline 66.51%), brier 0.1802. LR is primary (testAcc > LGB).**
+  - LGB: 64.90% (+0.69pp, improved from 61.89% via class_weight='balanced') — temporal shift partially compensated
+  - Primary selection: auto by testAccuracy (LGB wins when it overtakes LR)
+  - `prematch_logit` sources: stored=1415, elo=22, neutral=4068
+  - LR weights: `kill_diff_norm=3.365, kill_diff_x_phase=0.679, prematch_logit=0.236, nw_lead_norm=0.108, kill_pace_norm=-0.076, hero_advantage=0.013`
+  - LGB feature importance top-5: `kill_pace_norm=201, kill_diff_norm=194, game_time_norm=103, nw_lead_norm=81, hero_advantage=71`
+  - **Features (12, fv=5):** `bias, game_time_norm, nw_lead_norm, kill_diff_norm, r_towers_lost_ratio, d_towers_lost_ratio, prematch_logit, kill_pace_norm, game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage`
+  - Group A: tower_diff_norm split → r/d_towers_lost_ratio (both=0 when buildingState=null, 68.4% of snapshots — no noise); total_kills_norm → kill_pace_norm (time-normalized)
+  - Group B: hero_advantage from matchup matrix (15994 pairs) — LGB importance=71; 1049/5505 training samples with draft
+  - Group C: class_weight='balanced' in LGB — compensates radiant 64.2% test vs 52.1% train imbalance
+  - Root data: 519 training matches / 5505 bucketed snapshots
 
 **Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · **7292 prematch_outcomes** (backfilled via `backfill:prematch-outcomes`) · 18.7k live snapshots (5505 after 3-min bucket dedup).
 

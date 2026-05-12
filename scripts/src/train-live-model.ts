@@ -2,19 +2,21 @@
  * Обучение LIVE-модели победителя матча.
  *
  * Модель работает ВО ВРЕМЯ матча: текущий снапшот (NW lead, kills,
- * tower count, game_time, phase) + прематч-вероятность → P(Radiant победит).
+ * tower ratios, game_time, phase) + прематч-вероятность + hero advantage → P(Radiant).
  *
- * Фичи (9 + bias = 10):
- *   x0 = 1                                      bias
- *   x1 = (gameTimeSec - 1800) / 1800            нормализованное время (центрировано на 30 мин)
- *   x2 = radiantLead / 10000                    net worth преимущество
- *   x3 = (radiantScore - direScore) / 15        разница убийств
- *   x4 = towerDiff / 11                         разница башен
- *   x5 = logit(prematchProb)                    прематч как сильный приор
- *   x6 = (radiantScore + direScore) / 30        темп убийств (всего за матч)
- *   x7 = clip(gameTimeSec / 3600, 0, 1)         фаза игры 0→1 (early/mid/late)
- *   x8 = (radiantLead / 10000) × game_phase     взаимодействие: NW важнее в лейте
- *   x9 = killDiff / 15 × game_phase             убийства важнее в лейте
+ * Фичи (11 + bias = 12):
+ *   x0  = 1                                         bias
+ *   x1  = (gameTimeSec - 1800) / 1800               нормализованное время
+ *   x2  = radiantLead / 10000                       net worth преимущество
+ *   x3  = (radiantScore - direScore) / 15           разница убийств
+ *   x4  = (11 - r_towers_alive) / 11                доля ПОТЕРЯННЫХ башен Radiant (0=нет данных)
+ *   x5  = (11 - d_towers_alive) / 11                доля ПОТЕРЯННЫХ башен Dire   (0=нет данных)
+ *   x6  = logit(prematchProb)                       прематч как сильный приор
+ *   x7  = kills_per_min / 1.1                       темп убийств (time-нормирован)
+ *   x8  = clip(gameTimeSec / 3600, 0, 1)            фаза игры 0→1
+ *   x9  = (radiantLead / 10000) × game_phase        взаимодействие: NW важнее в лейте
+ *   x10 = killDiff / 15 × game_phase                убийства важнее в лейте
+ *   x11 = hero_advantage (от matchup-матрицы, 0 если драфт неизвестен)
  *
  * Два движка:
  *   - LightGBM (primary)  — обучается через ml-service, blob в DB
@@ -26,29 +28,45 @@
  *   --min-samples N  минимум сэмплов (default: 50 для обоих)
  */
 
-import { db, modelVersionsTable, teamsTable, teamRecentFormTable } from '@workspace/db';
+import {
+  db,
+  modelVersionsTable,
+  teamsTable,
+  teamRecentFormTable,
+  heroMatchupsTable,
+} from '@workspace/db';
 import { sql, and, eq } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 
 const EPOCHS = 300;
 const LR_RATE = 0.03;
 const L2 = 0.01;
+
+// Версия фич: 5 (12 фич — разделённые башни + kill_pace + hero_advantage)
+const FEATURES_VERSION = 5;
+
 const FEATURE_NAMES = [
   'bias',
   'game_time_norm',
   'nw_lead_norm',
   'kill_diff_norm',
-  'tower_diff_norm',
+  'r_towers_lost_ratio',
+  'd_towers_lost_ratio',
   'prematch_logit',
-  'total_kills_norm',
+  'kill_pace_norm',
   'game_phase',
   'nw_x_phase',
   'kill_diff_x_phase',
+  'hero_advantage',
 ];
 const FEATURE_DIM = FEATURE_NAMES.length;
+
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const TRAIN_TIMEOUT_MS = 90_000;
+const GLOBAL_KPM = 1.1;
+
+type HeroMatchupsMap = Map<number, Map<number, { games: number; winRate: number }>>;
 
 function mlServiceToken(): string | null {
   const env = (process.env.ML_SERVICE_TOKEN ?? '').trim();
@@ -95,10 +113,43 @@ function dot(w: number[], x: number[]): number {
   let s = 0; for (let i = 0; i < w.length; i++) s += w[i] * x[i]; return s;
 }
 
+/**
+ * Вычисляет hero matchup advantage для Radiant относительно Dire.
+ * Результат: взвешенное среднее (winRate - 0.5) × log(games+1) для всех 25 пар,
+ * делённое на общий вес → диапазон примерно [-0.2, +0.2], 0 если нет данных.
+ * Identical formula to inference side in LiveWinnerModel.ts.
+ */
+function computeHeroAdvantage(
+  radiantPicks: number[],
+  direPicks: number[],
+  matchups: HeroMatchupsMap,
+): number {
+  let totalAdv = 0;
+  let totalWeight = 0;
+  for (const r of radiantPicks) {
+    const outerMap = matchups.get(r);
+    for (const d of direPicks) {
+      const direct = outerMap?.get(d);
+      if (direct && direct.games >= 5) {
+        const w = Math.log(direct.games + 1);
+        totalAdv += (direct.winRate - 0.5) * w;
+        totalWeight += w;
+        continue;
+      }
+      const inverse = matchups.get(d)?.get(r);
+      if (inverse && inverse.games >= 5) {
+        const w = Math.log(inverse.games + 1);
+        totalAdv += (0.5 - inverse.winRate) * w;
+        totalWeight += w;
+      }
+    }
+  }
+  return totalWeight > 0 ? totalAdv / totalWeight : 0;
+}
+
 function trainLogisticRegression(samples: Sample[], dim: number): number[] {
   const w = new Array(dim).fill(0);
   for (let epoch = 0; epoch < EPOCHS; epoch++) {
-    // shuffle
     for (let i = samples.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [samples[i], samples[j]] = [samples[j], samples[i]];
@@ -156,7 +207,10 @@ async function trainLgbm(train: Sample[], calib: Sample[], test: Sample[]): Prom
         calib: calib.map(s => ({ features: s.features, label: s.label })),
         test: test.map(s => ({ features: s.features, label: s.label })),
         task_type: 'classification',
-        // Сильная регуляризация: малый датасет (~300-2000 снапшотов), высокая корреляция
+        // Group C: balanced class weights — компенсирует временной сдвиг
+        // (test: radiant 64%, train 52%). LGB перевзвешивает minority class.
+        class_weight: 'balanced',
+        // Сильная регуляризация: малый датасет (~300-2000 снапшотов)
         num_leaves: 15,
         max_depth: 4,
         learning_rate: 0.05,
@@ -202,8 +256,6 @@ async function trainLgbm(train: Sample[], calib: Sample[], test: Sample[]): Prom
 
 /**
  * ELO-based prematch probability.
- * Сигмоида от нормализованной разницы рейтингов + поправка на 30-дн. винрейт.
- * Используется когда в prematch_outcomes нет сохранённой вероятности.
  */
 function eloPrematchProb(
   rRating: number, dRating: number,
@@ -214,7 +266,6 @@ function eloPrematchProb(
   const eloDiff = (rRating - dRating) / 200;
   const rWr = rWins / Math.max(rWins + rLosses, 1);
   const dWr = dWins / Math.max(dWins + dLosses, 1);
-  // Поправка на форму: берём среднее между ELO-сигналом и разницей винрейтов
   const wrDiff = (rWinrate30 ?? rWr) - (dWinrate30 ?? dWr);
   const combined = eloDiff * 0.7 + wrDiff * 0.3;
   return sigmoid(combined);
@@ -228,9 +279,8 @@ async function main() {
   if (dryRun) console.log('[train-live-model] DRY-RUN mode');
   if (sinceUnix) console.log(`[train-live-model] since_unix=${sinceUnix} (${new Date(sinceUnix * 1000).toISOString().slice(0, 10)})`);
 
-  // Загружаем рейтинги команд для вычисления prematch_logit на лету
-  console.log('[train-live-model] Loading team ratings & form …');
-  const [teamsRows, formRows] = await Promise.all([
+  console.log('[train-live-model] Loading team ratings, form & hero matchups …');
+  const [teamsRows, formRows, matchupRows] = await Promise.all([
     db.select({
       teamId: teamsTable.teamId,
       rating: teamsTable.rating,
@@ -241,20 +291,39 @@ async function main() {
       teamId: teamRecentFormTable.teamId,
       winRate: teamRecentFormTable.winRate,
     }).from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30)),
+    db.select({
+      heroId: heroMatchupsTable.heroId,
+      vsHeroId: heroMatchupsTable.vsHeroId,
+      games: heroMatchupsTable.games,
+      winRate: heroMatchupsTable.winRate,
+    }).from(heroMatchupsTable),
   ]);
 
   const teamMap = new Map<number, { rating: number; wins: number; losses: number }>();
   for (const t of teamsRows) {
     if (t.rating != null) teamMap.set(t.teamId, { rating: t.rating, wins: t.wins ?? 0, losses: t.losses ?? 0 });
   }
-  const formMap = new Map<number, number>();  // teamId → winRate30d
+  const formMap = new Map<number, number>();
   for (const f of formRows) {
     if (f.winRate != null) formMap.set(f.teamId, f.winRate);
   }
-  console.log(`[train-live-model] teams=${teamMap.size} with ratings, form=${formMap.size} with 30d winrate`);
 
-  console.log('[train-live-model] Joining live_snapshots × pro_matches × prematch_outcomes …');
+  // Build hero matchups cache: heroId → vsHeroId → { games, winRate }
+  const heroMatchups: HeroMatchupsMap = new Map();
+  for (const row of matchupRows) {
+    if (!heroMatchups.has(row.heroId)) heroMatchups.set(row.heroId, new Map());
+    heroMatchups.get(row.heroId)!.set(row.vsHeroId, {
+      games: row.games ?? 0,
+      winRate: typeof row.winRate === 'number' ? row.winRate : Number(row.winRate ?? 0.5),
+    });
+  }
+  console.log(
+    `[train-live-model] teams=${teamMap.size} | form=${formMap.size} | hero matchup pairs=${matchupRows.length}`,
+  );
 
+  console.log('[train-live-model] Joining live_snapshots × pro_matches × prematch_outcomes × match_drafts …');
+
+  // Group B: LEFT JOIN match_drafts для hero_advantage фичи
   const rows = await db.execute(sql`
     SELECT
       ls.match_id                   AS "matchId",
@@ -266,10 +335,13 @@ async function main() {
       pm.radiant_team_id            AS "radiantTeamId",
       pm.dire_team_id               AS "direTeamId",
       po.predicted_radiant_win_prob AS "storedPrematchProb",
-      COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin"
+      COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin",
+      md.radiant_picks              AS "radiantPicks",
+      md.dire_picks                 AS "direPicks"
     FROM live_snapshots ls
     INNER JOIN pro_matches pm ON pm.match_id = ls.match_id
     LEFT JOIN prematch_outcomes po ON po.match_id = ls.match_id
+    LEFT JOIN match_drafts md ON md.match_id = ls.match_id
     WHERE pm.radiant_win IS NOT NULL
       AND ls.game_time_sec IS NOT NULL
       AND ls.game_time_sec >= 60
@@ -297,6 +369,7 @@ async function main() {
   let storedPrematchCount = 0;
   let eloPrematchCount = 0;
   let unknownPrematchCount = 0;
+  let heroAdvCount = 0;
 
   const seenBuckets = new Set<string>();
   const samples: Sample[] = [];
@@ -306,14 +379,13 @@ async function main() {
     const gameTimeSec = toNum(raw['gameTimeSec']);
     if (matchId == null || gameTimeSec == null) continue;
 
-    // 1 снапшот на 3-минутный bucket → предотвращаем утечку через коррелированные снапшоты
+    // 1 снапшот на 3-минутный bucket
     const bucket = Math.floor(gameTimeSec / 180);
     const key = `${matchId}:${bucket}`;
     if (seenBuckets.has(key)) continue;
     seenBuckets.add(key);
 
-    // Prematch probability: приоритет — сохранённый результат из prematch_outcomes,
-    // fallback — ELO-оценка по рейтингам команд (реальный сигнал, не 0.5).
+    // Prematch probability
     let prematchProb: number;
     const storedProb = toNum(raw['storedPrematchProb']);
     if (storedProb != null && storedProb > 0 && storedProb < 1) {
@@ -334,25 +406,49 @@ async function main() {
         );
         eloPrematchCount++;
       } else {
-        // Команды не найдены — используем нейтральный приор
-        prematchProb = 0.52;   // ~историческое преимущество Radiant в Dota 2
+        prematchProb = 0.52;
         unknownPrematchCount++;
       }
     }
 
+    // Group A: split tower features (0 when building_state=null — no noise)
     const towers = towerCountsFromBuildingState(toNum(raw['buildingState']));
+    const buildingStateNull = (raw['buildingState'] == null);
+    // When null: r=11, d=11 → both ratios = 0 (no towers known lost)
+    // When valid: r_lost = (11 - r_alive) / 11
+    const rTowersLostRatio = buildingStateNull ? 0 : (11 - towers.r) / 11;
+    const dTowersLostRatio = buildingStateNull ? 0 : (11 - towers.d) / 11;
+
     const radiantLead = toNum(raw['radiantLead']) ?? 0;
     const radiantScore = toNum(raw['radiantScore']) ?? 0;
     const direScore = toNum(raw['direScore']) ?? 0;
     const killDiff = radiantScore - direScore;
-    const towerDiff = towers.r - towers.d;
+
+    // Group A: kill_pace_norm (time-normalized, replaces total_kills_norm)
+    const killPaceNorm = gameTimeSec > 0
+      ? ((radiantScore + direScore) / (gameTimeSec / 60)) / GLOBAL_KPM
+      : 0;
 
     const gamePhase = Math.min(gameTimeSec / 3600, 1.0);
     const nwNorm = radiantLead / 10000;
     const killDiffNorm = killDiff / 15;
-    const totalKillsNorm = (radiantScore + direScore) / 30;
     const nwXPhase = nwNorm * gamePhase;
     const killXPhase = killDiffNorm * gamePhase;
+
+    // Group B: hero_advantage от matchup-матрицы (0 когда драфт неизвестен)
+    let heroAdvantage = 0;
+    const rPicks = raw['radiantPicks'];
+    const dPicks = raw['direPicks'];
+    if (
+      Array.isArray(rPicks) && Array.isArray(dPicks) &&
+      rPicks.length === 5 && dPicks.length === 5 &&
+      heroMatchups.size > 0
+    ) {
+      heroAdvantage = computeHeroAdvantage(
+        rPicks as number[], dPicks as number[], heroMatchups,
+      );
+      heroAdvCount++;
+    }
 
     samples.push({
       features: [
@@ -360,12 +456,14 @@ async function main() {
         (gameTimeSec - 1800) / 1800,              // game_time_norm
         nwNorm,                                   // nw_lead_norm
         killDiffNorm,                             // kill_diff_norm
-        towerDiff / 11,                           // tower_diff_norm
-        logit(prematchProb),                      // prematch_logit (ELO или stored)
-        totalKillsNorm,                           // total_kills_norm
+        rTowersLostRatio,                         // r_towers_lost_ratio (Group A)
+        dTowersLostRatio,                         // d_towers_lost_ratio (Group A)
+        logit(prematchProb),                      // prematch_logit
+        killPaceNorm,                             // kill_pace_norm (Group A)
         gamePhase,                                // game_phase
         nwXPhase,                                 // nw_x_phase
         killXPhase,                               // kill_diff_x_phase
+        heroAdvantage,                            // hero_advantage (Group B)
       ],
       label: raw['actualRadiantWin'] ? 1 : 0,
       matchId,
@@ -376,6 +474,9 @@ async function main() {
   console.log(
     `[train-live-model] prematch_logit sources: stored=${storedPrematchCount} elo=${eloPrematchCount} neutral=${unknownPrematchCount}`,
   );
+  console.log(
+    `[train-live-model] hero_advantage: ${heroAdvCount}/${samples.length + (seenBuckets.size - samples.length)} samples have draft data`,
+  );
   console.log(`[train-live-model] After bucket dedup (180s): ${samples.length} examples from ${seenBuckets.size} unique match-buckets`);
 
   if (samples.length < minSamples) {
@@ -383,7 +484,7 @@ async function main() {
     process.exit(0);
   }
 
-  // Сплит ПО МАТЧАМ (не по снапшотам) — предотвращаем утечку данных между split'ами
+  // Сплит ПО МАТЧАМ (не по снапшотам)
   const allMatches = Array.from(new Set(samples.map(s => s.matchId))).sort((a, b) => a - b);
   const trainEnd = Math.floor(allMatches.length * 0.8);
   const calibEnd = Math.floor(allMatches.length * 0.9);
@@ -401,7 +502,6 @@ async function main() {
     `[train-live-model] Sample split train/calib/test: ${trainSamples.length}/${calibSamples.length}/${testSamples.length}`,
   );
 
-  // Распределение лейблов
   const trainPos = trainSamples.filter(s => s.label === 1).length;
   const testPos  = testSamples.filter(s => s.label === 1).length;
   console.log(
@@ -414,8 +514,8 @@ async function main() {
     process.exit(0);
   }
 
-  // === LightGBM (primary) ===
-  console.log('[train-live-model] Training LightGBM via ml-service …');
+  // === LightGBM (Group C: class_weight='balanced') ===
+  console.log('[train-live-model] Training LightGBM via ml-service (class_weight=balanced) …');
   const lgbm = await trainLgbm(trainSamples, calibSamples, testSamples);
   if (lgbm) {
     const liftPp = ((lgbm.testAcc - lgbm.baselineAcc) * 100).toFixed(2);
@@ -437,10 +537,10 @@ async function main() {
   console.log(`[train-live-model] [LR]  TRAIN acc=${(trainMetrics.acc * 100).toFixed(2)}%  brier=${trainMetrics.brier.toFixed(4)}`);
   console.log(`[train-live-model] [LR]  TEST  acc=${(testMetrics.acc * 100).toFixed(2)}%  brier=${testMetrics.brier.toFixed(4)}`);
 
-  // Baseline: только прематч-вероятность (без live-фич)
+  // Baseline: только прематч-вероятность
   let baselineCorrect = 0, baselineBrier = 0;
   for (const s of testSamples) {
-    const prematchLogit = s.features[5];     // x5 = logit(prematchProb)
+    const prematchLogit = s.features[6]!;  // x6 = logit(prematchProb)
     const prematchProb = sigmoid(prematchLogit);
     if ((prematchProb >= 0.5 ? 1 : 0) === s.label) baselineCorrect++;
     baselineBrier += (prematchProb - s.label) ** 2;
@@ -452,9 +552,8 @@ async function main() {
   console.log(`[train-live-model] Baseline (только прематч): acc=${(baselineAcc * 100).toFixed(2)}%  brier=${baselineBrierAvg.toFixed(4)}`);
   console.log(`[train-live-model] [LR]  lift: Δacc=${lrLiftSign}${lrLift}pp  Δbrier=${(baselineBrierAvg - testMetrics.brier).toFixed(4)}`);
 
-  // Веса LR с именами фич для интерпретации
   console.log('[train-live-model] [LR]  Weights:',
-    FEATURE_NAMES.map((n, i) => `${n}=${w[i].toFixed(3)}`).join(' '),
+    FEATURE_NAMES.map((n, i) => `${n}=${w[i]!.toFixed(3)}`).join(' '),
   );
 
   if (dryRun) {
@@ -465,7 +564,7 @@ async function main() {
   const versionStem = `live-v${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
   const commonMeta = {
     featureNames: FEATURE_NAMES,
-    featuresVersion: 4,
+    featuresVersion: FEATURES_VERSION,
     baselineAcc,
     baselineBrier: baselineBrierAvg,
     matchesTrain: trainMatches.size,
@@ -476,10 +575,11 @@ async function main() {
     sinceUnix,
     lrLiftAcc: testMetrics.acc - baselineAcc,
     lgbmLiftAcc: lgbm ? lgbm.testAcc - lgbm.baselineAcc : null,
+    heroAdvCount,
+    heroMatchupPairs: matchupRows.length,
   };
 
   await db.transaction(async tx => {
-    // Деактивируем старые live_winner модели
     await tx
       .update(modelVersionsTable)
       .set({ isActive: false })
@@ -489,11 +589,11 @@ async function main() {
 
     // LR fallback — всегда сохраняем
     const weights: Record<string, number> = {};
-    FEATURE_NAMES.forEach((n, i) => { weights[`w${i}`] = w[i]; });
+    FEATURE_NAMES.forEach((n, i) => { weights[`w${i}`] = w[i]!; });
     toInsert.push({
       version: `lr-${versionStem}`,
       kind: 'live_winner',
-      featuresVersion: 4,
+      featuresVersion: FEATURES_VERSION,
       algorithm: 'logistic_regression_live',
       engine: 'logreg',
       features: FEATURE_NAMES,
@@ -516,12 +616,12 @@ async function main() {
       isActive: true,
     });
 
-    // LGB primary — если ml-service отвечал
+    // LGB primary
     if (lgbm) {
       toInsert.push({
         version: `lgbm-${versionStem}`,
         kind: 'live_winner',
-        featuresVersion: 4,
+        featuresVersion: FEATURES_VERSION,
         algorithm: 'lightgbm_live',
         engine: 'lightgbm',
         features: FEATURE_NAMES,
@@ -536,6 +636,7 @@ async function main() {
           ...commonMeta,
           liftAcc: lgbm.testAcc - lgbm.baselineAcc,
           featureImportance: lgbm.featureImportance,
+          classWeight: 'balanced',
           numLeaves: 15,
           maxDepth: 4,
           nEstimators: 80,
