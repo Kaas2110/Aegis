@@ -9,11 +9,11 @@
  * При отсутствии любой live-модели → возвращаем null (вызывающий код
  * использует прематч-вероятность как fallback).
  *
- * Фичи (12) — должны точно соответствовать train-live-model.ts:
+ * Фичи (14, fv=6) — должны точно соответствовать train-live-model.ts:
  *   bias, game_time_norm, nw_lead_norm, kill_diff_norm,
- *   r_towers_lost_ratio, d_towers_lost_ratio,
  *   prematch_logit, kill_pace_norm,
- *   game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage
+ *   game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage,
+ *   nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff
  */
 
 import { db, modelVersionsTable } from '@workspace/db';
@@ -27,20 +27,22 @@ const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const LIGHTGBM_BACKOFF_MS = 60_000;
 const GLOBAL_KPM = 1.1;
 
-// Feature names — must match training script exactly
+// Feature names — must match training script exactly (fv=6, 14 features)
 const LIVE_FEATURE_NAMES = [
   'bias',
   'game_time_norm',
   'nw_lead_norm',
   'kill_diff_norm',
-  'r_towers_lost_ratio',
-  'd_towers_lost_ratio',
   'prematch_logit',
   'kill_pace_norm',
   'game_phase',
   'nw_x_phase',
   'kill_diff_x_phase',
   'hero_advantage',
+  'nw_lead_per_min',
+  'kill_ratio',
+  'elo_diff_norm',
+  'form_diff',
 ] as const;
 const LIVE_FEATURE_DIM = LIVE_FEATURE_NAMES.length;
 
@@ -196,22 +198,17 @@ function logit(p: number): number {
   return Math.log(q / (1 - q));
 }
 
-function towerCountsFromBuildingState(bs: number | null | undefined): { r: number; d: number } {
-  if (bs == null || !Number.isFinite(bs)) return { r: 11, d: 11 };
-  let r = 0, d = 0;
-  for (let i = 0; i < 11; i++) if (bs & (1 << i)) r++;
-  for (let i = 11; i < 22; i++) if (bs & (1 << i)) d++;
-  return { r, d };
-}
-
 export interface LiveSnapshotInput {
   gameTimeSec: number | null;
   radiantLead: number | null;
   radiantScore: number | null;
   direScore: number | null;
-  buildingState: number | null;
-  /** Group B: matchup advantage от героев (вычисляется в LiveWorker, 0 если драфт неизвестен) */
+  /** hero matchup advantage (вычисляется в LiveWorker, 0 если драфт неизвестен) */
   heroAdvantage?: number;
+  /** (elo_r − elo_d) / 200; 0 если нет данных */
+  eloDiffNorm?: number;
+  /** form30_r − form30_d; 0 если нет данных */
+  formDiff?: number;
 }
 
 async function predictViaLgbm(blobB64: string, features: number[]): Promise<number | null> {
@@ -252,35 +249,31 @@ function predictViaLr(weights: number[], features: number[]): number {
 }
 
 /**
- * Строит вектор фич для live-снапшота (12 фич, fv=5).
- * Должно совпадать с train-live-model.ts FEATURE_NAMES.
+ * Строит вектор фич для live-снапшота (14 фич, fv=6).
+ * Должно точно совпадать с train-live-model.ts FEATURE_NAMES.
  *
- * Изменения vs fv=4 (10 фич):
- *   - tower_diff_norm убран (был 0 в 68.4% снапшотов → шум)
- *   + r_towers_lost_ratio + d_towers_lost_ratio (оба=0 когда buildingState=null)
- *   - total_kills_norm заменён на kill_pace_norm (time-нормированный темп)
- *   + hero_advantage (от matchup-матрицы, 0 если драфт неизвестен)
+ * Изменения vs fv=5 (12 фич):
+ *   - r_towers_lost_ratio + d_towers_lost_ratio убраны (importance=0, 68.4% null)
+ *   + nw_lead_per_min  — темп накопления NW (скорость, а не абсолютная величина)
+ *   + kill_ratio       — доля убийств radiant (bounded [0,1])
+ *   + elo_diff_norm    — (elo_r − elo_d) / 200
+ *   + form_diff        — form30_r − form30_d
+ * Балансировка 50/50 теперь на уровне данных (не только class_weight).
  */
 function buildFeatureVec(
   snap: LiveSnapshotInput,
   prematchProb: number,
 ): { vec: number[]; named: Record<string, number> } {
   const gameTimeSec = snap.gameTimeSec!;
-  const towers = towerCountsFromBuildingState(snap.buildingState);
-  const buildingStateKnown = snap.buildingState != null && Number.isFinite(snap.buildingState);
-
   const radiantLead = snap.radiantLead ?? 0;
   const radiantScore = snap.radiantScore ?? 0;
   const direScore = snap.direScore ?? 0;
   const killDiff = radiantScore - direScore;
+  const totalKills = radiantScore + direScore;
 
-  // Group A: split tower features (0 = no info, not "equal")
-  const rTowersLostRatio = buildingStateKnown ? (11 - towers.r) / 11 : 0;
-  const dTowersLostRatio = buildingStateKnown ? (11 - towers.d) / 11 : 0;
-
-  // Group A: time-normalized kill pace
+  const gameTimeMins = gameTimeSec / 60;
   const killPaceNorm = gameTimeSec > 0
-    ? ((radiantScore + direScore) / (gameTimeSec / 60)) / GLOBAL_KPM
+    ? (totalKills / gameTimeMins) / GLOBAL_KPM
     : 0;
 
   const gamePhase = Math.min(gameTimeSec / 3600, 1.0);
@@ -290,22 +283,27 @@ function buildFeatureVec(
   const killXPhase = killDiffNorm * gamePhase;
   const prematchLogit = logit(prematchProb);
 
-  // Group B: hero_advantage (0 when draft unknown)
   const heroAdvantage = snap.heroAdvantage ?? 0;
+  const nwLeadPerMin = gameTimeMins > 1 ? (radiantLead / gameTimeMins) / 1000 : 0;
+  const killRatio = totalKills > 0 ? radiantScore / totalKills : 0.5;
+  const eloDiffNorm = snap.eloDiffNorm ?? 0;
+  const formDiff = snap.formDiff ?? 0;
 
   const vec = [
-    1,                                          // bias
-    (gameTimeSec - 1800) / 1800,                // game_time_norm
-    nwNorm,                                     // nw_lead_norm
-    killDiffNorm,                               // kill_diff_norm
-    rTowersLostRatio,                           // r_towers_lost_ratio
-    dTowersLostRatio,                           // d_towers_lost_ratio
-    prematchLogit,                              // prematch_logit
-    killPaceNorm,                               // kill_pace_norm
-    gamePhase,                                  // game_phase
-    nwXPhase,                                   // nw_x_phase
-    killXPhase,                                 // kill_diff_x_phase
-    heroAdvantage,                              // hero_advantage
+    1,                            // x0  bias
+    (gameTimeSec - 1800) / 1800,  // x1  game_time_norm
+    nwNorm,                       // x2  nw_lead_norm
+    killDiffNorm,                 // x3  kill_diff_norm
+    prematchLogit,                // x4  prematch_logit
+    killPaceNorm,                 // x5  kill_pace_norm
+    gamePhase,                    // x6  game_phase
+    nwXPhase,                     // x7  nw_x_phase
+    killXPhase,                   // x8  kill_diff_x_phase
+    heroAdvantage,                // x9  hero_advantage
+    nwLeadPerMin,                 // x10 nw_lead_per_min
+    killRatio,                    // x11 kill_ratio
+    eloDiffNorm,                  // x12 elo_diff_norm
+    formDiff,                     // x13 form_diff
   ];
 
   const named: Record<string, number> = {};

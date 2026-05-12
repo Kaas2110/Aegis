@@ -42,22 +42,24 @@ const EPOCHS = 300;
 const LR_RATE = 0.03;
 const L2 = 0.01;
 
-// Версия фич: 5 (12 фич — разделённые башни + kill_pace + hero_advantage)
-const FEATURES_VERSION = 5;
+// Версия фич: 6 (14 фич — убраны башни; добавлены nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff)
+const FEATURES_VERSION = 6;
 
 const FEATURE_NAMES = [
   'bias',
   'game_time_norm',
   'nw_lead_norm',
   'kill_diff_norm',
-  'r_towers_lost_ratio',
-  'd_towers_lost_ratio',
-  'prematch_logit',
+  'prematch_logit',       // x4 (сдвинут с x6: убраны 2 башенные фичи)
   'kill_pace_norm',
   'game_phase',
   'nw_x_phase',
   'kill_diff_x_phase',
   'hero_advantage',
+  'nw_lead_per_min',     // новая: темп накопления NW (nw_lead / min / 1000)
+  'kill_ratio',          // новая: доля убийств radiant (rScore / total, bounded [0,1])
+  'elo_diff_norm',       // новая: (elo_r − elo_d) / 200
+  'form_diff',           // новая: form30_r − form30_d
 ];
 const FEATURE_DIM = FEATURE_NAMES.length;
 
@@ -89,14 +91,6 @@ function parseMinSamples(def: number): number {
 }
 
 interface Sample { features: number[]; label: number; matchId: number; bucket: number; }
-
-function towerCountsFromBuildingState(bs: number | null | undefined): { r: number; d: number } {
-  if (bs == null || !Number.isFinite(bs)) return { r: 11, d: 11 };
-  let r = 0, d = 0;
-  for (let i = 0; i < 11; i++) if (bs & (1 << i)) r++;
-  for (let i = 11; i < 22; i++) if (bs & (1 << i)) d++;
-  return { r, d };
-}
 
 function logit(p: number): number {
   const eps = 1e-4;
@@ -331,7 +325,6 @@ async function main() {
       ls.radiant_lead               AS "radiantLead",
       ls.radiant_score              AS "radiantScore",
       ls.dire_score                 AS "direScore",
-      ls.building_state             AS "buildingState",
       pm.radiant_team_id            AS "radiantTeamId",
       pm.dire_team_id               AS "direTeamId",
       po.predicted_radiant_win_prob AS "storedPrematchProb",
@@ -411,22 +404,15 @@ async function main() {
       }
     }
 
-    // Group A: split tower features (0 when building_state=null — no noise)
-    const towers = towerCountsFromBuildingState(toNum(raw['buildingState']));
-    const buildingStateNull = (raw['buildingState'] == null);
-    // When null: r=11, d=11 → both ratios = 0 (no towers known lost)
-    // When valid: r_lost = (11 - r_alive) / 11
-    const rTowersLostRatio = buildingStateNull ? 0 : (11 - towers.r) / 11;
-    const dTowersLostRatio = buildingStateNull ? 0 : (11 - towers.d) / 11;
-
     const radiantLead = toNum(raw['radiantLead']) ?? 0;
     const radiantScore = toNum(raw['radiantScore']) ?? 0;
     const direScore = toNum(raw['direScore']) ?? 0;
     const killDiff = radiantScore - direScore;
+    const totalKills = radiantScore + direScore;
 
-    // Group A: kill_pace_norm (time-normalized, replaces total_kills_norm)
+    const gameTimeMins = gameTimeSec / 60;
     const killPaceNorm = gameTimeSec > 0
-      ? ((radiantScore + direScore) / (gameTimeSec / 60)) / GLOBAL_KPM
+      ? (totalKills / gameTimeMins) / GLOBAL_KPM
       : 0;
 
     const gamePhase = Math.min(gameTimeSec / 3600, 1.0);
@@ -434,6 +420,20 @@ async function main() {
     const killDiffNorm = killDiff / 15;
     const nwXPhase = nwNorm * gamePhase;
     const killXPhase = killDiffNorm * gamePhase;
+
+    // Новые фичи
+    const nwLeadPerMin = gameTimeMins > 1 ? (radiantLead / gameTimeMins) / 1000 : 0;
+    const killRatio = totalKills > 0 ? radiantScore / totalKills : 0.5;
+
+    // Командные контекстные фичи (elo + form)
+    const rId = toNum(raw['radiantTeamId']);
+    const dId = toNum(raw['direTeamId']);
+    const rTeam = rId != null ? teamMap.get(rId) : undefined;
+    const dTeam = dId != null ? teamMap.get(dId) : undefined;
+    const eloDiffNorm = (rTeam && dTeam) ? (rTeam.rating - dTeam.rating) / 200 : 0;
+    const formDiff = (rId != null && dId != null)
+      ? (formMap.get(rId) ?? 0.5) - (formMap.get(dId) ?? 0.5)
+      : 0;
 
     // Group B: hero_advantage от matchup-матрицы (0 когда драфт неизвестен)
     let heroAdvantage = 0;
@@ -452,18 +452,20 @@ async function main() {
 
     samples.push({
       features: [
-        1,                                        // bias
-        (gameTimeSec - 1800) / 1800,              // game_time_norm
-        nwNorm,                                   // nw_lead_norm
-        killDiffNorm,                             // kill_diff_norm
-        rTowersLostRatio,                         // r_towers_lost_ratio (Group A)
-        dTowersLostRatio,                         // d_towers_lost_ratio (Group A)
-        logit(prematchProb),                      // prematch_logit
-        killPaceNorm,                             // kill_pace_norm (Group A)
-        gamePhase,                                // game_phase
-        nwXPhase,                                 // nw_x_phase
-        killXPhase,                               // kill_diff_x_phase
-        heroAdvantage,                            // hero_advantage (Group B)
+        1,                                        // x0  bias
+        (gameTimeSec - 1800) / 1800,              // x1  game_time_norm
+        nwNorm,                                   // x2  nw_lead_norm
+        killDiffNorm,                             // x3  kill_diff_norm
+        logit(prematchProb),                      // x4  prematch_logit
+        killPaceNorm,                             // x5  kill_pace_norm
+        gamePhase,                                // x6  game_phase
+        nwXPhase,                                 // x7  nw_x_phase
+        killXPhase,                               // x8  kill_diff_x_phase
+        heroAdvantage,                            // x9  hero_advantage
+        nwLeadPerMin,                             // x10 nw_lead_per_min
+        killRatio,                                // x11 kill_ratio
+        eloDiffNorm,                              // x12 elo_diff_norm
+        formDiff,                                 // x13 form_diff
       ],
       label: raw['actualRadiantWin'] ? 1 : 0,
       matchId,
@@ -491,22 +493,41 @@ async function main() {
   const trainMatches = new Set(allMatches.slice(0, trainEnd));
   const calibMatches = new Set(allMatches.slice(trainEnd, calibEnd));
 
-  const trainSamples = samples.filter(s => trainMatches.has(s.matchId));
-  const calibSamples = samples.filter(s => calibMatches.has(s.matchId));
-  const testSamples  = samples.filter(s => !trainMatches.has(s.matchId) && !calibMatches.has(s.matchId));
+  const rawTrainSamples = samples.filter(s => trainMatches.has(s.matchId));
+  const calibSamples    = samples.filter(s => calibMatches.has(s.matchId));
+  const testSamples     = samples.filter(s => !trainMatches.has(s.matchId) && !calibMatches.has(s.matchId));
+
+  // Балансировка 50/50 в тренировочной выборке (undersample мажоритарного класса)
+  // Тест НЕ балансируем — отражает реальное распределение.
+  function shuffleArr<T>(arr: T[]): T[] {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j]!, a[i]!];
+    }
+    return a;
+  }
+  const trainPos50 = rawTrainSamples.filter(s => s.label === 1);
+  const trainNeg50 = rawTrainSamples.filter(s => s.label === 0);
+  const minClass   = Math.min(trainPos50.length, trainNeg50.length);
+  const trainSamples = shuffleArr([
+    ...shuffleArr(trainPos50).slice(0, minClass),
+    ...shuffleArr(trainNeg50).slice(0, minClass),
+  ]);
 
   console.log(
     `[train-live-model] Match split train/calib/test: ${trainMatches.size}/${calibMatches.size}/${allMatches.length - calibEnd}`,
   );
   console.log(
-    `[train-live-model] Sample split train/calib/test: ${trainSamples.length}/${calibSamples.length}/${testSamples.length}`,
+    `[train-live-model] Raw train samples: ${rawTrainSamples.length} → balanced 50/50: ${trainSamples.length} (${minClass} per class, dropped ${rawTrainSamples.length - trainSamples.length})`,
+  );
+  console.log(
+    `[train-live-model] Sample split train(balanced)/calib/test: ${trainSamples.length}/${calibSamples.length}/${testSamples.length}`,
   );
 
-  const trainPos = trainSamples.filter(s => s.label === 1).length;
   const testPos  = testSamples.filter(s => s.label === 1).length;
   console.log(
-    `[train-live-model] Label distribution: train radiant=${trainPos}/${trainSamples.length} (${(100 * trainPos / trainSamples.length).toFixed(1)}%)` +
-    ` | test radiant=${testPos}/${testSamples.length} (${(100 * testPos / testSamples.length).toFixed(1)}%)`,
+    `[train-live-model] Label distribution: train radiant=50.0% (balanced) | test radiant=${testPos}/${testSamples.length} (${(100 * testPos / testSamples.length).toFixed(1)}%)`,
   );
 
   if (trainSamples.length < 30 || testSamples.length < 5) {
@@ -540,7 +561,7 @@ async function main() {
   // Baseline: только прематч-вероятность
   let baselineCorrect = 0, baselineBrier = 0;
   for (const s of testSamples) {
-    const prematchLogit = s.features[6]!;  // x6 = logit(prematchProb)
+    const prematchLogit = s.features[4]!;  // x4 = logit(prematchProb)
     const prematchProb = sigmoid(prematchLogit);
     if ((prematchProb >= 0.5 ? 1 : 0) === s.label) baselineCorrect++;
     baselineBrier += (prematchProb - s.label) ** 2;

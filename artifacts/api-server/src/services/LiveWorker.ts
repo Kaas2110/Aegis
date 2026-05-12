@@ -7,7 +7,7 @@
 
 import { db, liveSnapshotsTable, predictionsTable } from '@workspace/db';
 import { logger } from '../lib/logger';
-import { predictMatchWinner, loadActiveModel, getActiveModel, computeHeroMatchupAdvantage, type DraftInput } from './PredictionModel';
+import { predictMatchWinner, loadActiveModel, getActiveModel, computeHeroMatchupAdvantage, getTeamLiveContext, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
 
@@ -24,7 +24,6 @@ interface LiveMatch {
   radiant_score?: number;
   dire_score?: number;
   radiant_lead?: number;
-  building_state?: number;
   // OpenDota /api/live раскрывает массив игроков с hero_id и team (0=R, 1=D)
   // как только драфт завершён. Используем это для v2-фичей.
   players?: Array<{ account_id?: number; hero_id?: number; team?: 0 | 1; team_slot?: number }>;
@@ -134,7 +133,6 @@ async function pollOnce(): Promise<void> {
       radiantScore: m.radiant_score ?? null,
       direScore: m.dire_score ?? null,
       radiantLead: m.radiant_lead ?? null,
-      buildingState: m.building_state ?? null,
       rawPayload: m as unknown as Record<string, unknown>,
     }));
     await db.insert(liveSnapshotsTable).values(rows);
@@ -176,14 +174,16 @@ async function pollOnce(): Promise<void> {
         if (draft && draft.radiantPicks.length === 5 && draft.direPicks.length === 5) {
           heroAdvantage = await computeHeroMatchupAdvantage(draft.radiantPicks, draft.direPicks);
         }
+        const { eloDiffNorm, formDiff } = getTeamLiveContext(m.team_id_radiant, m.team_id_dire);
         const livePred = await predictLiveWinner(
           {
             gameTimeSec: m.game_time ?? null,
             radiantLead: m.radiant_lead ?? null,
             radiantScore: m.radiant_score ?? null,
             direScore: m.dire_score ?? null,
-            buildingState: m.building_state ?? null,
             heroAdvantage,
+            eloDiffNorm,
+            formDiff,
           },
           pred.probRadiantWin,
         );

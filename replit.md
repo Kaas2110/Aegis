@@ -79,11 +79,11 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`lib/api-spec/openapi.yaml`** — OpenAPI contract; codegen: `pnpm --filter @workspace/api-spec run codegen`
 - pnpm-workspace skill — monorepo structure, TypeScript, project references
 
-## ML state (as of 2026-05-12, retrain #4)
+## ML state (as of 2026-05-12, retrain #5)
 
 **Training window:** 365d optimal for all model types (540d worse due to meta drift ~9pp).
 
-**Active models (25 total, retrained 2026-05-12 #4):**
+**Active models (25 total, prematch/market retrained #4, live retrained #5):**
 - Prematch winner: 9 LGB + 9 LR (v1/v2/v3 × winner/t1/t2) — all 18 active
   - Best LGB: v3/prematch_winner 78.5% / brier 0.1573 · v3/t2 78.9% / brier 0.1489
   - v3/t1 69.0% — overfits (train 94.5%, only 840 t1 samples)
@@ -93,17 +93,17 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - Market v3 (retrained #4, 2026-05-12): 3 LGB — first_blood 58.8%, total_kills R²=0.059, total_duration R²=0.039
   - **Bug fix: `patch_kpm` was a global constant (importance=0 in all 3 models). Replaced with `expected_tempo_norm` = (avgKillsR + avgKillsD) / (2×GLOBAL_AVG_KILLS) — varies per matchup, non-zero importance.**
   - expected_tempo_norm: top-5 for total_duration (importance=32). total_kills top: elo_diff, winrate_diff, experience_diff, draft_aggression_r/d
-- Live winner (fv=5, 12 features): 1 LGB + 1 LR — **retrained #4 (2026-05-12)**
-  - **LR: 71.36% (+4.85pp over prematch baseline 66.51%), brier 0.1802. LR is primary (testAcc > LGB).**
-  - LGB: 64.90% (+0.69pp, improved from 61.89% via class_weight='balanced') — temporal shift partially compensated
-  - Primary selection: auto by testAccuracy (LGB wins when it overtakes LR)
+- Live winner (fv=6, 14 features): 1 LGB + 1 LR — **retrained #5 (2026-05-12)**
+  - **LR: 71.13% (+4.62pp over prematch baseline 66.51%), brier 0.1834. LR is primary (testAcc > LGB).**
+  - LGB: 61.66% (−2.54pp vs baseline) — severe overfit (train 98.3%), temporal shift; LGB deprioritised
+  - Primary selection: auto by testAccuracy
   - `prematch_logit` sources: stored=1415, elo=22, neutral=4068
-  - LR weights: `kill_diff_norm=3.365, kill_diff_x_phase=0.679, prematch_logit=0.236, nw_lead_norm=0.108, kill_pace_norm=-0.076, hero_advantage=0.013`
-  - LGB feature importance top-5: `kill_pace_norm=201, kill_diff_norm=194, game_time_norm=103, nw_lead_norm=81, hero_advantage=71`
-  - **Features (12, fv=5):** `bias, game_time_norm, nw_lead_norm, kill_diff_norm, r_towers_lost_ratio, d_towers_lost_ratio, prematch_logit, kill_pace_norm, game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage`
-  - Group A: tower_diff_norm split → r/d_towers_lost_ratio (both=0 when buildingState=null, 68.4% of snapshots — no noise); total_kills_norm → kill_pace_norm (time-normalized)
-  - Group B: hero_advantage from matchup matrix (15994 pairs) — LGB importance=71; 1049/5505 training samples with draft
-  - Group C: class_weight='balanced' in LGB — compensates radiant 64.2% test vs 52.1% train imbalance
+  - LR weights: `kill_diff_norm=3.071, kill_diff_x_phase=0.635, kill_ratio=1.488, nw_lead_norm=0.192, elo_diff_norm=0.151, nw_lead_per_min=0.143`
+  - LGB feature importance top-5: `form_diff=295, kill_pace_norm=231, kill_ratio=197, kill_diff_norm=52, hero_advantage=52`
+  - **Features (14, fv=6):** `bias, game_time_norm, nw_lead_norm, kill_diff_norm, prematch_logit, kill_pace_norm, game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage, nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff`
+  - Changes vs fv=5: removed r/d_towers_lost_ratio (importance=0, 68.4% null → noise); added nw_lead_per_min (NW tempo), kill_ratio (radiant share), elo_diff_norm ((elo_r−elo_d)/200), form_diff (form30_r−form30_d)
+  - **50/50 train balance:** undersample majority class in train set only (test unbalanced = real distribution); raw 4480 → balanced 4294 (2147/class, dropped 186)
+  - Group C: class_weight='balanced' in LGB retained
   - Root data: 519 training matches / 5505 bucketed snapshots
 
 **Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · **7292 prematch_outcomes** (backfilled via `backfill:prematch-outcomes`) · 18.7k live snapshots (5505 after 3-min bucket dedup).

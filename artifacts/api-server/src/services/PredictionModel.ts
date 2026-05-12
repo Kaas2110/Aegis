@@ -462,6 +462,27 @@ export async function getTeamRating(teamId: number) {
 }
 
 /**
+ * Возвращает командные контекстные фичи для live-модели:
+ *   eloDiffNorm = (elo_r − elo_d) / 200
+ *   formDiff    = form30_r − form30_d
+ * 0 если данные отсутствуют.
+ * Используется LiveWorker для подготовки snap в predictLiveWinner.
+ */
+export function getTeamLiveContext(
+  radiantTeamId: number,
+  direTeamId: number,
+): { eloDiffNorm: number; formDiff: number } {
+  const r = teamRatings.get(radiantTeamId);
+  const d = teamRatings.get(direTeamId);
+  const eloDiffNorm = (r && d) ? (r.rating - d.rating) / 200 : 0;
+  const formDiff = recentFormCache.size > 0
+    ? (recentFormCache.get(radiantTeamId)?.winRate ?? 0.5) -
+      (recentFormCache.get(direTeamId)?.winRate ?? 0.5)
+    : 0;
+  return { eloDiffNorm, formDiff };
+}
+
+/**
  * Возвращает взвешенное matchup-преимущество Radiant над Dire.
  * Формат: log-weighted среднее (winRate - 0.5) для 25 пар героев.
  * Возвращает 0 если данных недостаточно.
