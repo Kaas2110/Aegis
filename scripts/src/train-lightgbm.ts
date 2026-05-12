@@ -33,12 +33,13 @@ import {
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
-import { asc, gte, and, eq, inArray } from 'drizzle-orm';
+import { asc, gte, and, eq, inArray, sql } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier } from './lib/tier';
 import {
   buildHeroFeatures,
   buildExtraFeatures,
+  computeRosterStability,
   HERO_FEATURE_NAMES,
   HERO_FEATURE_DIM,
   EXTRA_FEATURE_NAMES,
@@ -49,6 +50,8 @@ import {
   type RecentFormMap,
   type H2HMap,
   type PlayerGlickoMap,
+  type SoSMap,
+  type RosterStabilityMap,
 } from './lib/hero-features';
 
 const TRAIN_WINDOW_DAYS = 365;
@@ -312,9 +315,22 @@ async function main() {
     if (!inner) { inner = new Map(); playerHeroStats.set(r.accountId, inner); }
     inner.set(r.heroId, { games: r.games, wins: r.wins });
   }
-  const formRows = await db.select().from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30));
+  const formRows = await db.select({
+    teamId: teamRecentFormTable.teamId,
+    winRate: teamRecentFormTable.winRate,
+    games: teamRecentFormTable.games,
+    avgKillsFor: teamRecentFormTable.avgKillsFor,
+    avgDurationSec: teamRecentFormTable.avgDurationSec,
+  }).from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30));
   const recentForm: RecentFormMap = new Map();
-  for (const r of formRows) recentForm.set(r.teamId, { winRate: r.winRate, games: r.games });
+  for (const r of formRows) {
+    recentForm.set(r.teamId, {
+      winRate: r.winRate,
+      games: r.games,
+      avgKillsFor: r.avgKillsFor ?? undefined,
+      avgDurationSec: r.avgDurationSec ?? undefined,
+    });
+  }
   const h2hRows = await db.select().from(teamH2HTable).where(eq(teamH2HTable.periodDays, 365));
   const h2h: H2HMap = new Map();
   for (const r of h2hRows) h2h.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
@@ -327,8 +343,40 @@ async function main() {
   const playerGlicko: PlayerGlickoMap = new Map();
   for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
 
+  // Wave 3+4: Strength of Schedule — avg рейтинг соперников за 30 дней
+  const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
+  const sosResult = await db.execute(sql`
+    SELECT team_id::bigint, AVG(opp_rating)::float AS avg_opp_elo
+    FROM (
+      SELECT pm.radiant_team_id AS team_id, t.rating AS opp_rating
+      FROM pro_matches pm JOIN teams t ON t.team_id = pm.dire_team_id
+      WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
+      UNION ALL
+      SELECT pm.dire_team_id AS team_id, t.rating AS opp_rating
+      FROM pro_matches pm JOIN teams t ON t.team_id = pm.radiant_team_id
+      WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
+    ) sub
+    GROUP BY team_id
+  `);
+  const sos: SoSMap = new Map();
+  for (const row of (sosResult.rows as { team_id: string; avg_opp_elo: string }[])) {
+    sos.set(Number(row.team_id), Number(row.avg_opp_elo));
+  }
+
+  // Roster stability: Jaccard similarity over last 10 lineups per team
+  const matchTeamMapLgb = new Map<number, { r: number | null; d: number | null }>();
+  for (const m of matches) matchTeamMapLgb.set(m.matchId, { r: m.radiantTeamId, d: m.direTeamId });
+  const rosterInputsArr = draftsRows.map(d => ({
+    matchId: d.matchId,
+    radiantTeamId: matchTeamMapLgb.get(d.matchId)?.r ?? null,
+    direTeamId: matchTeamMapLgb.get(d.matchId)?.d ?? null,
+    radiantAccountIds: d.radiantAccountIds,
+    direAccountIds: d.direAccountIds,
+  }));
+  const rosterStability: RosterStabilityMap = computeRosterStability(rosterInputsArr);
+
   console.log(
-    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size}`,
+    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size} sos=${sos.size} rosterStability=${rosterStability.size}`,
   );
 
   // Сборка бакетов
@@ -375,7 +423,7 @@ async function main() {
       radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
       radiantPicks: draft.radiantPicks, direPicks: draft.direPicks,
       radiantAccountIds: draft.radiantAccountIds, direAccountIds: draft.direAccountIds,
-      playerHeroStats, heroStats, recentForm, h2h, playerGlicko,
+      playerHeroStats, heroStats, recentForm, h2h, playerGlicko, sos, rosterStability,
     });
     const v3S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats], label };
     v3All.push(v3S); if (tier) v3Bucket[tier].push(v3S);

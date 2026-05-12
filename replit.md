@@ -79,31 +79,32 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`lib/api-spec/openapi.yaml`** — OpenAPI contract; codegen: `pnpm --filter @workspace/api-spec run codegen`
 - pnpm-workspace skill — monorepo structure, TypeScript, project references
 
-## ML state (as of 2026-05-12, retrain #8 — deep-research wave)
+## ML state (as of 2026-05-12, retrain #9 — extra features wave)
 
-**Deep-research items shipped:** prematch fv 5→12 (radiant_side_logit, recency_days_norm, series_type_norm, map_no_norm, tier_t1/t2/t3) · live fv 7→8 (is_real_live, tower_diff_norm from `building_state` bitmap, has_draft, recency_days_norm) · chronological B6 split (1d gap train/test) · composite-score primary selection (brier-only when only one model has logloss; brier+0.3·logloss when both) · ml-service quantile task_type with proper pinball/coverage metrics · 3 quantile models (α=0.25/0.5/0.75) for `total_duration` market.
+**Deep-research items shipped (retrain #8):** prematch fv 5→12 (radiant_side_logit, recency_days_norm, series_type_norm, map_no_norm, tier_t1/t2/t3) · live fv 7→8 (is_real_live, tower_diff_norm from `building_state` bitmap, has_draft, recency_days_norm) · chronological B6 split (1d gap train/test) · composite-score primary selection (brier-only when only one model has logloss; brier+0.3·logloss when both) · ml-service quantile task_type with proper pinball/coverage metrics · 3 quantile models (α=0.25/0.5/0.75) for `total_duration` market.
+
+**Extra features added (retrain #9):** EXTRA_FEATURE_NAMES 5→9 (v3 dim 24→28): `avg_kills_diff` (avgKillsFor 30d diff / 10) · `avg_duration_diff` (avgDurationSec 30d diff / 3600) · `sos_diff` (strength of schedule: avg opp elo diff / 200, 30d window) · `roster_stability_diff` (Jaccard overlap of last 10 lineups, radiant−dire). Prematch LR improved +3.4pp on winner, +0.5pp on t2.
 
 **LiveWorker now persists `building_state` to live_snapshots** (was lost — only stored in raw_payload). New snapshots have tower data; old snapshots remain null until natural rotation.
 
-### Latest training results
+### Latest training results (retrain #9, 2026-05-12)
 
-**Prematch winner (fv=3, 12 team features × hero × extras = 24 dim for v3):**
-- LR best: v3/winner 76.4%/0.157 · v3/t2 79.3%/0.143 (was 0.156)
-- LGB best: v3/winner 74.4%/0.157 · v3/t2 81.7%/0.148
+**Prematch winner (fv=3, 12 team + 7 hero + 9 extra = 28 dim for v3):**
+- LR best: v3/winner **79.8%/0.155** · v3/t2 **79.8%/0.153** (was 76.4%/0.157 · 79.3%/0.143)
+- LGB best: v3/winner 78.5%/0.1528 · v3/t2 **81.7%/0.1497**
 
-**Market models (16-dim team features):**
-- first_blood (LGB clf): 62.1% / brier 0.233
-- total_kills (LGB reg): R²=0.045, RMSE=0.296
-- total_duration (LGB reg): R²=0.052, RMSE=0.271
-- total_duration quantiles (NEW): q25 cov=0.243 (target 0.25 ✓) · q50 cov=0.479 (target 0.5 ✓) · q75 cov=0.720 (target 0.75 ✓) — calibration отличная
+**Market models (16-dim team features, unchanged):**
+- first_blood (LGB clf): 61.9% / brier 0.231
+- total_kills (LGB reg): R²=0.053, RMSE=0.270
+- total_duration (LGB reg): R²=0.057, RMSE=0.270
+- total_duration quantiles: q25 cov=0.227 (target 0.25 ✓) · q50 cov=0.469 (target 0.5 ✓) · q75 cov=0.716 (target 0.75 ✓)
 
-**Live winner (fv=8, 20 features):**
-- **LR primary** 70.4% / brier **0.188** (lift +3.93pp over prematch baseline 66.51%)
-- LGB secondary 67.0% / brier 0.287 (train 99.5%, overfits sharply on hero_advantage=255)
-- Composite selection: `brier_only` mode (LGB does not store logLossTest in metadata) → LR wins by lower brier
-- LR weights top-5: `kill_diff_norm=3.07, kill_ratio=1.49, kill_diff_x_phase=0.62, elo_diff_norm=0.18, kill_pace_norm=0.04`
-- New fv=8 features in LR: `recency_days_norm=0.088, has_draft=-0.134, is_real_live=0.000, tower_diff_norm=0.000` (last two ≈0 because only 309/5505 snapshots are real-live)
-- LGB feature importance top-5: `hero_advantage=255, kill_ratio=224, recency_days_norm=154, form_diff=144, kill_pace_norm=119` — `recency_days_norm` доказала ценность (#3 importance)
+**Live winner (fv=8, 20 features, retrain #9):**
+- **LR primary** 71.82% / brier **0.1819** (lift +5.31pp over prematch baseline 66.51%)
+- LGB secondary 69.05% / brier 0.2803 (train 99.5%, overfits on hero_advantage)
+- Composite selection: `brier_only` mode → LR wins by lower brier
+- LR weights top-5: `kill_diff_norm=3.11, kill_ratio=1.50, kill_diff_x_phase=0.66, elo_diff_norm=0.22, nw_lead_per_min=0.19`
+- LGB feature importance top-5: `hero_advantage=197, kill_ratio=194, form_diff=127, kill_pace_norm=126, recency_days_norm=123`
 
 **Data:** 28.9k matches in 365d window · 5505 snapshots (3-min bucket dedup) · 4480 raw → 4294 balanced (50/50) train · 433 test · is_real_live=309/5505 · has_draft=5268/5505 (95.7%) · prematch_logit sources: stored=1415, elo=22, neutral=4068.
 

@@ -121,13 +121,18 @@ export function buildHeroFeatures(
 }
 
 // ── Wave 3: player-skill / form / h2h / side / glicko ────────────────────
-// 5 фичей поверх v2. v3 dim = team(5) + hero(7) + extra(5) = 17.
+// 5 фичей поверх v2. v3 dim = team(12) + hero(7) + extra(9) = 28.
 
 export interface PlayerHeroStat { games: number; wins: number; }
 /** Map<accountId, Map<heroId, {games, wins}>> */
 export type PlayerHeroStatsMap = Map<number, Map<number, PlayerHeroStat>>;
 
-export interface RecentForm { winRate: number; games: number; }
+export interface RecentForm {
+  winRate: number;
+  games: number;
+  avgKillsFor?: number;    // средние убийства за (команда как атакующая)
+  avgDurationSec?: number; // средняя длительность карты в секундах
+}
 /** Map<teamId, RecentForm> for chosen period (e.g. 30d) */
 export type RecentFormMap = Map<number, RecentForm>;
 
@@ -139,15 +144,29 @@ export interface PlayerGlicko { rating: number; rd: number; }
 /** Map<accountId, {rating, rd}> — Glicko-1 рейтинг игрока. */
 export type PlayerGlickoMap = Map<number, PlayerGlicko>;
 
+/** Map<teamId, avgOpponentElo> — Strength of Schedule (30d). */
+export type SoSMap = Map<number, number>;
+
+/** Map<teamId, stabilityScore 0–1> — avg Jaccard similarity last 10 lineups. */
+export type RosterStabilityMap = Map<number, number>;
+
 export const EXTRA_FEATURE_NAMES = [
-  'player_skill_diff',     // Σ (winrate_on_hero - global_winrate_on_hero)·log(games+1) radiant - dire
-  'recent_form_diff',      // form30.winRate(rad) - form30.winRate(dire)
-  'h2h_advantage_radiant', // P(radiant wins h2h) - 0.5, scaled by log(games+1)
-  'side_advantage',        // 1 (radiant always plays radiant в этом матче) — модель выучит вес
-  'player_glicko_diff',    // (avg(rad glicko) - avg(dire glicko)) / 200
+  'player_skill_diff',       // Σ (wr_on_hero - global_wr_on_hero)·log(games+1) rad - dire
+  'recent_form_diff',        // form30.winRate(rad) - form30.winRate(dire)
+  'h2h_advantage_radiant',   // P(radiant wins h2h) - 0.5, scaled by log(games+1)
+  'side_advantage',          // 1 (radiant always plays radiant в этом матче)
+  'player_glicko_diff',      // (avg(rad glicko) - avg(dire glicko)) / 200
+  'avg_kills_diff',          // (avgKillsFor_R - avgKillsFor_D) / 10
+  'avg_duration_diff',       // (avgDurationSec_R - avgDurationSec_D) / 3600
+  'sos_diff',                // (avgOppElo_R - avgOppElo_D) / 200
+  'roster_stability_diff',   // Jaccard stability: stabilityR - stabilityD
 ] as const;
 
 export const EXTRA_FEATURE_DIM = EXTRA_FEATURE_NAMES.length;
+
+// Нормировочные константы (прo-сцена по историческим данным)
+const GLOBAL_AVG_KILLS_PER_TEAM = 22;   // убийств за команду за карту (~44 total)
+const GLOBAL_AVG_DURATION_SEC = 2340;    // ~39 минут
 
 /** Глобальный winrate героя — берём из heroStats.proWinRate (≈0.5 если незнакомый). */
 function globalHeroWR(heroId: number, heroStats: HeroStatsMap): number {
@@ -194,7 +213,66 @@ function teamAvgGlicko(
   return sum / accountIds.length;
 }
 
-/** Возвращает 5 v3-extra фичей. Аргументы могут быть null — тогда фича = 0. */
+/**
+ * Вычисляет roster_stability по текущим данным match_drafts.
+ * Для каждой команды берёт последние до 10 матчей (по убыванию matchId),
+ * считает avg Jaccard similarity между соседними player-sets.
+ * Возвращает Map<teamId, stability 0–1>.
+ */
+export function computeRosterStability(
+  rows: Array<{
+    matchId: number;
+    radiantTeamId: number | null;
+    direTeamId: number | null;
+    radiantAccountIds: number[] | null | undefined;
+    direAccountIds: number[] | null | undefined;
+  }>,
+): RosterStabilityMap {
+  // По убыванию matchId (свежее = первее)
+  const sorted = [...rows].sort((a, b) => b.matchId - a.matchId);
+  const teamSets = new Map<number, number[][]>(); // teamId → list of player-sets
+
+  for (const d of sorted) {
+    if (d.radiantTeamId && d.radiantAccountIds && d.radiantAccountIds.length > 0) {
+      const key = d.radiantTeamId;
+      const arr = teamSets.get(key) ?? [];
+      if (arr.length < 10) {
+        arr.push(d.radiantAccountIds.filter(a => a > 0));
+        teamSets.set(key, arr);
+      }
+    }
+    if (d.direTeamId && d.direAccountIds && d.direAccountIds.length > 0) {
+      const key = d.direTeamId;
+      const arr = teamSets.get(key) ?? [];
+      if (arr.length < 10) {
+        arr.push(d.direAccountIds.filter(a => a > 0));
+        teamSets.set(key, arr);
+      }
+    }
+  }
+
+  const result: RosterStabilityMap = new Map();
+  for (const [teamId, sets] of teamSets) {
+    if (sets.length < 2) {
+      result.set(teamId, 1.0); // только один матч — считаем стабильным
+      continue;
+    }
+    let jacSum = 0;
+    let pairs = 0;
+    for (let i = 0; i < sets.length - 1; i++) {
+      const setA = sets[i];
+      const setB = new Set(sets[i + 1]);
+      const intersection = setA.filter(x => setB.has(x)).length;
+      const union = new Set([...setA, ...sets[i + 1]]).size;
+      jacSum += union > 0 ? intersection / union : 1;
+      pairs++;
+    }
+    result.set(teamId, pairs > 0 ? jacSum / pairs : 1.0);
+  }
+  return result;
+}
+
+/** Возвращает 9 v3-extra фичей. Аргументы могут быть null — тогда фича = 0. */
 export function buildExtraFeatures(args: {
   radiantTeamId: number;
   direTeamId: number;
@@ -207,6 +285,8 @@ export function buildExtraFeatures(args: {
   recentForm: RecentFormMap;
   h2h: H2HMap;
   playerGlicko: PlayerGlickoMap;
+  sos?: SoSMap;
+  rosterStability?: RosterStabilityMap;
 }): number[] {
   const radSkill = teamPlayerSkill(args.radiantPicks, args.radiantAccountIds, args.playerHeroStats, args.heroStats);
   const dirSkill = teamPlayerSkill(args.direPicks, args.direAccountIds, args.playerHeroStats, args.heroStats);
@@ -238,5 +318,35 @@ export function buildExtraFeatures(args: {
     glickoDiff = (radG - dirG) / 200;
   }
 
-  return [playerSkillDiff, recentFormDiff, h2hAdv, 1, glickoDiff];
+  // avg_kills_diff: (avgKillsFor_R - avgKillsFor_D) / 10
+  const avgKillsDiff =
+    ((formR?.avgKillsFor ?? GLOBAL_AVG_KILLS_PER_TEAM) -
+     (formD?.avgKillsFor ?? GLOBAL_AVG_KILLS_PER_TEAM)) / 10;
+
+  // avg_duration_diff: (avgDurationSec_R - avgDurationSec_D) / 3600
+  const avgDurDiff =
+    ((formR?.avgDurationSec ?? GLOBAL_AVG_DURATION_SEC) -
+     (formD?.avgDurationSec ?? GLOBAL_AVG_DURATION_SEC)) / 3600;
+
+  // sos_diff: (avgOppElo_R - avgOppElo_D) / 200
+  const sosR = args.sos?.get(args.radiantTeamId);
+  const sosD = args.sos?.get(args.direTeamId);
+  const sosDiff = (sosR != null && sosD != null) ? (sosR - sosD) / 200 : 0;
+
+  // roster_stability_diff: stabilityR - stabilityD (0 = нет данных)
+  const stabR = args.rosterStability?.get(args.radiantTeamId) ?? 0.5;
+  const stabD = args.rosterStability?.get(args.direTeamId) ?? 0.5;
+  const rosterStabilityDiff = stabR - stabD;
+
+  return [
+    playerSkillDiff,
+    recentFormDiff,
+    h2hAdv,
+    1,
+    glickoDiff,
+    avgKillsDiff,
+    avgDurDiff,
+    sosDiff,
+    rosterStabilityDiff,
+  ];
 }

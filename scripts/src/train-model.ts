@@ -35,12 +35,13 @@ import {
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
-import { asc, gte, and, eq, inArray } from 'drizzle-orm';
+import { asc, gte, and, eq, inArray, sql } from 'drizzle-orm';
 import { fitIsotonic, applyCalibration, type CalibrationModel } from './lib/isotonic';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier } from './lib/tier';
 import {
   buildHeroFeatures,
   buildExtraFeatures,
+  computeRosterStability,
   HERO_FEATURE_NAMES,
   HERO_FEATURE_DIM,
   EXTRA_FEATURE_NAMES,
@@ -51,6 +52,8 @@ import {
   type RecentFormMap,
   type H2HMap,
   type PlayerGlickoMap,
+  type SoSMap,
+  type RosterStabilityMap,
 } from './lib/hero-features';
 
 const TRAIN_WINDOW_DAYS = 365;
@@ -418,11 +421,24 @@ async function main() {
     inner.set(r.heroId, { games: r.games, wins: r.wins });
   }
   const formRows = await db
-    .select()
+    .select({
+      teamId: teamRecentFormTable.teamId,
+      winRate: teamRecentFormTable.winRate,
+      games: teamRecentFormTable.games,
+      avgKillsFor: teamRecentFormTable.avgKillsFor,
+      avgDurationSec: teamRecentFormTable.avgDurationSec,
+    })
     .from(teamRecentFormTable)
     .where(eq(teamRecentFormTable.periodDays, 30));
   const recentForm: RecentFormMap = new Map();
-  for (const r of formRows) recentForm.set(r.teamId, { winRate: r.winRate, games: r.games });
+  for (const r of formRows) {
+    recentForm.set(r.teamId, {
+      winRate: r.winRate,
+      games: r.games,
+      avgKillsFor: r.avgKillsFor ?? undefined,
+      avgDurationSec: r.avgDurationSec ?? undefined,
+    });
+  }
 
   const h2hRows = await db
     .select()
@@ -457,6 +473,39 @@ async function main() {
   for (const a of accRows) {
     accIds.set(a.matchId, { r: a.radiantAccountIds, d: a.direAccountIds });
   }
+
+  // Wave 3+4: Strength of Schedule — avg рейтинг соперников за 30 дней
+  const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
+  const sosResult = await db.execute(sql`
+    SELECT team_id::bigint, AVG(opp_rating)::float AS avg_opp_elo
+    FROM (
+      SELECT pm.radiant_team_id AS team_id, t.rating AS opp_rating
+      FROM pro_matches pm JOIN teams t ON t.team_id = pm.dire_team_id
+      WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
+      UNION ALL
+      SELECT pm.dire_team_id AS team_id, t.rating AS opp_rating
+      FROM pro_matches pm JOIN teams t ON t.team_id = pm.radiant_team_id
+      WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
+    ) sub
+    GROUP BY team_id
+  `);
+  const sos: SoSMap = new Map();
+  for (const row of (sosResult.rows as { team_id: string; avg_opp_elo: string }[])) {
+    sos.set(Number(row.team_id), Number(row.avg_opp_elo));
+  }
+
+  // Roster stability: Jaccard similarity over last 10 lineups per team
+  const matchTeamMap = new Map<number, { r: number | null; d: number | null }>();
+  for (const m of matches) matchTeamMap.set(m.matchId, { r: m.radiantTeamId, d: m.direTeamId });
+  const rosterInputs = accRows.map(a => ({
+    matchId: a.matchId,
+    radiantTeamId: matchTeamMap.get(a.matchId)?.r ?? null,
+    direTeamId: matchTeamMap.get(a.matchId)?.d ?? null,
+    radiantAccountIds: a.radiantAccountIds,
+    direAccountIds: a.direAccountIds,
+  }));
+  const rosterStability: RosterStabilityMap = computeRosterStability(rosterInputs);
+  console.log(`[train-model] sos=${sos.size} rosterStability=${rosterStability.size}`);
 
   // ── Сборка фичей за один проход ────────────────────────────────────────
   const v1All: Sample[] = [];
@@ -544,6 +593,8 @@ async function main() {
       recentForm,
       h2h,
       playerGlicko,
+      sos,
+      rosterStability,
     });
     const v3Sample: Sample = {
       features: [...teamFeats, ...heroFeats, ...extraFeats],

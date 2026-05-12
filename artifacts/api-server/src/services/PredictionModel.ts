@@ -31,6 +31,8 @@ import {
   playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
+  matchDraftsTable,
+  proMatchesTable,
 } from '@workspace/db';
 import { eq, desc, and, inArray, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
@@ -39,6 +41,7 @@ import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier, type PrematchKin
 import {
   buildHeroFeatures,
   buildExtraFeatures,
+  computeRosterStability,
   HERO_FEATURE_NAMES,
   EXTRA_FEATURE_NAMES,
   type HeroStatsMap,
@@ -47,6 +50,8 @@ import {
   type PlayerGlickoMap,
   type RecentFormMap,
   type H2HMap,
+  type SoSMap,
+  type RosterStabilityMap,
 } from '../lib/hero-features';
 
 // fv9 (12 фич): расширено с 5 для prematch (см. train-model.ts).
@@ -170,6 +175,8 @@ let playerHeroStatsCache: PlayerHeroStatsMap = new Map();
 let recentFormCache: RecentFormMap = new Map();
 let h2hCache: H2HMap = new Map();
 let playerGlickoCache: PlayerGlickoMap = new Map();
+let sosCache: SoSMap = new Map();
+let rosterStabilityCache: RosterStabilityMap = new Map();
 let lastWave3Load = 0;
 const WAVE3_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -385,6 +392,8 @@ async function refreshWave3Data(): Promise<void> {
         teamId: teamRecentFormTable.teamId,
         winRate: teamRecentFormTable.winRate,
         games: teamRecentFormTable.games,
+        avgKillsFor: teamRecentFormTable.avgKillsFor,
+        avgDurationSec: teamRecentFormTable.avgDurationSec,
       })
         .from(teamRecentFormTable)
         .where(eq(teamRecentFormTable.periodDays, 30)),
@@ -409,7 +418,14 @@ async function refreshWave3Data(): Promise<void> {
       inner.set(r.heroId, { games: r.games, wins: r.wins });
     }
     const formMap: RecentFormMap = new Map();
-    for (const r of form) formMap.set(r.teamId, { winRate: r.winRate, games: r.games });
+    for (const r of form) {
+      formMap.set(r.teamId, {
+        winRate: r.winRate,
+        games: r.games,
+        avgKillsFor: r.avgKillsFor ?? undefined,
+        avgDurationSec: r.avgDurationSec ?? undefined,
+      });
+    }
     const h2hMap: H2HMap = new Map();
     for (const r of h2hRows) {
       h2hMap.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
@@ -417,13 +433,64 @@ async function refreshWave3Data(): Promise<void> {
     const prMap: PlayerGlickoMap = new Map();
     for (const r of prRows) prMap.set(r.accountId, { rating: r.rating, rd: r.rd });
 
+    // SoS: avg рейтинг соперников за последние 30 дней
+    const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
+    const sosResult = await db.execute(sql`
+      SELECT team_id::bigint, AVG(opp_rating)::float AS avg_opp_elo
+      FROM (
+        SELECT pm.radiant_team_id AS team_id, t.rating AS opp_rating
+        FROM pro_matches pm JOIN teams t ON t.team_id = pm.dire_team_id
+        WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
+        UNION ALL
+        SELECT pm.dire_team_id AS team_id, t.rating AS opp_rating
+        FROM pro_matches pm JOIN teams t ON t.team_id = pm.radiant_team_id
+        WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
+      ) sub
+      GROUP BY team_id
+    `);
+    const newSosCache: SoSMap = new Map();
+    for (const row of (sosResult.rows as { team_id: string; avg_opp_elo: string }[])) {
+      newSosCache.set(Number(row.team_id), Number(row.avg_opp_elo));
+    }
+
+    // Roster stability: Jaccard similarity of lineups over last 10 matches
+    const draftsForStability = await db.select({
+      matchId: matchDraftsTable.matchId,
+      radiantAccountIds: matchDraftsTable.radiantAccountIds,
+      direAccountIds: matchDraftsTable.direAccountIds,
+    }).from(matchDraftsTable);
+    const pmForStability = await db.select({
+      matchId: proMatchesTable.matchId,
+      radiantTeamId: proMatchesTable.radiantTeamId,
+      direTeamId: proMatchesTable.direTeamId,
+    }).from(proMatchesTable);
+    const pmTeamMap = new Map<number, { r: number | null; d: number | null }>();
+    for (const pm of pmForStability) pmTeamMap.set(pm.matchId, { r: pm.radiantTeamId, d: pm.direTeamId });
+    const rosterInputs = draftsForStability.map(d => ({
+      matchId: d.matchId,
+      radiantTeamId: pmTeamMap.get(d.matchId)?.r ?? null,
+      direTeamId: pmTeamMap.get(d.matchId)?.d ?? null,
+      radiantAccountIds: d.radiantAccountIds,
+      direAccountIds: d.direAccountIds,
+    }));
+    const newRosterStabilityCache: RosterStabilityMap = computeRosterStability(rosterInputs);
+
     playerHeroStatsCache = phsMap;
     recentFormCache = formMap;
     h2hCache = h2hMap;
     playerGlickoCache = prMap;
+    sosCache = newSosCache;
+    rosterStabilityCache = newRosterStabilityCache;
     lastWave3Load = Date.now();
     logger.info(
-      { phsAccounts: phsMap.size, formTeams: formMap.size, h2hPairs: h2hMap.size, glickoPlayers: prMap.size },
+      {
+        phsAccounts: phsMap.size,
+        formTeams: formMap.size,
+        h2hPairs: h2hMap.size,
+        glickoPlayers: prMap.size,
+        sosTeams: newSosCache.size,
+        rosterStabilityTeams: newRosterStabilityCache.size,
+      },
       '[PredictionModel] Wave 3 data refreshed',
     );
   } catch (err) {
@@ -772,6 +839,8 @@ export async function predictMatchWinner(
       recentForm: recentFormCache,
       h2h: h2hCache,
       playerGlicko: playerGlickoCache,
+      sos: sosCache,
+      rosterStability: rosterStabilityCache,
     });
     const v3Dim = teamFeats.length + heroFeats.length + extraFeats.length;
     const v3Model = pickModel(tier, 3);
