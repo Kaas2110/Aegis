@@ -74,6 +74,13 @@ const L2 = 0.001;
 const MIN_SAMPLES_PER_TIER = 50;
 const MIN_AVG_GLICKO = 1200;  // отсекаем T3 — рейтинги шумные
 
+/** CLI: --min-glicko N — переопределяет MIN_AVG_GLICKO для экспериментов. */
+function parseMinGlicko(): number {
+  const idx = process.argv.indexOf('--min-glicko');
+  if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
+  return MIN_AVG_GLICKO;
+}
+
 const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
 const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
 
@@ -273,7 +280,10 @@ async function main() {
   // ── Загрузка матчей ────────────────────────────────────────────────────
   const minStartTime = parseSinceUnix();
   const effectiveMinSamplesTier = parseMinSamplesTier();
-  console.log(`[train-model] Loading matches (since=${new Date(minStartTime * 1000).toISOString().slice(0, 10)}) …`);
+  const effectiveMinGlicko = parseMinGlicko();
+  const dryRun = process.argv.includes('--dry-run');
+  if (dryRun) console.log('[train-model] DRY-RUN mode — DB not modified');
+  console.log(`[train-model] minGlicko=${effectiveMinGlicko} since=${new Date(minStartTime * 1000).toISOString().slice(0, 10)}`);
   const matches = await db
     .select({
       matchId: proMatchesTable.matchId,
@@ -405,7 +415,7 @@ async function main() {
     const d = teams.get(m.direTeamId);
     if (!r || !d) continue;
     const avgGlicko = (r.rating + d.rating) / 2;
-    if (avgGlicko < MIN_AVG_GLICKO) {
+    if (avgGlicko < effectiveMinGlicko) {
       droppedByMmr++;
       continue;
     }
@@ -582,7 +592,7 @@ async function main() {
         l2: L2,
         windowDays: TRAIN_WINDOW_DAYS,
         windowStartUnix: minStartTime,
-        minAvgGlicko: MIN_AVG_GLICKO,
+        minAvgGlicko: effectiveMinGlicko,
       },
       isActive: true,
     };
@@ -594,6 +604,16 @@ async function main() {
   // Деактивируем ВСЕ активные прематч-модели всех версий (v1 и v2). Затем
   // вставляем новые. Constraint (kind, features_version WHERE active)
   // защищает от race condition.
+  if (dryRun) {
+    console.log('\n[train-model] DRY-RUN results (not saved):');
+    for (const r of toInsert) {
+      console.log(
+        `   ${r.kind} v${r.featuresVersion} ${r.engine ?? 'logreg'} ` +
+        `test_acc=${(r.testAccuracy * 100).toFixed(2)}% brier=${r.brierScore.toFixed(4)} train=${r.trainSampleSize}`,
+      );
+    }
+    process.exit(0);
+  }
   await db.transaction(async tx => {
     await tx
       .update(modelVersionsTable)
