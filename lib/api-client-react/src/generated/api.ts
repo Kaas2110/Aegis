@@ -35,6 +35,9 @@ import type {
   AdminSettingsInput,
   AdminSettingsOnlyResponse,
   AdminSettingsResponse,
+  AdminSubscriptionUpdatePriceInput,
+  AdminSubscriptionUpdatePriceResponse,
+  AdminSubscriptionsResponse,
   AdminWhoami,
   HealthStatus,
 } from "./api.schemas";
@@ -1172,6 +1175,175 @@ export const useProbeAdminBookmakers = <
   TContext
 > => {
   return useMutation(getProbeAdminBookmakersMutationOptions(options));
+};
+
+/**
+ * @summary List RevenueCat offerings, packages and their test store prices
+ */
+export const getGetAdminSubscriptionsUrl = () => {
+  return `/api/admin/subscriptions`;
+};
+
+export const getAdminSubscriptions = async (
+  options?: RequestInit,
+): Promise<AdminSubscriptionsResponse> => {
+  return customFetch<AdminSubscriptionsResponse>(
+    getGetAdminSubscriptionsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAdminSubscriptionsQueryKey = () => {
+  return [`/api/admin/subscriptions`] as const;
+};
+
+export const getGetAdminSubscriptionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminSubscriptions>>,
+  TError = ErrorType<AdminOpenObject>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSubscriptions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminSubscriptionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminSubscriptions>>
+  > = ({ signal }) => getAdminSubscriptions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSubscriptions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminSubscriptionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminSubscriptions>>
+>;
+export type GetAdminSubscriptionsQueryError = ErrorType<AdminOpenObject>;
+
+/**
+ * @summary List RevenueCat offerings, packages and their test store prices
+ */
+
+export function useGetAdminSubscriptions<
+  TData = Awaited<ReturnType<typeof getAdminSubscriptions>>,
+  TError = ErrorType<AdminOpenObject>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSubscriptions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminSubscriptionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update test store price for a package (creates new product, swaps)
+ */
+export const getUpdateAdminSubscriptionPriceUrl = () => {
+  return `/api/admin/subscriptions/update-price`;
+};
+
+export const updateAdminSubscriptionPrice = async (
+  adminSubscriptionUpdatePriceInput: AdminSubscriptionUpdatePriceInput,
+  options?: RequestInit,
+): Promise<AdminSubscriptionUpdatePriceResponse> => {
+  return customFetch<AdminSubscriptionUpdatePriceResponse>(
+    getUpdateAdminSubscriptionPriceUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminSubscriptionUpdatePriceInput),
+    },
+  );
+};
+
+export const getUpdateAdminSubscriptionPriceMutationOptions = <
+  TError = ErrorType<AdminOpenObject>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSubscriptionPrice>>,
+    TError,
+    { data: BodyType<AdminSubscriptionUpdatePriceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminSubscriptionPrice>>,
+  TError,
+  { data: BodyType<AdminSubscriptionUpdatePriceInput> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminSubscriptionPrice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminSubscriptionPrice>>,
+    { data: BodyType<AdminSubscriptionUpdatePriceInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAdminSubscriptionPrice(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminSubscriptionPriceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminSubscriptionPrice>>
+>;
+export type UpdateAdminSubscriptionPriceMutationBody =
+  BodyType<AdminSubscriptionUpdatePriceInput>;
+export type UpdateAdminSubscriptionPriceMutationError =
+  ErrorType<AdminOpenObject>;
+
+/**
+ * @summary Update test store price for a package (creates new product, swaps)
+ */
+export const useUpdateAdminSubscriptionPrice = <
+  TError = ErrorType<AdminOpenObject>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSubscriptionPrice>>,
+    TError,
+    { data: BodyType<AdminSubscriptionUpdatePriceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminSubscriptionPrice>>,
+  TError,
+  { data: BodyType<AdminSubscriptionUpdatePriceInput> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminSubscriptionPriceMutationOptions(options));
 };
 
 /**

@@ -19,6 +19,7 @@
 
 import { Router, type IRouter } from 'express';
 import { getAppSettings, updateAppSettings } from '../services/AppSettings';
+import { isRevenueCatConfigured, getOfferingInfo, updatePackagePrice } from '../services/RevenueCatService';
 import {
   triggerManualRetrain,
   getSchedulerState,
@@ -232,6 +233,58 @@ router.post('/bookmakers/probe', async (req, res) => {
     proxyConfigured: !!getApiKey('PROXY_URL'),
     results,
   });
+});
+
+/**
+ * GET /api/admin/subscriptions
+ * Returns current RevenueCat offering with packages and test store prices.
+ */
+router.get('/subscriptions', async (req, res) => {
+  if (!isRevenueCatConfigured()) {
+    res.status(503).json({ error: 'RevenueCat not configured (missing REVENUECAT_PROJECT_ID or REVENUECAT_TEST_STORE_APP_ID)' });
+    return;
+  }
+  try {
+    const data = await getOfferingInfo();
+    res.json(data);
+  } catch (err) {
+    req.log.error({ err }, 'admin/subscriptions GET failed');
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * POST /api/admin/subscriptions/update-price
+ * Creates a new test-store product at the new price, swaps the package, deletes the old one.
+ */
+router.post('/subscriptions/update-price', async (req, res) => {
+  if (!isRevenueCatConfigured()) {
+    res.status(503).json({ error: 'RevenueCat not configured' });
+    return;
+  }
+  const body = req.body as { packageId?: unknown; offeringId?: unknown; newPriceUsd?: unknown; periodDuration?: unknown; productIdentifierSuffix?: unknown };
+  if (typeof body.packageId !== 'string' || typeof body.offeringId !== 'string') {
+    res.status(400).json({ error: 'packageId and offeringId (strings) required' });
+    return;
+  }
+  const price = typeof body.newPriceUsd === 'number' ? body.newPriceUsd : parseFloat(String(body.newPriceUsd));
+  if (isNaN(price) || price <= 0 || price > 9999) {
+    res.status(400).json({ error: 'newPriceUsd must be a positive number' });
+    return;
+  }
+  try {
+    const result = await updatePackagePrice({
+      packageId: body.packageId,
+      offeringId: body.offeringId,
+      newPriceUsd: price,
+      periodDuration: typeof body.periodDuration === 'string' ? body.periodDuration : undefined,
+      productIdentifierSuffix: typeof body.productIdentifierSuffix === 'string' ? body.productIdentifierSuffix : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'admin/subscriptions/update-price failed');
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 router.get('/models', async (_req, res) => {

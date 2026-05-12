@@ -9,6 +9,7 @@ import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
 import { useSubscription } from '@/lib/revenuecat';
+import type { PurchasesPackage } from 'react-native-purchases';
 
 interface Tier1Team {
   teamId: number;
@@ -96,13 +97,39 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
   );
 }
 
+const PLAN_LABEL: Record<string, string> = {
+  '$rc_weekly': 'в неделю',
+  '$rc_monthly': 'в месяц',
+  '$rc_annual': 'в год',
+};
+
+const PLAN_SORT: Record<string, number> = {
+  '$rc_weekly': 0,
+  '$rc_monthly': 1,
+  '$rc_annual': 2,
+};
+
+function getPlanLabel(pkg: PurchasesPackage): string {
+  return PLAN_LABEL[pkg.identifier] ?? 'в период';
+}
+
+function sortPackages(pkgs: PurchasesPackage[]): PurchasesPackage[] {
+  return [...pkgs].sort((a, b) => {
+    const ai = PLAN_SORT[a.identifier] ?? 99;
+    const bi = PLAN_SORT[b.identifier] ?? 99;
+    return ai - bi;
+  });
+}
+
 function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hooks/useColors').useColors> }) {
   const { isSubscribed, isLoading, offerings, purchase, restore, isPurchasing, isRestoring } = useSubscription();
   const [showPaywall, setShowPaywall] = useState(false);
+  const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
 
   const currentOffering = offerings?.current;
-  const pkg = currentOffering?.availablePackages[0];
-  const priceStr = pkg?.product.priceString ?? '—';
+  const packages = sortPackages(currentOffering?.availablePackages ?? []);
+  const defaultPkg = packages.find(p => p.identifier === '$rc_monthly') ?? packages[0] ?? null;
+  const activePkg = selectedPkg ?? defaultPkg;
 
   if (isLoading) {
     return (
@@ -137,6 +164,8 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
     );
   }
 
+  const bestPriceStr = activePkg?.product.priceString ?? '—';
+
   return (
     <>
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -161,7 +190,7 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
             style={{ backgroundColor: colors.primary, borderRadius: 12, height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}
           >
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.primaryForeground }}>
-              {priceStr !== '—' ? `${priceStr} / месяц` : 'Попробовать Premium'}
+              {bestPriceStr !== '—' ? `от ${bestPriceStr} / нед` : 'Попробовать Premium'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -200,28 +229,85 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
               ))}
             </View>
 
-            <View style={{ backgroundColor: colors.muted, borderRadius: 14, padding: 16, alignItems: 'center', gap: 4 }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 28, color: colors.foreground }}>{priceStr !== '—' ? priceStr : '...'}</Text>
-              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.mutedForeground }}>в месяц · отмена в любой момент</Text>
-            </View>
+            {packages.length > 1 && (
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.mutedForeground, letterSpacing: 1, textTransform: 'uppercase' }}>
+                  Выберите тариф
+                </Text>
+                {packages.map(pkg => {
+                  const isActive = (activePkg?.identifier ?? '') === pkg.identifier;
+                  return (
+                    <TouchableOpacity
+                      key={pkg.identifier}
+                      onPress={() => setSelectedPkg(pkg)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        borderRadius: 12,
+                        borderWidth: 1.5,
+                        borderColor: isActive ? colors.primary : colors.border,
+                        backgroundColor: isActive ? colors.primary + '12' : colors.background,
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                      }}
+                    >
+                      <View style={{
+                        width: 18, height: 18, borderRadius: 9,
+                        borderWidth: 2,
+                        borderColor: isActive ? colors.primary : colors.mutedForeground,
+                        backgroundColor: isActive ? colors.primary : 'transparent',
+                        marginRight: 10,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {isActive && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primaryForeground }} />}
+                      </View>
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.foreground, flex: 1 }}>
+                        {pkg.product.priceString}
+                        <Text style={{ fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>
+                          {' '}{getPlanLabel(pkg)}
+                        </Text>
+                      </Text>
+                      {pkg.identifier === '$rc_annual' && (
+                        <View style={{ backgroundColor: colors.positive + '33', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: colors.positive }}>ВЫГОДНО</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {packages.length === 0 && (
+              <View style={{ backgroundColor: colors.muted, borderRadius: 14, padding: 16, alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 28, color: colors.foreground }}>
+                  {bestPriceStr !== '—' ? bestPriceStr : '...'}
+                </Text>
+                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.mutedForeground }}>
+                  {activePkg ? getPlanLabel(activePkg) : 'в месяц'} · отмена в любой момент
+                </Text>
+              </View>
+            )}
 
             <TouchableOpacity
               onPress={async () => {
-                if (!pkg) { Alert.alert('Нет доступных тарифов'); return; }
+                if (!activePkg) { Alert.alert('Нет доступных тарифов'); return; }
                 try {
-                  await purchase(pkg);
+                  await purchase(activePkg);
                   setShowPaywall(false);
-                  await logProductEvent('subscription_purchased', 'paywall', { price: priceStr });
+                  await logProductEvent('subscription_purchased', 'paywall', { price: activePkg.product.priceString, plan: activePkg.identifier });
                 } catch (e: any) {
                   if (!e.userCancelled) Alert.alert('Ошибка покупки', e.message ?? 'Попробуйте позже');
                 }
               }}
-              disabled={isPurchasing || !pkg}
+              disabled={isPurchasing || !activePkg}
               style={{ backgroundColor: colors.primary, borderRadius: 14, height: 54, alignItems: 'center', justifyContent: 'center' }}
             >
               {isPurchasing
                 ? <ActivityIndicator color={colors.primaryForeground} />
-                : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.primaryForeground }}>Подключить Premium</Text>
+                : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.primaryForeground }}>
+                    {activePkg ? `Подключить за ${activePkg.product.priceString}` : 'Подключить Premium'}
+                  </Text>
               }
             </TouchableOpacity>
 

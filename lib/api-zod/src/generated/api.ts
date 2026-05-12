@@ -282,6 +282,58 @@ export const ProbeAdminBookmakersResponse = zod.object({
 });
 
 /**
+ * @summary List RevenueCat offerings, packages and their test store prices
+ */
+export const GetAdminSubscriptionsResponse = zod.object({
+  offeringId: zod.string(),
+  offeringDisplayName: zod.string(),
+  isCurrent: zod.boolean(),
+  packages: zod.array(
+    zod.object({
+      packageId: zod.string(),
+      offeringId: zod.string(),
+      lookupKey: zod.string(),
+      displayName: zod.string(),
+      testStoreProduct: zod
+        .object({
+          productId: zod.string().optional(),
+          identifier: zod.string().optional(),
+          priceUsd: zod.number().nullish(),
+          priceMicros: zod.number().nullish(),
+        })
+        .nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Update test store price for a package (creates new product, swaps)
+ */
+export const UpdateAdminSubscriptionPriceBody = zod.object({
+  packageId: zod.string(),
+  offeringId: zod.string(),
+  newPriceUsd: zod.number().describe("New price in USD (e.g. 4.99)"),
+  periodDuration: zod
+    .string()
+    .optional()
+    .describe(
+      "ISO 8601 duration (P1W, P1M, P1Y). Required when creating new product.",
+    ),
+  productIdentifierSuffix: zod
+    .string()
+    .optional()
+    .describe("Optional suffix for new product identifier (e.g. _v2)"),
+});
+
+export const UpdateAdminSubscriptionPriceResponse = zod.object({
+  ok: zod.boolean(),
+  oldProductId: zod.string().nullable(),
+  newProductId: zod.string(),
+  newPriceUsd: zod.number(),
+  message: zod.string().optional(),
+});
+
+/**
  * @summary List external API integrations and their key status
  */
 export const GetAdminIntegrationsResponse = zod.object({

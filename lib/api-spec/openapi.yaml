@@ -238,6 +238,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminBookmakerProbeResponse"
 
+  /admin/subscriptions:
+    get:
+      operationId: getAdminSubscriptions
+      tags: [admin]
+      summary: List RevenueCat offerings, packages and their test store prices
+      responses:
+        "200":
+          description: Subscription offerings and packages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSubscriptionsResponse"
+        "503":
+          description: RevenueCat not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
+  /admin/subscriptions/update-price:
+    post:
+      operationId: updateAdminSubscriptionPrice
+      tags: [admin]
+      summary: Update test store price for a package (creates new product, swaps)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSubscriptionUpdatePriceInput"
+      responses:
+        "200":
+          description: Price updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSubscriptionUpdatePriceResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+        "503":
+          description: RevenueCat not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
   /admin/integrations:
     get:
       operationId: getAdminIntegrations
@@ -595,6 +645,80 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminBookmakerProbeResult"
+
+    # ---- Subscriptions (RevenueCat) ----
+    AdminSubscriptionPackage:
+      type: object
+      required: [packageId, offeringId, lookupKey, displayName]
+      properties:
+        packageId:
+          type: string
+        offeringId:
+          type: string
+        lookupKey:
+          type: string
+        displayName:
+          type: string
+        testStoreProduct:
+          type: object
+          nullable: true
+          properties:
+            productId:
+              type: string
+            identifier:
+              type: string
+            priceUsd:
+              type: number
+              nullable: true
+            priceMicros:
+              type: integer
+              nullable: true
+    AdminSubscriptionsResponse:
+      type: object
+      required: [offeringId, offeringDisplayName, isCurrent, packages]
+      properties:
+        offeringId:
+          type: string
+        offeringDisplayName:
+          type: string
+        isCurrent:
+          type: boolean
+        packages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminSubscriptionPackage"
+    AdminSubscriptionUpdatePriceInput:
+      type: object
+      required: [packageId, offeringId, newPriceUsd]
+      properties:
+        packageId:
+          type: string
+        offeringId:
+          type: string
+        newPriceUsd:
+          type: number
+          description: New price in USD (e.g. 4.99)
+        periodDuration:
+          type: string
+          description: ISO 8601 duration (P1W, P1M, P1Y). Required when creating new product.
+        productIdentifierSuffix:
+          type: string
+          description: Optional suffix for new product identifier (e.g. _v2)
+    AdminSubscriptionUpdatePriceResponse:
+      type: object
+      required: [ok, oldProductId, newProductId, newPriceUsd]
+      properties:
+        ok:
+          type: boolean
+        oldProductId:
+          type: string
+          nullable: true
+        newProductId:
+          type: string
+        newPriceUsd:
+          type: number
+        message:
+          type: string
 
     # ---- Open-shape payloads (scheduler state, odds status) ----
     AdminOpenObject:
