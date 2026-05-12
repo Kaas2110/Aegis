@@ -5,6 +5,7 @@ import { startLiveWorker } from "./services/LiveWorker";
 import { startScheduler } from "./services/SchedulerWorker";
 import { startOutcomeTracker } from "./services/OutcomeTracker";
 import { loadActiveLiveModel } from "./services/LiveWinnerModel";
+import { loadActiveMarketModels } from "./services/MarketLgbm";
 import { primeApiKeysCache } from "./services/ApiKeysService";
 
 const rawPort = process.env["PORT"];
@@ -41,6 +42,7 @@ app.listen(port, async (err) => {
   // Поднимаем активную live-модель (не критично — может не существовать
   // на свежей системе, до первого ретрейна live-пайплайна).
   loadActiveLiveModel().catch((err) => logger.error({ err }, "Live model load failed"));
+  loadActiveMarketModels().catch((err) => logger.error({ err }, "Market models load failed"));
 
   // Запускаем live-воркер: опрос OpenDota раз в минуту,
   // запись снапшотов и предсказаний в БД.

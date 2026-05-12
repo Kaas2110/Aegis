@@ -6,11 +6,16 @@ import {
   useGetAdminIntegrations,
   useUpdateAdminIntegration,
   useProbeAdminBookmakers,
+  useGetAdminModels,
+  useTriggerAdminModelRetrain,
   getGetAdminIntegrationsQueryKey,
   getGetAdminOddsStatusQueryKey,
   getGetAdminSettingsQueryKey,
+  getGetAdminModelsQueryKey,
   type AdminIntegrationStatus,
   type AdminBookmakerProbeResult,
+  type AdminModelRow,
+  type AdminModelRetrainInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -77,6 +82,178 @@ const PUBLIC_SOURCES: { name: string; description: string; url: string }[] = [
     url: "https://www.olimp.bet",
   },
 ];
+
+/**
+ * Маппинг (kind, engine, fv) → команда переобучения для конкретной модели.
+ * Возвращает null, если модель не поддерживает индивидуальный ретрейн (тогда
+ * только full pipeline через «Переобучить всё»).
+ */
+function retrainArgsForModel(m: AdminModelRow): AdminModelRetrainInput | null {
+  const isPrematch =
+    m.kind === "prematch_winner" ||
+    m.kind === "prematch_winner_t1" ||
+    m.kind === "prematch_winner_t2" ||
+    m.kind === "prematch_winner_t3";
+  if (isPrematch) {
+    if (m.engine === "lightgbm") {
+      // train:lightgbm --label v{fv}/{tier}  (tier: t1/t2/t3 или fallback для prematch_winner)
+      const tier =
+        m.kind === "prematch_winner_t1" ? "t1" :
+        m.kind === "prematch_winner_t2" ? "t2" :
+        m.kind === "prematch_winner_t3" ? "t3" : "fallback";
+      return { script: "train:lightgbm", label: `v${m.featuresVersion}/${tier}` };
+    }
+    return { script: "train:model" };
+  }
+  if (m.kind === "market_first_blood")    return { script: "train:market-models", market: "first_blood" };
+  if (m.kind === "market_total_kills")    return { script: "train:market-models", market: "total_kills" };
+  if (m.kind === "market_total_duration") return { script: "train:market-models", market: "total_duration" };
+  if (m.kind === "live_winner")           return { script: "train:live-model" };
+  return null;
+}
+
+const KIND_LABEL_RU: Record<string, string> = {
+  prematch_winner: "Прематч (fallback)",
+  prematch_winner_t1: "Прематч T1",
+  prematch_winner_t2: "Прематч T2",
+  prematch_winner_t3: "Прематч T3",
+  market_first_blood: "Первая кровь",
+  market_total_kills: "Тотал убийств",
+  market_total_duration: "Длительность",
+  live_winner: "Live winner",
+};
+
+function ActiveModelsPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetAdminModels();
+  const retrainAll = useTriggerAdminRetrain();
+  const retrainOne = useTriggerAdminModelRetrain();
+
+  const handleRetrainAll = () => {
+    retrainAll.mutate(undefined, {
+      onSuccess: (r) => {
+        toast({
+          title: r.ok ? "Полный ретрейн запущен" : "Не удалось запустить",
+          description: r.message ?? r.status ?? "—",
+        });
+        queryClient.invalidateQueries({ queryKey: getGetAdminModelsQueryKey() });
+      },
+      onError: (err: unknown) => {
+        toast({ variant: "destructive", title: "Ошибка", description: err instanceof Error ? err.message : "—" });
+      },
+    });
+  };
+
+  const handleRetrainOne = (m: AdminModelRow) => {
+    const args = retrainArgsForModel(m);
+    if (!args) {
+      toast({ variant: "destructive", title: "Не поддерживается", description: `Для kind=${m.kind} индивидуальный ретрейн не реализован` });
+      return;
+    }
+    retrainOne.mutate(
+      { data: args },
+      {
+        onSuccess: (r) => {
+          toast({
+            title: r.ok || (r as { started?: boolean }).started ? "Запущено" : "Уже идёт ретрейн",
+            description: `${args.script}${args.label ? ` --label ${args.label}` : ""}${args.market ? ` --market ${args.market}` : ""}`,
+          });
+          queryClient.invalidateQueries({ queryKey: getGetAdminModelsQueryKey() });
+        },
+        onError: (err: unknown) => {
+          toast({ variant: "destructive", title: "Ошибка ретрейна", description: err instanceof Error ? err.message : "—" });
+        },
+      },
+    );
+  };
+
+  const models = data?.models ?? [];
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="border-b border-border pb-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+              Активные модели
+            </CardTitle>
+            <CardDescription className="font-mono text-xs">
+              Per-model ручной ретрейн. Индивидуальный mutex с full-pipeline — параллельно не запустятся.
+            </CardDescription>
+          </div>
+          <Button
+            onClick={handleRetrainAll}
+            disabled={retrainAll.isPending}
+            className="rounded-none font-mono text-xs uppercase tracking-wider"
+          >
+            {retrainAll.isPending ? "ЗАПУСК..." : "ПЕРЕОБУЧИТЬ ВСЁ"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-6">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : models.length === 0 ? (
+          <div className="text-center py-4 font-mono text-xs text-muted-foreground uppercase">
+            АКТИВНЫХ МОДЕЛЕЙ НЕТ
+          </div>
+        ) : (
+          <div className="border border-border bg-background overflow-x-auto">
+            <table className="w-full text-xs font-mono">
+              <thead className="bg-card border-b border-border">
+                <tr className="text-left text-muted-foreground uppercase text-[10px]">
+                  <th className="px-3 py-2">Тип</th>
+                  <th className="px-3 py-2">Engine</th>
+                  <th className="px-3 py-2">FV</th>
+                  <th className="px-3 py-2">Версия</th>
+                  <th className="px-3 py-2 text-right">Brier</th>
+                  <th className="px-3 py-2 text-right">Train n</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {models.map((m) => {
+                  const args = retrainArgsForModel(m);
+                  return (
+                    <tr key={m.id} className="border-t border-border">
+                      <td className="px-3 py-2 text-foreground">
+                        <div className="font-bold">{KIND_LABEL_RU[m.kind] ?? m.kind}</div>
+                        <div className="text-[10px] text-muted-foreground">{m.kind}</div>
+                      </td>
+                      <td className={`px-3 py-2 font-bold ${m.engine === "lightgbm" ? "text-radiant" : "text-muted-foreground"}`}>
+                        {m.engine.toUpperCase()}
+                      </td>
+                      <td className="px-3 py-2">v{m.featuresVersion}</td>
+                      <td className="px-3 py-2 text-muted-foreground truncate max-w-[140px]">{m.version}</td>
+                      <td className="px-3 py-2 text-right">{m.brierScore != null ? m.brierScore.toFixed(4) : "—"}</td>
+                      <td className="px-3 py-2 text-right">{m.trainSampleSize ?? "—"}</td>
+                      <td className="px-3 py-2 text-right">
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleRetrainOne(m)}
+                          disabled={!args || retrainOne.isPending}
+                          className="rounded-none font-mono text-[10px] uppercase tracking-wider h-7 px-2"
+                          title={args ? `${args.script}${args.label ? ` --label ${args.label}` : ""}${args.market ? ` --market ${args.market}` : ""}` : "не поддерживается"}
+                        >
+                          ПЕРЕОБУЧИТЬ
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function BookmakerProbePanel() {
   const { toast } = useToast();
@@ -393,6 +570,8 @@ export default function Operations() {
           Ручное управление пайплайнами и интеграциями
         </p>
       </div>
+
+      <ActiveModelsPanel />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="rounded-none border-border bg-card">

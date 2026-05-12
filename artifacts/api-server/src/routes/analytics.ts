@@ -225,6 +225,7 @@ router.get('/popular-markets', async (req, res) => {
 
   const { buildPopularMarkets } = await import('../services/PopularMarkets');
   const { predictMatchWinner } = await import('../services/PredictionModel');
+  const { predictMarketsFor } = await import('../services/MarketLgbm');
 
   // Опционально: подтягиваем ML-предсказание чтобы получить точный elo proxy.
   // Здесь упрощаем — feature vector с нейтральными значениями. Если есть ML-модель,
@@ -244,6 +245,7 @@ router.get('/popular-markets', async (req, res) => {
     req.log.warn({ err }, 'ML predict failed for popular markets — using neutral ELO');
   }
 
+  const lgbOverrides = await predictMarketsFor(radiantId, direId).catch(() => null);
   const cards = buildPopularMarkets({
     team1Name,
     team2Name,
@@ -259,6 +261,7 @@ router.get('/popular-markets', async (req, res) => {
       tournamentTier: 1,
       isLive: false,
     },
+    lgbOverrides: lgbOverrides ?? undefined,
   });
 
   res.json({
@@ -456,9 +459,20 @@ router.get('/totals-ladder', async (req, res) => {
     lineValues.push(snappedCenter + (startOffset + i) * step);
   }
 
+  // Wave 4: пытаемся LGB market-модель; на отсутствие/ошибку — heuristic.
+  const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
+  const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
+  const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
+  const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
+
   const lines = lineValues.map(line => {
-    const pred = type === 'kills' ? predictTotalKills(fv, line) : predictTotalDuration(fv, line);
-    const pOver = pred.probTeam1;
+    let pOver: number;
+    if (lgbLogN) {
+      pOver = probLogNormalOver(line * linesScale, lgbLogN.mean, lgbLogN.std);
+    } else {
+      const pred = type === 'kills' ? predictTotalKills(fv, line) : predictTotalDuration(fv, line);
+      pOver = pred.probTeam1;
+    }
     return {
       line: Number(line.toFixed(1)),
       pOver: Number(pOver.toFixed(4)),
@@ -468,6 +482,8 @@ router.get('/totals-ladder', async (req, res) => {
 
   // Confidence у моделей фиксированный (0.62/0.64) — берём из первой строки
   const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0]) : predictTotalDuration(fv, lineValues[0]);
+  const confidence = lgbLogN ? 0.72 : sample.confidence;
+  const modelVersion = lgbLogN ? 'lightgbm-market' : sample.modelVersion;
 
   res.json({
     type,
@@ -475,8 +491,8 @@ router.get('/totals-ladder', async (req, res) => {
     isLive,
     projection,
     lines,
-    confidence: sample.confidence,
-    modelVersion: sample.modelVersion,
+    confidence,
+    modelVersion,
     generatedAt: new Date().toISOString(),
   });
 });

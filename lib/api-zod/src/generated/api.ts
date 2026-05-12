@@ -100,6 +100,34 @@ export const TriggerAdminRetrainResponse = zod.object({
 });
 
 /**
+ * @summary Per-model manual retrain (lightgbm bucket / market / live)
+ */
+export const TriggerAdminModelRetrainBody = zod.object({
+  script: zod.enum([
+    "train:model",
+    "train:lightgbm",
+    "train:market-models",
+    "train:live-model",
+  ]),
+  label: zod
+    .string()
+    .optional()
+    .describe('For train:lightgbm — bucket label like \"v3\/t1\".'),
+  market: zod
+    .string()
+    .optional()
+    .describe(
+      "For train:market-models — first_blood|total_kills|total_duration|all.",
+    ),
+});
+
+export const TriggerAdminModelRetrainResponse = zod.object({
+  ok: zod.boolean().optional(),
+  status: zod.string().optional(),
+  message: zod.string().optional(),
+});
+
+/**
  * @summary Prune live_snapshots older than N days
  */
 export const triggerAdminPruneBodyDaysMax = 365;

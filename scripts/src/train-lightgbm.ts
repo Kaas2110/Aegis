@@ -311,10 +311,23 @@ async function main() {
   const v2Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES];
   const v3Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES];
 
-  const allowed = new Set(
-    (process.env.LIGHTGBM_KINDS ?? '').split(',').map(s => s.trim()).filter(Boolean),
-  );
+  // Фильтрация по меткам бакетов: env LIGHTGBM_KINDS (comma-separated)
+  // и/или CLI `--label v3/t1` (можно повторять). Whitelist валидируется
+  // против полного списка меток ниже (см. jobs[].label).
+  const allowed = new Set<string>();
+  for (const v of (process.env.LIGHTGBM_KINDS ?? '').split(',').map(s => s.trim())) {
+    if (v) allowed.add(v);
+  }
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--label' && argv[i + 1]) { allowed.add(argv[i + 1]); i++; }
+    else if (a.startsWith('--label=')) allowed.add(a.slice('--label='.length));
+  }
   const include = (label: string) => allowed.size === 0 || allowed.has(label);
+  if (allowed.size > 0) {
+    console.log(`[train-lightgbm] filter: ${[...allowed].join(', ')}`);
+  }
 
   type Job = {
     label: string;

@@ -19,6 +19,8 @@ export * from "./adminIntegrationUpdateResponse";
 export * from "./adminLoginInput";
 export * from "./adminLoginResult";
 export * from "./adminMetricsResponse";
+export * from "./adminModelRetrainInput";
+export * from "./adminModelRetrainInputScript";
 export * from "./adminModelRow";
 export * from "./adminModelsResponse";
 export * from "./adminOkResult";

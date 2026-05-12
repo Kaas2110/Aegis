@@ -26,6 +26,7 @@ import {
   predictMapWinner,
   type FeatureVector, type BetPrediction,
 } from './BetTypeModels';
+import { probLogNormalOver } from './MarketLgbm';
 
 export interface PopularMarketCard {
   betType: string;
@@ -89,10 +90,20 @@ export interface BuildPopularMarketsInput {
   features: FeatureVector;
   team1Name: string;
   team2Name: string;
+  /**
+   * Опциональные LGB-override'ы (Wave 4). Если переданы — переопределяют
+   * heuristic вероятности для соответствующих рынков. Mean/std из ml-service —
+   * в log-пространстве (label = log(value)).
+   */
+  lgbOverrides?: {
+    firstBloodP: number | null;
+    totalKillsLogN: { mean: number; std: number } | null;
+    totalDurationLogN: { mean: number; std: number } | null;
+  };
 }
 
 export function buildPopularMarkets(input: BuildPopularMarketsInput): PopularMarketCard[] {
-  const { features: f, team1Name, team2Name } = input;
+  const { features: f, team1Name, team2Name, lgbOverrides } = input;
   const cards: PopularMarketCard[] = [];
 
   // 1) Победитель матча — всегда первый
@@ -137,6 +148,12 @@ export function buildPopularMarkets(input: BuildPopularMarketsInput): PopularMar
     };
   }
   const tk = predictTotalKills(f, popularKills);
+  const lgbKills = lgbOverrides?.totalKillsLogN ?? null;
+  if (lgbKills) {
+    tk.probTeam1 = probLogNormalOver(popularKills, lgbKills.mean, lgbKills.std);
+    tk.probTeam2 = 1 - tk.probTeam1;
+    tk.confidence = 0.72;
+  }
   const tkSide = pickHigher(tk.probTeam1);
   cards.push({
     betType: 'total_kills',
@@ -154,6 +171,12 @@ export function buildPopularMarkets(input: BuildPopularMarketsInput): PopularMar
   const expectedDur = 28 + scalingAvg * 24;
   const popularDur = popularDurationLine(expectedDur);
   const td = predictTotalDuration(f, popularDur);
+  const lgbDur = lgbOverrides?.totalDurationLogN ?? null;
+  if (lgbDur) {
+    td.probTeam1 = probLogNormalOver(popularDur * 60, lgbDur.mean, lgbDur.std);
+    td.probTeam2 = 1 - td.probTeam1;
+    td.confidence = 0.72;
+  }
   const tdSide = pickHigher(td.probTeam1);
   cards.push({
     betType: 'total_duration',
@@ -167,7 +190,12 @@ export function buildPopularMarkets(input: BuildPopularMarketsInput): PopularMar
 
   // 5) Первая кровь
   const fb = predictFirstBlood(f);
-  cards.push(bestSideCard(fb, team1Name, team2Name, 'Агрессивность пиков и форма'));
+  if (lgbOverrides?.firstBloodP != null) {
+    fb.probTeam1 = lgbOverrides.firstBloodP;
+    fb.probTeam2 = 1 - lgbOverrides.firstBloodP;
+    fb.confidence = 0.66;
+  }
+  cards.push(bestSideCard(fb, team1Name, team2Name, lgbOverrides?.firstBloodP != null ? 'LGBM team-rating модель' : 'Агрессивность пиков и форма'));
 
   // 6) Первая башня (только прематч / самое начало live)
   if (!f.isLive || (f.gameTimeSec ?? 0) < 600) {

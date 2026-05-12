@@ -66,6 +66,24 @@ export interface AdminRetrainResult {
   [key: string]: unknown;
 }
 
+export type AdminModelRetrainInputScript =
+  (typeof AdminModelRetrainInputScript)[keyof typeof AdminModelRetrainInputScript];
+
+export const AdminModelRetrainInputScript = {
+  "train:model": "train:model",
+  "train:lightgbm": "train:lightgbm",
+  "train:market-models": "train:market-models",
+  "train:live-model": "train:live-model",
+} as const;
+
+export interface AdminModelRetrainInput {
+  script: AdminModelRetrainInputScript;
+  /** For train:lightgbm — bucket label like "v3/t1". */
+  label?: string;
+  /** For train:market-models — first_blood|total_kills|total_duration|all. */
+  market?: string;
+}
+
 export interface AdminPruneInput {
   /**
    * @minimum 1

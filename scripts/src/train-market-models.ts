@@ -1,31 +1,27 @@
 /**
- * Wave 3.D — обучение моделей для производных рынков (тотал убийств, тотал
- * длительности, первая кровь).
+ * Wave 4 — обучение LightGBM-моделей для производных рынков:
+ *   - market_first_blood    : classification (label = radiantWin прокси
+ *                             среди матчей с известным first_blood_time)
+ *   - market_total_kills    : regression на log(radiant_score+dire_score)
+ *   - market_total_duration : regression на log(duration_sec)
  *
- * Подход (baseline, не LightGBM):
- *   - per-tier эмпирические распределения, сохраняемые как параметры в
- *     model_versions.weights (jsonb).
- *   - total_kills: log-normal по `radiant_score + dire_score`. Сохраняем
- *     mean/std логарифма + средне-нормальный фоллбэк (если выборка < 30).
- *     Инференс считает P(over line) через нормальное CDF.
- *   - total_duration: log-normal по duration_sec.
- *   - first_blood_radiant: эмпирическая базовая P(radiant first blood) +
- *     линейный сдвиг по eloDiff (логит-сдвиг 0.4 на 200 пунктов рейтинга).
- *     Берём из pro_matches.first_blood_time IS NOT NULL и строим прокси из
- *     finishing scores: «кто получил первую» приближаем по знаку
- *     `radiant_score - dire_score` ранних минут — данных пока нет, поэтому
- *     для first_blood используем только base_rate (P(radiant_win) с малой
- *     поправкой). При появлении детальных данных можно дотренировать.
+ * Все модели тренируются через ml-service (`POST /train`) с одним и тем
+ * же team-feature-set'ом (5 фич: bias, elo_diff_norm, winrate_diff,
+ * experience_diff, is_high_tier) — что уже есть для prematch_winner.
  *
- * Все три модели пишутся в `model_versions` с собственными `kind`:
- *   - 'market_total_kills' (algorithm='lognormal_per_tier')
- *   - 'market_total_duration' (algorithm='lognormal_per_tier')
- *   - 'market_first_blood'   (algorithm='base_rate_logit')
+ * Сохранение в `model_versions` с `engine='lightgbm'`, `binaryBlob`,
+ * `weights={}` (jsonb NOT NULL — кладём пустой объект как маркер; реальные
+ * параметры в blob). Атомарный swap per-market: для каждого `kind`
+ * деактивируем все предыдущие active и вставляем новую активную в одной
+ * транзакции.
  *
- * is_active управляется атомарно: для каждого `kind` деактивируем все
- * предыдущие active и вставляем новую активную в одной транзакции.
+ * CLI:
+ *   pnpm --filter @workspace/scripts run train:market-models
+ *     [--market first_blood|total_kills|total_duration|all]
  *
- * Завершается с exit 0 даже если какой-то из рынков не имеет данных —
+ *   --market all (по умолчанию) — обучает все 3.
+ *
+ * Завершается с exit 0 даже если какой-то рынок пропущен (мало данных) —
  * сценарий вызывается из расписания и не должен валить весь pipeline.
  */
 
@@ -35,10 +31,17 @@ import {
   teamsTable,
   modelVersionsTable,
 } from '@workspace/db';
-import { gte, and, eq, isNotNull } from 'drizzle-orm';
-import { classifyTier, type Tier } from './lib/tier';
+import { gte, and, eq } from 'drizzle-orm';
+import { asc } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
 
 const TRAIN_WINDOW_DAYS = 180;
+const MIN_SAMPLES = 60;
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
+const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
+const TRAIN_TIMEOUT_MS = 120_000;
+
+const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
 
 interface MatchRow {
   matchId: number;
@@ -52,34 +55,69 @@ interface MatchRow {
   direTeamId: number | null;
 }
 
-interface PerTierLogNormal {
-  n: number;
-  meanLog: number;
-  stdLog: number;
+interface TeamRating { rating: number; wins: number; losses: number; }
+
+type MarketKey = 'first_blood' | 'total_kills' | 'total_duration';
+const ALL_MARKETS: MarketKey[] = ['first_blood', 'total_kills', 'total_duration'];
+
+const KIND_BY_MARKET: Record<MarketKey, string> = {
+  first_blood: 'market_first_blood',
+  total_kills: 'market_total_kills',
+  total_duration: 'market_total_duration',
+};
+
+const TASK_BY_MARKET: Record<MarketKey, 'classification' | 'regression'> = {
+  first_blood: 'classification',
+  total_kills: 'regression',
+  total_duration: 'regression',
+};
+
+interface MlMetrics { accuracy: number; log_loss: number; brier: number; n: number; }
+interface TrainResponse {
+  label: string;
+  task_type: 'classification' | 'regression';
+  blob_b64: string;
+  feature_names: string[];
+  train_metrics: MlMetrics;
+  calib_metrics: MlMetrics;
+  test_metrics_raw: MlMetrics;
+  test_metrics_calibrated: MlMetrics;
+  baseline_acc: number;
+  feature_importance: Record<string, number>;
+  train_seconds: number;
+  residual_std: number | null;
 }
 
-interface KillsModelWeights {
-  perTier: Record<'t1' | 't2' | 't3' | 'all', PerTierLogNormal>;
-  trainAccuracy: number;  // не применимо, ставим 0; держим поле для совместимости
-  testSize: number;
+interface Sample { features: number[]; label: number; }
+
+function mlServiceToken(): string | null {
+  const env = (process.env.ML_SERVICE_TOKEN ?? '').trim();
+  if (env) return env;
+  try {
+    const v = readFileSync(ML_TOKEN_FILE, 'utf8').trim();
+    return v || null;
+  } catch { return null; }
 }
 
-interface FirstBloodModelWeights {
-  baseRadiantP: number;
-  eloLogitSlope: number;  // logit-сдвиг на 1 единицу нормированной разницы
-  n: number;
+function buildTeamFeatures(
+  rId: number, dId: number, teams: Map<number, TeamRating>,
+): number[] | null {
+  const r = teams.get(rId); const d = teams.get(dId);
+  if (!r || !d) return null;
+  const rG = r.wins + r.losses; const dG = d.wins + d.losses;
+  if (rG < 5 || dG < 5) return null;
+  return [
+    1,
+    (r.rating - d.rating) / 200,
+    r.wins / rG - d.wins / dG,
+    Math.log(rG + 1) - Math.log(dG + 1),
+    rG >= 50 && dG >= 50 ? 1 : 0,
+  ];
 }
 
-function safeMeanStd(values: number[]): { mean: number; std: number } {
-  if (values.length === 0) return { mean: 0, std: 1 };
-  const m = values.reduce((a, b) => a + b, 0) / values.length;
-  const v = values.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, values.length - 1);
-  return { mean: m, std: Math.sqrt(Math.max(v, 1e-9)) };
-}
-
-async function loadMatches(): Promise<MatchRow[]> {
-  const sinceTs = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86400;
-  const rows = await db
+async function loadData() {
+  const sinceTs = Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86_400;
+  const matches = await db
     .select({
       matchId: proMatchesTable.matchId,
       startTime: proMatchesTable.startTime,
@@ -92,177 +130,193 @@ async function loadMatches(): Promise<MatchRow[]> {
       direTeamId: proMatchesTable.direTeamId,
     })
     .from(proMatchesTable)
-    .where(gte(proMatchesTable.startTime, sinceTs));
-  return rows.filter((r): r is MatchRow => r.duration != null);
+    .where(gte(proMatchesTable.startTime, sinceTs))
+    .orderBy(asc(proMatchesTable.startTime));
+
+  const teamsRows = await db.select({
+    teamId: teamsTable.teamId, rating: teamsTable.rating,
+    wins: teamsTable.wins, losses: teamsTable.losses,
+  }).from(teamsTable);
+  const teams = new Map<number, TeamRating>();
+  for (const t of teamsRows) {
+    if (t.rating != null) teams.set(t.teamId, { rating: t.rating, wins: t.wins ?? 0, losses: t.losses ?? 0 });
+  }
+  return { matches: matches.filter((r): r is MatchRow => r.duration != null), teams };
 }
 
-async function loadTeamRatings(): Promise<Map<number, number>> {
-  const rows = await db
-    .select({ teamId: teamsTable.teamId, rating: teamsTable.rating })
-    .from(teamsTable);
-  const m = new Map<number, number>();
-  for (const r of rows) if (r.rating != null) m.set(r.teamId, r.rating);
-  return m;
-}
-
-function bucketByTier(
-  matches: MatchRow[],
-  ratings: Map<number, number>,
-): Record<'t1' | 't2' | 't3' | 'all', MatchRow[]> {
-  const out = { t1: [] as MatchRow[], t2: [] as MatchRow[], t3: [] as MatchRow[], all: [] as MatchRow[] };
+function buildSamples(market: MarketKey, matches: MatchRow[], teams: Map<number, TeamRating>): Sample[] {
+  const out: Sample[] = [];
   for (const m of matches) {
-    out.all.push(m);
     if (!m.radiantTeamId || !m.direTeamId) continue;
-    const r1 = ratings.get(m.radiantTeamId);
-    const r2 = ratings.get(m.direTeamId);
-    if (r1 == null || r2 == null) continue;
-    const t = classifyTier(r1, r2);
-    if (t === 't1') out.t1.push(m);
-    else if (t === 't2') out.t2.push(m);
-    else if (t === 't3') out.t3.push(m);
+    const feats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
+    if (!feats) continue;
+
+    if (market === 'first_blood') {
+      // Прокси: «radiant получил FB» = radiantWin среди матчей с known FB time.
+      // Реальная FB-команда требует /matches/:id players[].firstblood_claimed.
+      if (m.firstBloodTime == null) continue;
+      out.push({ features: feats, label: m.radiantWin ? 1 : 0 });
+    } else if (market === 'total_kills') {
+      if (m.radiantScore == null || m.direScore == null) continue;
+      const total = m.radiantScore + m.direScore;
+      if (total <= 0) continue;
+      out.push({ features: feats, label: Math.log(total) });
+    } else {
+      if (m.duration <= 0) continue;
+      out.push({ features: feats, label: Math.log(m.duration) });
+    }
   }
   return out;
 }
 
-function fitLogNormalPerTier(
-  buckets: Record<'t1' | 't2' | 't3' | 'all', MatchRow[]>,
-  extract: (m: MatchRow) => number | null,
-): KillsModelWeights {
-  const perTier: Record<'t1' | 't2' | 't3' | 'all', PerTierLogNormal> = {
-    t1: { n: 0, meanLog: 0, stdLog: 1 },
-    t2: { n: 0, meanLog: 0, stdLog: 1 },
-    t3: { n: 0, meanLog: 0, stdLog: 1 },
-    all: { n: 0, meanLog: 0, stdLog: 1 },
-  };
-  for (const tier of ['t1', 't2', 't3', 'all'] as const) {
-    const vals: number[] = [];
-    for (const m of buckets[tier]) {
-      const v = extract(m);
-      if (v == null || v <= 0) continue;
-      vals.push(Math.log(v));
+async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainResponse | null> {
+  const label = `market/${market}`;
+  if (samples.length < MIN_SAMPLES) {
+    console.log(`  [${label}] SKIP: only ${samples.length} samples (need ${MIN_SAMPLES}+)`);
+    return null;
+  }
+  const n = samples.length;
+  const trainEnd = Math.floor(n * 0.8);
+  const calibEnd = Math.floor(n * 0.9);
+  const train = samples.slice(0, trainEnd);
+  const calib = samples.slice(trainEnd, calibEnd);
+  const test = samples.slice(calibEnd);
+  const taskType = TASK_BY_MARKET[market];
+  console.log(`  [${label}] training task=${taskType} n=${train.length}/calib=${calib.length}/test=${test.length}`);
+
+  const token = mlServiceToken();
+  if (!token) {
+    console.error(`  [${label}] no ML_SERVICE_TOKEN (env or ${ML_TOKEN_FILE}) — restart ml-service first`);
+    return null;
+  }
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TRAIN_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${ML_SERVICE_URL}/train`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-ml-token': token },
+      body: JSON.stringify({
+        label,
+        feature_names: TEAM_FEATURE_NAMES,
+        task_type: taskType,
+        train, calib, test,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`  [${label}] ml-service ${res.status}: ${body.slice(0, 300)}`);
+      return null;
     }
-    if (vals.length < 5) continue;
-    const { mean, std } = safeMeanStd(vals);
-    perTier[tier] = { n: vals.length, meanLog: mean, stdLog: std };
+    const data = (await res.json()) as TrainResponse;
+    const tm = data.test_metrics_calibrated;
+    if (taskType === 'classification') {
+      console.log(`  [${label}] TEST acc=${(tm.accuracy * 100).toFixed(1)}% brier=${tm.brier.toFixed(4)} (n=${tm.n})`);
+    } else {
+      console.log(`  [${label}] TEST r2=${tm.accuracy.toFixed(3)} rmse=${tm.brier.toFixed(4)} mae=${tm.log_loss.toFixed(4)} (n=${tm.n}, residual_std=${data.residual_std?.toFixed(4)})`);
+    }
+    return data;
+  } catch (e) {
+    console.error(`  [${label}] training failed: ${(e as Error).message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
-  return { perTier, trainAccuracy: 0, testSize: perTier.all.n };
 }
 
-function fitFirstBlood(
-  matches: MatchRow[],
-  ratings: Map<number, number>,
-): FirstBloodModelWeights {
-  // Прокси: считаем «radiant получил первую кровь» = `radiant_win` AND
-  // matches с известным first_blood_time (что значит игра доехала до фактической
-  // первой крови, и мы можем хотя бы оценить долю по сторонам). Реальный
-  // парсинг first-blood-team требует /matches/:id players[].firstblood_claimed
-  // — добавим в backfill позже.
-  let total = 0;
-  let radiantFirst = 0;
-  for (const m of matches) {
-    if (m.firstBloodTime == null) continue;
-    total++;
-    if (m.radiantWin) radiantFirst++;
-  }
-  const baseP = total > 0 ? radiantFirst / total : 0.52;
-  // Лёгкий логистический сдвиг по eloDiff (без обучения — фиксированная
-  // эвристика 0.4 logit на 200 elo). Будет уточнено при backfill.
-  return { baseRadiantP: baseP, eloLogitSlope: 0.4, n: total };
-}
+async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise<void> {
+  const kind = KIND_BY_MARKET[market];
+  const blob = Buffer.from(r.blob_b64, 'base64');
+  const taskType = TASK_BY_MARKET[market];
+  const versionStem = `lgbm-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
 
-async function activateModel(opts: {
-  kind: string;
-  algorithm: string;
-  weights: Record<string, unknown>;
-  features: string[];
-  testSize: number;
-  trainAccuracy: number;
-  metadata: Record<string, unknown>;
-}): Promise<void> {
-  const versionStem = `${opts.kind}-${new Date().toISOString().slice(0, 10)}-${Date.now()}`;
-  await db.transaction(async tx => {
+  await db.transaction(async (tx) => {
     await tx
       .update(modelVersionsTable)
       .set({ isActive: false })
-      .where(and(eq(modelVersionsTable.kind, opts.kind), eq(modelVersionsTable.isActive, true)));
+      .where(and(eq(modelVersionsTable.kind, kind), eq(modelVersionsTable.isActive, true)));
     await tx.insert(modelVersionsTable).values({
       version: versionStem,
-      kind: opts.kind,
-      algorithm: opts.algorithm,
-      features: opts.features,
-      weights: opts.weights as Record<string, number>,
+      kind,
       featuresVersion: 1,
+      algorithm: 'lightgbm',
+      engine: 'lightgbm',
+      binaryBlob: blob,
+      features: r.feature_names,
+      weights: {},
+      trainAccuracy: r.train_metrics.accuracy,
+      testAccuracy: r.test_metrics_calibrated.accuracy,
+      brierScore: r.test_metrics_calibrated.brier,
+      trainSampleSize: r.train_metrics.n,
+      testSampleSize: r.test_metrics_calibrated.n,
+      metadata: {
+        market,
+        taskType,
+        engine: 'lightgbm',
+        residualStd: r.residual_std,
+        testRaw: r.test_metrics_raw,
+        testCalibrated: r.test_metrics_calibrated,
+        calibSampleSize: r.calib_metrics.n,
+        baselineAcc: r.baseline_acc,
+        featureImportance: r.feature_importance,
+        windowDays: TRAIN_WINDOW_DAYS,
+        trainSeconds: r.train_seconds,
+        blobBytes: blob.length,
+      },
       isActive: true,
-      trainAccuracy: opts.trainAccuracy,
-      testAccuracy: opts.trainAccuracy,
-      brierScore: 0,
-      trainSampleSize: opts.testSize,
-      testSampleSize: opts.testSize,
-      metadata: opts.metadata,
     });
   });
+  console.log(`  [market/${market}] ✅ activated ${versionStem} (blob=${blob.length}b)`);
+}
+
+function parseMarketsFromArgs(): MarketKey[] {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    let v: string | undefined;
+    if (a === '--market' && argv[i + 1]) { v = argv[i + 1]; i++; }
+    else if (a.startsWith('--market=')) v = a.slice('--market='.length);
+    if (!v) continue;
+    if (v === 'all') return ALL_MARKETS;
+    if ((ALL_MARKETS as string[]).includes(v)) return [v as MarketKey];
+    console.error(`[train-market-models] unknown --market: ${v} (valid: all, ${ALL_MARKETS.join(', ')})`);
+    process.exit(1);
+  }
+  return ALL_MARKETS;
 }
 
 async function main(): Promise<void> {
-  console.log('[train-market-models] loading data');
-  const [matches, ratings] = await Promise.all([loadMatches(), loadTeamRatings()]);
-  console.log(`[train-market-models] matches=${matches.length} ratings=${ratings.size}`);
-  if (matches.length < 30) {
+  const targets = parseMarketsFromArgs();
+  console.log(`[train-market-models] ml-service: ${ML_SERVICE_URL} markets=${targets.join(',')}`);
+
+  try {
+    const h = await fetch(`${ML_SERVICE_URL}/healthz`);
+    if (!h.ok) throw new Error(`status ${h.status}`);
+  } catch (e) {
+    console.error(`[train-market-models] ml-service unreachable: ${(e as Error).message}`);
+    process.exit(1);
+  }
+
+  const { matches, teams } = await loadData();
+  console.log(`[train-market-models] matches=${matches.length} teams=${teams.size}`);
+
+  if (matches.length < MIN_SAMPLES) {
     console.log('[train-market-models] not enough matches — exiting cleanly');
     return;
   }
 
-  const buckets = bucketByTier(matches, ratings);
-  console.log(
-    `[train-market-models] buckets: t1=${buckets.t1.length} t2=${buckets.t2.length} t3=${buckets.t3.length} all=${buckets.all.length}`,
-  );
+  let trained = 0;
+  for (const market of targets) {
+    console.log(`\n[train-market-models] === ${market} ===`);
+    const samples = buildSamples(market, matches, teams);
+    const r = await trainMarket(market, samples);
+    if (!r) continue;
+    await activateMarketModel(market, r);
+    trained++;
+  }
 
-  // 1. Total kills
-  const killsModel = fitLogNormalPerTier(buckets, m =>
-    m.radiantScore != null && m.direScore != null ? m.radiantScore + m.direScore : null,
-  );
-  await activateModel({
-    kind: 'market_total_kills',
-    algorithm: 'lognormal_per_tier',
-    features: ['per_tier_lognormal'],
-    weights: killsModel as unknown as Record<string, unknown>,
-    testSize: killsModel.testSize,
-    trainAccuracy: 0,
-    metadata: { description: 'log-normal of (radiant+dire) score per tier' },
-  });
-  console.log(
-    `[train-market-models] total_kills: t1=${killsModel.perTier.t1.n} t2=${killsModel.perTier.t2.n} t3=${killsModel.perTier.t3.n} all=${killsModel.perTier.all.n}`,
-  );
-
-  // 2. Total duration
-  const durModel = fitLogNormalPerTier(buckets, m => (m.duration > 0 ? m.duration : null));
-  await activateModel({
-    kind: 'market_total_duration',
-    algorithm: 'lognormal_per_tier',
-    features: ['per_tier_lognormal'],
-    weights: durModel as unknown as Record<string, unknown>,
-    testSize: durModel.testSize,
-    trainAccuracy: 0,
-    metadata: { description: 'log-normal of match duration (sec) per tier' },
-  });
-  console.log(
-    `[train-market-models] total_duration: t1=${durModel.perTier.t1.n} t2=${durModel.perTier.t2.n} t3=${durModel.perTier.t3.n} all=${durModel.perTier.all.n}`,
-  );
-
-  // 3. First blood
-  const fbModel = fitFirstBlood(matches, ratings);
-  await activateModel({
-    kind: 'market_first_blood',
-    algorithm: 'base_rate_logit',
-    features: ['base_rate', 'elo_logit_slope'],
-    weights: fbModel as unknown as Record<string, unknown>,
-    testSize: fbModel.n,
-    trainAccuracy: 0,
-    metadata: { description: 'base radiant-first-blood rate + linear elo logit shift' },
-  });
-  console.log(`[train-market-models] first_blood: n=${fbModel.n} baseP=${fbModel.baseRadiantP.toFixed(3)}`);
-
-  console.log('[train-market-models] done');
+  console.log(`\n[train-market-models] done — trained ${trained}/${targets.length}`);
 }
 
 main()

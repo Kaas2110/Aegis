@@ -25,6 +25,7 @@ import type {
   AdminLoginInput,
   AdminLoginResult,
   AdminMetricsResponse,
+  AdminModelRetrainInput,
   AdminModelsResponse,
   AdminOkResult,
   AdminOpenObject,
@@ -680,6 +681,95 @@ export const useTriggerAdminRetrain = <
   TContext
 > => {
   return useMutation(getTriggerAdminRetrainMutationOptions(options));
+};
+
+/**
+ * @summary Per-model manual retrain (lightgbm bucket / market / live)
+ */
+export const getTriggerAdminModelRetrainUrl = () => {
+  return `/api/admin/models/retrain`;
+};
+
+export const triggerAdminModelRetrain = async (
+  adminModelRetrainInput: AdminModelRetrainInput,
+  options?: RequestInit,
+): Promise<AdminRetrainResult> => {
+  return customFetch<AdminRetrainResult>(getTriggerAdminModelRetrainUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminModelRetrainInput),
+  });
+};
+
+export const getTriggerAdminModelRetrainMutationOptions = <
+  TError = ErrorType<AdminOpenObject | AdminRetrainResult>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerAdminModelRetrain>>,
+    TError,
+    { data: BodyType<AdminModelRetrainInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof triggerAdminModelRetrain>>,
+  TError,
+  { data: BodyType<AdminModelRetrainInput> },
+  TContext
+> => {
+  const mutationKey = ["triggerAdminModelRetrain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof triggerAdminModelRetrain>>,
+    { data: BodyType<AdminModelRetrainInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return triggerAdminModelRetrain(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TriggerAdminModelRetrainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof triggerAdminModelRetrain>>
+>;
+export type TriggerAdminModelRetrainMutationBody =
+  BodyType<AdminModelRetrainInput>;
+export type TriggerAdminModelRetrainMutationError = ErrorType<
+  AdminOpenObject | AdminRetrainResult
+>;
+
+/**
+ * @summary Per-model manual retrain (lightgbm bucket / market / live)
+ */
+export const useTriggerAdminModelRetrain = <
+  TError = ErrorType<AdminOpenObject | AdminRetrainResult>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerAdminModelRetrain>>,
+    TError,
+    { data: BodyType<AdminModelRetrainInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof triggerAdminModelRetrain>>,
+  TError,
+  { data: BodyType<AdminModelRetrainInput> },
+  TContext
+> => {
+  return useMutation(getTriggerAdminModelRetrainMutationOptions(options));
 };
 
 /**

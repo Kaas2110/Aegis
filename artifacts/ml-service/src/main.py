@@ -36,6 +36,8 @@ from typing import Annotated
 import hmac
 import secrets
 
+from typing import Literal
+
 import joblib
 import lightgbm as lgb
 import numpy as np
@@ -80,11 +82,12 @@ def require_token(x_ml_token: Annotated[str | None, Header()] = None) -> None:
 
 class TrainSample(BaseModel):
     features: list[float]
-    label: int = Field(ge=0, le=1)
+    # 0/1 для classification; произвольное число для regression.
+    label: float
 
 
 class TrainRequest(BaseModel):
-    """Тренировка LightGBM-классификатора с изотонической калибровкой.
+    """Тренировка LightGBM-классификатора (или регрессора) с изотонической калибровкой.
 
     Хронологический split на train/calib/test делается на стороне Node
     (там полный контекст по startTime); сюда приходят УЖЕ разбитые наборы.
@@ -92,6 +95,7 @@ class TrainRequest(BaseModel):
 
     label: str  # человекочитаемый ярлык, напр. "v3/prematch_winner_t1"
     feature_names: list[str]
+    task_type: Literal["classification", "regression"] = "classification"
     train: list[TrainSample]
     calib: list[TrainSample]
     test: list[TrainSample]
@@ -105,6 +109,8 @@ class TrainRequest(BaseModel):
 
 
 class TrainMetrics(BaseModel):
+    # accuracy/log_loss/brier — для classification; для regression
+    # переиспользуем поля как rmse (в `brier`) и r2-pseudo (в `accuracy`).
     accuracy: float
     log_loss: float
     brier: float
@@ -113,6 +119,7 @@ class TrainMetrics(BaseModel):
 
 class TrainResponse(BaseModel):
     label: str
+    task_type: Literal["classification", "regression"] = "classification"
     blob_b64: str  # base64-encoded joblib bundle
     feature_names: list[str]
     train_metrics: TrainMetrics
@@ -122,6 +129,7 @@ class TrainResponse(BaseModel):
     baseline_acc: float
     feature_importance: dict[str, float]
     train_seconds: float
+    residual_std: float | None = None  # только для regression
 
 
 class PredictRequest(BaseModel):
@@ -130,22 +138,33 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    raw_prob: float
-    calibrated_prob: float
+    # classification → raw_prob/calibrated_prob; regression → mean/std.
+    raw_prob: float | None = None
+    calibrated_prob: float | None = None
+    mean: float | None = None
+    std: float | None = None
+    task_type: Literal["classification", "regression"] = "classification"
 
 
 # ── Bundle helpers ──────────────────────────────────────────────────────
 
 
-def _serialize_bundle(model: lgb.LGBMClassifier, calibrator: IsotonicRegression | None,
-                      feature_names: list[str]) -> bytes:
+def _serialize_bundle(
+    model,
+    calibrator: IsotonicRegression | None,
+    feature_names: list[str],
+    task_type: str = "classification",
+    residual_std: float | None = None,
+) -> bytes:
     buf = io.BytesIO()
     joblib.dump(
         {
-            "version": 1,
+            "version": 2,
+            "task_type": task_type,
             "model": model,
             "calibrator": calibrator,
             "feature_names": feature_names,
+            "residual_std": residual_std,
             "lightgbm_version": lgb.__version__,
         },
         buf,
@@ -154,19 +173,23 @@ def _serialize_bundle(model: lgb.LGBMClassifier, calibrator: IsotonicRegression 
     return buf.getvalue()
 
 
-def _deserialize_bundle(blob: bytes) -> tuple[lgb.LGBMClassifier, IsotonicRegression | None, list[str]]:
+def _deserialize_bundle(blob: bytes) -> dict:
     bundle = joblib.load(io.BytesIO(blob))
-    return bundle["model"], bundle.get("calibrator"), bundle.get("feature_names", [])
+    # v1 bundles не имели task_type — это всегда classification.
+    bundle.setdefault("task_type", "classification")
+    bundle.setdefault("residual_std", None)
+    bundle.setdefault("feature_names", [])
+    return bundle
 
 
 # ── In-process bundle cache (по hash blob'а) ────────────────────────────
 
 
-_BUNDLE_CACHE: dict[str, tuple[lgb.LGBMClassifier, IsotonicRegression | None, list[str]]] = {}
+_BUNDLE_CACHE: dict[str, dict] = {}
 _CACHE_MAX = 32  # достаточно для 8 моделей × tier
 
 
-def _load_cached(blob_b64: str) -> tuple[lgb.LGBMClassifier, IsotonicRegression | None, list[str]]:
+def _load_cached(blob_b64: str) -> dict:
     cached = _BUNDLE_CACHE.get(blob_b64)
     if cached is not None:
         return cached
@@ -194,6 +217,19 @@ def _metrics(probs: np.ndarray, labels: np.ndarray) -> TrainMetrics:
     ll = float(-np.mean(labels * np.log(p) + (1 - labels) * np.log(1 - p)))
     brier = float(np.mean((p - labels) ** 2))
     return TrainMetrics(accuracy=acc, log_loss=ll, brier=brier, n=n)
+
+
+def _reg_metrics(preds: np.ndarray, labels: np.ndarray) -> TrainMetrics:
+    """Метрики регрессии. accuracy = pseudo-R² (1 - SSE/SST), brier = RMSE."""
+    n = len(labels)
+    if n == 0:
+        return TrainMetrics(accuracy=0.0, log_loss=0.0, brier=0.0, n=0)
+    err = preds - labels
+    rmse = float(np.sqrt(np.mean(err ** 2)))
+    mae = float(np.mean(np.abs(err)))
+    sst = float(np.sum((labels - labels.mean()) ** 2))
+    r2 = float(1.0 - (np.sum(err ** 2) / sst)) if sst > 1e-9 else 0.0
+    return TrainMetrics(accuracy=r2, log_loss=mae, brier=rmse, n=n)
 
 
 # ── FastAPI app ─────────────────────────────────────────────────────────
@@ -231,91 +267,133 @@ def train(req: TrainRequest) -> TrainResponse:
 
     t0 = time.perf_counter()
 
-    X_train = np.array([s.features for s in req.train], dtype=np.float64)
-    y_train = np.array([s.label for s in req.train], dtype=np.int32)
-    X_calib = np.array([s.features for s in req.calib], dtype=np.float64) if req.calib else np.empty((0, X_train.shape[1]))
-    y_calib = np.array([s.label for s in req.calib], dtype=np.int32) if req.calib else np.empty(0, dtype=np.int32)
-    X_test = np.array([s.features for s in req.test], dtype=np.float64) if req.test else np.empty((0, X_train.shape[1]))
-    y_test = np.array([s.label for s in req.test], dtype=np.int32) if req.test else np.empty(0, dtype=np.int32)
+    is_reg = req.task_type == "regression"
 
-    # Single-class guard (LightGBM упадёт на одном классе)
-    if len(np.unique(y_train)) < 2:
+    X_train = np.array([s.features for s in req.train], dtype=np.float64)
+    y_dtype = np.float64 if is_reg else np.int32
+    y_train = np.array([s.label for s in req.train], dtype=y_dtype)
+    X_calib = np.array([s.features for s in req.calib], dtype=np.float64) if req.calib else np.empty((0, X_train.shape[1]))
+    y_calib = np.array([s.label for s in req.calib], dtype=y_dtype) if req.calib else np.empty(0, dtype=y_dtype)
+    X_test = np.array([s.features for s in req.test], dtype=np.float64) if req.test else np.empty((0, X_train.shape[1]))
+    y_test = np.array([s.label for s in req.test], dtype=y_dtype) if req.test else np.empty(0, dtype=y_dtype)
+
+    if not is_reg and len(np.unique(y_train)) < 2:
         raise HTTPException(400, "train set has only one class")
 
-    use_eval = len(X_calib) >= 10 and len(np.unique(y_calib)) >= 2
+    use_eval = len(X_calib) >= 10 and (is_reg or len(np.unique(y_calib)) >= 2)
     callbacks = []
     if use_eval and req.early_stopping_rounds > 0:
         callbacks.append(lgb.early_stopping(req.early_stopping_rounds, verbose=False))
     callbacks.append(lgb.log_evaluation(0))
 
-    model = lgb.LGBMClassifier(
-        objective="binary",
-        num_leaves=req.num_leaves,
-        learning_rate=req.learning_rate,
-        n_estimators=req.n_estimators,
-        min_data_in_leaf=req.min_data_in_leaf,
-        feature_fraction=req.feature_fraction,
-        bagging_fraction=0.9,
-        bagging_freq=5,
-        random_state=42,
-        verbose=-1,
-        n_jobs=1,
-    )
+    if is_reg:
+        model = lgb.LGBMRegressor(
+            objective="regression",
+            num_leaves=req.num_leaves,
+            learning_rate=req.learning_rate,
+            n_estimators=req.n_estimators,
+            min_data_in_leaf=req.min_data_in_leaf,
+            feature_fraction=req.feature_fraction,
+            bagging_fraction=0.9,
+            bagging_freq=5,
+            random_state=42,
+            verbose=-1,
+            n_jobs=1,
+        )
+    else:
+        model = lgb.LGBMClassifier(
+            objective="binary",
+            num_leaves=req.num_leaves,
+            learning_rate=req.learning_rate,
+            n_estimators=req.n_estimators,
+            min_data_in_leaf=req.min_data_in_leaf,
+            feature_fraction=req.feature_fraction,
+            bagging_fraction=0.9,
+            bagging_freq=5,
+            random_state=42,
+            verbose=-1,
+            n_jobs=1,
+        )
 
+    eval_metric = "rmse" if is_reg else "binary_logloss"
     if use_eval:
         model.fit(
             X_train, y_train,
             eval_set=[(X_calib, y_calib)],
-            eval_metric="binary_logloss",
+            eval_metric=eval_metric,
             callbacks=callbacks,
         )
     else:
         model.fit(X_train, y_train, callbacks=callbacks)
 
-    # Изотоническая калибровка на holdout (calib set).
     calibrator: IsotonicRegression | None = None
-    if len(X_calib) >= 20 and len(np.unique(y_calib)) >= 2:
-        raw_calib_probs = model.predict_proba(X_calib)[:, 1]
-        calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-        calibrator.fit(raw_calib_probs, y_calib)
+    residual_std: float | None = None
 
-    # Метрики
-    train_probs = model.predict_proba(X_train)[:, 1]
-    train_metrics = _metrics(train_probs, y_train)
+    if is_reg:
+        # Residual std из calib set (или из train, если calib пуст).
+        ref_X = X_calib if len(X_calib) >= 5 else X_train
+        ref_y = y_calib if len(X_calib) >= 5 else y_train
+        ref_pred = model.predict(ref_X)
+        residuals = ref_y - ref_pred
+        residual_std = float(np.std(residuals, ddof=1)) if len(residuals) >= 2 else 0.0
 
-    calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
-    if len(X_calib) > 0:
-        calib_raw = model.predict_proba(X_calib)[:, 1]
-        calib_cal = calibrator.predict(calib_raw) if calibrator is not None else calib_raw
-        calib_metrics = _metrics(calib_cal, y_calib)
+        train_pred = model.predict(X_train)
+        train_metrics = _reg_metrics(train_pred, y_train)
+        calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+        if len(X_calib) > 0:
+            calib_pred = model.predict(X_calib)
+            calib_metrics = _reg_metrics(calib_pred, y_calib)
+        test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+        test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+        if len(X_test) > 0:
+            test_pred = model.predict(X_test)
+            test_metrics_raw = _reg_metrics(test_pred, y_test)
+            test_metrics_calibrated = test_metrics_raw
+        baseline_acc = float(y_test.mean()) if len(y_test) > 0 else 0.0
+    else:
+        if len(X_calib) >= 20 and len(np.unique(y_calib)) >= 2:
+            raw_calib_probs = model.predict_proba(X_calib)[:, 1]
+            calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+            calibrator.fit(raw_calib_probs, y_calib)
 
-    test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
-    test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
-    if len(X_test) > 0:
-        test_raw = model.predict_proba(X_test)[:, 1]
-        test_cal = calibrator.predict(test_raw) if calibrator is not None else test_raw
-        test_metrics_raw = _metrics(test_raw, y_test)
-        test_metrics_calibrated = _metrics(test_cal, y_test)
+        train_probs = model.predict_proba(X_train)[:, 1]
+        train_metrics = _metrics(train_probs, y_train)
 
-    baseline_acc = float(y_test.mean()) if len(y_test) > 0 else 0.0
+        calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+        if len(X_calib) > 0:
+            calib_raw = model.predict_proba(X_calib)[:, 1]
+            calib_cal = calibrator.predict(calib_raw) if calibrator is not None else calib_raw
+            calib_metrics = _metrics(calib_cal, y_calib)
+
+        test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+        test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
+        if len(X_test) > 0:
+            test_raw = model.predict_proba(X_test)[:, 1]
+            test_cal = calibrator.predict(test_raw) if calibrator is not None else test_raw
+            test_metrics_raw = _metrics(test_raw, y_test)
+            test_metrics_calibrated = _metrics(test_cal, y_test)
+
+        baseline_acc = float(y_test.mean()) if len(y_test) > 0 else 0.0
 
     importance = {
         name: float(imp)
         for name, imp in zip(req.feature_names, model.feature_importances_)
     }
 
-    blob = _serialize_bundle(model, calibrator, req.feature_names)
+    blob = _serialize_bundle(model, calibrator, req.feature_names,
+                             task_type=req.task_type, residual_std=residual_std)
     blob_b64 = base64.b64encode(blob).decode("ascii")
 
     elapsed = time.perf_counter() - t0
     log.info(
-        "[%s] trained in %.2fs n_train=%d n_calib=%d n_test=%d test_cal_acc=%.3f brier=%.4f bytes=%d",
-        req.label, elapsed, len(X_train), len(X_calib), len(X_test),
+        "[%s/%s] trained in %.2fs n_train=%d n_calib=%d n_test=%d test_acc=%.3f brier=%.4f bytes=%d",
+        req.label, req.task_type, elapsed, len(X_train), len(X_calib), len(X_test),
         test_metrics_calibrated.accuracy, test_metrics_calibrated.brier, len(blob),
     )
 
     return TrainResponse(
         label=req.label,
+        task_type=req.task_type,
         blob_b64=blob_b64,
         feature_names=req.feature_names,
         train_metrics=train_metrics,
@@ -325,6 +403,7 @@ def train(req: TrainRequest) -> TrainResponse:
         baseline_acc=baseline_acc,
         feature_importance=importance,
         train_seconds=elapsed,
+        residual_std=residual_std,
     )
 
 
@@ -332,10 +411,15 @@ def train(req: TrainRequest) -> TrainResponse:
 @app.post("/predict", response_model=PredictResponse, dependencies=[Depends(require_token)])
 def predict(req: PredictRequest) -> PredictResponse:
     try:
-        model, calibrator, feature_names = _load_cached(req.blob_b64)
+        bundle = _load_cached(req.blob_b64)
     except Exception as e:
         log.exception("failed to load bundle")
         raise HTTPException(400, f"bad blob: {e}")
+
+    model = bundle["model"]
+    calibrator = bundle.get("calibrator")
+    feature_names = bundle.get("feature_names", [])
+    task_type = bundle.get("task_type", "classification")
 
     if feature_names and len(req.features) != len(feature_names):
         raise HTTPException(
@@ -344,7 +428,13 @@ def predict(req: PredictRequest) -> PredictResponse:
         )
 
     X = np.array([req.features], dtype=np.float64)
+
+    if task_type == "regression":
+        mean = float(model.predict(X)[0])
+        std = float(bundle.get("residual_std") or 0.0)
+        return PredictResponse(mean=mean, std=std, task_type="regression")
+
     raw = float(model.predict_proba(X)[0, 1])
     cal = float(calibrator.predict(np.array([raw]))[0]) if calibrator is not None else raw
     cal = max(0.0, min(1.0, cal))
-    return PredictResponse(raw_prob=raw, calibrated_prob=cal)
+    return PredictResponse(raw_prob=raw, calibrated_prob=cal, task_type="classification")

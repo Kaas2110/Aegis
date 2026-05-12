@@ -24,6 +24,7 @@ import { db, schedulerStateTable, proMatchesTable } from '@workspace/db';
 import { eq, lt, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { loadActiveModel } from './PredictionModel';
+import { loadActiveMarketModels } from './MarketLgbm';
 import { loadActiveLiveModel } from './LiveWinnerModel';
 import { pruneLiveSnapshots } from './OutcomeTracker';
 import { getAppSettings } from './AppSettings';
@@ -276,6 +277,11 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
 
     // train:market-models — non-fatal
     stepResults['train:market-models'] = await runScriptSafe('train:market-models', 'train:market-models', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    if (stepResults['train:market-models']) {
+      try { await loadActiveMarketModels(); } catch (err) {
+        logger.warn({ err: String(err) }, '[Scheduler] reload after train:market-models failed');
+      }
+    }
 
     // train:live-model — non-fatal (нужны накопленные снапшоты)
     stepResults['train:live-model'] = await runScriptSafe('train:live-model', 'train:live-model', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
@@ -536,6 +542,84 @@ export async function triggerManualRetrain(): Promise<{ started: boolean; reason
   if (runInFlight) return { started: false, reason: 'already running' };
   void runRetrainPipeline('manual trigger');
   return { started: true, reason: 'manual trigger' };
+}
+
+/**
+ * Whitelist скриптов и допустимых аргументов для per-model ручного
+ * переобучения из админки. Любой запрос с скриптом/аргументом вне
+ * whitelist отклоняется на уровне роута (см. POST /admin/models/retrain).
+ */
+export const TRAIN_SCRIPT_WHITELIST: Record<string, { args: readonly string[] }> = {
+  'train:model':         { args: [] },
+  'train:lightgbm':      { args: ['--label'] },
+  'train:market-models': { args: ['--market'] },
+  'train:live-model':    { args: [] },
+};
+export type TrainScriptName = 'train:model' | 'train:lightgbm' | 'train:market-models' | 'train:live-model';
+
+/**
+ * Запускает один тренировочный скрипт в фоне с whitelist'ом аргументов.
+ * Использует тот же `runInFlight` mutex, что и full retrain pipeline:
+ * во время full retrain перепереобучить отдельную модель нельзя.
+ *
+ * Args передаются как массив пар [flag, value]; flag должен быть в
+ * `TRAIN_SCRIPT_WHITELIST[script].args`. value валидируется регэкспом
+ * (только [a-zA-Z0-9_/-]). Это защита от shell-инъекции — pnpm/spawn
+ * без shell, но extra layer не помешает.
+ */
+export async function runTrainScriptManual(
+  script: TrainScriptName,
+  args: Array<{ flag: string; value: string }>,
+): Promise<{ started: boolean; reason: string }> {
+  const meta = TRAIN_SCRIPT_WHITELIST[script];
+  if (!meta) return { started: false, reason: `unknown script: ${script}` };
+
+  const flatArgs: string[] = [];
+  for (const { flag, value } of args) {
+    if (!meta.args.includes(flag)) {
+      return { started: false, reason: `flag ${flag} not allowed for ${script}` };
+    }
+    if (!/^[a-zA-Z0-9_/-]+$/.test(value)) {
+      return { started: false, reason: `invalid value for ${flag}: must match [a-zA-Z0-9_/-]+` };
+    }
+    flatArgs.push(flag, value);
+  }
+
+  if (runInFlight) return { started: false, reason: 'another retrain is in flight' };
+
+  runInFlight = true;
+  const reason = `manual ${script}${flatArgs.length ? ' ' + flatArgs.join(' ') : ''}`;
+  logger.info({ script, flatArgs }, `[Scheduler] ${reason}`);
+
+  // fire-and-forget; release mutex when done; hot-reload models on success.
+  void (async () => {
+    try {
+      const r = await runPnpmScript(script, flatArgs, { timeoutMs: 30 * 60 * 1000 });
+      if (r.code === 0) {
+        logger.info({ script, flatArgs }, `[Scheduler] ${reason} OK`);
+        // Hot-reload зависит от скрипта; гоняем оба — getActiveModel идемпотентен.
+        try {
+          if (script === 'train:model' || script === 'train:lightgbm') {
+            await loadActiveModel();
+          }
+          if (script === 'train:market-models') {
+            await loadActiveMarketModels();
+          }
+          if (script === 'train:live-model') {
+            await loadActiveLiveModel();
+          }
+        } catch (e) {
+          logger.warn({ err: String(e) }, `[Scheduler] hot-reload after ${script} failed`);
+        }
+      } else {
+        logger.error({ script, code: r.code, tail: r.tail.slice(-2000) }, `[Scheduler] ${reason} FAILED`);
+      }
+    } finally {
+      runInFlight = false;
+    }
+  })();
+
+  return { started: true, reason };
 }
 
 /**

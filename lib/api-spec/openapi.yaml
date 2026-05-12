@@ -130,6 +130,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminRetrainResult"
 
+  /admin/models/retrain:
+    post:
+      operationId: triggerAdminModelRetrain
+      tags: [admin]
+      summary: Per-model manual retrain (lightgbm bucket / market / live)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminModelRetrainInput"
+      responses:
+        "200":
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRetrainResult"
+        "400":
+          description: Invalid script or args
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+        "409":
+          description: Already in flight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRetrainResult"
+
   /admin/prune-snapshots:
     post:
       operationId: triggerAdminPrune
@@ -336,6 +367,23 @@ components:
           type: string
         message:
           type: string
+    AdminModelRetrainInput:
+      type: object
+      required: [script]
+      properties:
+        script:
+          type: string
+          enum:
+            - "train:model"
+            - "train:lightgbm"
+            - "train:market-models"
+            - "train:live-model"
+        label:
+          type: string
+          description: For train:lightgbm — bucket label like "v3/t1".
+        market:
+          type: string
+          description: For train:market-models — first_blood|total_kills|total_duration|all.
     AdminPruneInput:
       type: object
       properties:

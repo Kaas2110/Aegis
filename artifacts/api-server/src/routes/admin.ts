@@ -19,7 +19,13 @@
 
 import { Router, type IRouter } from 'express';
 import { getAppSettings, updateAppSettings } from '../services/AppSettings';
-import { triggerManualRetrain, getSchedulerState } from '../services/SchedulerWorker';
+import {
+  triggerManualRetrain,
+  getSchedulerState,
+  runTrainScriptManual,
+  TRAIN_SCRIPT_WHITELIST,
+  type TrainScriptName,
+} from '../services/SchedulerWorker';
 import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/OutcomeTracker';
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
@@ -75,6 +81,38 @@ router.get('/metrics', async (req, res) => {
 router.post('/retrain', async (_req, res) => {
   const result = await triggerManualRetrain();
   res.json(result);
+});
+
+/**
+ * POST /api/admin/models/retrain
+ * Per-model ручной триггер. Body: { script, label?, market? }.
+ *  - script ∈ TRAIN_SCRIPT_WHITELIST (train:model | train:lightgbm |
+ *    train:market-models | train:live-model)
+ *  - label?  — для train:lightgbm (например "v3/t1" или "v2/fallback")
+ *  - market? — для train:market-models (first_blood|total_kills|total_duration|all)
+ *
+ * Любой неизвестный script/flag возвращает 400. При успешном старте —
+ * 200 + { started, reason }. Mutex с full-pipeline retrain'ом.
+ */
+router.post('/models/retrain', async (req, res) => {
+  const body = (req.body ?? {}) as { script?: unknown; label?: unknown; market?: unknown };
+  const script = body.script;
+  if (typeof script !== 'string' || !(script in TRAIN_SCRIPT_WHITELIST)) {
+    res.status(400).json({
+      error: 'invalid script',
+      allowed: Object.keys(TRAIN_SCRIPT_WHITELIST),
+    });
+    return;
+  }
+  const args: Array<{ flag: string; value: string }> = [];
+  if (typeof body.label === 'string' && body.label.length > 0) {
+    args.push({ flag: '--label', value: body.label });
+  }
+  if (typeof body.market === 'string' && body.market.length > 0) {
+    args.push({ flag: '--market', value: body.market });
+  }
+  const result = await runTrainScriptManual(script as TrainScriptName, args);
+  res.status(result.started ? 200 : 409).json(result);
 });
 
 router.post('/prune-snapshots', async (req, res) => {
