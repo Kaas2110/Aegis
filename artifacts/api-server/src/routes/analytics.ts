@@ -443,11 +443,27 @@ router.get('/totals-ladder', async (req, res) => {
     res.status(400).json({ error: 'format must be BO1, BO3 or BO5' });
     return;
   }
+  const formatNorm = formatRaw === 'BO1' ? 0 : formatRaw === 'BO5' ? 1 : 0.5;
   const rawLineCount = Number(req.query.lineCount);
   const lineCount = Math.min(15, Math.max(3, Number.isFinite(rawLineCount) && rawLineCount > 0 ? Math.floor(rawLineCount) : 7));
   const liveCurrent = req.query.liveCurrent != null ? Number(req.query.liveCurrent) : null;
   const liveMinute = req.query.liveMinute != null ? Number(req.query.liveMinute) : null;
   const isLive = liveCurrent != null && liveMinute != null && liveCurrent >= 0 && liveMinute > 0;
+
+  // Опциональные букмекерские линии: ?lines=42.5,43.5,44.5
+  // Если переданы — используем как есть (реальные линии бука), иначе генерируем синтетические.
+  let bookmakerLines: number[] | null = null;
+  let bookmakerSource: string | null = null;
+  if (req.query.lines) {
+    const parsed = String(req.query.lines)
+      .split(',')
+      .map(s => parseFloat(s.trim()))
+      .filter(n => Number.isFinite(n) && n > 0 && n < 1000);
+    if (parsed.length >= 2) {
+      bookmakerLines = parsed;
+      bookmakerSource = req.query.bookmakerSource ? String(req.query.bookmakerSource) : null;
+    }
+  }
 
   const { predictTotalKills, predictTotalDuration } = await import('../services/BetTypeModels');
   const { predictMatchWinner } = await import('../services/PredictionModel');
@@ -498,7 +514,6 @@ router.get('/totals-ladder', async (req, res) => {
       const projectedKills = currentVal + killsPerMin * (estimatedFinalMin - minute);
       projection = { current: currentVal, minute, projected: projectedKills, remainingMin: estimatedFinalMin - minute };
     } else {
-      // duration: показываем, сколько уже прошло; «projected» = ожид. финал
       projection = { current: minute, projected: Math.max(minute + 1, baseExpectedDuration), minute, remainingMin: Math.max(1, baseExpectedDuration - minute) };
     }
   }
@@ -506,26 +521,31 @@ router.get('/totals-ladder', async (req, res) => {
   // Центр лестницы: для прематч — μ модели, для live — projection.projected
   const center = projection ? projection.projected : (type === 'kills' ? baseExpectedKills : baseExpectedDuration);
   const step = type === 'kills' ? 1 : 0.5;
-  // Линии у буков:
-  //   kills — всегда X.5 (49.5, 50.5, 51.5...) — snap к ближайшему X.5
-  //   duration — шаг 0.5, допускаются и .0 и .5 (42.0, 42.5, 43.0...) — snap к ближайшему .5
-  let snappedCenter: number;
-  if (type === 'kills') {
-    snappedCenter = Math.round(center - 0.5) + 0.5;
+
+  // Генерируем линии — или реальные от букмекера, или синтетические вокруг μ
+  let lineValues: number[];
+  const usingBookmakerLines = bookmakerLines !== null && bookmakerLines.length >= 2;
+  if (usingBookmakerLines) {
+    lineValues = bookmakerLines!;
   } else {
-    snappedCenter = Math.round(center * 2) / 2;
-  }
-  const startOffset = -Math.floor(lineCount / 2);
-  const lineValues: number[] = [];
-  for (let i = 0; i < lineCount; i++) {
-    lineValues.push(snappedCenter + (startOffset + i) * step);
+    let snappedCenter: number;
+    if (type === 'kills') {
+      snappedCenter = Math.round(center - 0.5) + 0.5;
+    } else {
+      snappedCenter = Math.round(center * 2) / 2;
+    }
+    const startOffset = -Math.floor(lineCount / 2);
+    lineValues = [];
+    for (let i = 0; i < lineCount; i++) {
+      lineValues.push(snappedCenter + (startOffset + i) * step);
+    }
   }
 
-  // Wave 4: пытаемся LGB market-модель; на отсутствие/ошибку — heuristic.
+  // Wave 4 v2: LGB market-модель с 11 фичами (форма команд + patch_kpm + format)
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
-  const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
+  const lgb = await predictMarketsFor(radiantId, direId, formatNorm).catch(() => null);
   const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
-  const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
+  const linesScale = type === 'duration' ? 60 : 1;
 
   const lines = lineValues.map(line => {
     let pOver: number;
@@ -542,10 +562,9 @@ router.get('/totals-ladder', async (req, res) => {
     };
   });
 
-  // Confidence у моделей фиксированный (0.62/0.64) — берём из первой строки
-  const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0]) : predictTotalDuration(fv, lineValues[0]);
+  const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0] ?? center) : predictTotalDuration(fv, lineValues[0] ?? center);
   const confidence = lgbLogN ? 0.72 : sample.confidence;
-  const modelVersion = lgbLogN ? 'lightgbm-market' : sample.modelVersion;
+  const modelVersion = lgbLogN ? 'lightgbm-market-v2' : sample.modelVersion;
 
   res.json({
     type,
@@ -555,6 +574,8 @@ router.get('/totals-ladder', async (req, res) => {
     lines,
     confidence,
     modelVersion,
+    bookmakerSource: bookmakerSource ?? undefined,
+    linesSource: usingBookmakerLines ? 'bookmaker' : 'synthetic',
     generatedAt: new Date().toISOString(),
   });
 });

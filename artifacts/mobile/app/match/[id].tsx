@@ -227,6 +227,38 @@ export default function MatchDetailScreen() {
     if (match) logProductEvent('match_detail_opened', 'match_detail', { matchId: match.id });
   }, [match?.id]);
 
+  // Wave 4: тоталы от букмекеров — пробуем найти реальные линии по именам команд.
+  // Оба типа (kills/duration) за один обход источников не получить через текущий API,
+  // поэтому делаем два параллельных запроса. Ошибки — silent (fallback на синтетику).
+  interface BkLinesResult { lines: number[]; source: string; sourceName: string }
+  const [bkKills, setBkKills] = useState<BkLinesResult | null>(null);
+  const [bkDuration, setBkDuration] = useState<BkLinesResult | null>(null);
+
+  useEffect(() => {
+    if (!match) return;
+    const t1 = match.team1.name?.trim();
+    const t2 = match.team2.name?.trim();
+    if (!t1 || !t2) return;
+    let cancelled = false;
+    const fetchLines = async (type: 'kills' | 'duration', setter: (v: BkLinesResult | null) => void) => {
+      try {
+        const r = await fetch(getApiUrl(
+          `/api/bookmakers/match-lines?team1=${encodeURIComponent(t1)}&team2=${encodeURIComponent(t2)}&type=${type}`
+        ));
+        if (!r.ok || cancelled) return;
+        const json = await r.json() as { found: boolean; lines?: number[]; source?: string; sourceName?: string };
+        if (!cancelled && json.found && json.lines && json.lines.length >= 2) {
+          setter({ lines: json.lines, source: json.source ?? '', sourceName: json.sourceName ?? json.source ?? '' });
+        }
+      } catch { /* silent — bookmakers may be geo-blocked */ }
+    };
+    Promise.all([
+      fetchLines('kills', setBkKills),
+      fetchLines('duration', setBkDuration),
+    ]);
+    return () => { cancelled = true; };
+  }, [match?.id]);
+
   // T006: подтягиваем гуманизированный прогноз
   useEffect(() => {
     if (!match) return;
@@ -749,6 +781,7 @@ export default function MatchDetailScreen() {
                       : null;
                     const liveMinute = isLive && snap ? Math.floor(snap.gameTimeSeconds / 60) : null;
                     const fmt = (match.format ?? 'BO3').toUpperCase() as 'BO1' | 'BO3' | 'BO5';
+                    const bkResult = ladderType === 'kills' ? bkKills : bkDuration;
                     return (
                       <TotalsLadder
                         key={mkt.id}
@@ -758,6 +791,8 @@ export default function MatchDetailScreen() {
                         format={fmt}
                         liveCurrent={liveCurrent}
                         liveMinute={liveMinute}
+                        bookmakerLines={bkResult?.lines}
+                        bookmakerSource={bkResult?.sourceName}
                       />
                     );
                   }

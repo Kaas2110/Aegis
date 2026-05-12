@@ -1,39 +1,36 @@
 /**
  * Market models inference (Wave 4 — LightGBM via ml-service).
  *
- * Загружает 3 активные модели из `model_versions` (kind ∈
- * market_first_blood | market_total_kills | market_total_duration,
- * engine='lightgbm', is_active=true) и экспонирует async-предикторы.
+ * v2 фичи (11): bias, elo_diff_norm, winrate_diff, experience_diff,
+ * is_high_tier, avg_kills_r, avg_kills_d, avg_dur_h_r, avg_dur_h_d,
+ * patch_kpm, format_norm.
  *
- * Фичи — те же 5 team-features, что в `scripts/src/train-market-models.ts`
- * (`buildTeamFeatures`):
- *   [bias, elo_diff_norm, winrate_diff, experience_diff, is_high_tier]
- *
- * Для regression моделей ml-service возвращает {mean, std} в log-пространстве
- * (label = log(value)). На выходе делаем exp(mean) и std сохраняем как-есть
- * (это σ log-нормали).
+ * Форма команд (avgKillsFor / avgDurationSec 30d) + patch_kpm кэшируются
+ * с 1h TTL. При отсутствии данных — глобальные медианы.
  *
  * Inference:
- *   - 200ms timeout, общий circuit-breaker делит с PredictionModel через
- *     `lightgbmAvailable`/`tripLightgbm` нет — здесь свой локальный, чтобы
- *     не валить prematch при недоступности market-моделей.
- *   - Per-(rId,dId,market) кэш на 60s (одни и те же запросы внутри минуты
- *     повторяются часто — popular-markets + analytics route).
- *   - При любой ошибке возвращаем null → caller использует свой эвристический
- *     fallback.
+ *   - 200ms timeout, свой circuit-breaker (не трогает prematch_winner).
+ *   - Per-(rId, dId, market) кэш на 60s.
+ *   - При любой ошибке → null, caller использует эвристический fallback.
  */
 
-import { db, modelVersionsTable, teamsTable } from '@workspace/db';
-import { eq, and, inArray } from 'drizzle-orm';
+import { db, modelVersionsTable, teamsTable, teamRecentFormTable, proMatchesTable } from '@workspace/db';
+import { eq, and, inArray, gte } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 
-const TEAM_CACHE_TTL_MS = 15 * 60 * 1000;
-const PREDICT_CACHE_TTL_MS = 60 * 1000;
+const TEAM_CACHE_TTL_MS = 15 * 60 * 1000;   // 15 min
+const FORM_CACHE_TTL_MS = 60 * 60 * 1000;   // 1h
+const PREDICT_CACHE_TTL_MS = 60 * 1000;      // 1 min
 const CIRCUIT_BACKOFF_MS = 60_000;
+
+// Нормализационные константы
+const GLOBAL_AVG_KILLS = 52;
+const GLOBAL_AVG_DUR_SEC = 2200;
+const GLOBAL_KPM = 1.1;
 
 export type MarketKind =
   | 'market_first_blood'
@@ -69,6 +66,15 @@ let cached: Map<MarketKind, LoadedMarket> = new Map();
 let teamRatings: Map<number, { rating: number; wins: number; losses: number }> = new Map();
 let lastTeamLoad = 0;
 
+// Форма команд (30d snapshot)
+interface TeamForm { avgKillsFor: number; avgDurationSec: number; }
+let teamForm: Map<number, TeamForm> = new Map();
+let lastFormLoad = 0;
+
+// Patch KPM (глобальный темп убийств за 30 дней)
+let patchKpm = GLOBAL_KPM;
+let lastKpmLoad = 0;
+
 let circuitOpen = false;
 let circuitOpenUntil = 0;
 
@@ -103,7 +109,7 @@ function tripCircuit(reason: string): void {
   circuitOpenUntil = Date.now() + CIRCUIT_BACKOFF_MS;
 }
 
-/** Загрузить активные market-модели в кеш. Вызывать при старте api-server и после ретрейна. */
+/** Загрузить активные market-модели в кеш. */
 export async function loadActiveMarketModels(): Promise<number> {
   try {
     const rows = await db
@@ -123,7 +129,7 @@ export async function loadActiveMarketModels(): Promise<number> {
       const blob = r.binaryBlob as Buffer | Uint8Array | null;
       if (!blob) continue;
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
-      const tt = meta['task_type'];
+      const tt = meta['task_type'] ?? meta['taskType'];
       const taskType: 'classification' | 'regression' =
         tt === 'regression' ? 'regression' : 'classification';
       next.set(kind, {
@@ -167,19 +173,89 @@ async function refreshTeams(): Promise<void> {
   }
 }
 
-function buildTeamFeatures(rId: number, dId: number): number[] | null {
+async function refreshForm(): Promise<void> {
+  if (Date.now() - lastFormLoad < FORM_CACHE_TTL_MS && teamForm.size > 0) return;
+  try {
+    const rows = await db
+      .select({
+        teamId: teamRecentFormTable.teamId,
+        avgKillsFor: teamRecentFormTable.avgKillsFor,
+        avgDurationSec: teamRecentFormTable.avgDurationSec,
+      })
+      .from(teamRecentFormTable)
+      .where(eq(teamRecentFormTable.periodDays, 30));
+
+    const next = new Map<number, TeamForm>();
+    for (const r of rows) {
+      next.set(r.teamId, {
+        avgKillsFor: r.avgKillsFor ?? GLOBAL_AVG_KILLS,
+        avgDurationSec: r.avgDurationSec ?? GLOBAL_AVG_DUR_SEC,
+      });
+    }
+    teamForm = next;
+    lastFormLoad = Date.now();
+    logger.debug({ count: next.size }, '[MarketLgbm] team form refreshed');
+  } catch (err) {
+    logger.error({ err }, '[MarketLgbm] failed to load team form');
+  }
+}
+
+async function refreshPatchKpm(): Promise<void> {
+  if (Date.now() - lastKpmLoad < FORM_CACHE_TTL_MS) return;
+  try {
+    const since = Math.floor(Date.now() / 1000) - 30 * 86_400;
+    const rows = await db
+      .select({
+        radiantScore: proMatchesTable.radiantScore,
+        direScore: proMatchesTable.direScore,
+        duration: proMatchesTable.duration,
+      })
+      .from(proMatchesTable)
+      .where(gte(proMatchesTable.startTime, since));
+
+    let totalKills = 0; let totalMin = 0;
+    for (const r of rows) {
+      const kills = (r.radiantScore ?? 0) + (r.direScore ?? 0);
+      const dur = r.duration ?? 0;
+      if (kills > 0 && dur > 0) { totalKills += kills; totalMin += dur / 60; }
+    }
+    if (totalMin > 0 && rows.length >= 10) {
+      patchKpm = totalKills / totalMin;
+    }
+    lastKpmLoad = Date.now();
+    logger.debug({ patchKpm, n: rows.length }, '[MarketLgbm] patch KPM refreshed');
+  } catch (err) {
+    logger.error({ err }, '[MarketLgbm] failed to compute patch KPM');
+  }
+}
+
+/**
+ * Строит вектор из 11 фич для market-моделей v2.
+ * formatNorm: 0.0=BO1, 0.5=BO3, 1.0=BO5 (по умолчанию 0.5).
+ */
+function buildTeamFeatures(rId: number, dId: number, formatNorm = 0.5): number[] | null {
   const r = teamRatings.get(rId);
   const d = teamRatings.get(dId);
   if (!r || !d) return null;
   const rG = r.wins + r.losses;
   const dG = d.wins + d.losses;
   if (rG < 5 || dG < 5) return null;
+
+  const rf = teamForm.get(rId);
+  const df = teamForm.get(dId);
+
   return [
-    1,
-    (r.rating - d.rating) / 200,
-    r.wins / rG - d.wins / dG,
-    Math.log(rG + 1) - Math.log(dG + 1),
-    rG >= 50 && dG >= 50 ? 1 : 0,
+    1,                                                          // bias
+    (r.rating - d.rating) / 200,                               // elo_diff_norm
+    r.wins / rG - d.wins / dG,                                 // winrate_diff
+    Math.log(rG + 1) - Math.log(dG + 1),                      // experience_diff
+    rG >= 50 && dG >= 50 ? 1 : 0,                             // is_high_tier
+    (rf?.avgKillsFor ?? GLOBAL_AVG_KILLS) / 60,                // avg_kills_r
+    (df?.avgKillsFor ?? GLOBAL_AVG_KILLS) / 60,                // avg_kills_d
+    (rf?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,         // avg_dur_h_r
+    (df?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,         // avg_dur_h_d
+    patchKpm,                                                   // patch_kpm
+    formatNorm,                                                 // format_norm
   ];
 }
 
@@ -238,26 +314,25 @@ async function callMlPredict(blobB64: string, features: number[]): Promise<Predi
 
 interface CachedPrediction {
   ts: number;
-  firstBloodP: number | null;     // P(radiant wins fb-proxy)
+  firstBloodP: number | null;
   totalKillsLogN: { mean: number; std: number } | null;
   totalDurationLogN: { mean: number; std: number } | null;
 }
 const predictCache: Map<string, CachedPrediction> = new Map();
 
-function cacheKey(rId: number, dId: number): string {
-  return `${rId}|${dId}`;
+function cacheKey(rId: number, dId: number, fmt: number): string {
+  return `${rId}|${dId}|${fmt.toFixed(2)}`;
 }
 
 /**
- * Возвращает все 3 market-предсказания для пары команд (или null'ы для
- * каждого, если соответствующая модель недоступна или входные фичи
- * недостаточны).
- *
- * Никогда не бросает — fallback'и считают вызывающие.
+ * Возвращает все 3 market-предсказания для пары команд.
+ * formatNorm: 0=BO1, 0.5=BO3, 1.0=BO5 (по умолчанию 0.5 = BO3).
+ * Никогда не бросает.
  */
 export async function predictMarketsFor(
   radiantTeamId: number,
   direTeamId: number,
+  formatNorm = 0.5,
 ): Promise<CachedPrediction> {
   const empty: CachedPrediction = {
     ts: Date.now(),
@@ -267,12 +342,14 @@ export async function predictMarketsFor(
   };
   if (cached.size === 0) return empty;
 
-  const key = cacheKey(radiantTeamId, direTeamId);
+  const key = cacheKey(radiantTeamId, direTeamId, formatNorm);
   const hit = predictCache.get(key);
   if (hit && Date.now() - hit.ts < PREDICT_CACHE_TTL_MS) return hit;
 
-  await refreshTeams();
-  const features = buildTeamFeatures(radiantTeamId, direTeamId);
+  // Обновляем кэши параллельно
+  await Promise.all([refreshTeams(), refreshForm(), refreshPatchKpm()]);
+
+  const features = buildTeamFeatures(radiantTeamId, direTeamId, formatNorm);
   if (!features) {
     predictCache.set(key, empty);
     return empty;
@@ -303,12 +380,10 @@ export async function predictMarketsFor(
 }
 
 /**
- * Стандартное normal-CDF приближение через erf (Abramowitz & Stegun 7.1.26).
- * Используется для конвертации (mean, std) log-нормали в P(value > line)
- * через Φ((log(line) − mean) / std).
+ * Стандартное normal-CDF приближение (Abramowitz & Stegun 7.1.26).
+ * P(value > line) для log-нормали: Φ((log(line) − mean) / std).
  */
 function normCdf(z: number): number {
-  // erf approximation
   const sign = z < 0 ? -1 : 1;
   const x = Math.abs(z) / Math.SQRT2;
   const t = 1 / (1 + 0.3275911 * x);
@@ -317,18 +392,17 @@ function normCdf(z: number): number {
   return 0.5 * (1 + erf);
 }
 
-/** P(exp(N(mean,std)) > line). std — sigma в log-пространстве. */
 export function probLogNormalOver(line: number, logMean: number, logStd: number): number {
   if (line <= 0) return 1;
-  const z = (Math.log(line) - logMean) / Math.max(1e-3, logStd);
+  const z = (Math.log(line) - logMean) / logStd;
   return 1 - normCdf(z);
 }
 
-/** Diagnostics — для admin /models endpoint. */
-export function getActiveMarketModelInfo(): Array<{ kind: MarketKind; taskType: string; loadedAt: number }> {
-  return Array.from(cached.values()).map(m => ({
-    kind: m.kind,
-    taskType: m.taskType,
-    loadedAt: m.loadedAt,
-  }));
+/** Инвалидировать predict-кэш (после ретрейна). */
+export function invalidatePredictCache(): void {
+  predictCache.clear();
+  teamForm.clear();
+  lastFormLoad = 0;
+  lastKpmLoad = 0;
+  _cachedToken = null;
 }

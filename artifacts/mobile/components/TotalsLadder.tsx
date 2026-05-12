@@ -2,6 +2,7 @@
  * TotalsLadder — лестница ТБ/ТМ как у букмекеров.
  * Несколько линий тотала (49.5, 50.5, …, 55.5) с вероятностью модели для каждой стороны.
  * Live: лестница автоматически центрируется вокруг проекции текущего темпа.
+ * Wave 4: если переданы реальные линии букмекера, показывает значок источника.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
@@ -26,6 +27,8 @@ interface LadderResponse {
   confidence: number;
   modelVersion: string;
   generatedAt: string;
+  linesSource?: 'bookmaker' | 'synthetic';
+  bookmakerSource?: string;
 }
 
 interface Props {
@@ -36,6 +39,10 @@ interface Props {
   liveCurrent?: number | null;
   liveMinute?: number | null;
   defaultExpanded?: boolean;
+  /** Реальные линии от букмекера, если удалось получить. */
+  bookmakerLines?: number[] | null;
+  /** Название источника для бейджа (напр. «PARI»). */
+  bookmakerSource?: string | null;
 }
 
 const TYPE_LABEL: Record<TotalsType, { title: string; unit: string }> = {
@@ -46,6 +53,7 @@ const TYPE_LABEL: Record<TotalsType, { title: string; unit: string }> = {
 export function TotalsLadder({
   radiantTeamId, direTeamId, type, format = 'BO3',
   liveCurrent, liveMinute, defaultExpanded = true,
+  bookmakerLines, bookmakerSource,
 }: Props) {
   const colors = useColors();
   const [data, setData] = useState<LadderResponse | null>(null);
@@ -69,6 +77,11 @@ export function TotalsLadder({
       params.set('liveCurrent', String(liveCurrent));
       params.set('liveMinute', String(liveMinute));
     }
+    // Если есть реальные линии букмекера — передаём на сервер
+    if (bookmakerLines && bookmakerLines.length >= 2) {
+      params.set('lines', bookmakerLines.join(','));
+      if (bookmakerSource) params.set('bookmakerSource', bookmakerSource);
+    }
 
     fetch(getApiUrl(`/api/analytics/totals-ladder?${params.toString()}`))
       .then(async r => {
@@ -79,9 +92,11 @@ export function TotalsLadder({
       .catch(e => { if (!cancelled) { setError(String(e?.message ?? e)); setLoading(false); } });
 
     return () => { cancelled = true; };
-  }, [radiantTeamId, direTeamId, type, format, liveCurrent, liveMinute]);
+  }, [radiantTeamId, direTeamId, type, format, liveCurrent, liveMinute, bookmakerLines, bookmakerSource]);
 
   const meta = TYPE_LABEL[type];
+  const usingRealLines = data?.linesSource === 'bookmaker';
+  const sourceBadge = data?.bookmakerSource ?? bookmakerSource;
 
   return (
     <View style={[
@@ -90,12 +105,23 @@ export function TotalsLadder({
     ]}>
       <TouchableOpacity onPress={() => setExpanded(e => !e)} style={styles.header} activeOpacity={0.7}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.typeLabel, { color: colors.mutedForeground }]}>
-            {meta.title.toUpperCase()}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.typeLabel, { color: colors.mutedForeground }]}>
+              {meta.title.toUpperCase()}
+            </Text>
+            {usingRealLines && sourceBadge && (
+              <View style={[styles.sourceBadge, { backgroundColor: colors.primary + '25', borderColor: colors.primary + '60' }]}>
+                <Text style={[styles.sourceBadgeText, { color: colors.primary }]}>
+                  {sourceBadge.toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.marketLabel, { color: colors.foreground }]}>
             {data
-              ? `${data.lines.length} линий вокруг ${data.expectedValue.toFixed(1)}${meta.unit}`
+              ? usingRealLines
+                ? `${data.lines.length} линий · реальные кэфы`
+                : `${data.lines.length} линий вокруг ${data.expectedValue.toFixed(1)}${meta.unit}`
               : meta.title}
           </Text>
           {data?.projection && (
@@ -167,7 +193,9 @@ export function TotalsLadder({
           {!loading && !error && data && (
             <View style={styles.footer}>
               <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-                Уверенность модели: {Math.round(data.confidence * 100)}%
+                {usingRealLines
+                  ? `Линии: ${sourceBadge ?? 'буки'} · модель ${Math.round(data.confidence * 100)}%`
+                  : `Уверенность модели: ${Math.round(data.confidence * 100)}%`}
               </Text>
               <FreshnessIndicator ageSeconds={Math.floor((Date.now() - new Date(data.generatedAt).getTime()) / 1000)} />
             </View>
@@ -219,7 +247,23 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerLeft: { flex: 1, gap: 2 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   typeLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 9, letterSpacing: 1.2 },
+  sourceBadge: {
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  sourceBadgeText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 0.5,
+  },
   marketLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   subline: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 2 },
   body: {

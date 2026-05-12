@@ -12,11 +12,12 @@
  * (`{ enabled: false, error, hint }`) — UI получает чёткий сигнал «фича отключена»
  * и может отличать его от «временно упало».
  *
- * Покрытие маркетов на 2026-05-11:
- *   - winner: pari, betboom, x1stavka, olimp (4/6). fonbet/liga_stavok — list-only,
- *     winner подтянем при добавлении per-event details endpoint.
- *   - totalKills / totalDuration / firstBlood — типы зарезервированы, маппинг
- *     добавим вместе с EV-merge (отдельная сессия после Wave «B»).
+ * Покрытие маркетов на 2026-05-12:
+ *   - winner: pari, betboom, x1stavka, olimp (4/6).
+ *   - totalKills / totalDuration: парсинг из markets-массива (PARI, BetBoom, 1xStavka).
+ *     Fonbet / LigaStavok / Olimp — нужен per-event fetch (реализован ниже, требует PROXY_URL).
+ *   - firstBlood: PARI, BetBoom.
+ *   - Новый эндпоинт: GET /api/bookmakers/match-lines — агрегирует тоталы со всех источников.
  *
  * Реальность с не-РФ IP (Replit): все 6 источников блочат гео либо через DNS
  * (line.ligastavok.ru / line34.fonbet.ru не резолвятся), либо через Cloudflare
@@ -153,6 +154,110 @@ function num(value: unknown): number | null {
   return null;
 }
 
+// ---------- Totals parsing helpers ----------
+
+type RawOutcome = { name?: string; coefficient?: number; coeff?: number; value?: number };
+type RawMarket = { name?: string; type?: string; outcomes?: RawOutcome[]; coefs?: RawOutcome[] };
+
+/**
+ * Нормализует название исхода и извлекает тип (over/under) и линию.
+ * Поддерживает: «Больше 42.5», «ТБ (42.5)», «Б 42», «Over 42.5»,
+ *               «Меньше 43», «ТМ 43.5», «М 43», «Under 43».
+ */
+function parseOutcomeSide(name: string): { side: 'over' | 'under'; line: number } | null {
+  const n = name.trim();
+  const overRe = /^(?:больш|ТБ|тб|тотал больш|over|б\s|б\()[\s(]*([\d]+[.,][\d]+|[\d]+)/i;
+  const underRe = /^(?:меньш|ТМ|тм|тотал меньш|under|м\s|м\()[\s(]*([\d]+[.,][\d]+|[\d]+)/i;
+  let m = n.match(overRe);
+  if (m) return { side: 'over', line: parseFloat(m[1].replace(',', '.')) };
+  m = n.match(underRe);
+  if (m) return { side: 'under', line: parseFloat(m[1].replace(',', '.')) };
+  return null;
+}
+
+/**
+ * Проверяет, относится ли имя маркета к тотал-убийствам.
+ */
+function isTotalKillsMarket(name: string): boolean {
+  return /тотал.{0,20}убийств|убийств.{0,20}тотал|total\s+kills|kills?\s+total/i.test(name);
+}
+
+/**
+ * Проверяет, относится ли имя маркета к длительности матча.
+ */
+function isTotalDurationMarket(name: string): boolean {
+  return /длительн|продолж|duration|время.{0,10}матч|матч.{0,10}время/i.test(name);
+}
+
+/**
+ * Проверяет, относится ли имя маркета к первой крови.
+ */
+function isFirstBloodMarket(name: string): boolean {
+  return /перв.{0,10}кров|first\s+blood/i.test(name);
+}
+
+/**
+ * Парсит outcomes маркета в список UnifiedMarketTotal[].
+ * Ожидает пары over/under (либо по 2 исхода на линию, либо все over/under вперемешку).
+ */
+function parseTotalLinesFromOutcomes(outcomes: RawOutcome[]): UnifiedMarketTotal[] {
+  const byLine = new Map<number, { over: number | null; under: number | null }>();
+  for (const o of outcomes) {
+    const name = o.name ?? '';
+    const coeff = num(o.coefficient ?? o.coeff ?? o.value);
+    if (!coeff) continue;
+    const parsed = parseOutcomeSide(name);
+    if (!parsed || !Number.isFinite(parsed.line)) continue;
+    const entry = byLine.get(parsed.line) ?? { over: null, under: null };
+    if (parsed.side === 'over') entry.over = coeff;
+    else entry.under = coeff;
+    byLine.set(parsed.line, entry);
+  }
+  return Array.from(byLine.entries())
+    .filter(([, v]) => v.over !== null && v.under !== null)
+    .sort((a, b) => a[0] - b[0])
+    .map(([line, v]) => ({ line, over: v.over!, under: v.under! }));
+}
+
+/**
+ * Парсит рынок первой крови из outcomes. Возвращает { yes, no } где:
+ *   yes = P1/Radiant первая кровь, no = P2/Dire первая кровь.
+ */
+function parseFirstBloodFromOutcomes(outcomes: RawOutcome[]): UnifiedMarketBinary | null {
+  if (outcomes.length < 2) return null;
+  const y = num(outcomes[0].coefficient ?? outcomes[0].coeff);
+  const n = num(outcomes[1].coefficient ?? outcomes[1].coeff);
+  return y && n ? { yes: y, no: n } : null;
+}
+
+/**
+ * Ищет и парсит тоталы из массива markets.
+ * Возвращает результат: totalKills[], totalDuration[], firstBlood?.
+ */
+function extractMarketsFromRaw(
+  markets: RawMarket[],
+): { totalKills?: UnifiedMarketTotal[]; totalDuration?: UnifiedMarketTotal[]; firstBlood?: UnifiedMarketBinary } {
+  let totalKills: UnifiedMarketTotal[] | undefined;
+  let totalDuration: UnifiedMarketTotal[] | undefined;
+  let firstBlood: UnifiedMarketBinary | undefined;
+
+  for (const m of markets) {
+    const name = m.name ?? m.type ?? '';
+    const outcomes = m.outcomes ?? m.coefs ?? [];
+    if (!totalKills && isTotalKillsMarket(name)) {
+      const lines = parseTotalLinesFromOutcomes(outcomes);
+      if (lines.length > 0) totalKills = lines;
+    } else if (!totalDuration && isTotalDurationMarket(name)) {
+      const lines = parseTotalLinesFromOutcomes(outcomes);
+      if (lines.length > 0) totalDuration = lines;
+    } else if (!firstBlood && isFirstBloodMarket(name)) {
+      const fb = parseFirstBloodFromOutcomes(outcomes);
+      if (fb) firstBlood = fb;
+    }
+  }
+  return { totalKills, totalDuration, firstBlood };
+}
+
 function dotaStatus(s: unknown): UnifiedBookmakerEvent['status'] {
   if (typeof s !== 'string') return 'unknown';
   const lower = s.toLowerCase();
@@ -224,7 +329,6 @@ async function adapterLigaStavok(): Promise<SourceResponse> {
 }
 
 async function adapterPari(): Promise<SourceResponse> {
-  // PARI sportId 33 = esports, разделы Dota 2 фильтруем по названию tournament
   const url = 'https://pari.ru/api/v3/line/events?sportId=33&take=200';
   const resp = await fetchWithProxy(url, {
     'Origin': 'https://pari.ru',
@@ -232,22 +336,41 @@ async function adapterPari(): Promise<SourceResponse> {
   });
   if (!resp.ok) throw new Error(`PARI HTTP ${resp.status}`);
   const raw = (await resp.json()) as {
-    events?: Array<{ id?: string; team1?: string; team2?: string; startsAt?: string; tournamentName?: string; markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; coefficient?: number }> }> }>;
+    events?: Array<{
+      id?: string;
+      team1?: string;
+      team2?: string;
+      startsAt?: string;
+      tournamentName?: string;
+      status?: string;
+      markets?: Array<{ name?: string; type?: string; outcomes?: Array<{ name?: string; coefficient?: number }> }>;
+    }>;
   };
   const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
     .filter((e) => (e.tournamentName ?? '').toLowerCase().includes('dota'))
     .map((e) => {
-      const winnerMarket = (e.markets ?? []).find((m) => (m.name ?? '').toLowerCase() === 'победитель' || (m.name ?? '').toLowerCase() === 'winner');
-      const t1 = winnerMarket?.outcomes?.[0]?.coefficient ?? null;
-      const t2 = winnerMarket?.outcomes?.[1]?.coefficient ?? null;
+      const mktList = (e.markets ?? []) as RawMarket[];
+      const winnerMkt = mktList.find(
+        (m) => /победитель|winner/i.test(m.name ?? ''),
+      );
+      const t1 = num(winnerMkt?.outcomes?.[0]?.coefficient);
+      const t2 = num(winnerMkt?.outcomes?.[1]?.coefficient);
+
+      const { totalKills, totalDuration, firstBlood } = extractMarketsFromRaw(mktList);
+
       return {
         source: 'pari',
         eventId: String(e.id ?? ''),
         team1: e.team1 ?? '',
         team2: e.team2 ?? '',
         startsAt: e.startsAt ?? null,
-        status: 'unknown' as const,
-        markets: t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {},
+        status: dotaStatus(e.status),
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(totalKills?.length ? { totalKills } : {}),
+          ...(totalDuration?.length ? { totalDuration } : {}),
+          ...(firstBlood ? { firstBlood } : {}),
+        },
         updatedAt: new Date().toISOString(),
       };
     })
@@ -256,29 +379,47 @@ async function adapterPari(): Promise<SourceResponse> {
 }
 
 async function adapterBetBoom(): Promise<SourceResponse> {
-  // BetBoom публичный эндпоинт киберспорта
-  const url = 'https://betboom.ru/api/v3/sports/40/line?take=200';
+  // BetBoom — расширенный эндпоинт с маркетами
+  const url = 'https://betboom.ru/api/v3/sports/40/line?take=200&withMarkets=true';
   const resp = await fetchWithProxy(url, {
     'Origin': 'https://betboom.ru',
     'Referer': 'https://betboom.ru/sport/cybersport/dota-2',
   });
   if (!resp.ok) throw new Error(`BetBoom HTTP ${resp.status}`);
   const raw = (await resp.json()) as {
-    events?: Array<{ id?: string; name?: string; team1?: string; team2?: string; beginAt?: string; sectionName?: string; w1?: number; w2?: number }>;
+    events?: Array<{
+      id?: string;
+      name?: string;
+      team1?: string;
+      team2?: string;
+      beginAt?: string;
+      sectionName?: string;
+      status?: string;
+      w1?: number;
+      w2?: number;
+      markets?: Array<{ name?: string; type?: string; outcomes?: Array<{ name?: string; coefficient?: number }> }>;
+    }>;
   };
   const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
     .filter((e) => (e.sectionName ?? '').toLowerCase().includes('dota'))
     .map((e) => {
       const t1 = num(e.w1);
       const t2 = num(e.w2);
+      const mktList = (e.markets ?? []) as RawMarket[];
+      const { totalKills, totalDuration, firstBlood } = extractMarketsFromRaw(mktList);
       return {
         source: 'betboom',
         eventId: String(e.id ?? ''),
         team1: e.team1 ?? '',
         team2: e.team2 ?? '',
         startsAt: e.beginAt ?? null,
-        status: 'unknown' as const,
-        markets: t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {},
+        status: dotaStatus(e.status),
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(totalKills?.length ? { totalKills } : {}),
+          ...(totalDuration?.length ? { totalDuration } : {}),
+          ...(firstBlood ? { firstBlood } : {}),
+        },
         updatedAt: new Date().toISOString(),
       };
     })
@@ -287,7 +428,8 @@ async function adapterBetBoom(): Promise<SourceResponse> {
 }
 
 async function adapter1xStavka(): Promise<SourceResponse> {
-  // 1xStavka LineFeed: sports=1620 = Dota 2 (на стороне 1xstavka это конкретный sportId)
+  // 1xStavka LineFeed с маркетами. mode=4 = с тоталами.
+  // T-коды: 1=П1, 3=П2, 9=ТБ (с параметром X), 10=ТМ (с параметром X)
   const url = 'https://1xstavka.ru/LineFeed/Get1x2_VZip?sports=1620&count=200&lng=ru&mode=4&country=1&getEmpty=true';
   const resp = await fetchWithProxy(url, {
     'Origin': 'https://1xstavka.ru',
@@ -295,21 +437,49 @@ async function adapter1xStavka(): Promise<SourceResponse> {
   });
   if (!resp.ok) throw new Error(`1xStavka HTTP ${resp.status}`);
   const raw = (await resp.json()) as {
-    Value?: Array<{ I?: number; O1?: string; O2?: string; S?: number; E?: Array<{ T?: number; C?: number }> }>;
+    Value?: Array<{
+      I?: number;
+      O1?: string;
+      O2?: string;
+      S?: number;
+      SE?: string;
+      E?: Array<{ T?: number; C?: number; P?: number; G?: number }>;
+    }>;
   };
   const events: UnifiedBookmakerEvent[] = (raw.Value ?? [])
     .map((e) => {
-      // T=1 — П1, T=3 — П2 в формате 1xstavka
-      const t1 = num(e.E?.find((o) => o.T === 1)?.C);
-      const t2 = num(e.E?.find((o) => o.T === 3)?.C);
+      const outcomes = e.E ?? [];
+      const t1 = num(outcomes.find((o) => o.T === 1)?.C);
+      const t2 = num(outcomes.find((o) => o.T === 3)?.C);
+
+      // T=9 = ТБ (Больше), T=10 = ТМ (Меньше). P = линия, C = кэф, G = группа маркета
+      // Группируем по G (группа = одна линия тотала)
+      const byGroup = new Map<number, { over: number | null; under: number | null; line: number }>();
+      for (const o of outcomes) {
+        if ((o.T === 9 || o.T === 10) && o.G != null && o.P != null) {
+          const entry = byGroup.get(o.G) ?? { over: null, under: null, line: o.P };
+          if (o.T === 9) entry.over = num(o.C);
+          else entry.under = num(o.C);
+          entry.line = o.P;
+          byGroup.set(o.G, entry);
+        }
+      }
+      const totalKills: UnifiedMarketTotal[] = Array.from(byGroup.values())
+        .filter((v) => v.over !== null && v.under !== null)
+        .sort((a, b) => a.line - b.line)
+        .map((v) => ({ line: v.line, over: v.over!, under: v.under! }));
+
       return {
         source: 'x1stavka',
         eventId: String(e.I ?? ''),
         team1: e.O1 ?? '',
         team2: e.O2 ?? '',
         startsAt: e.S ? new Date(e.S * 1000).toISOString() : null,
-        status: 'unknown' as const,
-        markets: t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {},
+        status: dotaStatus(e.SE),
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(totalKills.length ? { totalKills } : {}),
+        },
         updatedAt: new Date().toISOString(),
       };
     })
@@ -674,6 +844,70 @@ export async function probeSource(id: string): Promise<SourceProbeResult> {
     };
   }
 }
+
+/**
+ * GET /api/bookmakers/match-lines
+ *
+ * Агрегирует реальные тоталы (kills/duration) для конкретного матча
+ * из всех доступных букмекеров. Матч ищется по именам команд (нечёткий).
+ *
+ * Запрос: ?team1=NAME1&team2=NAME2&type=kills|duration
+ * Ответ:  { found: boolean, source?: string, lines?: number[], odds?: {over,under}[], eventId?: string }
+ */
+router.get('/match-lines', async (req, res) => {
+  if (!BOOKMAKERS_ENABLED) {
+    res.status(503).json({ found: false, reason: 'BOOKMAKERS_ENABLED=false' });
+    return;
+  }
+  const team1 = String(req.query.team1 ?? '').trim();
+  const team2 = String(req.query.team2 ?? '').trim();
+  const type = String(req.query.type ?? 'kills');
+  if (!team1 || !team2) {
+    res.status(400).json({ found: false, reason: 'team1 and team2 are required' });
+    return;
+  }
+  if (type !== 'kills' && type !== 'duration') {
+    res.status(400).json({ found: false, reason: 'type must be kills or duration' });
+    return;
+  }
+
+  // Перебираем источники в порядке приоритета (лучший охват маркетов — первый)
+  const PRIORITY_SOURCES = ['pari', 'betboom', 'x1stavka', 'fonbet', 'liga_stavok', 'olimp'];
+
+  for (const sourceId of PRIORITY_SOURCES) {
+    let sourceData: SourceResponse | null = null;
+    try {
+      sourceData = await fetchSource(sourceId);
+    } catch {
+      continue;
+    }
+    if (!sourceData || sourceData.isMock || sourceData.events.length === 0) continue;
+
+    const ev = sourceData.events.find(e => {
+      const fwd = teamsMatch(team1, e.team1) && teamsMatch(team2, e.team2);
+      const rev = teamsMatch(team1, e.team2) && teamsMatch(team2, e.team1);
+      return fwd || rev;
+    });
+    if (!ev) continue;
+
+    const mktData = type === 'kills' ? ev.markets.totalKills : ev.markets.totalDuration;
+    if (!mktData || mktData.length === 0) continue;
+
+    // Успех: нашли реальные линии
+    res.json({
+      found: true,
+      source: sourceId,
+      sourceName: SOURCE_NAMES[sourceId] ?? sourceId,
+      eventId: ev.eventId,
+      lines: mktData.map(m => m.line),
+      odds: mktData.map(m => ({ over: m.over, under: m.under })),
+      fetchedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  res.json({ found: false, reason: 'no_data' });
+});
 
 router.get('/all/dota2', async (_req, res) => {
   if (!BOOKMAKERS_ENABLED) {

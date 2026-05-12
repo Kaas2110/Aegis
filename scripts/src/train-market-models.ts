@@ -1,34 +1,22 @@
 /**
  * Wave 4 — обучение LightGBM-моделей для производных рынков:
- *   - market_first_blood    : classification (label = radiantWin прокси
- *                             среди матчей с известным first_blood_time)
+ *   - market_first_blood    : classification (label = radiantWin прокси)
  *   - market_total_kills    : regression на log(radiant_score+dire_score)
  *   - market_total_duration : regression на log(duration_sec)
  *
- * Все модели тренируются через ml-service (`POST /train`) с одним и тем
- * же team-feature-set'ом (5 фич: bias, elo_diff_norm, winrate_diff,
- * experience_diff, is_high_tier) — что уже есть для prematch_winner.
- *
- * Сохранение в `model_versions` с `engine='lightgbm'`, `binaryBlob`,
- * `weights={}` (jsonb NOT NULL — кладём пустой объект как маркер; реальные
- * параметры в blob). Атомарный swap per-market: для каждого `kind`
- * деактивируем все предыдущие active и вставляем новую активную в одной
- * транзакции.
+ * v2 фичи (11 фич): team ELO, опыт, форма (avgKillsFor/avgDurationSec 30d),
+ * patch_kpm (глобальный темп убийств за последние 30 дней), series_type.
  *
  * CLI:
  *   pnpm --filter @workspace/scripts run train:market-models
  *     [--market first_blood|total_kills|total_duration|all]
- *
- *   --market all (по умолчанию) — обучает все 3.
- *
- * Завершается с exit 0 даже если какой-то рынок пропущен (мало данных) —
- * сценарий вызывается из расписания и не должен валить весь pipeline.
  */
 
 import {
   db,
   proMatchesTable,
   teamsTable,
+  teamRecentFormTable,
   modelVersionsTable,
 } from '@workspace/db';
 import { gte, and, eq } from 'drizzle-orm';
@@ -37,15 +25,14 @@ import { readFileSync } from 'node:fs';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES = 60;
+const FEATURES_VERSION = 2;
 
-/** Возвращает Unix-timestamp начала тренировочного окна. */
 function parseSinceUnix(): number {
   const idx = process.argv.indexOf('--since-unix');
   if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
   return Math.floor(Date.now() / 1000) - TRAIN_WINDOW_DAYS * 86_400;
 }
 
-/** Возвращает минимум сэмплов для обучения. */
 function parseMinSamples(): number {
   const idx = process.argv.indexOf('--min-samples');
   if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
@@ -55,7 +42,19 @@ const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 const TRAIN_TIMEOUT_MS = 120_000;
 
-const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
+const TEAM_FEATURE_NAMES = [
+  'bias',
+  'elo_diff_norm',
+  'winrate_diff',
+  'experience_diff',
+  'is_high_tier',
+  'avg_kills_r',
+  'avg_kills_d',
+  'avg_dur_h_r',
+  'avg_dur_h_d',
+  'patch_kpm',
+  'format_norm',
+] as const;
 
 interface MatchRow {
   matchId: number;
@@ -67,9 +66,11 @@ interface MatchRow {
   radiantWin: boolean;
   radiantTeamId: number | null;
   direTeamId: number | null;
+  series_type: number | null;
 }
 
 interface TeamRating { rating: number; wins: number; losses: number; }
+interface TeamForm { avgKillsFor: number; avgDurationSec: number; }
 
 type MarketKey = 'first_blood' | 'total_kills' | 'total_duration';
 const ALL_MARKETS: MarketKey[] = ['first_blood', 'total_kills', 'total_duration'];
@@ -113,25 +114,47 @@ function mlServiceToken(): string | null {
   } catch { return null; }
 }
 
+// Нормализационные константы (медиана про-сцены)
+const GLOBAL_AVG_KILLS = 52;   // avg kills per map
+const GLOBAL_AVG_DUR_SEC = 2200; // avg duration sec (~37 min)
+const GLOBAL_KPM = 1.1;         // kills per minute
+
 function buildTeamFeatures(
-  rId: number, dId: number, teams: Map<number, TeamRating>,
+  rId: number,
+  dId: number,
+  seriesType: number | null,
+  teams: Map<number, TeamRating>,
+  form: Map<number, TeamForm>,
+  patchKpm: number,
 ): number[] | null {
   const r = teams.get(rId); const d = teams.get(dId);
   if (!r || !d) return null;
   const rG = r.wins + r.losses; const dG = d.wins + d.losses;
   if (rG < 5 || dG < 5) return null;
+
+  const rf = form.get(rId);
+  const df = form.get(dId);
+
+  // format_norm: 0=BO1, 0.5=BO3, 1.0=BO5 (series_type: 0=BO1, 1=BO3, 2=BO5)
+  const formatNorm = seriesType != null ? Math.min(1, seriesType / 2) : 0.5;
+
   return [
-    1,
-    (r.rating - d.rating) / 200,
-    r.wins / rG - d.wins / dG,
-    Math.log(rG + 1) - Math.log(dG + 1),
-    rG >= 50 && dG >= 50 ? 1 : 0,
+    1,                                                        // bias
+    (r.rating - d.rating) / 200,                             // elo_diff_norm
+    r.wins / rG - d.wins / dG,                               // winrate_diff
+    Math.log(rG + 1) - Math.log(dG + 1),                    // experience_diff
+    rG >= 50 && dG >= 50 ? 1 : 0,                           // is_high_tier
+    (rf?.avgKillsFor ?? GLOBAL_AVG_KILLS) / 60,              // avg_kills_r (normalized)
+    (df?.avgKillsFor ?? GLOBAL_AVG_KILLS) / 60,              // avg_kills_d
+    (rf?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,       // avg_dur_h_r (in hours ~0.6)
+    (df?.avgDurationSec ?? GLOBAL_AVG_DUR_SEC) / 3600,       // avg_dur_h_d
+    patchKpm,                                                 // patch_kpm (kills/min)
+    formatNorm,                                               // format_norm
   ];
 }
 
 async function loadData() {
   const sinceTs = parseSinceUnix();
-  const effectiveMinSamples = parseMinSamples();
   const matches = await db
     .select({
       matchId: proMatchesTable.matchId,
@@ -143,6 +166,7 @@ async function loadData() {
       radiantWin: proMatchesTable.radiantWin,
       radiantTeamId: proMatchesTable.radiantTeamId,
       direTeamId: proMatchesTable.direTeamId,
+      series_type: proMatchesTable.series_type,
     })
     .from(proMatchesTable)
     .where(gte(proMatchesTable.startTime, sinceTs))
@@ -156,19 +180,61 @@ async function loadData() {
   for (const t of teamsRows) {
     if (t.rating != null) teams.set(t.teamId, { rating: t.rating, wins: t.wins ?? 0, losses: t.losses ?? 0 });
   }
-  return { matches: matches.filter((r): r is MatchRow => r.duration != null), teams };
+
+  // Форма команд (30-дневный снапшот)
+  const formRows = await db.select({
+    teamId: teamRecentFormTable.teamId,
+    avgKillsFor: teamRecentFormTable.avgKillsFor,
+    avgDurationSec: teamRecentFormTable.avgDurationSec,
+  }).from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30));
+
+  const form = new Map<number, TeamForm>();
+  for (const f of formRows) {
+    form.set(f.teamId, {
+      avgKillsFor: f.avgKillsFor ?? GLOBAL_AVG_KILLS,
+      avgDurationSec: f.avgDurationSec ?? GLOBAL_AVG_DUR_SEC,
+    });
+  }
+
+  // Patch KPM — глобальный темп убийств за последние 30 дней
+  const since30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
+  const recentMatches = matches.filter(m => m.startTime >= since30d);
+  let patchKpm = GLOBAL_KPM;
+  if (recentMatches.length >= 10) {
+    let totalKills = 0; let totalMin = 0;
+    for (const m of recentMatches) {
+      const kills = (m.radiantScore ?? 0) + (m.direScore ?? 0);
+      if (kills > 0 && m.duration > 0) {
+        totalKills += kills;
+        totalMin += m.duration / 60;
+      }
+    }
+    if (totalMin > 0) patchKpm = totalKills / totalMin;
+  }
+  console.log(`[train-market-models] form loaded: ${form.size} teams | patchKpm=${patchKpm.toFixed(3)} (${recentMatches.length} recent matches)`);
+
+  return {
+    matches: matches.filter((r): r is MatchRow => r.duration != null),
+    teams,
+    form,
+    patchKpm,
+  };
 }
 
-function buildSamples(market: MarketKey, matches: MatchRow[], teams: Map<number, TeamRating>): Sample[] {
+function buildSamples(
+  market: MarketKey,
+  matches: MatchRow[],
+  teams: Map<number, TeamRating>,
+  form: Map<number, TeamForm>,
+  patchKpm: number,
+): Sample[] {
   const out: Sample[] = [];
   for (const m of matches) {
     if (!m.radiantTeamId || !m.direTeamId) continue;
-    const feats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
+    const feats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, m.series_type, teams, form, patchKpm);
     if (!feats) continue;
 
     if (market === 'first_blood') {
-      // Прокси-метка: radiantWin. Настоящая FB-команда (players[].firstblood_claimed)
-      // требует per-match detail fetch — дорого; radiantWin коррелирует ≈53%.
       if (m.radiantWin == null) continue;
       out.push({ features: feats, label: m.radiantWin ? 1 : 0 });
     } else if (market === 'total_kills') {
@@ -198,7 +264,7 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
   const calib = samples.slice(trainEnd, calibEnd);
   const test = samples.slice(calibEnd);
   const taskType = TASK_BY_MARKET[market];
-  console.log(`  [${label}] training task=${taskType} n=${train.length}/calib=${calib.length}/test=${test.length}`);
+  console.log(`  [${label}] training task=${taskType} n=${train.length}/calib=${calib.length}/test=${test.length} features=${TEAM_FEATURE_NAMES.length}`);
 
   const token = mlServiceToken();
   if (!token) {
@@ -231,6 +297,11 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
       console.log(`  [${label}] TEST acc=${(tm.accuracy * 100).toFixed(1)}% brier=${tm.brier.toFixed(4)} (n=${tm.n})`);
     } else {
       console.log(`  [${label}] TEST r2=${tm.accuracy.toFixed(3)} rmse=${tm.brier.toFixed(4)} mae=${tm.log_loss.toFixed(4)} (n=${tm.n}, residual_std=${data.residual_std?.toFixed(4)})`);
+      const fi = data.feature_importance;
+      if (fi) {
+        const sorted = Object.entries(fi).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        console.log(`  [${label}] top-5 features: ${sorted.map(([k, v]) => `${k}=${v.toFixed(3)}`).join(', ')}`);
+      }
     }
     return data;
   } catch (e) {
@@ -245,9 +316,10 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
   const kind = KIND_BY_MARKET[market];
   const blob = Buffer.from(r.blob_b64, 'base64');
   const taskType = TASK_BY_MARKET[market];
-  const versionStem = `lgbm-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+  const versionStem = `lgbm-${kind}-v2-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
 
   await db.transaction(async (tx) => {
+    // Деактивируем ВСЕ активные модели этого kind (все версии, все engine)
     await tx
       .update(modelVersionsTable)
       .set({ isActive: false })
@@ -255,7 +327,7 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
     await tx.insert(modelVersionsTable).values({
       version: versionStem,
       kind,
-      featuresVersion: 1,
+      featuresVersion: FEATURES_VERSION,
       algorithm: 'lightgbm',
       engine: 'lightgbm',
       binaryBlob: blob,
@@ -270,6 +342,8 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
         market,
         taskType,
         engine: 'lightgbm',
+        featuresVersion: FEATURES_VERSION,
+        featureNames: r.feature_names,
         residualStd: r.residual_std,
         testRaw: r.test_metrics_raw,
         testCalibrated: r.test_metrics_calibrated,
@@ -283,7 +357,7 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
       isActive: true,
     });
   });
-  console.log(`  [market/${market}] ✅ activated ${versionStem} (blob=${blob.length}b)`);
+  console.log(`  [market/${market}] ✅ activated ${versionStem} (blob=${blob.length}b, fv=${FEATURES_VERSION})`);
 }
 
 function parseMarketsFromArgs(): MarketKey[] {
@@ -304,7 +378,7 @@ function parseMarketsFromArgs(): MarketKey[] {
 
 async function main(): Promise<void> {
   const targets = parseMarketsFromArgs();
-  console.log(`[train-market-models] ml-service: ${ML_SERVICE_URL} markets=${targets.join(',')}`);
+  console.log(`[train-market-models] ml-service: ${ML_SERVICE_URL} markets=${targets.join(',')} features=${FEATURES_VERSION}`);
 
   try {
     const h = await fetch(`${ML_SERVICE_URL}/healthz`);
@@ -314,8 +388,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const { matches, teams } = await loadData();
-  console.log(`[train-market-models] matches=${matches.length} teams=${teams.size}`);
+  const { matches, teams, form, patchKpm } = await loadData();
+  console.log(`[train-market-models] matches=${matches.length} teams=${teams.size} form=${form.size} patchKpm=${patchKpm.toFixed(3)}`);
 
   if (matches.length < parseMinSamples()) {
     console.log('[train-market-models] not enough matches — exiting cleanly');
@@ -325,7 +399,7 @@ async function main(): Promise<void> {
   let trained = 0;
   for (const market of targets) {
     console.log(`\n[train-market-models] === ${market} ===`);
-    const samples = buildSamples(market, matches, teams);
+    const samples = buildSamples(market, matches, teams, form, patchKpm);
     const r = await trainMarket(market, samples);
     if (!r) continue;
     await activateMarketModel(market, r);
