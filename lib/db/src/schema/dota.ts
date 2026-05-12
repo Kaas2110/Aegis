@@ -393,7 +393,7 @@ export const prematchOutcomesTable = pgTable('prematch_outcomes', {
 export const appSettingsTable = pgTable('app_settings', {
   id: integer('id').primaryKey(),
   useBookmakerOdds: boolean('use_bookmaker_odds').notNull().default(false),
-  liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(7),
+  liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(10),
   // ── Настройки тренировочного датасета ─────────────────────────────────
   // trainWindowDays:  максимальное кол-во дней истории (hard cap)
   // trainMaxPatches:  максимальное кол-во последних патчей (берётся более

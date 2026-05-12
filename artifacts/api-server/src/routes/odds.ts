@@ -82,8 +82,22 @@ async function fetchWithProxy(url: string, options: RequestInit = {}): Promise<R
   return fetch(url, { ...options, headers });
 }
 
+// The Odds API отключён глобально: продукт ориентирован на RU/СНГ-аудиторию,
+// а у TheOddsApi нет российских букмекеров. Кэфы берём только из локальных
+// букмекерских адаптеров (см. routes/bookmakers.ts). Чтобы вернуть международный
+// источник, удалите этот guard и снова настройте ODDS_API_KEY.
 router.get('/dota2', async (req, res) => {
+  res.status(503).json({
+    error: 'odds_api_disabled',
+    hint: 'The Odds API отключён: для RU/СНГ используются местные букмекеры (/api/bookmakers/*).',
+    isMock: true,
+    data: getMockOdds(),
+  });
+  return;
+
+  // eslint-disable-next-line no-unreachable
   const oddsApiKey = getApiKey('ODDS_API_KEY');
+  void req;
   if (!oddsApiKey) {
     res.status(503).json({
       error: 'ODDS_API_KEY не настроен',
@@ -128,7 +142,13 @@ router.get('/dota2', async (req, res) => {
 });
 
 router.get('/sports', async (req, res) => {
+  // The Odds API отключён — см. комментарий выше у /dota2.
+  res.status(503).json({ error: 'odds_api_disabled', sports: [] });
+  return;
+
+  // eslint-disable-next-line no-unreachable
   const oddsApiKey = getApiKey('ODDS_API_KEY');
+  void req;
   if (!oddsApiKey) {
     res.json({ error: 'ODDS_API_KEY не настроен', sports: [] });
     return;

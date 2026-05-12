@@ -104,7 +104,7 @@ export function canonicalizeFlagsForMode(
 const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   id: 1,
   useBookmakerOdds: false,
-  liveSnapshotPruneDays: 7,
+  liveSnapshotPruneDays: 10,
   trainWindowDays: 365,
   trainMaxPatches: 4,
   trainMinSamples: 1000,

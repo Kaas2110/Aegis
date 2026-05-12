@@ -47,7 +47,7 @@ pnpm run typecheck                                # full check (libs first)
 | `train:live-model` | LGB + LR live-winner (dual, both saved to DB) |
 | `train:live-model` (via scheduler) | Also runs after backfill if snapshot pairs < 100 |
 
-**Env vars:** `DATABASE_URL` (required). Optional: `STRATZ_TOKEN` · `PANDASCORE_API_KEY` · `ODDS_API_KEY` · `PINNACLE_GUEST_API_KEY` · `ADMIN_TOKEN` · `SESSION_SECRET` · `BOOKMAKERS_ENABLED` (default false) · `PROXY_URL` · `DISABLE_LIVE_WORKER` · `DISABLE_SCHEDULER` · `DISABLE_AUTO_RETRAIN` · `DISABLE_BACKGROUND_POLLER` · `POLL_UPCOMING_MIN` (default 30) · `AUTO_DB_PUSH=false`.
+**Env vars:** `DATABASE_URL` (required). Optional: `STRATZ_TOKEN` · `PANDASCORE_API_KEY` · `PINNACLE_GUEST_API_KEY` · `ADMIN_TOKEN` · `SESSION_SECRET` · `BOOKMAKERS_ENABLED` (default false) · `PROXY_URL` · `DISABLE_LIVE_WORKER` · `DISABLE_SCHEDULER` · `DISABLE_AUTO_RETRAIN` · `DISABLE_BACKGROUND_POLLER` · `POLL_UPCOMING_MIN` (default 30) · `AUTO_DB_PUSH=false`. **Note:** `ODDS_API_KEY` (The Odds API) больше не используется — продукт ориентирован на RU/СНГ, кэфы берутся только из локальных букмекеров. `/api/odds/dota2` и `/api/odds/sports` всегда возвращают 503.
 
 **STRATZ_TOKEN** — free JWT from stratz.com/api (Steam login). 250 req/min / 20k req/day. On Replit: Node fetch blocked by Cloudflare TLS JA3 → auto-falls back to curl. Client: `scripts/src/lib/stratz.ts`. Test: `pnpm --filter @workspace/scripts run test:stratz`.
 
@@ -66,7 +66,8 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - Interface language: Russian
 - Pinnacle scraped manually (user warned about ToS)
 - Don't suggest Reserved VM deployment unless asked
-- Don't pay for The Odds API at this stage
+- The Odds API отключён полностью (RU/СНГ-фокус, нет российских буков). Не возвращать без явного запроса
+- Live snapshots prune window: 10 дней (default)
 - Bookmaker UI hidden until first users (backend untouched, marked `TODO(bookmakers)`)
 - Alerts: `minConfidence` only; `minEdge`/`minOdds` return with bookmaker UI
 
