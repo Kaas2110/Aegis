@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { UserSettings, Filters } from '@/types';
-import { initLogger, logProductEvent } from '@/services/logging/EventLogger';
+import { initLogger, logProductEvent, flushEvents } from '@/services/logging/EventLogger';
+import { API_BASE_URL } from '@/lib/api/baseUrl';
 
 const DEFAULT_SETTINGS: UserSettings = {
   language: 'ru',
@@ -81,6 +82,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               .filter((n: number) => Number.isFinite(n));
           }
           setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+          // Flush analytics events если пользователь дал согласие
+          if (parsed.analyticsConsent) {
+            flushEvents(API_BASE_URL).catch(() => {});
+          }
         }
         if (fRaw) {
           const parsed = JSON.parse(fRaw);

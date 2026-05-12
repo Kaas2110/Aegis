@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Platform,
+  Switch, Platform, BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -168,9 +168,24 @@ export default function OnboardingScreen() {
             </View>
 
             <PrimaryButton label="Мне есть 18 лет — принять и продолжить" onPress={handleWelcomeConfirm} />
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+              if (Platform.OS === 'android') {
+                BackHandler.exitApp();
+              } else {
+                router.replace('/onboarding');
+              }
+            }}>
               <Text style={[styles.exitLink, { color: colors.mutedForeground }]}>Мне нет 18 лет — выйти</Text>
             </TouchableOpacity>
+            <View style={styles.legalRow}>
+              <TouchableOpacity onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'privacy' } })}>
+                <Text style={[styles.legalLink, { color: colors.mutedForeground }]}>Конфиденциальность</Text>
+              </TouchableOpacity>
+              <Text style={[styles.legalSep, { color: colors.mutedForeground }]}>·</Text>
+              <TouchableOpacity onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'terms' } })}>
+                <Text style={[styles.legalLink, { color: colors.mutedForeground }]}>Условия использования</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -382,6 +397,9 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   exitLink: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center' },
+  legalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  legalLink: { fontFamily: 'Inter_400Regular', fontSize: 11, textDecorationLine: 'underline' },
+  legalSep: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   stepTitle: { fontFamily: 'Inter_700Bold', fontSize: 24 },
   stepSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
   filterLabel: { fontFamily: 'Inter_400Regular', fontSize: 12 },

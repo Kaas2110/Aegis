@@ -493,6 +493,18 @@ export default function SettingsScreen() {
       <FavoriteTeamsCard colors={colors} />
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <SectionHeader title="ПРАВОВАЯ ИНФОРМАЦИЯ" />
+        <Row
+          label="Политика конфиденциальности"
+          onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'privacy' } })}
+        />
+        <Row
+          label="Условия использования"
+          onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'terms' } })}
+        />
+      </View>
+
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="РАЗРАБОТКА" />
         {/* Админ-функционал переехал в отдельный web-кабинет (/admin-web/).
             В мобильном приложении остаётся только сброс онбординга. */}
@@ -508,8 +520,7 @@ export default function SettingsScreen() {
 
       <View style={styles.version}>
         <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Aegis · 1.0.0</Text>
-        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Модель: baseline_v1.0.0</Text>
-        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · Коэффициенты: demo (до подключения API)</Text>
+        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · ML-прогнозы: LightGBM</Text>
       </View>
     </ScrollView>
   );

@@ -46,6 +46,7 @@ function RootLayoutNav() {
       <Stack.Screen name="market-compare/[id]" options={{ presentation: 'card' }} />
       <Stack.Screen name="admin" options={{ presentation: 'card' }} />
       <Stack.Screen name="glossary" options={{ presentation: 'card' }} />
+      <Stack.Screen name="legal" options={{ presentation: 'card' }} />
     </Stack>
   );
 }

@@ -2,20 +2,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import type { ProductEvent } from '@/types';
 
-const APP_VERSION = '1.0.0-mvp1';
+const APP_VERSION = '1.0.0';
 const EVENTS_KEY = '@dea_product_events';
 const TECH_LOGS_KEY = '@dea_tech_logs';
 const AUDIT_LOGS_KEY = '@dea_audit_logs';
 const MAX_STORED_EVENTS = 500;
+const FLUSH_BATCH_SIZE = 200;
+const FLUSH_MIN_COUNT = 10;
 
 let currentSessionId = generateId();
 let currentAnonymousId = '';
+let _flushApiBaseUrl = '';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
 
-export async function initLogger(): Promise<void> {
+export async function initLogger(apiBaseUrl?: string): Promise<void> {
   try {
     const stored = await AsyncStorage.getItem('@dea_anon_id');
     if (stored) {
@@ -25,8 +28,37 @@ export async function initLogger(): Promise<void> {
       await AsyncStorage.setItem('@dea_anon_id', currentAnonymousId);
     }
     currentSessionId = 'sess_' + generateId();
+    if (apiBaseUrl) _flushApiBaseUrl = apiBaseUrl;
   } catch {
     currentAnonymousId = 'anon_' + generateId();
+  }
+}
+
+/**
+ * Отправляет накопленные события на сервер.
+ * Вызывать при старте приложения (если analyticsConsent=true) и при уходе в фон.
+ * Идемпотентно: при ошибке события остаются в хранилище и повторятся в следующей сессии.
+ */
+export async function flushEvents(apiBaseUrl?: string): Promise<void> {
+  const base = (apiBaseUrl ?? _flushApiBaseUrl).replace(/\/+$/, '');
+  if (!base) return;
+  try {
+    const raw = await AsyncStorage.getItem(EVENTS_KEY);
+    const events: ProductEvent[] = raw ? JSON.parse(raw) : [];
+    if (events.length < FLUSH_MIN_COUNT) return;
+    const batch = events.slice(0, FLUSH_BATCH_SIZE);
+    const response = await fetch(`${base}/api/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: batch }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.ok) {
+      const remaining = events.slice(FLUSH_BATCH_SIZE);
+      await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(remaining));
+    }
+  } catch {
+    // silent fail — flush will retry next session
   }
 }
 
