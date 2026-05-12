@@ -12,3 +12,9 @@ id = "yezbT-QT6naNGE4cR09RI"
 uri = "file://backups/RESTORE.md"
 type = "text"
 title = "RESTORE.md — пошаговая инструкция восстановления"
+
+[[outputs]]
+id = "dJ8P8P-NyH6KHEw52-wEF"
+uri = "file://aegis-ml-models-description.md"
+type = "text"
+title = "Aegis — Описание ML-моделей (ретрейн #4)"
