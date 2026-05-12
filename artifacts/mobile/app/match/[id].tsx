@@ -300,6 +300,17 @@ export default function MatchDetailScreen() {
   });
   const bestMarket = sortedMarkets.find(m => m.type === 'map_winner') ?? sortedMarkets[0];
 
+  // Без режима букмекера показываем только победителей (матча и карты).
+  // Тоталы/гандикапы/первая кровь и т.д. имеют смысл только как «вероятность
+  // против линии бука» — без линии это просто П1/П2 проценты, которые путают
+  // пользователя (см. фидбэк по «Тотал убийств 52% / 48%»).
+  // Когда подключим букмекеров (SHOW_BOOKMAKER_PICKER=true), фильтр снимется
+  // и для тоталов будет рендериться TotalsLadder с реальными ТБ/ТМ-линиями.
+  const WINNER_ONLY_MARKETS: ReadonlySet<string> = new Set(['match_winner', 'map_winner']);
+  const visibleMarkets = SHOW_BOOKMAKER_PICKER
+    ? sortedMarkets
+    : sortedMarkets.filter(m => WINNER_ONLY_MARKETS.has(m.type));
+
   // ── Feature access ──────────────────────────────────────────────────────────
   const winProbAccess    = useFeatureAccess('win_probability');
   const marketAccess     = useFeatureAccess('market_predictions');
@@ -721,8 +732,8 @@ export default function MatchDetailScreen() {
             )}
 
             <View style={{ opacity: marketAccess.canAccess ? 1 : 0.35 }} pointerEvents={marketAccess.canAccess ? 'auto' : 'none'}>
-            {sortedMarkets.length > 0 ? (
-              sortedMarkets.map(mkt => {
+            {visibleMarkets.length > 0 ? (
+              visibleMarkets.map(mkt => {
                 // Тоталы рендерим лестницей ТБ/ТМ (как у буков), а не П1/П2.
                 // Нужны числовые team_id (OpenDota) — у mock-матчей их нет, поэтому
                 // показываем ladder только когда есть оба ID.
