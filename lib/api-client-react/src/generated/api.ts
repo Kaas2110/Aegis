@@ -39,6 +39,8 @@ import type {
   AdminSubscriptionUpdatePriceResponse,
   AdminSubscriptionsResponse,
   AdminWhoami,
+  FeatureFlagsConfig,
+  FeatureFlagsUpdateInput,
   HealthStatus,
 } from "./api.schemas";
 
@@ -1345,6 +1347,243 @@ export const useUpdateAdminSubscriptionPrice = <
 > => {
   return useMutation(getUpdateAdminSubscriptionPriceMutationOptions(options));
 };
+
+/**
+ * @summary Current monetization mode + feature access matrix
+ */
+export const getGetAdminFeatureFlagsUrl = () => {
+  return `/api/admin/feature-flags`;
+};
+
+export const getAdminFeatureFlags = async (
+  options?: RequestInit,
+): Promise<FeatureFlagsConfig> => {
+  return customFetch<FeatureFlagsConfig>(getGetAdminFeatureFlagsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminFeatureFlagsQueryKey = () => {
+  return [`/api/admin/feature-flags`] as const;
+};
+
+export const getGetAdminFeatureFlagsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminFeatureFlags>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminFeatureFlags>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminFeatureFlagsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminFeatureFlags>>
+  > = ({ signal }) => getAdminFeatureFlags({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminFeatureFlags>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminFeatureFlagsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminFeatureFlags>>
+>;
+export type GetAdminFeatureFlagsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Current monetization mode + feature access matrix
+ */
+
+export function useGetAdminFeatureFlags<
+  TData = Awaited<ReturnType<typeof getAdminFeatureFlags>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminFeatureFlags>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminFeatureFlagsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update monetization mode and / or feature access matrix
+ */
+export const getUpdateAdminFeatureFlagsUrl = () => {
+  return `/api/admin/feature-flags`;
+};
+
+export const updateAdminFeatureFlags = async (
+  featureFlagsUpdateInput: FeatureFlagsUpdateInput,
+  options?: RequestInit,
+): Promise<FeatureFlagsConfig> => {
+  return customFetch<FeatureFlagsConfig>(getUpdateAdminFeatureFlagsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(featureFlagsUpdateInput),
+  });
+};
+
+export const getUpdateAdminFeatureFlagsMutationOptions = <
+  TError = ErrorType<AdminOpenObject>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminFeatureFlags>>,
+    TError,
+    { data: BodyType<FeatureFlagsUpdateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminFeatureFlags>>,
+  TError,
+  { data: BodyType<FeatureFlagsUpdateInput> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminFeatureFlags"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminFeatureFlags>>,
+    { data: BodyType<FeatureFlagsUpdateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAdminFeatureFlags(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminFeatureFlagsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminFeatureFlags>>
+>;
+export type UpdateAdminFeatureFlagsMutationBody =
+  BodyType<FeatureFlagsUpdateInput>;
+export type UpdateAdminFeatureFlagsMutationError = ErrorType<AdminOpenObject>;
+
+/**
+ * @summary Update monetization mode and / or feature access matrix
+ */
+export const useUpdateAdminFeatureFlags = <
+  TError = ErrorType<AdminOpenObject>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminFeatureFlags>>,
+    TError,
+    { data: BodyType<FeatureFlagsUpdateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminFeatureFlags>>,
+  TError,
+  { data: BodyType<FeatureFlagsUpdateInput> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminFeatureFlagsMutationOptions(options));
+};
+
+/**
+ * @summary Public monetization config (mode + feature matrix) for the mobile client
+ */
+export const getGetMonetizationConfigUrl = () => {
+  return `/api/config/monetization`;
+};
+
+export const getMonetizationConfig = async (
+  options?: RequestInit,
+): Promise<FeatureFlagsConfig> => {
+  return customFetch<FeatureFlagsConfig>(getGetMonetizationConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMonetizationConfigQueryKey = () => {
+  return [`/api/config/monetization`] as const;
+};
+
+export const getGetMonetizationConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonetizationConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMonetizationConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMonetizationConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMonetizationConfig>>
+  > = ({ signal }) => getMonetizationConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonetizationConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMonetizationConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMonetizationConfig>>
+>;
+export type GetMonetizationConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Public monetization config (mode + feature matrix) for the mobile client
+ */
+
+export function useGetMonetizationConfig<
+  TData = Awaited<ReturnType<typeof getMonetizationConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMonetizationConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMonetizationConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List external API integrations and their key status

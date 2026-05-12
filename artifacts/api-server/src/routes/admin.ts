@@ -18,7 +18,17 @@
  */
 
 import { Router, type IRouter } from 'express';
-import { getAppSettings, updateAppSettings } from '../services/AppSettings';
+import {
+  getAppSettings,
+  updateAppSettings,
+  FEATURE_KEYS,
+  FEATURE_CATALOG,
+  DEFAULT_FEATURE_FLAGS,
+  normalizeFeatureFlags,
+  type SubscriptionTier,
+  type MonetizationMode,
+  type FeatureKey,
+} from '../services/AppSettings';
 import { isRevenueCatConfigured, getOfferingInfo, updatePackagePrice } from '../services/RevenueCatService';
 import {
   triggerManualRetrain,
@@ -285,6 +295,72 @@ router.post('/subscriptions/update-price', async (req, res) => {
     req.log.error({ err }, 'admin/subscriptions/update-price failed');
     res.status(500).json({ error: String(err) });
   }
+});
+
+/**
+ * GET /api/admin/feature-flags
+ * Returns current monetization mode + per-feature minTier matrix + catalog.
+ */
+router.get('/feature-flags', async (_req, res) => {
+  const settings = await getAppSettings(true);
+  const flags = normalizeFeatureFlags(settings.featureFlags);
+  res.json({
+    mode: settings.monetizationMode as MonetizationMode,
+    flags,
+    features: FEATURE_CATALOG,
+  });
+});
+
+/**
+ * PUT /api/admin/feature-flags
+ * Body: { mode?: 'freemium'|'tiered', flags?: { [FeatureKey]: 'free'|'basic'|'premium' } }
+ */
+router.put('/feature-flags', async (req, res) => {
+  const body = (req.body ?? {}) as { mode?: unknown; flags?: unknown };
+  const patch: Parameters<typeof updateAppSettings>[0] = {};
+
+  if (body.mode !== undefined) {
+    if (body.mode !== 'freemium' && body.mode !== 'tiered') {
+      res.status(400).json({ error: 'mode must be "freemium" or "tiered"' });
+      return;
+    }
+    patch.monetizationMode = body.mode;
+  }
+
+  if (body.flags !== undefined) {
+    if (!body.flags || typeof body.flags !== 'object') {
+      res.status(400).json({ error: 'flags must be an object' });
+      return;
+    }
+    const incoming = body.flags as Record<string, unknown>;
+    const current = normalizeFeatureFlags((await getAppSettings(true)).featureFlags);
+    const next: Record<FeatureKey, SubscriptionTier> = { ...current };
+    for (const k of Object.keys(incoming)) {
+      if (!(FEATURE_KEYS as readonly string[]).includes(k)) {
+        res.status(400).json({ error: `unknown feature: ${k}`, allowed: FEATURE_KEYS });
+        return;
+      }
+      const v = incoming[k];
+      if (v !== 'free' && v !== 'basic' && v !== 'premium') {
+        res.status(400).json({ error: `invalid tier for ${k}: ${String(v)}` });
+        return;
+      }
+      next[k as FeatureKey] = v;
+    }
+    patch.featureFlags = next;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'no valid fields in body' });
+    return;
+  }
+
+  const settings = await updateAppSettings(patch);
+  res.json({
+    mode: settings.monetizationMode as MonetizationMode,
+    flags: normalizeFeatureFlags(settings.featureFlags),
+    features: FEATURE_CATALOG,
+  });
 });
 
 router.get('/models', async (_req, res) => {

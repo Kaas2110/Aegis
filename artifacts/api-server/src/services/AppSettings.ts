@@ -9,6 +9,66 @@ import { db, appSettingsTable, type AppSettings } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 
+export type SubscriptionTier = 'free' | 'basic' | 'premium';
+export type MonetizationMode = 'freemium' | 'tiered';
+
+export const FEATURE_KEYS = [
+  'win_probability',
+  'market_predictions',
+  'draft_analysis',
+  'backtest',
+  'alerts_edge',
+  'live_predictions',
+] as const;
+export type FeatureKey = typeof FEATURE_KEYS[number];
+
+export const DEFAULT_FEATURE_FLAGS: Record<FeatureKey, SubscriptionTier> = {
+  win_probability: 'premium',
+  market_predictions: 'premium',
+  draft_analysis: 'premium',
+  backtest: 'premium',
+  alerts_edge: 'premium',
+  live_predictions: 'premium',
+};
+
+export const FEATURE_CATALOG: Array<{ key: FeatureKey; label: string; description: string }> = [
+  { key: 'win_probability',    label: 'Вероятность победы',  description: 'Прогноз вероятности победы команды на карточке матча' },
+  { key: 'market_predictions', label: 'Рынки прогнозов',     description: 'Первая кровь, тоталы убийств, длительность, форы и т.д.' },
+  { key: 'draft_analysis',     label: 'Анализ драфта',       description: 'Разбор пиков и банов, влияние на исход матча' },
+  { key: 'backtest',           label: 'Бэктест',             description: 'Историческая equity-кривая и KPI стратегии' },
+  { key: 'alerts_edge',        label: 'Алерты по edge',      description: 'Push-уведомления по minConfidence' },
+  { key: 'live_predictions',   label: 'Live прогнозы',       description: 'Обновляемые в реальном времени прогнозы по live матчам' },
+];
+
+export function normalizeFeatureFlags(raw: unknown): Record<FeatureKey, SubscriptionTier> {
+  const out: Record<FeatureKey, SubscriptionTier> = { ...DEFAULT_FEATURE_FLAGS };
+  if (raw && typeof raw === 'object') {
+    for (const k of FEATURE_KEYS) {
+      const v = (raw as Record<string, unknown>)[k];
+      if (v === 'free' || v === 'basic' || v === 'premium') out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * Канонизация под выбранный режим монетизации. В freemium режиме тира `basic`
+ * не существует — любой флаг, поднятый до `basic`, сворачивается в `premium`,
+ * чтобы клиент (мобилка/админка) не получил недоступный тир и UX не показывал
+ * «Доступно в Basic», когда оплатить Basic нельзя.
+ */
+export function canonicalizeFlagsForMode(
+  flags: Record<FeatureKey, SubscriptionTier>,
+  mode: MonetizationMode,
+): Record<FeatureKey, SubscriptionTier> {
+  if (mode !== 'freemium') return flags;
+  const out = { ...flags };
+  for (const k of FEATURE_KEYS) {
+    if (out[k] === 'basic') out[k] = 'premium';
+  }
+  return out;
+}
+
 const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   id: 1,
   useBookmakerOdds: false,
@@ -16,6 +76,8 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   trainWindowDays: 365,
   trainMaxPatches: 4,
   trainMinSamples: 1000,
+  monetizationMode: 'freemium',
+  featureFlags: DEFAULT_FEATURE_FLAGS,
   notes: null,
 };
 
@@ -51,6 +113,8 @@ export async function updateAppSettings(
     | 'trainWindowDays'
     | 'trainMaxPatches'
     | 'trainMinSamples'
+    | 'monetizationMode'
+    | 'featureFlags'
     | 'notes'
   >>,
 ): Promise<AppSettings> {

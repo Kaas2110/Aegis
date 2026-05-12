@@ -334,6 +334,70 @@ export const UpdateAdminSubscriptionPriceResponse = zod.object({
 });
 
 /**
+ * @summary Current monetization mode + feature access matrix
+ */
+export const GetAdminFeatureFlagsResponse = zod.object({
+  mode: zod.enum(["freemium", "tiered"]),
+  flags: zod
+    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
+    .describe('minTier per feature key (e.g. { backtest \"premium\" })'),
+  features: zod
+    .array(
+      zod.object({
+        key: zod.string(),
+        label: zod.string(),
+        description: zod.string().optional(),
+      }),
+    )
+    .describe("Catalog of feature keys with display labels (Russian)"),
+});
+
+/**
+ * @summary Update monetization mode and / or feature access matrix
+ */
+export const UpdateAdminFeatureFlagsBody = zod.object({
+  mode: zod.enum(["freemium", "tiered"]).optional(),
+  flags: zod
+    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
+    .optional(),
+});
+
+export const UpdateAdminFeatureFlagsResponse = zod.object({
+  mode: zod.enum(["freemium", "tiered"]),
+  flags: zod
+    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
+    .describe('minTier per feature key (e.g. { backtest \"premium\" })'),
+  features: zod
+    .array(
+      zod.object({
+        key: zod.string(),
+        label: zod.string(),
+        description: zod.string().optional(),
+      }),
+    )
+    .describe("Catalog of feature keys with display labels (Russian)"),
+});
+
+/**
+ * @summary Public monetization config (mode + feature matrix) for the mobile client
+ */
+export const GetMonetizationConfigResponse = zod.object({
+  mode: zod.enum(["freemium", "tiered"]),
+  flags: zod
+    .record(zod.string(), zod.enum(["free", "basic", "premium"]))
+    .describe('minTier per feature key (e.g. { backtest \"premium\" })'),
+  features: zod
+    .array(
+      zod.object({
+        key: zod.string(),
+        label: zod.string(),
+        description: zod.string().optional(),
+      }),
+    )
+    .describe("Catalog of feature keys with display labels (Russian)"),
+});
+
+/**
  * @summary List external API integrations and their key status
  */
 export const GetAdminIntegrationsResponse = zod.object({

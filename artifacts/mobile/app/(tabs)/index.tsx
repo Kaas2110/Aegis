@@ -11,6 +11,8 @@ import { useApp } from '@/context/AppContext';
 import { MatchCard } from '@/components/MatchCard';
 import { FilterBar } from '@/components/FilterBar';
 import { AegisLogo } from '@/components/AegisLogo';
+import { useSubscription } from '@/lib/revenuecat';
+import { TouchableOpacity as RNTouchable } from 'react-native';
 // TODO(bookmakers): см. ниже — компонент скрыт до подключения платных кэфов.
 // import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
@@ -20,6 +22,33 @@ import { notificationService, notifyFavoriteTeamMatchStart } from '@/services/no
 import type { Match, Market } from '@/types';
 
 const REFRESH_INTERVAL_MS = 60_000;
+
+/**
+ * Маленький значок-индикатор статуса подписки в шапке.
+ * Premium → золотая корона, Free → замок (открывает экран подписки).
+ */
+function PremiumHeaderBadge() {
+  const colors = useColors();
+  const { isSubscribed } = useSubscription();
+  if (isSubscribed) {
+    return (
+      <RNTouchable
+        onPress={() => router.push('/(tabs)/settings')}
+        style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Feather name="award" size={18} color={colors.primary} />
+      </RNTouchable>
+    );
+  }
+  return (
+    <RNTouchable
+      onPress={() => router.push('/(tabs)/settings')}
+      style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Feather name="zap" size={18} color={colors.warning} />
+    </RNTouchable>
+  );
+}
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -206,6 +235,7 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
+            <PremiumHeaderBadge />
             <TouchableOpacity onPress={() => router.push('/admin')} style={styles.actionBtn}>
               <Feather name="settings" size={18} color={colors.mutedForeground} />
             </TouchableOpacity>

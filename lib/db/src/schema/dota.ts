@@ -402,6 +402,12 @@ export const appSettingsTable = pgTable('app_settings', {
   trainWindowDays: integer('train_window_days').notNull().default(365),
   trainMaxPatches: integer('train_max_patches').notNull().default(4),
   trainMinSamples: integer('train_min_samples').notNull().default(1000),
+  // ── Монетизация ───────────────────────────────────────────────────────
+  // monetizationMode: 'freemium' (Free + Premium) | 'tiered' (Free + Basic + Premium)
+  // featureFlags: матрица доступа { [featureKey]: 'free' | 'basic' | 'premium' }
+  //   определяет минимальный тир для каждой функции. Меняется без деплоя.
+  monetizationMode: text('monetization_mode').notNull().default('freemium'),
+  featureFlags: jsonb('feature_flags').$type<Record<string, 'free' | 'basic' | 'premium'>>().notNull().default({}),
   notes: text('notes'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

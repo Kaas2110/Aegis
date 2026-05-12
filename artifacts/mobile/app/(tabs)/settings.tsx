@@ -384,6 +384,9 @@ export default function SettingsScreen() {
     >
       <Text style={[styles.title, { color: colors.foreground }]}>Профиль</Text>
 
+      {/* Подписка идёт первой — самый важный CTA / статус пользователя. */}
+      <SubscriptionCard colors={colors} />
+
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="ОТОБРАЖЕНИЕ" />
         {/* TODO(subscription): «Режим карточек» убран — всегда подробный.
@@ -452,8 +455,6 @@ export default function SettingsScreen() {
         />
         <Row label="Экспортировать мои данные" onPress={handleExportData} />
       </View>
-
-      <SubscriptionCard colors={colors} />
 
       <FavoriteTeamsCard colors={colors} />
 

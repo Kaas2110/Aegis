@@ -12,6 +12,8 @@ import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { notificationService, type EvAlert } from '@/services/notifications/NotificationService';
 import type { Alert, MarketType } from '@/types';
+import { useFeatureAccess } from '@/lib/featureFlags';
+import { PremiumGate } from '@/components/PremiumGate';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
@@ -47,6 +49,7 @@ export default function AlertsScreen() {
   const [activeTab, setActiveTab] = useState<'triggered' | 'rules'>('triggered');
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const access = useFeatureAccess('alerts_edge');
 
   useEffect(() => {
     logProductEvent('match_list_viewed', 'alerts');
@@ -132,10 +135,24 @@ export default function AlertsScreen() {
       <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.title, { color: colors.foreground }]}>Алерты</Text>
-          <TouchableOpacity onPress={() => setShowModal(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
-            <Feather name="plus" size={18} color={colors.primaryForeground} />
-          </TouchableOpacity>
+          {access.canAccess && (
+            <TouchableOpacity onPress={() => setShowModal(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
+              <Feather name="plus" size={18} color={colors.primaryForeground} />
+            </TouchableOpacity>
+          )}
         </View>
+        {!access.canAccess && (
+          <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+            <PremiumGate
+              feature="alerts_edge"
+              variant="inline"
+              title="Алерты по edge доступны в Premium"
+              subtitle="Получайте уведомления о высокой уверенности модели и +EV событиях"
+            >
+              {null}
+            </PremiumGate>
+          </View>
+        )}
 
         <View style={[styles.tabs, { backgroundColor: colors.muted }]}>
           {(['triggered', 'rules'] as const).map(t => {

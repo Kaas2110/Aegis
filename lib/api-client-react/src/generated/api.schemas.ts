@@ -5,6 +5,48 @@
  * Aegis API specification
  * OpenAPI spec version: 0.1.0
  */
+export type FeatureTier = (typeof FeatureTier)[keyof typeof FeatureTier];
+
+export const FeatureTier = {
+  free: "free",
+  basic: "basic",
+  premium: "premium",
+} as const;
+
+export type MonetizationMode =
+  (typeof MonetizationMode)[keyof typeof MonetizationMode];
+
+export const MonetizationMode = {
+  freemium: "freemium",
+  tiered: "tiered",
+} as const;
+
+/**
+ * minTier per feature key (e.g. { backtest "premium" })
+ */
+export type FeatureFlagsConfigFlags = { [key: string]: FeatureTier };
+
+export type FeatureFlagsConfigFeaturesItem = {
+  key: string;
+  label: string;
+  description?: string;
+};
+
+export interface FeatureFlagsConfig {
+  mode: MonetizationMode;
+  /** minTier per feature key (e.g. { backtest "premium" }) */
+  flags: FeatureFlagsConfigFlags;
+  /** Catalog of feature keys with display labels (Russian) */
+  features: FeatureFlagsConfigFeaturesItem[];
+}
+
+export type FeatureFlagsUpdateInputFlags = { [key: string]: FeatureTier };
+
+export interface FeatureFlagsUpdateInput {
+  mode?: MonetizationMode;
+  flags?: FeatureFlagsUpdateInputFlags;
+}
+
 export interface HealthStatus {
   status: string;
 }

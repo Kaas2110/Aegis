@@ -6,6 +6,7 @@ import type { Match, Market } from '@/types';
 import { OddsTilesPair } from './OddsTile';
 import { OrnateCorners } from './OrnateFrame';
 import { HexBadge } from './HexBadge';
+import { PremiumGate } from './PremiumGate';
 
 interface Props {
   match: Match;
@@ -153,31 +154,33 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
         </View>
 
         {/* ── MARKET PREVIEW ────────────────────── */}
+        {/* Прогноз вероятности победы — premium-фича. На free тире
+            виден силуэт через blur + замок-CTA, кликом ведёт на paywall. */}
         {bestMarket && (
-          <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
-            <View style={styles.marketHeader}>
-              <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
-                {marketTypeRu(bestMarket.type).toUpperCase()}
-              </Text>
-              {/* TODO(bookmakers): бейдж «ПЕРЕВЕС» считался от букмекерских кэфов.
-                  Без них значение шумит — возвращаем вместе с букмекерским UI. */}
-            </View>
+          <PremiumGate feature="win_probability" variant="overlay">
+            <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
+              <View style={styles.marketHeader}>
+                <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
+                  {marketTypeRu(bestMarket.type).toUpperCase()}
+                </Text>
+              </View>
 
-            <OddsTilesPair
-              team1Label={match.team1.shortName}
-              team2Label={match.team2.shortName}
-              modelProbTeam1={bestMarket.prediction.modelProbability}
-              fairProbTeam1={bestMarket.bestOdds.fairProbTeam1}
-              oddsTeam1={bestMarket.bestOdds.oddsTeam1}
-              oddsTeam2={bestMarket.bestOdds.oddsTeam2}
-              bookmakerName={bestMarket.bestOdds.bookmakerName}
-              edgeTeam1={bestMarket.prediction.edge}
-              evTeam1={bestMarket.prediction.ev}
-              confidence={bestMarket.prediction.confidence}
-              onPressTeam1={onPress}
-              onPressTeam2={onPress}
-            />
-          </View>
+              <OddsTilesPair
+                team1Label={match.team1.shortName}
+                team2Label={match.team2.shortName}
+                modelProbTeam1={bestMarket.prediction.modelProbability}
+                fairProbTeam1={bestMarket.bestOdds.fairProbTeam1}
+                oddsTeam1={bestMarket.bestOdds.oddsTeam1}
+                oddsTeam2={bestMarket.bestOdds.oddsTeam2}
+                bookmakerName={bestMarket.bestOdds.bookmakerName}
+                edgeTeam1={bestMarket.prediction.edge}
+                evTeam1={bestMarket.prediction.ev}
+                confidence={bestMarket.prediction.confidence}
+                onPressTeam1={onPress}
+                onPressTeam2={onPress}
+              />
+            </View>
+          </PremiumGate>
         )}
       </View>
     </TouchableOpacity>

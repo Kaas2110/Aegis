@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FeatureFlagsCard } from "@/components/FeatureFlagsCard";
 
 const LOOKUP_KEY_LABEL: Record<string, string> = {
   "$rc_weekly": "Неделя",
@@ -164,6 +165,8 @@ export default function Subscriptions() {
           Управление тарифами RevenueCat. Цены тест-стора изменяются через API; продакшн — App Store Connect / Google Play Console.
         </p>
       </div>
+
+      <FeatureFlagsCard />
 
       <Card className="rounded-none border-border bg-card">
         <CardHeader className="border-b border-border pb-4">

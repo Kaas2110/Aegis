@@ -288,6 +288,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminOpenObject"
 
+  /admin/feature-flags:
+    get:
+      operationId: getAdminFeatureFlags
+      tags: [admin]
+      summary: Current monetization mode + feature access matrix
+      responses:
+        "200":
+          description: Feature flags config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlagsConfig"
+    put:
+      operationId: updateAdminFeatureFlags
+      tags: [admin]
+      summary: Update monetization mode and / or feature access matrix
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeatureFlagsUpdateInput"
+      responses:
+        "200":
+          description: Updated feature flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlagsConfig"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
+  /config/monetization:
+    get:
+      operationId: getMonetizationConfig
+      tags: [health]
+      summary: Public monetization config (mode + feature matrix) for the mobile client
+      responses:
+        "200":
+          description: Public monetization config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlagsConfig"
+
   /admin/integrations:
     get:
       operationId: getAdminIntegrations
@@ -320,6 +369,46 @@ paths:
 
 components:
   schemas:
+    FeatureTier:
+      type: string
+      enum: [free, basic, premium]
+    MonetizationMode:
+      type: string
+      enum: [freemium, tiered]
+    FeatureFlagsConfig:
+      type: object
+      required: [mode, flags, features]
+      properties:
+        mode:
+          $ref: "#/components/schemas/MonetizationMode"
+        flags:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/FeatureTier"
+          description: minTier per feature key (e.g. { backtest "premium" })
+        features:
+          type: array
+          description: Catalog of feature keys with display labels (Russian)
+          items:
+            type: object
+            required: [key, label]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+    FeatureFlagsUpdateInput:
+      type: object
+      properties:
+        mode:
+          $ref: "#/components/schemas/MonetizationMode"
+        flags:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/FeatureTier"
+
     HealthStatus:
       type: object
       properties:

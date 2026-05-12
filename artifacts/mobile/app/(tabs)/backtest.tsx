@@ -6,6 +6,8 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { BacktestResult } from '@/types';
+import { useFeatureAccess } from '@/lib/featureFlags';
+import { PremiumGate } from '@/components/PremiumGate';
 
 const PERIOD_OPTIONS = [30, 90, 180, 365] as const;
 const CONF_OPTIONS = [50, 60, 70, 80] as const;
@@ -22,8 +24,10 @@ export default function BacktestScreen() {
   const [isRunning, setIsRunning] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const access = useFeatureAccess('backtest');
 
   async function handleRun() {
+    if (!access.canAccess) return;
     setIsRunning(true);
     setError(null);
     await logProductEvent('backtest_started', 'backtest', { periodDays, minConf, minOdds });
@@ -57,7 +61,20 @@ export default function BacktestScreen() {
         Реальная история прогнозов из prematch_outcomes — что было бы, если ставить по уверенности модели
       </Text>
 
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      {!access.canAccess && (
+        <PremiumGate
+          feature="backtest"
+          variant="inline"
+          title="Бэктест доступен в Premium"
+          subtitle="Историческая equity-кривая и KPI стратегии. Открывается после оформления подписки."
+        >
+          {null}
+        </PremiumGate>
+      )}
+
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, opacity: access.canAccess ? 1 : 0.4 }]}
+        pointerEvents={access.canAccess ? 'auto' : 'none'}
+      >
         <Text style={[styles.cardTitle, { color: colors.foreground }]}>Параметры</Text>
 
         <Text style={[styles.paramLabel, { color: colors.mutedForeground }]}>Период (дней)</Text>

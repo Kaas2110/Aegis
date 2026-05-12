@@ -22,6 +22,7 @@ import { Alert } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
 import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
+import { FeatureFlagsProvider, FeatureFlagsSideEffects } from "@/lib/featureFlags";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -71,13 +72,16 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <SubscriptionProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <AppProvider>
-                  <RootLayoutNav />
-                </AppProvider>
-              </KeyboardProvider>
-            </GestureHandlerRootView>
+            <FeatureFlagsProvider>
+              <FeatureFlagsSideEffects />
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <AppProvider>
+                    <RootLayoutNav />
+                  </AppProvider>
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </FeatureFlagsProvider>
           </SubscriptionProvider>
         </QueryClientProvider>
       </ErrorBoundary>
