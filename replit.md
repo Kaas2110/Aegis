@@ -114,9 +114,19 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 
 - **Admin → отдельный web-артефакт (DONE 2026-05-11).** Inline `/api/admin-ui/` удалён вместе с `routes/adminUi.ts`. Активный admin-инструмент — артефакт `artifacts/admin-web` (React + Vite, slug `admin-web`, previewPath `/admin-web/`, путь в проксе `/admin-web`). Страницы: `/login`, `/` (дашборд: scheduler-state + активные модели + общие метрики), `/settings`, `/metrics`, `/operations` (ручной retrain + prune snapshots + odds-status). UI на русском, тёмная амбер-палитра (#080604 фон, #E8830A акцент, моноширинная типографика, sharp corners). **Auth.** `POST /api/admin/login { token }` сравнивает с `ADMIN_TOKEN` через `timingSafeEqual` (брутфорс-троттл 10 попыток / 15 мин на IP) и выставляет HttpOnly-cookie `aegis_admin_session` (24h, sameSite=lax, `secure` только в production). `GET /api/admin/whoami` возвращает `{authenticated, tokenConfigured}`. `POST /api/admin/logout` удаляет сессию и cookie. Все `/api/admin/*` и `POST /api/analytics/retrain` идут через `requireAdminSession` — **legacy `X-Admin-Token` header больше не принимается**. Сессии хранятся in-memory в одном процессе api-server (рестарт = relogin, для одного оператора достаточно). На фронте куки летят автоматически: в `lib/api-client-react/src/custom-fetch.ts` глобально выставлено `credentials: 'include'`. На любую 401-ошибку из защищённых хуков `QueryCache.onError` редиректит на `/admin-web/login`. Все вызовы из admin-web идут через сгенерированные хуки `@workspace/api-client-react` (OpenAPI-контракт в `lib/api-spec/openapi.yaml`, секция `admin-auth` + `admin`).
 
+## Исторический инgest + retrain (DONE 2026-05-12)
+
+Расширение тренировочной выборки инgestом исторических матчей (май–сент 2025, ранее отсутствовавший промежуток):
+
+- **`ingest:matches -- --less-than <match_id>`** — параметр для обратного инgesta (добавлен в `ingest-matches.ts`). Безопасный батч = 30 страниц (~33s). Суммарно добавлено ≈25 000 матчей, заполнен пропуск май–авг 2025.
+- **Итог**: 44 609 матчей в БД; **28 956 в 365-дневном обучающем окне** (было 18 974, **+52%**).
+- **Retrain LR** (`train:model`): v3 logreg test_acc **83.6%** / brier 0.137 (было 81.5%).
+- **Retrain LightGBM** (`train:lightgbm`): v3 LGB test_acc **81.5%** / brier 0.154 (было 80.5%).
+- v2/v3 train_samples не изменились (нужны draft-данные для hero-фич); **2 743 матча без драфтов** — инgested в фоне через `ingest:drafts` (Stratz, ~12 мин). После завершения — следующий `train:model` + `train:lightgbm` даст полный прирост v2/v3.
+- `train:model` получил флаги `--min-glicko N` и `--dry-run` (сравнение без сохранения).
+
 ## Миграция из старого workspace (2026-05-11)
 
 - Старый Postgres (`helium/heliumdb`) был внутренним и недоступен — DB пересобрана с нуля через `pnpm --filter @workspace/db run push`.
 - Код восстановлен из public GitHub repo (`Kaas2110/Market-Edge`) поверх scaffold'ов monorepo.
-- Первая ingest-пробежка scheduler'а (после рестарта) загрузила 1000 команд + ~2000 матчей и обучила v1 prematch модель (acc≈73.7% на tier-1, brier≈0.18). v2/v3 ждут `ingest:drafts` + `ingest:players-heroes`. Live-модель ждёт ~1-2 недели накопления `live_snapshots × prematch_outcomes`.
 - `ADMIN_TOKEN` перевыпущен (старый, утёкший в чате, инвалидирован). `SESSION_SECRET` уже был в workspace.
