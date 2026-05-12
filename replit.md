@@ -83,10 +83,12 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 
 **Training window:** 365d optimal for all model types (540d worse due to meta drift ~9pp).
 
-**Active models (25 total, retrained 2026-05-12 #2):**
+**Active models (25 total, retrained 2026-05-12 #3):**
 - Prematch winner: 9 LGB + 9 LR (v1/v2/v3 × winner/t1/t2)
   - Best LGB: v3/prematch_winner 78.5% / brier 0.1573 · v3/t2 78.9% / brier 0.1489
   - v3/t1 69.0% — overfits (train 94.5%, only 840 t1 samples)
+  - Best LR (retrained #3): v3/winner 76.4% / brier 0.164 · v3/t2 77.0% / brier 0.156 · v3/t1 63.1%
+  - LGB margin over LR: winner +2.1pp · t2 +1.9pp · t1 +5.9pp → LGB correctly primary
 - Market v3: 3 LGB (first_blood 60.0%, total_kills R²=0.063, total_duration R²=0.053)
   - Improved from v2: first_blood 61.3%→60.0% (slight decline after strict dedup), kills R² 0.031→0.063 (+103%), duration R² 0.004→0.053 (+13×)
 - Live winner (fv=4, 10 features): 1 LGB + 1 LR — retrained #3 (2026-05-12)
