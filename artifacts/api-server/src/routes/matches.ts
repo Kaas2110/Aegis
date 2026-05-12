@@ -1,6 +1,7 @@
 import { Router, type IRouter } from 'express';
 import { db, teamsTable, leaguesTable } from '@workspace/db';
 import { inArray } from 'drizzle-orm';
+import { autoIngestTeamBackground } from '../services/TeamAutoIngestor';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
 import { getApiKey } from '../services/ApiKeysService';
@@ -189,13 +190,25 @@ router.get('/upcoming', async (req, res) => {
     const data = await withCache('matches:upcoming', 60_000, async () => {
       const url = new URL(`${PANDASCORE_BASE}/dota2/matches/upcoming`);
       url.searchParams.set('token', pandascoreKey);
-      url.searchParams.set('page[size]', '20');
+      url.searchParams.set('page[size]', '50');
       url.searchParams.set('sort', 'begin_at');
       url.searchParams.set('filter[status]', 'not_started');
       const resp = await apiFetch(url.toString());
       if (!resp.ok) throw new Error(`PandaScore: HTTP ${resp.status}`);
       const raw = await resp.json() as unknown;
-      return await enrichWithLeagueNames(raw).catch(() => raw);
+      const enriched = await enrichWithLeagueNames(raw).catch(() => raw);
+      // Фоновый авто-ингест команд которых нет в нашей БД.
+      // Fire-and-forget — не блокирует ответ клиенту.
+      if (Array.isArray(enriched)) {
+        for (const m of enriched as Record<string, unknown>[]) {
+          const opps = m['opponents'] as Array<{ opponent?: { name?: string } }> | undefined;
+          const t1 = (opps?.[0]?.opponent?.name ?? '').trim();
+          const t2 = (opps?.[1]?.opponent?.name ?? '').trim();
+          if (t1) autoIngestTeamBackground(t1);
+          if (t2) autoIngestTeamBackground(t2);
+        }
+      }
+      return enriched;
     });
     res.json({ isMock: false, data });
   } catch (err) {

@@ -13,8 +13,6 @@ import { FilterBar } from '@/components/FilterBar';
 import { AegisLogo } from '@/components/AegisLogo';
 import { useSubscription } from '@/lib/revenuecat';
 import { TouchableOpacity as RNTouchable } from 'react-native';
-// TODO(bookmakers): см. ниже — компонент скрыт до подключения платных кэфов.
-// import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
 import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
 import { logProductEvent } from '@/services/logging/EventLogger';
@@ -69,7 +67,8 @@ export default function HomeScreen() {
   async function loadData(silent = false) {
     if (!silent) setLoading(true);
     try {
-      const result = await fetchLiveData();
+      const bookmakerSource = filters.bookmaker !== 'all' ? filters.bookmaker : undefined;
+      const result = await fetchLiveData(bookmakerSource);
       setEnrichedLive(result.liveMatches);
       setEnrichedPrematch(result.prematchMatches);
       setIsMock(result.isMock);
@@ -98,7 +97,7 @@ export default function HomeScreen() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [filters.bookmaker]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -288,9 +287,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={[styles.sectionDiamond, { borderColor: accentColor, backgroundColor: accentColor + '22' }]} />
                 <View style={[styles.sectionLine, { backgroundColor: colors.borderGold }]} />
-                {/* TODO(bookmakers): см. replit.md → Bookmakers roadmap. */}
-                {/* {item.isLive && <BookmakerDropdown />} */}
-              </View>
+                    </View>
             );
           }
 
@@ -343,6 +340,13 @@ function DataSourceBar({
     pandascore: 'PandaScore (расписание)',
     the_odds_api: 'The Odds API',
     'demo-live': 'демо-лайв',
+    fonbet: 'Fonbet',
+    liga_stavok: 'Лига Ставок',
+    pari: 'PARI',
+    betboom: 'BetBoom',
+    x1stavka: '1xStavka',
+    olimp: 'Olimp.bet',
+    mock: 'Mock (тест)',
   };
   const labels = sources.map(s => SOURCE_LABEL_RU[s] ?? s);
 

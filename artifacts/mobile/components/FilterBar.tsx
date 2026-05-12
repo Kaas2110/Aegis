@@ -7,9 +7,10 @@ const BOOKMAKER_OPTIONS = [
   { label: 'Все', value: 'all' },
   { label: 'Fonbet', value: 'fonbet' },
   { label: 'Лига Ставок', value: 'liga_stavok' },
-  { label: 'Betfair', value: 'betfair' },
+  { label: 'PARI', value: 'pari' },
   { label: 'BetBoom', value: 'betboom' },
-  { label: 'Pari', value: 'pari' },
+  { label: '1xStavka', value: 'x1stavka' },
+  { label: 'Olimp', value: 'olimp' },
   { label: 'Mock', value: 'mock' },
 ] as const;
 

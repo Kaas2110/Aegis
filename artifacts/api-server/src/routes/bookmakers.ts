@@ -705,4 +705,184 @@ for (const id of Object.keys(ADAPTERS)) {
   });
 }
 
+// ---------- Upcoming-joined: join PandaScore upcoming + конкретный букмекер ----------
+//
+// GET /api/bookmakers/upcoming-joined?source=fonbet|liga_stavok|...|mock|all
+//
+// - all   → весь PandaScore upcoming (матчи всех тиров), без кэфов
+// - mock  → весь PandaScore + синтетические детерминированные кэфы (для тестирования)
+// - <bk>  → только матчи, присутствующие И в PandaScore И у выбранного букмекера
+//           (нечёткий матч по именам команд); кэфы из ответа букмекера
+//
+// Ответ: { source, isMock, count, matches: JoinedMatch[] }
+// Используется мобильным клиентом при выборе фильтра букмекера.
+
+interface JoinedMatch {
+  pandaScoreId: string | number;
+  team1: string;
+  team2: string;
+  team1Id?: number;
+  team2Id?: number;
+  startsAt: string | null;
+  tournament: string;
+  numberOfGames: number;
+  league_tier?: string;
+  bookmakerEvent?: {
+    source: string;
+    sourceName: string;
+    eventId: string;
+    winner?: { team1: number; team2: number };
+  };
+}
+
+// normalizeTeamName уже определена выше — переиспользуем.
+
+function teamsMatch(psName: string, bkName: string): boolean {
+  const a = normalizeTeamName(psName);
+  const b = normalizeTeamName(bkName);
+  if (a === b) return true;
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length < b.length ? a : b;
+  if (shorter.length >= 4 && longer.includes(shorter)) return true;
+  return false;
+}
+
+// Детерминированный hash-based псевдо-шанс победы для mock-кэфов.
+// Один и тот же матч всегда получает одни и те же кэфы — не «прыгают» при рефреше.
+function syntheticOdds(team1: string, team2: string): { team1: number; team2: number } {
+  let h = 2166136261;
+  for (const c of `${team1.toLowerCase()}|${team2.toLowerCase()}`) {
+    h ^= c.charCodeAt(0);
+    h = (Math.imul(h, 16777619) >>> 0);
+  }
+  const prob1 = 0.35 + (h % 30000) / 100000; // 35–65 %
+  const vig = 0.05;
+  const o1 = Math.round((1 / (prob1 + vig / 2)) * 100) / 100;
+  const o2 = Math.round((1 / (1 - prob1 + vig / 2)) * 100) / 100;
+  return { team1: o1, team2: o2 };
+}
+
+async function fetchPandaScoreUpcoming(apiKey: string, limit = 50): Promise<Record<string, unknown>[]> {
+  const url = new URL('https://api.pandascore.co/dota2/matches/upcoming');
+  url.searchParams.set('token', apiKey);
+  url.searchParams.set('page[size]', String(limit));
+  url.searchParams.set('sort', 'begin_at');
+  url.searchParams.set('filter[status]', 'not_started');
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const resp = await fetch(url.toString(), {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': getRandomUserAgent(), Accept: 'application/json' },
+    });
+    if (!resp.ok) return [];
+    return (await resp.json()) as Record<string, unknown>[];
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+function psMatchToJoined(m: Record<string, unknown>): JoinedMatch | null {
+  const opps = m['opponents'] as Array<{ opponent?: { id?: number; name?: string } }> | undefined;
+  const t1 = (opps?.[0]?.opponent?.name ?? '').trim();
+  const t2 = (opps?.[1]?.opponent?.name ?? '').trim();
+  if (!t1 || !t2 || /^tbd$/i.test(t1) || /^tbd$/i.test(t2)) return null;
+  const startMs = m['begin_at'] ? Date.parse(m['begin_at'] as string) : NaN;
+  if (!Number.isFinite(startMs)) return null;
+  const league = m['league'] as Record<string, unknown> | undefined;
+  const serie = m['serie'] as Record<string, unknown> | undefined;
+  const leagueName = String(
+    (m['league_name'] as string | undefined) ??
+    league?.['name'] ??
+    serie?.['full_name'] ??
+    'Pro Match',
+  ).trim();
+  return {
+    pandaScoreId: m['id'] as string | number,
+    team1: t1,
+    team2: t2,
+    team1Id: opps?.[0]?.opponent?.id,
+    team2Id: opps?.[1]?.opponent?.id,
+    startsAt: new Date(startMs).toISOString(),
+    tournament: leagueName,
+    numberOfGames: (m['number_of_games'] as number | undefined) ?? 3,
+    league_tier: m['league_tier'] as string | undefined,
+  };
+}
+
+router.get('/upcoming-joined', async (req, res) => {
+  const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
+  const source = String(req.query.source ?? 'all').toLowerCase();
+
+  // --- 1. Получаем PandaScore upcoming ---
+  let psRaw: Record<string, unknown>[] = [];
+  if (pandascoreKey) {
+    psRaw = await fetchPandaScoreUpcoming(pandascoreKey, 50);
+  }
+  const psMatches = psRaw.map(psMatchToJoined).filter((m): m is JoinedMatch => m !== null);
+
+  // --- 2. "all" — возвращаем всё без кэфов ---
+  if (source === 'all') {
+    res.json({ source: 'all', isMock: false, count: psMatches.length, matches: psMatches });
+    return;
+  }
+
+  // --- 3. "mock" — синтетические кэфы для тестирования ---
+  if (source === 'mock') {
+    const withOdds: JoinedMatch[] = psMatches.map(m => ({
+      ...m,
+      bookmakerEvent: {
+        source: 'mock',
+        sourceName: 'Mock (тест)',
+        eventId: `mock_${m.pandaScoreId}`,
+        winner: syntheticOdds(m.team1, m.team2),
+      },
+    }));
+    res.json({ source: 'mock', isMock: true, count: withOdds.length, matches: withOdds });
+    return;
+  }
+
+  // --- 4. Конкретный букмекер — fetch + join ---
+  const bkData = await fetchSource(source);
+  if (!bkData || bkData.isMock || bkData.events.length === 0) {
+    res.json({
+      source,
+      isMock: true,
+      count: 0,
+      matches: [],
+      error: bkData?.error ?? 'no_data',
+      hint: bkData?.hint ?? 'Букмекер недоступен. Возможно, требуется РФ-прокси (PROXY_URL).',
+    });
+    return;
+  }
+
+  const joined: JoinedMatch[] = [];
+  for (const ps of psMatches) {
+    const ev = bkData.events.find(e => {
+      const fwd = teamsMatch(ps.team1, e.team1) && teamsMatch(ps.team2, e.team2);
+      const rev = teamsMatch(ps.team1, e.team2) && teamsMatch(ps.team2, e.team1);
+      return fwd || rev;
+    });
+    if (ev) {
+      const swapped = teamsMatch(ps.team1, ev.team2) && teamsMatch(ps.team2, ev.team1);
+      const raw = ev.markets.winner;
+      const winner = raw
+        ? (swapped ? { team1: raw.team2, team2: raw.team1 } : raw)
+        : undefined;
+      joined.push({
+        ...ps,
+        bookmakerEvent: {
+          source: ev.source,
+          sourceName: SOURCE_NAMES[ev.source] ?? ev.source,
+          eventId: ev.eventId,
+          ...(winner ? { winner } : {}),
+        },
+      });
+    }
+  }
+  res.json({ source, isMock: false, count: joined.length, matches: joined });
+});
+
 export default router;
