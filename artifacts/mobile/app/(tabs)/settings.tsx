@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
+import { useSubscription } from '@/lib/revenuecat';
 
 interface Tier1Team {
   teamId: number;
@@ -92,6 +93,145 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
         </View>
       )}
     </View>
+  );
+}
+
+function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hooks/useColors').useColors> }) {
+  const { isSubscribed, isLoading, offerings, purchase, restore, isPurchasing, isRestoring } = useSubscription();
+  const [showPaywall, setShowPaywall] = useState(false);
+
+  const currentOffering = offerings?.current;
+  const pkg = currentOffering?.availablePackages[0];
+  const priceStr = pkg?.product.priceString ?? '—';
+
+  if (isLoading) {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', padding: 20 }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (isSubscribed) {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.row, { borderBottomColor: 'transparent' }]}>
+          <Feather name="award" size={18} color={colors.primary} style={{ marginRight: 8 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowLabel, { color: colors.foreground }]}>Aegis Premium</Text>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>Подписка активна</Text>
+          </View>
+          <View style={{ backgroundColor: colors.primary + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.primary }}>PRO</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={async () => { try { await restore(); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
+          disabled={isRestoring}
+          style={[styles.row, { borderBottomColor: 'transparent' }]}
+        >
+          <Text style={[styles.rowLabel, { color: colors.mutedForeground, fontSize: 13 }]}>Восстановить покупки</Text>
+          {isRestoring ? <ActivityIndicator size="small" color={colors.mutedForeground} /> : <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={{ padding: 16, gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Feather name="zap" size={18} color={colors.primary} />
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.foreground }}>Aegis Premium</Text>
+          </View>
+          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.mutedForeground, lineHeight: 19 }}>
+            Полный доступ к бэктесту модели, расширенным алертам по уверенности и всем рынкам прогнозов.
+          </Text>
+          <View style={{ gap: 6 }}>
+            {['Бэктест и equity-кривая', 'Анализ драфтов и факторов', 'Алерты по edge и минимальной уверенности'].map(f => (
+              <View key={f} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Feather name="check-circle" size={14} color={colors.positive} />
+                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.foreground }}>{f}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity
+            onPress={() => setShowPaywall(true)}
+            style={{ backgroundColor: colors.primary, borderRadius: 12, height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}
+          >
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.primaryForeground }}>
+              {priceStr !== '—' ? `${priceStr} / месяц` : 'Попробовать Premium'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={async () => { try { await restore(); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
+            disabled={isRestoring}
+            style={{ alignItems: 'center' }}
+          >
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.mutedForeground }}>Восстановить покупки</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <Modal visible={showPaywall} transparent animationType="slide" onRequestClose={() => setShowPaywall(false)}>
+        <View style={{ flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, gap: 18 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: colors.foreground }}>Aegis Premium</Text>
+              <TouchableOpacity onPress={() => setShowPaywall(false)}>
+                <Feather name="x" size={22} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: 10 }}>
+              {[
+                { icon: 'trending-up' as const, text: 'Бэктест модели — equity-кривая и KPI' },
+                { icon: 'layers' as const, text: 'Анализ пиков / банов в драфте' },
+                { icon: 'bell' as const, text: 'Алерты по edge и уверенности' },
+                { icon: 'bar-chart-2' as const, text: 'Все 15 рынков прогнозов' },
+              ].map(({ icon, text }) => (
+                <View key={text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary + '22', alignItems: 'center', justifyContent: 'center' }}>
+                    <Feather name={icon} size={16} color={colors.primary} />
+                  </View>
+                  <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 14, color: colors.foreground, flex: 1 }}>{text}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ backgroundColor: colors.muted, borderRadius: 14, padding: 16, alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 28, color: colors.foreground }}>{priceStr !== '—' ? priceStr : '...'}</Text>
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.mutedForeground }}>в месяц · отмена в любой момент</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={async () => {
+                if (!pkg) { Alert.alert('Нет доступных тарифов'); return; }
+                try {
+                  await purchase(pkg);
+                  setShowPaywall(false);
+                  await logProductEvent('subscription_purchased', 'paywall', { price: priceStr });
+                } catch (e: any) {
+                  if (!e.userCancelled) Alert.alert('Ошибка покупки', e.message ?? 'Попробуйте позже');
+                }
+              }}
+              disabled={isPurchasing || !pkg}
+              style={{ backgroundColor: colors.primary, borderRadius: 14, height: 54, alignItems: 'center', justifyContent: 'center' }}
+            >
+              {isPurchasing
+                ? <ActivityIndicator color={colors.primaryForeground} />
+                : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.primaryForeground }}>Подключить Premium</Text>
+              }
+            </TouchableOpacity>
+
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.mutedForeground, textAlign: 'center', lineHeight: 16 }}>
+              Оплата через App Store / Google Play. Отмена в любое время в настройках магазина.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -226,6 +366,8 @@ export default function SettingsScreen() {
         />
         <Row label="Экспортировать мои данные" onPress={handleExportData} />
       </View>
+
+      <SubscriptionCard colors={colors} />
 
       <FavoriteTeamsCard colors={colors} />
 

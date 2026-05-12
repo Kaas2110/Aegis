@@ -23,9 +23,11 @@
     "backfill:live-snapshots": "tsx ./src/backfill-live-snapshots.ts",
     "import:snapshot": "tsx ./src/import-snapshot.ts",
     "test:stratz": "tsx ./src/test-stratz.ts",
+    "seed:revenuecat": "tsx ./src/seedRevenueCat.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@replit/revenuecat-sdk": "catalog:",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:"
   },
