@@ -14,7 +14,7 @@ import {
 } from '../services/SchedulerWorker';
 import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable } from '@workspace/db';
 import { requireAdminSession } from './adminAuth';
-import { eq, desc, sql, and, gte, isNotNull, inArray } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, isNotNull, inArray, ilike, or } from 'drizzle-orm';
 
 const router: IRouter = Router();
 
@@ -163,6 +163,68 @@ router.get('/ml-predict', async (req, res) => {
     direWinProbability: 1 - result.probRadiantWin,
     modelVersion: result.modelVersion,
     features: result.features,
+  });
+});
+
+/**
+ * GET /api/analytics/predict-by-name?radiantTeamName=X&direTeamName=Y
+ * Резолвит имена команд → teamId в нашей БД → запускает ML-предсказание.
+ * Используется мобилкой для обогащения прематч-карточек с PandaScore,
+ * где есть реальные имена команд, но нет OpenDota teamId.
+ */
+router.get('/predict-by-name', async (req, res) => {
+  const radiantName = String(req.query.radiantTeamName ?? '').trim();
+  const direName   = String(req.query.direTeamName   ?? '').trim();
+
+  if (radiantName.length < 2 || direName.length < 2) {
+    res.status(400).json({ error: 'radiantTeamName и direTeamName должны быть не менее 2 символов' });
+    return;
+  }
+
+  const searchTeam = async (q: string) =>
+    db.select({ teamId: teamsTable.teamId, name: teamsTable.name, rating: teamsTable.rating })
+      .from(teamsTable)
+      .where(or(ilike(teamsTable.name, `%${q}%`), ilike(teamsTable.tag, `%${q}%`)))
+      .orderBy(desc(teamsTable.rating))
+      .limit(1);
+
+  const [radiantRows, direRows] = await Promise.all([
+    searchTeam(radiantName),
+    searchTeam(direName),
+  ]);
+
+  const radiantTeam = radiantRows[0];
+  const direTeam    = direRows[0];
+
+  if (!radiantTeam || !direTeam) {
+    res.status(404).json({
+      error: 'team_not_found',
+      detail: !radiantTeam
+        ? `"${radiantName}" не найдена в БД`
+        : `"${direName}" не найдена в БД`,
+    });
+    return;
+  }
+  if (radiantTeam.teamId === direTeam.teamId) {
+    res.status(400).json({ error: 'Оба имени указывают на одну и ту же команду' });
+    return;
+  }
+
+  const result = await mlPredictMatchWinner(radiantTeam.teamId, direTeam.teamId);
+  if (!result) {
+    res.status(503).json({ error: 'no_model', detail: 'Нет активной ML-модели или недостаточно данных' });
+    return;
+  }
+
+  res.json({
+    radiantTeamId:          radiantTeam.teamId,
+    radiantTeamName:        radiantTeam.name,
+    direTeamId:             direTeam.teamId,
+    direTeamName:           direTeam.name,
+    radiantWinProbability:  result.probRadiantWin,
+    direWinProbability:     1 - result.probRadiantWin,
+    modelVersion:           result.modelVersion,
+    features:               result.features,
   });
 });
 

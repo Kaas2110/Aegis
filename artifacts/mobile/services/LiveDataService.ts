@@ -452,6 +452,73 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
   };
 }
 
+interface PredictByNameResponse {
+  radiantTeamId: number;
+  radiantTeamName: string;
+  direTeamId: number;
+  direTeamName: string;
+  radiantWinProbability: number;
+  direWinProbability: number;
+  modelVersion: string;
+  features: Record<string, number>;
+}
+
+/**
+ * Обогащает прематч-матч ML-предсказанием через /api/analytics/predict-by-name.
+ * Если команды не найдены в БД или модели нет — возвращает матч без markets.
+ * Таймаут 3 секунды чтобы не тормозить загрузку списка.
+ */
+async function enrichPrematch(match: Match): Promise<EnrichedMatch> {
+  const empty = (): EnrichedMatch => ({
+    match, markets: [], availableBookmakers: [], dataSource: 'real',
+  });
+  try {
+    const t1 = encodeURIComponent(match.team1.name);
+    const t2 = encodeURIComponent(match.team2.name);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    let resp: Response;
+    try {
+      resp = await fetch(
+        `${API_BASE}/analytics/predict-by-name?radiantTeamName=${t1}&direTeamName=${t2}`,
+        { signal: ctrl.signal },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!resp.ok) return empty();
+    const pred = await resp.json() as PredictByNameResponse;
+
+    // Синтезируем analyticsResult в формате, который ожидает analyticsToMarkets.
+    const analyticsResult: NonNullable<EnrichedMatch['analyticsResult']> = {
+      predictions: [{
+        betType: 'match_winner',
+        labelRu: 'Победитель серии',
+        probTeam1: pred.radiantWinProbability,
+        probTeam2: pred.direWinProbability,
+        confidence: 0.65,
+        edge: 0,
+        ev: 0,
+        mainFactors: [],
+      }],
+      modelVersion: pred.modelVersion,
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Обновляем team.id до OpenDota teamId (нужен для /api/analytics/explain при открытии детального экрана)
+    const enrichedMatch: Match = {
+      ...match,
+      team1: { ...match.team1, id: String(pred.radiantTeamId) },
+      team2: { ...match.team2, id: String(pred.direTeamId) },
+    };
+
+    const markets = analyticsToMarkets(enrichedMatch, analyticsResult);
+    return { match: enrichedMatch, markets, analyticsResult, availableBookmakers: [], dataSource: 'real' };
+  } catch {
+    return empty();
+  }
+}
+
 export async function fetchLiveData(): Promise<LiveDataResult> {
   const fetchedAt = new Date().toISOString();
   try {
@@ -502,9 +569,7 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
         .filter((m): m is Match => m !== null)
         .slice(0, 30);
       const prematchList: EnrichedMatch[] = realUpcomingMatches.length > 0
-        ? realUpcomingMatches.map(match => ({
-            match, markets: [], availableBookmakers: [], dataSource: 'real' as const,
-          }))
+        ? await Promise.all(realUpcomingMatches.map(m => enrichPrematch(m)))
         : MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
       cacheEnriched([...liveList, ...prematchList]);
       const hasRealUpcoming = realUpcomingMatches.length > 0;
@@ -520,9 +585,12 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
         fetchedAt,
       };
     }
-    // 2. Convert OpenDota data to our Match format
+    // 2. Convert OpenDota data to our Match format.
+    // Фильтруем матчи без имён команд (как правило, высокорейтинговые паблики
+    // без турнирного контекста) — они бесполезны для ставочного приложения.
     const matches = (rawMatches as OpenDotaLiveMatch[])
-      .slice(0, 10) // Show max 10 live matches
+      .filter(m => (m.team_name_radiant ?? '').trim() && (m.team_name_dire ?? '').trim())
+      .slice(0, 10)
       .map(openDotaToMatch);
 
     // 3. Run analytics for each match
@@ -546,18 +614,17 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
 
     const finalLive = enriched;
 
-    // Маппим upcoming PandaScore → Match. Без analytics (для prematch обычно
-    // нет live-снапшота); markets пустые до старта матча. Этого достаточно для
-    // карточки в списке: имя турнира, время старта, формат.
+    // Маппим upcoming PandaScore → Match и обогащаем ML-предсказанием через
+    // /api/analytics/predict-by-name (резолвит имя → OpenDota teamId → ML).
     const upcomingRaws = Array.isArray(upcomingData?.data) ? upcomingData!.data : [];
     const prematchMatches: Match[] = upcomingRaws
       .map(upcomingToMatch)
       .filter((m): m is Match => m !== null)
       .filter(m => !finalLive.some(em => em.match.team1.id === m.team1.id && em.match.team2.id === m.team2.id))
-      .slice(0, 30);
-    const prematchEnriched: EnrichedMatch[] = prematchMatches.map(match => ({
-      match, markets: [], availableBookmakers: [], dataSource: 'real' as const,
-    }));
+      .slice(0, 20);
+    const prematchEnriched: EnrichedMatch[] = await Promise.all(
+      prematchMatches.map(match => enrichPrematch(match))
+    );
 
     cacheEnriched([...finalLive, ...prematchEnriched]);
     return {
