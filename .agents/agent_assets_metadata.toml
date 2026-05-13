@@ -12,3 +12,9 @@ id = "yezbT-QT6naNGE4cR09RI"
 uri = "file://backups/RESTORE.md"
 type = "text"
 title = "RESTORE.md — пошаговая инструкция восстановления"
+
+[[outputs]]
+id = "CfvEuSCSLOCu7gcGces8p"
+uri = "file://docs/self-hosting-guide.md"
+type = "text"
+title = "Aegis — Шпаргалка по развёртыванию"
