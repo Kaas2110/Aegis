@@ -74,8 +74,12 @@ const L2 = 0.001;
 const MIN_SAMPLES_PER_TIER = 50;
 const MIN_AVG_GLICKO = 1200;  // отсекаем T3 — рейтинги шумные
 
-const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
+const TEAM_FEATURE_NAMES = [
+  'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
+  'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
+  'tier_t1', 'tier_t2', 'tier_t3',
+] as const;
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 12
 
 interface Sample {
   features: number[];
@@ -103,10 +107,20 @@ function dot(w: number[], x: number[]): number {
   return s;
 }
 
+interface TeamMatchContext {
+  startTime: number;
+  seriesType: number | null;
+  mapNo: number;
+  tier: Tier | null;
+  radiantSideLogit: number;
+  nowUnix: number;
+}
+
 function buildTeamFeatures(
   radiantId: number,
   direId: number,
   teams: Map<number, TeamRating>,
+  ctx: TeamMatchContext,
 ): number[] | null {
   const r = teams.get(radiantId);
   const d = teams.get(direId);
@@ -123,7 +137,15 @@ function buildTeamFeatures(
   const expDiff = Math.log(rGames + 1) - Math.log(dGames + 1);
   const isHighTier = rGames >= 50 && dGames >= 50 ? 1 : 0;
 
-  return [1, eloDiff, wrDiff, expDiff, isHighTier];
+  const seriesTypeNorm = ctx.seriesType === 0 ? 0.0 : ctx.seriesType === 2 ? 1.0 : 0.5;
+  const mapNoNorm = Math.min(Math.max(ctx.mapNo - 1, 0), 4) / 4;
+  const recencyDaysNorm = (ctx.startTime - ctx.nowUnix) / (365 * 86400);
+
+  return [
+    1, eloDiff, wrDiff, expDiff, isHighTier,
+    ctx.radiantSideLogit, recencyDaysNorm, seriesTypeNorm, mapNoNorm,
+    ctx.tier === 't1' ? 1 : 0, ctx.tier === 't2' ? 1 : 0, ctx.tier === 't3' ? 1 : 0,
+  ];
 }
 
 function trainLogisticRegression(samples: Sample[], dim: number, label: string): number[] {
@@ -281,6 +303,8 @@ async function main() {
       direTeamId: proMatchesTable.direTeamId,
       radiantWin: proMatchesTable.radiantWin,
       startTime: proMatchesTable.startTime,
+      seriesType: proMatchesTable.series_type,
+      leagueId: proMatchesTable.leagueId,
     })
     .from(proMatchesTable)
     .where(gte(proMatchesTable.startTime, minStartTime))
@@ -387,6 +411,26 @@ async function main() {
     accIds.set(a.matchId, { r: a.radiantAccountIds, d: a.direAccountIds });
   }
 
+  // ── Предвычисление контекста для расширенных командных фичей ───────────
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const totalWithWin = matches.filter(m => m.radiantWin != null);
+  const radiantWinsCount = totalWithWin.filter(m => m.radiantWin).length;
+  const radiantWR = totalWithWin.length > 0 ? radiantWinsCount / totalWithWin.length : 0.52;
+  const rWRClamped = Math.min(Math.max(radiantWR, 1e-4), 1 - 1e-4);
+  const radiantSideLogit = Math.log(rWRClamped / (1 - rWRClamped));
+  const seriesCounters = new Map<string, number>();
+  const mapNoByMatch = new Map<number, number>();
+  for (const m of matches) {
+    if (!m.radiantTeamId || !m.direTeamId) continue;
+    const lo = Math.min(m.radiantTeamId, m.direTeamId);
+    const hi = Math.max(m.radiantTeamId, m.direTeamId);
+    const key = `${m.leagueId ?? 0}_${lo}_${hi}_${m.seriesType ?? 0}`;
+    const cnt = (seriesCounters.get(key) ?? 0) + 1;
+    seriesCounters.set(key, cnt);
+    mapNoByMatch.set(m.matchId, cnt);
+  }
+  console.log(`[train-model] radiantWR=${(radiantWR * 100).toFixed(1)}% logit=${radiantSideLogit.toFixed(4)}`);
+
   // ── Сборка фичей за один проход ────────────────────────────────────────
   const v1All: Sample[] = [];
   const v1Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
@@ -409,11 +453,18 @@ async function main() {
       droppedByMmr++;
       continue;
     }
-    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
+    const tier = classifyTier(r.rating, d.rating);
+    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams, {
+      startTime: m.startTime,
+      seriesType: m.seriesType ?? null,
+      mapNo: mapNoByMatch.get(m.matchId) ?? 1,
+      tier,
+      radiantSideLogit,
+      nowUnix,
+    });
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
-    const tier = classifyTier(r.rating, d.rating);
 
     const v1Sample: Sample = { features: teamFeats, label };
     v1All.push(v1Sample);

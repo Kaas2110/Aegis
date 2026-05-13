@@ -87,7 +87,8 @@ class TrainSample(BaseModel):
 
 
 class TrainRequest(BaseModel):
-    """Тренировка LightGBM-классификатора (или регрессора) с изотонической калибровкой.
+    """Тренировка LightGBM-классификатора (или регрессора/квантильного регрессора)
+    с изотонической калибровкой для classification.
 
     Хронологический split на train/calib/test делается на стороне Node
     (там полный контекст по startTime); сюда приходят УЖЕ разбитые наборы.
@@ -95,7 +96,9 @@ class TrainRequest(BaseModel):
 
     label: str  # человекочитаемый ярлык, напр. "v3/prematch_winner_t1"
     feature_names: list[str]
-    task_type: Literal["classification", "regression"] = "classification"
+    task_type: Literal["classification", "regression", "quantile"] = "classification"
+    # Для task_type="quantile": квантиль [0,1]. 0.5 = медиана (= regression median).
+    alpha: float = 0.5
     train: list[TrainSample]
     calib: list[TrainSample]
     test: list[TrainSample]
@@ -119,7 +122,7 @@ class TrainMetrics(BaseModel):
 
 class TrainResponse(BaseModel):
     label: str
-    task_type: Literal["classification", "regression"] = "classification"
+    task_type: Literal["classification", "regression", "quantile"] = "classification"
     blob_b64: str  # base64-encoded joblib bundle
     feature_names: list[str]
     train_metrics: TrainMetrics
@@ -130,6 +133,7 @@ class TrainResponse(BaseModel):
     feature_importance: dict[str, float]
     train_seconds: float
     residual_std: float | None = None  # только для regression
+    alpha: float | None = None  # только для quantile
 
 
 class PredictRequest(BaseModel):
@@ -138,12 +142,12 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    # classification → raw_prob/calibrated_prob; regression → mean/std.
+    # classification → raw_prob/calibrated_prob; regression/quantile → mean/std.
     raw_prob: float | None = None
     calibrated_prob: float | None = None
     mean: float | None = None
     std: float | None = None
-    task_type: Literal["classification", "regression"] = "classification"
+    task_type: Literal["classification", "regression", "quantile"] = "classification"
 
 
 # ── Bundle helpers ──────────────────────────────────────────────────────
@@ -268,25 +272,41 @@ def train(req: TrainRequest) -> TrainResponse:
     t0 = time.perf_counter()
 
     is_reg = req.task_type == "regression"
+    is_quantile = req.task_type == "quantile"
 
     X_train = np.array([s.features for s in req.train], dtype=np.float64)
-    y_dtype = np.float64 if is_reg else np.int32
+    y_dtype = np.float64 if (is_reg or is_quantile) else np.int32
     y_train = np.array([s.label for s in req.train], dtype=y_dtype)
     X_calib = np.array([s.features for s in req.calib], dtype=np.float64) if req.calib else np.empty((0, X_train.shape[1]))
     y_calib = np.array([s.label for s in req.calib], dtype=y_dtype) if req.calib else np.empty(0, dtype=y_dtype)
     X_test = np.array([s.features for s in req.test], dtype=np.float64) if req.test else np.empty((0, X_train.shape[1]))
     y_test = np.array([s.label for s in req.test], dtype=y_dtype) if req.test else np.empty(0, dtype=y_dtype)
 
-    if not is_reg and len(np.unique(y_train)) < 2:
+    if not (is_reg or is_quantile) and len(np.unique(y_train)) < 2:
         raise HTTPException(400, "train set has only one class")
 
-    use_eval = len(X_calib) >= 10 and (is_reg or len(np.unique(y_calib)) >= 2)
+    use_eval = len(X_calib) >= 10 and (is_reg or is_quantile or len(np.unique(y_calib)) >= 2)
     callbacks = []
     if use_eval and req.early_stopping_rounds > 0:
         callbacks.append(lgb.early_stopping(req.early_stopping_rounds, verbose=False))
     callbacks.append(lgb.log_evaluation(0))
 
-    if is_reg:
+    if is_quantile:
+        model = lgb.LGBMRegressor(
+            objective="quantile",
+            alpha=req.alpha,
+            num_leaves=req.num_leaves,
+            learning_rate=req.learning_rate,
+            n_estimators=req.n_estimators,
+            min_data_in_leaf=req.min_data_in_leaf,
+            feature_fraction=req.feature_fraction,
+            bagging_fraction=0.9,
+            bagging_freq=5,
+            random_state=42,
+            verbose=-1,
+            n_jobs=1,
+        )
+    elif is_reg:
         model = lgb.LGBMRegressor(
             objective="regression",
             num_leaves=req.num_leaves,
@@ -315,7 +335,7 @@ def train(req: TrainRequest) -> TrainResponse:
             n_jobs=1,
         )
 
-    eval_metric = "rmse" if is_reg else "binary_logloss"
+    eval_metric = "rmse" if (is_reg or is_quantile) else "binary_logloss"
     if use_eval:
         model.fit(
             X_train, y_train,
@@ -329,13 +349,16 @@ def train(req: TrainRequest) -> TrainResponse:
     calibrator: IsotonicRegression | None = None
     residual_std: float | None = None
 
-    if is_reg:
+    if is_reg or is_quantile:
         # Residual std из calib set (или из train, если calib пуст).
-        ref_X = X_calib if len(X_calib) >= 5 else X_train
-        ref_y = y_calib if len(X_calib) >= 5 else y_train
-        ref_pred = model.predict(ref_X)
-        residuals = ref_y - ref_pred
-        residual_std = float(np.std(residuals, ddof=1)) if len(residuals) >= 2 else 0.0
+        # Для quantile: std не имеет смысла (квантиль сам задаёт интервал),
+        # оставляем None.
+        if is_reg:
+            ref_X = X_calib if len(X_calib) >= 5 else X_train
+            ref_y = y_calib if len(X_calib) >= 5 else y_train
+            ref_pred = model.predict(ref_X)
+            residuals = ref_y - ref_pred
+            residual_std = float(np.std(residuals, ddof=1)) if len(residuals) >= 2 else 0.0
 
         train_pred = model.predict(X_train)
         train_metrics = _reg_metrics(train_pred, y_train)
@@ -404,6 +427,7 @@ def train(req: TrainRequest) -> TrainResponse:
         feature_importance=importance,
         train_seconds=elapsed,
         residual_std=residual_std,
+        alpha=req.alpha if is_quantile else None,
     )
 
 
@@ -429,10 +453,10 @@ def predict(req: PredictRequest) -> PredictResponse:
 
     X = np.array([req.features], dtype=np.float64)
 
-    if task_type == "regression":
+    if task_type in ("regression", "quantile"):
         mean = float(model.predict(X)[0])
-        std = float(bundle.get("residual_std") or 0.0)
-        return PredictResponse(mean=mean, std=std, task_type="regression")
+        std = float(bundle.get("residual_std") or 0.0) if task_type == "regression" else 0.0
+        return PredictResponse(mean=mean, std=std, task_type=task_type)  # type: ignore[arg-type]
 
     raw = float(model.predict_proba(X)[0, 1])
     cal = float(calibrator.predict(np.array([raw]))[0]) if calibrator is not None else raw

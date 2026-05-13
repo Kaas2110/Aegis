@@ -178,6 +178,9 @@ async function pollOnce(): Promise<void> {
             radiantScore: m.radiant_score ?? null,
             direScore: m.dire_score ?? null,
             buildingState: m.building_state ?? null,
+            isRealLive: 1,
+            hasDraft: draft !== null ? 1 : 0,
+            recencyDaysNorm: 0.0,
           },
           pred.probRadiantWin,
         );

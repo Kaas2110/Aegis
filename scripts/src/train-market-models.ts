@@ -71,25 +71,37 @@ interface MatchRow {
 
 interface TeamRating { rating: number; wins: number; losses: number; }
 
-type MarketKey = 'first_blood' | 'total_kills' | 'total_duration';
-const ALL_MARKETS: MarketKey[] = ['first_blood', 'total_kills', 'total_duration'];
+type MarketKey = 'first_blood' | 'total_kills' | 'total_duration' | 'total_duration_q25' | 'total_duration_q75';
+const ALL_MARKETS: MarketKey[] = ['first_blood', 'total_kills', 'total_duration', 'total_duration_q25', 'total_duration_q75'];
 
 const KIND_BY_MARKET: Record<MarketKey, string> = {
   first_blood: 'market_first_blood',
   total_kills: 'market_total_kills',
   total_duration: 'market_total_duration',
+  total_duration_q25: 'market_total_duration_q25',
+  total_duration_q75: 'market_total_duration_q75',
 };
 
-const TASK_BY_MARKET: Record<MarketKey, 'classification' | 'regression'> = {
+const TASK_BY_MARKET: Record<MarketKey, 'classification' | 'regression' | 'quantile'> = {
   first_blood: 'classification',
   total_kills: 'regression',
   total_duration: 'regression',
+  total_duration_q25: 'quantile',
+  total_duration_q75: 'quantile',
+};
+
+const QUANTILE_ALPHA_BY_MARKET: Record<MarketKey, number> = {
+  first_blood: 0.5,
+  total_kills: 0.5,
+  total_duration: 0.5,
+  total_duration_q25: 0.25,
+  total_duration_q75: 0.75,
 };
 
 interface MlMetrics { accuracy: number; log_loss: number; brier: number; n: number; }
 interface TrainResponse {
   label: string;
-  task_type: 'classification' | 'regression';
+  task_type: 'classification' | 'regression' | 'quantile';
   blob_b64: string;
   feature_names: string[];
   train_metrics: MlMetrics;
@@ -177,6 +189,7 @@ function buildSamples(market: MarketKey, matches: MatchRow[], teams: Map<number,
       if (total <= 0) continue;
       out.push({ features: feats, label: Math.log(total) });
     } else {
+      // total_duration, total_duration_q25, total_duration_q75 — same label, different model objective
       if (m.duration <= 0) continue;
       out.push({ features: feats, label: Math.log(m.duration) });
     }
@@ -198,7 +211,8 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
   const calib = samples.slice(trainEnd, calibEnd);
   const test = samples.slice(calibEnd);
   const taskType = TASK_BY_MARKET[market];
-  console.log(`  [${label}] training task=${taskType} n=${train.length}/calib=${calib.length}/test=${test.length}`);
+  const alpha = QUANTILE_ALPHA_BY_MARKET[market];
+  console.log(`  [${label}] training task=${taskType}${taskType === 'quantile' ? `(α=${alpha})` : ''} n=${train.length}/calib=${calib.length}/test=${test.length}`);
 
   const token = mlServiceToken();
   if (!token) {
@@ -216,6 +230,7 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
         label,
         feature_names: TEAM_FEATURE_NAMES,
         task_type: taskType,
+        alpha,
         train, calib, test,
       }),
       signal: ctrl.signal,
@@ -295,8 +310,9 @@ function parseMarketsFromArgs(): MarketKey[] {
     else if (a.startsWith('--market=')) v = a.slice('--market='.length);
     if (!v) continue;
     if (v === 'all') return ALL_MARKETS;
+    if (v === 'total_duration_quantiles') return ['total_duration_q25', 'total_duration_q75'];
     if ((ALL_MARKETS as string[]).includes(v)) return [v as MarketKey];
-    console.error(`[train-market-models] unknown --market: ${v} (valid: all, ${ALL_MARKETS.join(', ')})`);
+    console.error(`[train-market-models] unknown --market: ${v} (valid: all, total_duration_quantiles, ${ALL_MARKETS.join(', ')})`);
     process.exit(1);
   }
   return ALL_MARKETS;

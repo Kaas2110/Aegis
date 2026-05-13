@@ -4,7 +4,7 @@ Production-ready Dota 2 esports analytics mobile app. Russian UI. Live ML-driven
 
 Бренд: «Aegis». Внутренние пакеты по-прежнему называются `@workspace/mobile`/`@workspace/api-server` (не переименовываем без необходимости — миграция импортов не оправдана).
 
-Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle, Expo (React Native), Zod (`zod/v4`), Wave 4 ML: LightGBM 4.6 + sklearn IsotonicRegression в Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn, stateless — blob shipped per /predict), pure-JS logistic regression в `services/PredictionModel.ts` остаётся как fallback (60s circuit-breaker, 200ms timeout).
+Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle, Expo (React Native), Zod (`zod/v4`), Wave 4/5 ML: LightGBM 4.6 + sklearn IsotonicRegression в Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn, stateless — blob shipped per /predict), pure-JS logistic regression в `services/PredictionModel.ts` остаётся как fallback (60s circuit-breaker, 200ms timeout).
 
 ## Run & Operate
 
@@ -24,7 +24,7 @@ Stack: pnpm workspaces, Node 24, TypeScript 5.9, Express 5, PostgreSQL + Drizzle
 - `pnpm --filter @workspace/scripts run compute:bo3-series [days=180]` — aggregate `bo3_series`
 - `pnpm --filter @workspace/scripts run train:model` — atomic swap of all v1+v2+v3 active prematch models (live-winner trained back-to-back, non-fatal). Engine = logistic regression (fallback baseline).
 - `pnpm --filter @workspace/scripts run train:lightgbm [-- --label v3/t1]` — Wave 4 gradient-boosted prematch models (LightGBM via `artifacts/ml-service`). Атомарный swap внутри `engine='lightgbm'`; LR-модели остаются как fallback. CLI `--label` (или env `LIGHTGBM_KINDS`) ограничивает набор бакетов для re-train. Inference: api-server идёт по HTTP в ml-service с 200ms timeout + 60s circuit-breaker; на любой сбой → LR.
-- `pnpm --filter @workspace/scripts run train:market-models [-- --market first_blood|total_kills|total_duration|all]` — Wave 4 LightGBM derived-market models. `market_first_blood` (classification, label=radiantWin прокси), `market_total_kills`/`market_total_duration` (regression на log(value)). Все 5 фичей — team-rating-based. Атомарный per-market swap, engine='lightgbm'.
+- `pnpm --filter @workspace/scripts run train:market-models [-- --market first_blood|total_kills|total_duration|total_duration_q25|total_duration_q75|total_duration_quantiles|all]` — Wave 4/5 LightGBM derived-market models. `market_first_blood` (classification), `market_total_kills`/`market_total_duration` (regression), `market_total_duration_q25`/`market_total_duration_q75` (quantile α=0.25/0.75). Все 5 фичей — team-rating-based. Атомарный per-market swap, engine='lightgbm'. Alias `total_duration_quantiles` запускает оба квантильных рынка сразу.
 - `pnpm --filter @workspace/scripts run train:live-model` — train live-winner from `live_snapshots × prematch_outcomes`
 - `pnpm run typecheck` — full typecheck (libs first via `typecheck:libs`)
 
@@ -113,6 +113,28 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **Per-model retrain UI (DONE 2026-05-11).** В `artifacts/admin-web/src/pages/operations.tsx` добавлена секция «Активные модели» — таблица всех активных `model_versions` с per-row кнопкой «Переобучить» (маппинг kind/engine → script + label/market) и кнопкой «Переобучить всё» в шапке (старый `/admin/retrain`). Бэкенд: `POST /api/admin/models/retrain` (operationId `triggerAdminModelRetrain`, body `{script, label?, market?}`) + `runTrainScriptManual` в `SchedulerWorker.ts` с whitelist'ом скриптов/флагов (`train:model | train:lightgbm | train:market-models | train:live-model`, value regex `^[a-zA-Z0-9_/-]+$`), shared mutex с full-pipeline. Hot-reload в память: `loadActiveModel` для prematch, `loadActiveMarketModels` для markets, `loadActiveLiveModel` для live.
 
 - **Admin → отдельный web-артефакт (DONE 2026-05-11).** Inline `/api/admin-ui/` удалён вместе с `routes/adminUi.ts`. Активный admin-инструмент — артефакт `artifacts/admin-web` (React + Vite, slug `admin-web`, previewPath `/admin-web/`, путь в проксе `/admin-web`). Страницы: `/login`, `/` (дашборд: scheduler-state + активные модели + общие метрики), `/settings`, `/metrics`, `/operations` (ручной retrain + prune snapshots + odds-status). UI на русском, тёмная амбер-палитра (#080604 фон, #E8830A акцент, моноширинная типографика, sharp corners). **Auth.** `POST /api/admin/login { token }` сравнивает с `ADMIN_TOKEN` через `timingSafeEqual` (брутфорс-троттл 10 попыток / 15 мин на IP) и выставляет HttpOnly-cookie `aegis_admin_session` (24h, sameSite=lax, `secure` только в production). `GET /api/admin/whoami` возвращает `{authenticated, tokenConfigured}`. `POST /api/admin/logout` удаляет сессию и cookie. Все `/api/admin/*` и `POST /api/analytics/retrain` идут через `requireAdminSession` — **legacy `X-Admin-Token` header больше не принимается**. Сессии хранятся in-memory в одном процессе api-server (рестарт = relogin, для одного оператора достаточно). На фронте куки летят автоматически: в `lib/api-client-react/src/custom-fetch.ts` глобально выставлено `credentials: 'include'`. На любую 401-ошибку из защищённых хуков `QueryCache.onError` редиректит на `/admin-web/login`. Все вызовы из admin-web идут через сгенерированные хуки `@workspace/api-client-react` (OpenAPI-контракт в `lib/api-spec/openapi.yaml`, секция `admin-auth` + `admin`).
+
+## Wave 5 — ML quality improvements (DONE 2026-05-13)
+
+Реализованы 9 улучшений из deep-research-report. Все модели переобучены.
+
+**Live-winner model fv=8 (T002–T004):**
+- Признаки расширены с 6 до 9: добавлены `is_real_live`, `has_draft`, `recency_days_norm`.
+- Временно́й split с 1-day gap + composite score (brier + 0.3×logLoss) для champion selection.
+- Результат: test acc=80.2%, Δacc=+22.9pp vs prematch-only baseline, brier=0.145.
+- LiveWinnerModel.ts: backward-compat с 6-весовыми моделями (dim-bounded dot product).
+- LiveWorker.ts: передаёт `isRealLive=1`, `hasDraft`, `recencyDaysNorm=0`.
+
+**Prematch team features 5→12 dim (T005–T006):**
+- Новые фичи: `radiant_side_logit` (logit(radiant WR по датасету), ≈+0.08), `recency_days_norm`, `series_type_norm` (BO1=0/BO3=0.5/BO5=1), `map_no_norm` (ROW_NUMBER по серии), `tier_t1`, `tier_t2`, `tier_t3` (OHE).
+- Все 4 train-скрипта (train-model, train-lightgbm) и PredictionModel.ts (inference) обновлены.
+- LightGBM v3 test: acc=78.5% brier=0.153; v3/t2: acc=78.9% brier=0.155.
+
+**Quantile regression для total_duration (T001, T007):**
+- ml-service: добавлен `task_type="quantile"` с `alpha` param (LGBMRegressor objective="quantile"); residual_std=None для quantile.
+- 2 новые модели: `market_total_duration_q25` (α=0.25) и `market_total_duration_q75` (α=0.75).
+- CLI alias `--market total_duration_quantiles` обучает оба за один вызов.
+- Итого market-моделей: 5 (was 3).
 
 ## Миграция из старого workspace (2026-05-11)
 

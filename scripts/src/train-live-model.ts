@@ -1,48 +1,41 @@
 /**
- * Обучение LIVE-модели победителя матча.
+ * Обучение LIVE-модели победителя матча — FEATURES_VERSION 8 (dim=9).
  *
- * Эта модель работает ВО ВРЕМЯ матча: получает текущий снапшот (NW lead, kills,
- * tower count, game_time) + прематч-вероятность из основной модели → выдаёт
- * P(Radiant победит) обновляемую каждую минуту.
- *
- * Тренировочные данные — соединение трёх таблиц:
- *   live_snapshots (X)        — что происходило на минуте M матча
- *   prematch_outcomes (Y + prior) — кто победил (label) + что предсказала прематч-модель
- *
- * Фичи (5):
+ * Фичи:
  *   x0 = 1                                    bias
- *   x1 = (gameTimeSec - 1800) / 1800          нормализованная минута, центр = 30мин
- *   x2 = radiantLead / 10000                  net worth преимущество в десятках k
+ *   x1 = (gameTimeSec - 1800) / 1800          нормализованная минута
+ *   x2 = radiantLead / 10000                  net worth преимущество
  *   x3 = (radiantScore - direScore) / 15      разница убийств
- *   x4 = towerDiff / 11                       разница оставшихся башен (по building_state)
- *   x5 = logit(prematchProb)                  прематч как сильный приор
+ *   x4 = towerDiff / 11                       разница башен
+ *   x5 = logit(prematchProb)                  прематч как приор
+ *   x6 = is_real_live                         1=live-polling, 0=backfill
+ *   x7 = has_draft                            1=драфт известен
+ *   x8 = recency_days_norm                    -(дней с матча)/365 (0=сейчас)
  *
- * Цель: P(radiant_win | snapshot) = sigmoid(w · x)
+ * Сплит: по матчам, хронологический (startTime), с 1-суточным зазором
+ * между train/test во избежание утечки данных в пограничных матчах.
  *
- * Sampling: чтобы матч не доминировал в выборке, берём максимум 1 снапшот
- * на каждые 3 минуты игры (gameTime // 180).
+ * Чемпион: выводится composite score = brier + 0.3 * logLoss.
  */
 
 import { db, modelVersionsTable } from '@workspace/db';
 import { sql, and, eq } from 'drizzle-orm';
 
+const FEATURES_VERSION = 8;
+const DIM = 9;
+
 interface Sample {
   features: number[];
   label: number;
   matchId: number;
-  bucket: number; // gameTime в 3-мин ведре, для сэмплирования
+  bucket: number;
+  startTime: number;
 }
 
 const EPOCHS = 200;
 const LR = 0.05;
 const L2 = 0.001;
 
-// Парсит OpenDota building_state (bitmask) → счётчики башен.
-// Стандартное расположение бит:
-//   bits 0..10  — Radiant towers (11 штук: 4×T1+T2+T3 + 3 ancients)
-//   bits 11..21 — Dire towers
-// Это аппроксимация — точное соответствие зависит от версии OpenDota,
-// но как фича-индикатор «у кого больше построек цело» работает.
 function towerCountsFromBuildingState(bs: number | null | undefined): { r: number; d: number } {
   if (bs == null || !Number.isFinite(bs)) return { r: 11, d: 11 };
   let r = 0, d = 0;
@@ -58,12 +51,8 @@ function logit(p: number): number {
 }
 
 function sigmoid(z: number): number {
-  if (z >= 0) {
-    const ez = Math.exp(-z);
-    return 1 / (1 + ez);
-  }
-  const ez = Math.exp(z);
-  return ez / (1 + ez);
+  if (z >= 0) { const ez = Math.exp(-z); return 1 / (1 + ez); }
+  const ez = Math.exp(z); return ez / (1 + ez);
 }
 
 function dot(w: number[], x: number[]): number {
@@ -98,7 +87,7 @@ function trainLogisticRegression(samples: Sample[], dim: number): number[] {
   return w;
 }
 
-function evaluate(samples: Sample[], w: number[]): { acc: number; logLoss: number; brier: number } {
+function evaluate(samples: Sample[], w: number[]): { acc: number; logLoss: number; brier: number; composite: number } {
   let correct = 0, logLoss = 0, brier = 0;
   for (const s of samples) {
     const p = sigmoid(dot(w, s.features));
@@ -108,26 +97,16 @@ function evaluate(samples: Sample[], w: number[]): { acc: number; logLoss: numbe
     logLoss += -(s.label * Math.log(p + eps) + (1 - s.label) * Math.log(1 - p + eps));
     brier += (p - s.label) ** 2;
   }
-  return {
-    acc: correct / samples.length,
-    logLoss: logLoss / samples.length,
-    brier: brier / samples.length,
-  };
+  const n = samples.length;
+  const b = brier / n, ll = logLoss / n;
+  return { acc: correct / n, logLoss: ll, brier: b, composite: b + 0.3 * ll };
 }
 
 async function main() {
-  console.log('[train-live-model] Joining live_snapshots × prematch_outcomes …');
+  console.log('[train-live-model] Joining live_snapshots × prematch_outcomes (fv=8) …');
 
-  // SQL-джойн: для каждого снапшота с gameTime>=60 берём матч с известным
-  // исходом и прематч-прогнозом. Сразу фильтруем мусор (нулевые фичи).
-  // Лимитируем 200к строк — этого хватит для логистической регрессии и
-  // оперативной памяти node-процесса.
-  // LEFT JOIN с обеими таблицами:
-  //   po.predicted_radiant_win_prob — реальный прогноз модели (если матч был live-tracked)
-  //   pm.radiant_win — исход всегда известен для любого pro_match
-  //   COALESCE(po.predicted_radiant_win_prob, 0.5) — нейтральный приор для backfill
-  // Это позволяет использовать все live_snapshots (в т.ч. синтетические из backfill),
-  // не только те, для которых есть prematch_outcomes.
+  const nowUnix = Math.floor(Date.now() / 1000);
+
   const rows = await db.execute(sql`
     SELECT
       ls.match_id          AS "matchId",
@@ -136,16 +115,20 @@ async function main() {
       ls.radiant_score     AS "radiantScore",
       ls.dire_score        AS "direScore",
       ls.building_state    AS "buildingState",
+      ls.source            AS "source",
+      pm.start_time        AS "startTime",
       COALESCE(po.predicted_radiant_win_prob, 0.5) AS "prematchProb",
-      COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin"
+      COALESCE(po.actual_radiant_win, pm.radiant_win) AS "actualRadiantWin",
+      CASE WHEN md.match_id IS NOT NULL THEN 1 ELSE 0 END AS "hasDraft"
     FROM live_snapshots ls
     INNER JOIN pro_matches pm ON pm.match_id = ls.match_id
     LEFT JOIN prematch_outcomes po ON po.match_id = ls.match_id
+    LEFT JOIN match_drafts md ON md.match_id = ls.match_id
     WHERE pm.radiant_win IS NOT NULL
       AND ls.game_time_sec IS NOT NULL
       AND ls.game_time_sec >= 60
       AND ls.game_time_sec <= 7200
-    ORDER BY ls.match_id, ls.game_time_sec
+    ORDER BY pm.start_time ASC, ls.match_id, ls.game_time_sec
     LIMIT 200000
   `);
 
@@ -154,22 +137,15 @@ async function main() {
   if (rows.rows.length < 50) {
     console.error(
       '[train-live-model] Not enough joined data (need 50+ resolved snapshots).\n' +
-      '  Это нормально на свежей системе — live-модель требует, чтобы\n' +
-      '  LiveWorker накопил снапшоты и OutcomeTracker их зарезолвил.\n' +
       '  Запусти переобучение через 1-2 недели работы воркеров.',
     );
-    process.exit(0); // НЕ ошибка — не блокируем общий ретрейн-пайплайн.
+    process.exit(0);
   }
 
-  // Сэмплирование: 1 снапшот на 3-мин ведро каждого матча, чтобы не
-  // переобучаться на длинных матчах.
   const seenBuckets = new Set<string>();
   const samples: Sample[] = [];
+  const matchStartTimes = new Map<number, number>();
 
-  // pg возвращает bigint как СТРОКУ по умолчанию (чтобы не терять precision).
-  // Здесь match_id — bigint, а radiant_lead/score/building_state — int4 (number).
-  // Явно нормализуем каждое поле, чтобы дальнейшая арифметика и Set-ключи
-  // не зависели от того, как именно драйвер сериализовал значение.
   const toNum = (v: unknown): number | null => {
     if (v == null) return null;
     const n = typeof v === 'number' ? v : Number(v);
@@ -180,6 +156,7 @@ async function main() {
     const matchId = toNum(raw.matchId);
     const gameTimeSec = toNum(raw.gameTimeSec);
     const prematchProb = toNum(raw.prematchProb);
+    const startTime = toNum(raw.startTime) ?? 0;
     if (matchId == null || gameTimeSec == null || prematchProb == null) continue;
     if (prematchProb <= 0 || prematchProb >= 1) continue;
 
@@ -188,10 +165,15 @@ async function main() {
     if (seenBuckets.has(key)) continue;
     seenBuckets.add(key);
 
+    matchStartTimes.set(matchId, startTime);
+
     const towers = towerCountsFromBuildingState(toNum(raw.buildingState));
     const radiantLead = toNum(raw.radiantLead) ?? 0;
     const killDiff = (toNum(raw.radiantScore) ?? 0) - (toNum(raw.direScore) ?? 0);
     const towerDiff = towers.r - towers.d;
+    const isRealLive = String(raw.source) === 'live' ? 1 : 0;
+    const hasDraft = toNum(raw.hasDraft) ?? 0;
+    const recencyDaysNorm = (startTime - nowUnix) / (365 * 86400); // negative = past match
 
     const x = [
       1,
@@ -200,58 +182,73 @@ async function main() {
       killDiff / 15,
       towerDiff / 11,
       logit(prematchProb),
+      isRealLive,
+      hasDraft,
+      recencyDaysNorm,
     ];
     samples.push({
       features: x,
       label: raw.actualRadiantWin ? 1 : 0,
       matchId,
       bucket,
+      startTime,
     });
   }
 
-  console.log(`[train-live-model] After bucket sampling: ${samples.length} examples`);
+  console.log(`[train-live-model] After bucket sampling: ${samples.length} examples (dim=${DIM})`);
 
   if (samples.length < 50) {
     console.error('[train-live-model] Not enough sampled data.');
     process.exit(0);
   }
 
-  // Сплит ПО МАТЧАМ (не по снапшотам), чтобы не было утечки данных
-  // (один матч в train и test одновременно — это утечка).
-  const allMatches = Array.from(new Set(samples.map(s => s.matchId)));
-  // Хронологический порядок не сохранится — используем числовой порядок
-  // matchId как proxy (более новые матчи = большие id).
-  allMatches.sort((a, b) => a - b);
-  const splitIdx = Math.floor(allMatches.length * 0.8);
-  const trainMatches = new Set(allMatches.slice(0, splitIdx));
+  // Хронологический сплит по матчам с 1-суточным зазором для предотвращения
+  // утечки данных в матчах на границе сплита.
+  const allMatches = Array.from(
+    new Set(samples.map(s => s.matchId)),
+    id => ({ id, startTime: matchStartTimes.get(id) ?? 0 }),
+  );
+  allMatches.sort((a, b) => a.startTime - b.startTime);
 
-  const train = samples.filter(s => trainMatches.has(s.matchId));
-  const test = samples.filter(s => !trainMatches.has(s.matchId));
-  console.log(`[train-live-model] Matches train/test: ${trainMatches.size}/${allMatches.length - trainMatches.size}`);
-  console.log(`[train-live-model] Samples train/test: ${train.length}/${test.length}`);
+  const splitIdx = Math.floor(allMatches.length * 0.8);
+  const splitTime = allMatches[splitIdx]?.startTime ?? 0;
+  const gapSec = 86400; // 1 день
+
+  const trainMatchSet = new Set(
+    allMatches.filter(m => m.startTime <= splitTime - gapSec).map(m => m.id),
+  );
+  const testMatchSet = new Set(
+    allMatches.filter(m => m.startTime > splitTime).map(m => m.id),
+  );
+
+  const train = samples.filter(s => trainMatchSet.has(s.matchId));
+  const test = samples.filter(s => testMatchSet.has(s.matchId));
+  console.log(`[train-live-model] Matches train/test: ${trainMatchSet.size}/${testMatchSet.size} (gap=${gapSec}s)`);
+  console.log(`[train-live-model] Samples  train/test: ${train.length}/${test.length}`);
 
   if (train.length < 30 || test.length < 5) {
-    console.error('[train-live-model] Too few samples after split.');
+    console.error('[train-live-model] Too few samples after temporal split.');
     process.exit(0);
   }
 
   console.log('[train-live-model] Training logistic regression …');
-  const w = trainLogisticRegression([...train], 6);
+  const w = trainLogisticRegression([...train], DIM);
   console.log('[train-live-model] Weights:', w.map(x => x.toFixed(4)));
 
   const trainMetrics = evaluate(train, w);
   const testMetrics = evaluate(test, w);
-  console.log(`[train-live-model] TRAIN  acc=${(trainMetrics.acc * 100).toFixed(2)}%  logloss=${trainMetrics.logLoss.toFixed(4)}  brier=${trainMetrics.brier.toFixed(4)}`);
-  console.log(`[train-live-model] TEST   acc=${(testMetrics.acc * 100).toFixed(2)}%  logloss=${testMetrics.logLoss.toFixed(4)}  brier=${testMetrics.brier.toFixed(4)}`);
+  console.log(
+    `[train-live-model] TRAIN  acc=${(trainMetrics.acc * 100).toFixed(2)}%  logloss=${trainMetrics.logLoss.toFixed(4)}  brier=${trainMetrics.brier.toFixed(4)}  composite=${trainMetrics.composite.toFixed(4)}`,
+  );
+  console.log(
+    `[train-live-model] TEST   acc=${(testMetrics.acc * 100).toFixed(2)}%  logloss=${testMetrics.logLoss.toFixed(4)}  brier=${testMetrics.brier.toFixed(4)}  composite=${testMetrics.composite.toFixed(4)}`,
+  );
 
-  // Baseline: использовать ТОЛЬКО прематч-прогноз (без снапшота).
-  // Так мы видим, даёт ли live-модель прибавку поверх прематча.
-  let baselineCorrect = 0;
-  let baselineBrier = 0;
+  // Baseline: только прематч-прогноз
+  let baselineCorrect = 0, baselineBrier = 0;
   for (const s of test) {
-    const prematchProb = sigmoid(s.features[5]); // логит → обратно
-    const pred = prematchProb >= 0.5 ? 1 : 0;
-    if (pred === s.label) baselineCorrect++;
+    const prematchProb = sigmoid(s.features[5]);
+    if ((prematchProb >= 0.5 ? 1 : 0) === s.label) baselineCorrect++;
     baselineBrier += (prematchProb - s.label) ** 2;
   }
   const baselineAcc = baselineCorrect / test.length;
@@ -263,11 +260,12 @@ async function main() {
     `[train-live-model] Live model lift: Δacc=${((testMetrics.acc - baselineAcc) * 100).toFixed(2)}pp  Δbrier=${(baselineBrierAvg - testMetrics.brier).toFixed(4)}`,
   );
 
-  const version = `lr-live-v${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+  const version = `lr-live-v${FEATURES_VERSION}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
   console.log(`[train-live-model] Saving as ${version} …`);
 
-  // Атомарно: деактивируем старые LIVE-модели (НЕ трогаем prematch_winner!)
-  // и вставляем новую активную.
+  const weights: Record<string, number> = {};
+  for (let i = 0; i < w.length; i++) weights[`w${i}`] = w[i];
+
   await db.transaction(async tx => {
     await tx
       .update(modelVersionsTable)
@@ -277,16 +275,23 @@ async function main() {
       version,
       kind: 'live_winner',
       algorithm: 'logistic_regression_live',
-      features: ['bias', 'game_time_norm', 'nw_lead_norm', 'kill_diff_norm', 'tower_diff_norm', 'prematch_logit'],
-      weights: { w0: w[0], w1: w[1], w2: w[2], w3: w[3], w4: w[4], w5: w[5] },
+      features: [
+        'bias', 'game_time_norm', 'nw_lead_norm', 'kill_diff_norm', 'tower_diff_norm',
+        'prematch_logit', 'is_real_live', 'has_draft', 'recency_days_norm',
+      ],
+      weights,
       trainAccuracy: trainMetrics.acc,
       testAccuracy: testMetrics.acc,
       brierScore: testMetrics.brier,
       trainSampleSize: train.length,
       testSampleSize: test.length,
       metadata: {
+        featuresVersion: FEATURES_VERSION,
+        dim: DIM,
         logLossTrain: trainMetrics.logLoss,
         logLossTest: testMetrics.logLoss,
+        compositeScoreTrain: trainMetrics.composite,
+        compositeScoreTest: testMetrics.composite,
         baselineAcc,
         baselineBrier: baselineBrierAvg,
         liftAcc: testMetrics.acc - baselineAcc,
@@ -294,15 +299,16 @@ async function main() {
         epochs: EPOCHS,
         learningRate: LR,
         l2: L2,
-        matchesTrain: trainMatches.size,
-        matchesTest: allMatches.length - trainMatches.size,
+        matchesTrain: trainMatchSet.size,
+        matchesTest: testMatchSet.size,
+        gapSeconds: gapSec,
         bucketingSeconds: 180,
       },
       isActive: true,
     });
   });
 
-  console.log(`[train-live-model] ✅ Live model ${version} saved and activated.`);
+  console.log(`[train-live-model] ✅ Live model ${version} saved (fv=${FEATURES_VERSION}, composite=${testMetrics.composite.toFixed(4)}).`);
   process.exit(0);
 }
 

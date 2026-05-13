@@ -49,8 +49,14 @@ import {
   type H2HMap,
 } from '../lib/hero-features';
 
-const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
+const TEAM_FEATURE_NAMES = [
+  'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
+  'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
+  'tier_t1', 'tier_t2', 'tier_t3',
+] as const;
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 12
+/** Inference-time constant: logit(0.52) ≈ radiant historical side advantage in pro matches. */
+const RADIANT_SIDE_LOGIT = 0.08;
 
 type Engine = 'logreg' | 'lightgbm';
 
@@ -473,15 +479,31 @@ function sigmoid(z: number): number {
 function buildTeamFeatures(
   r: { rating: number; wins: number; losses: number },
   d: { rating: number; wins: number; losses: number },
+  tier: Tier | null,
+  ctx?: {
+    seriesTypeNorm?: number;  // default 0.5 (BO3)
+    mapNoNorm?: number;       // default 0.0 (game 1)
+    recencyDaysNorm?: number; // default 0.0 (now)
+  },
 ): number[] {
   const rGames = r.wins + r.losses;
   const dGames = d.wins + d.losses;
+  const seriesTypeNorm = ctx?.seriesTypeNorm ?? 0.5;
+  const mapNoNorm = ctx?.mapNoNorm ?? 0.0;
+  const recencyDaysNorm = ctx?.recencyDaysNorm ?? 0.0;
   return [
     1,
     (r.rating - d.rating) / 200,
     r.wins / rGames - d.wins / dGames,
     Math.log(rGames + 1) - Math.log(dGames + 1),
     rGames >= 50 && dGames >= 50 ? 1 : 0,
+    RADIANT_SIDE_LOGIT,
+    recencyDaysNorm,
+    seriesTypeNorm,
+    mapNoNorm,
+    tier === 't1' ? 1 : 0,
+    tier === 't2' ? 1 : 0,
+    tier === 't3' ? 1 : 0,
   ];
 }
 
@@ -577,7 +599,7 @@ export async function predictMatchWinner(
   if (rGames < 5 || dGames < 5) return null;
 
   const tier = classifyTier(r.rating, d.rating);
-  const teamFeats = buildTeamFeatures(r, d);
+  const teamFeats = buildTeamFeatures(r, d, tier);
 
   let model: LoadedModel | null = null;
   let features = teamFeats;
