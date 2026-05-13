@@ -46,6 +46,7 @@ import { db, modelVersionsTable } from '@workspace/db';
 import { desc, eq } from 'drizzle-orm';
 import { getLogs, getLogStats, MAX_ENTRIES as LOG_BUF_MAX } from '../lib/logBuffer';
 import { Readable } from 'node:stream';
+import { spawn } from 'node:child_process';
 
 const router: IRouter = Router();
 
@@ -461,6 +462,51 @@ router.get('/logs/export', async (req, res) => {
   Readable.from((function* () {
     for (const e of entries) yield e.raw;
   })()).pipe(res);
+});
+
+/**
+ * Экспорт базы данных: стримит pg_dump прямо в браузер как .sql-файл.
+ * Требует pg_dump на сервере (входит в postgresql-client).
+ */
+router.get('/export-db', (req, res) => {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    res.status(503).json({ error: 'DATABASE_URL не задан' });
+    return;
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `aegis-backup-${stamp}.sql`;
+
+  res.setHeader('Content-Type', 'application/sql; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  const dump = spawn('pg_dump', [
+    dbUrl,
+    '--no-owner',
+    '--no-acl',
+    '--clean',
+    '--if-exists',
+  ]);
+
+  dump.stdout.pipe(res);
+
+  dump.stderr.on('data', (chunk: Buffer) => {
+    req.log.warn({ msg: 'pg_dump stderr', text: chunk.toString() });
+  });
+
+  dump.on('error', (err) => {
+    req.log.error({ msg: 'pg_dump spawn error', err: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'pg_dump недоступен на сервере' });
+    } else {
+      res.destroy();
+    }
+  });
+
+  dump.on('close', (code) => {
+    if (code !== 0) req.log.warn({ msg: 'pg_dump exited', code });
+  });
 });
 
 export default router;

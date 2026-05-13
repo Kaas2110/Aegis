@@ -231,6 +231,70 @@ function ActiveModelsPanel() {
  * Плитка выгрузки серверных логов (in-memory ring-buffer, до 5000 записей).
  * Формат — NDJSON pino. Можно скинуть прямо в чат поддержки/агенту для дебага.
  */
+function DbExportPanel() {
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const r = await fetch("/api/admin/export-db", { credentials: "include" });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `HTTP ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const cd = r.headers.get("Content-Disposition") ?? "";
+      const fname =
+        /filename="([^"]+)"/.exec(cd)?.[1] ?? `aegis-backup-${Date.now()}.sql`;
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      const mb = (blob.size / 1024 / 1024).toFixed(1);
+      toast({ title: "База скачана", description: `${fname} (${mb} МБ)` });
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Ошибка экспорта",
+        description: err instanceof Error ? err.message : "—",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="border-b border-border pb-4">
+        <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+          База данных — резервная копия
+        </CardTitle>
+        <CardDescription className="font-mono text-xs">
+          Полный дамп PostgreSQL: матчи, команды, ML-модели, настройки.
+          Восстановление: <span className="text-foreground">psql $DATABASE_URL &lt; файл.sql</span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-6 flex items-center gap-4">
+        <Button
+          onClick={handleDownload}
+          disabled={downloading}
+          className="font-mono text-xs uppercase tracking-wider"
+        >
+          {downloading ? "Генерирую дамп…" : "⬇ Скачать БД (.sql)"}
+        </Button>
+        <span className="font-mono text-[11px] text-muted-foreground">
+          Содержит всё: данные + ML-модели + настройки
+        </span>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LogsExportPanel() {
   const { toast } = useToast();
   const { data: stats, refetch } = useGetAdminLogsStats();
@@ -856,6 +920,8 @@ export default function Operations() {
           )}
         </CardContent>
       </Card>
+
+      <DbExportPanel />
 
       <LogsExportPanel />
 
