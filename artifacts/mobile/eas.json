@@ -17,14 +17,30 @@
       "ios": { "simulator": true },
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app"
+        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app",
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "USE_EAS_SECRET",
+        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "USE_EAS_SECRET",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "USE_EAS_SECRET"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app"
+        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app",
+        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "USE_EAS_SECRET",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "USE_EAS_SECRET"
+      }
+    },
+    "production-android": {
+      "extends": "production",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://aegis-api.replit.app",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "USE_EAS_SECRET"
       }
     }
   },
