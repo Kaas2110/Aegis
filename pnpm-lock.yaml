@@ -437,6 +437,9 @@ importers:
       expo-notifications:
         specifier: ~0.32.13
         version: 0.32.17(expo@54.0.34)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      react-native-adapty:
+        specifier: ^3.15.6
+        version: 3.15.6(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
       react-native-purchases:
         specifier: ^10.1.0
         version: 10.1.0(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -834,6 +837,9 @@ packages:
     peerDependenciesMeta:
       graphql:
         optional: true
+
+  '@adapty/core@3.15.0':
+    resolution: {integrity: sha512-tZWhhY1s69HZXlWWdF9cQzc+jo4yt48WH4bRZhGWyD7Rm+ohr+qYPtStDDQ9Qg2JF8azwZ4xw/XsTYFbXe1Esw==}
 
   '@babel/code-frame@7.10.4':
     resolution: {integrity: sha512-vG6SvB6oYEhvgisZNFRmRCUkLz11c7rp+tbNTynGqc6mS1d5ATd/sGyV6W0KZZnXRKMTzZDRgQT3Ou9jhpAfUg==}
@@ -5145,6 +5151,11 @@ packages:
   react-is@19.2.6:
     resolution: {integrity: sha512-XjBR15BhXuylgWGuslhDKqlSayuqvqBX91BP8pauG8kd1zY8kotkNWbXksTCNRarse4kuGbe2kIY05ARtwNIvw==}
 
+  react-native-adapty@3.15.6:
+    resolution: {integrity: sha512-sARKnVpBOCTgWiCiqIC8EtX+jHAfoqDosrsEermGdcKMU39h/mEgC6UMW74IFARErKUJyoWsov5afKNeW0Eb+A==}
+    peerDependencies:
+      react-native: '>= 0.73.0'
+
   react-native-gesture-handler@2.28.0:
     resolution: {integrity: sha512-0msfJ1vRxXKVgTgvL+1ZOoYw3/0z1R+Ked0+udoJhyplC2jbVKIJ8Z1bzWdpQRCV3QcQ87Op0zJVE5DhKK2A0A==}
     peerDependencies:
@@ -6122,6 +6133,10 @@ packages:
 snapshots:
 
   '@0no-co/graphql.web@1.2.0': {}
+
+  '@adapty/core@3.15.0':
+    dependencies:
+      tslib: 2.8.1
 
   '@babel/code-frame@7.10.4':
     dependencies:
@@ -11458,6 +11473,12 @@ snapshots:
   react-is@18.3.1: {}
 
   react-is@19.2.6: {}
+
+  react-native-adapty@3.15.6(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
+    dependencies:
+      '@adapty/core': 3.15.0
+      react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
+      tslib: 2.8.1
 
   react-native-gesture-handler@2.28.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:

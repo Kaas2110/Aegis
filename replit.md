@@ -4,7 +4,7 @@ Production-ready Dota 2 esports analytics mobile app. Russian UI. Live ML-driven
 
 **Brand:** «Aegis». Internal packages remain `@workspace/mobile` / `@workspace/api-server`.
 
-**Stack:** pnpm workspaces · Node 24 · TypeScript 5.9 · Express 5 · PostgreSQL + Drizzle · Expo (React Native) · Zod v4 · LightGBM 4.6 + sklearn IsotonicRegression (FastAPI `artifacts/ml-service`, stateless blob-per-predict) · pure-JS logistic regression as fallback (60s circuit-breaker, 200ms timeout).
+**Stack:** pnpm workspaces · Node 24 · TypeScript 5.9 · Express 5 · PostgreSQL + Drizzle · Expo (React Native) · Zod v4 · LightGBM 4.6 + sklearn IsotonicRegression (FastAPI `artifacts/ml-service`, stateless blob-per-predict) · pure-JS logistic regression as fallback (60s circuit-breaker, 200ms timeout) · **Adapty** (монетизация, заменил RevenueCat — RU/СНГ фокус).
 
 ## Run & Operate
 
@@ -166,7 +166,7 @@ Remaining (deferred): EV-merge on frontend, full market coverage, `minEdge`/`min
 - **Wave 3 LGB** — blocked: need ≥80 matches with full `radiant/dire_account_ids` (currently ~68). Auto-unblocks as `match_drafts` accumulates
 - **Backtest UI** — LIVE (2026-05-12). Tab visible, endpoint `/api/analytics/backtest` covers 7292 outcomes (backfilled). Will improve naturally as outcomes accumulate.
 - **Bookmaker EV-merge** — matching bookie events to `pro_matches`, `BookmakerDropdown` in home header, `minEdge`/`minOdds` in alerts
-- **RevenueCat / Lite vs Premium** — monetization, feature gating
+- **Adapty / Lite vs Premium** — монетизация (Adapty заменил RevenueCat 2026-05-13, ключ `EXPO_PUBLIC_ADAPTY_KEY`), feature gating
 - **Live winner → full LGB** — auto when live trainSize > 10k snapshots
 
 ## Admin panel (`/admin-web/`)

@@ -21,18 +21,16 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Alert } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
-import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
+import { initializeAdapty, SubscriptionProvider } from "@/lib/adapty";
 import { FeatureFlagsProvider, FeatureFlagsSideEffects } from "@/lib/featureFlags";
 
 SplashScreen.preventAutoHideAsync();
 
-try {
-  initializeRevenueCat();
-} catch (err: any) {
-  // Молча проглатываем на web и в dev (ключи не заданы).
-  // На реальном устройстве падение RC не должно ронять весь layout.
-  if (__DEV__) console.warn('[RevenueCat] init skipped:', err?.message ?? err);
-}
+// Adapty активируем асинхронно — SDK требует await, но layout не await-ится.
+// Ошибки инициализации не роняют приложение.
+initializeAdapty().catch((err: any) => {
+  if (__DEV__) console.warn('[Adapty] init error:', err?.message ?? err);
+});
 
 const queryClient = new QueryClient();
 

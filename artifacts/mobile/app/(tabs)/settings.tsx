@@ -8,9 +8,8 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
-import { useSubscription, getTrialDays } from '@/lib/revenuecat';
+import { useSubscription, getTrialDays, getPlanLabel, sortPackages, isAnnualPackage, type AdaptyPackageInfo } from '@/lib/adapty';
 import { getApiUrl } from '@/lib/api/baseUrl';
-import type { PurchasesPackage } from 'react-native-purchases';
 
 interface Tier1Team {
   teamId: number;
@@ -98,38 +97,16 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
   );
 }
 
-const PLAN_LABEL: Record<string, string> = {
-  '$rc_weekly': 'в неделю',
-  '$rc_monthly': 'в месяц',
-  '$rc_annual': 'в год',
-};
-
-const PLAN_SORT: Record<string, number> = {
-  '$rc_weekly': 0,
-  '$rc_monthly': 1,
-  '$rc_annual': 2,
-};
-
-function getPlanLabel(pkg: PurchasesPackage): string {
-  return PLAN_LABEL[pkg.identifier] ?? 'в период';
-}
-
-function sortPackages(pkgs: PurchasesPackage[]): PurchasesPackage[] {
-  return [...pkgs].sort((a, b) => {
-    const ai = PLAN_SORT[a.identifier] ?? 99;
-    const bi = PLAN_SORT[b.identifier] ?? 99;
-    return ai - bi;
-  });
-}
-
 function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hooks/useColors').useColors> }) {
   const { isSubscribed, isLoading, offerings, purchase, restore, isPurchasing, isRestoring } = useSubscription();
   const [showPaywall, setShowPaywall] = useState(false);
-  const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
+  const [selectedPkg, setSelectedPkg] = useState<AdaptyPackageInfo | null>(null);
 
   const currentOffering = offerings?.current;
   const packages = sortPackages(currentOffering?.availablePackages ?? []);
-  const defaultPkg = packages.find(p => p.identifier === '$rc_monthly') ?? packages[0] ?? null;
+  const defaultPkg = packages.find(p =>
+    p.identifier.toLowerCase().includes('month')
+  ) ?? packages[0] ?? null;
   const activePkg = selectedPkg ?? defaultPkg;
 
   if (isLoading) {
@@ -291,7 +268,7 @@ function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hook
                           {' '}{getPlanLabel(pkg)}
                         </Text>
                       </Text>
-                      {pkg.identifier === '$rc_annual' && (
+                      {isAnnualPackage(pkg) && (
                         <View style={{ backgroundColor: colors.positive + '33', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                           <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: colors.positive }}>ВЫГОДНО</Text>
                         </View>

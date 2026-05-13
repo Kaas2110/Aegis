@@ -156,7 +156,7 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
             <View style={[styles.mockNote, { backgroundColor: colors.warning + '15', borderColor: colors.warning + '40' }]}>
               <Feather name="alert-circle" size={10} color={colors.warning} />
               <Text style={[styles.mockNoteText, { color: colors.warning }]}>
-                Demo-коэффициенты. Настройте API-ключи в переменных окружения.
+                Демо-коэффициенты. Реальные линии появятся после подключения букмекеров.
               </Text>
             </View>
           )}

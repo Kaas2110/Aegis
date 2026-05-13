@@ -12,7 +12,7 @@ import { MatchCard } from '@/components/MatchCard';
 import { FilterBar } from '@/components/FilterBar';
 import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { AegisLogo } from '@/components/AegisLogo';
-import { useSubscription } from '@/lib/revenuecat';
+import { useSubscription } from '@/lib/adapty';
 import { TouchableOpacity as RNTouchable } from 'react-native';
 import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
 import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
