@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "dotaedge",
+    "scheme": "aegis",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.dotaedge.analyzer",
+      "bundleIdentifier": "com.aegis.dota",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.dotaedge.analyzer",
+      "package": "com.aegis.dota",
       "versionCode": 1,
       "backgroundColor": "#080604",
       "edgeToEdgeEnabled": true,
