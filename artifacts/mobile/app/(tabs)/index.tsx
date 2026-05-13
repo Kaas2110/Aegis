@@ -26,7 +26,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { filters, settings } = useApp();
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [enrichedLive, setEnrichedLive] = useState<EnrichedMatch[]>([]);
   const [enrichedPrematch, setEnrichedPrematch] = useState<EnrichedMatch[]>([]);
   const [isMock, setIsMock] = useState(false);
@@ -63,7 +63,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     notificationService.requestPermissions();
-    loadData();
+    loadData(true); // тихая загрузка при первом открытии — не показываем спиннер
     logProductEvent('match_list_viewed', 'home');
     intervalRef.current = setInterval(() => loadData(true), REFRESH_INTERVAL_MS);
     return () => {

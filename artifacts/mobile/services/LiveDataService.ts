@@ -451,8 +451,10 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
 
 export async function fetchLiveData(): Promise<LiveDataResult> {
   const fetchedAt = new Date().toISOString();
-  // Закреплённый featured-матч (PARIVISION vs PlayTime, 1W Essence) запрашиваем
-  // параллельно с остальными источниками — он всегда первый в списке live.
+  // Featured-матч запрашиваем параллельно — используется только как fallback
+  // когда OpenDota /api/live вернул пустой массив (нет реальных live-матчей).
+  // Когда реальные данные есть, featured не добавляется, чтобы не показывать
+  // замороженный снапшот рядом с актуальными live-данными.
   const featuredPromise = buildFeaturedMatch().catch(() => null);
   try {
     // 1. Fetch live + upcoming matches + odds
@@ -525,8 +527,10 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       })
     );
 
-    const featured = await featuredPromise;
-    const finalLive = featured ? [featured, ...enriched] : enriched;
+    // Featured match is shown ONLY when OpenDota returned no real matches.
+    // When real live data is available we don't prepend the hardcoded fixture —
+    // it would show stale/frozen game state alongside real live data.
+    const finalLive = enriched;
 
     // Маппим upcoming PandaScore → Match. Без analytics (для prematch обычно
     // нет live-снапшота); markets пустые до старта матча. Этого достаточно для
@@ -547,7 +551,6 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       prematchMatches: prematchEnriched,
       isMock: false,
       sources: [
-        ...(featured ? ['featured'] : []),
         'opendota',
         ...(upcomingData && !upcomingData.isMock ? ['pandascore'] : []),
         ...(oddsData?.isMock === false ? ['the_odds_api'] : []),
