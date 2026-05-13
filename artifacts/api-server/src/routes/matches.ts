@@ -102,6 +102,127 @@ const PANDASCORE_BASE = 'https://api.pandascore.co';
 // STRATZ_TOKEN / PANDASCORE_API_KEY — резолвим через ApiKeysService на каждый
 // запрос, чтобы admin-web мог менять override без рестарта api-server.
 
+// ── PandaScore running-enrichment ─────────────────────────────────────────
+
+/** Нормализует имя команды: убирает «Team », приводит к нижнему регистру. */
+function normTeamName(name: unknown): string {
+  if (typeof name !== 'string') return '';
+  return name.toLowerCase().replace(/^team\s+/i, '').replace(/\s+/g, ' ').trim();
+}
+
+/** Достаточно ли похожи два нормализованных имени (одно содержит другое). */
+function namesMatch(a: string, b: string): boolean {
+  if (!a || !b || a.length < 2 || b.length < 2) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+interface PsGame {
+  status: string;
+  winner?: { id?: number | null; name?: string };
+  begin_at?: string | null;
+}
+
+interface PsRunningMatch {
+  id: number;
+  opponents?: Array<{ opponent?: { name?: string; id?: number } }>;
+  games?: PsGame[];
+  league?: { name?: string };
+  begin_at?: string;
+  number_of_games?: number;
+}
+
+/**
+ * OpenDota /api/live отдаёт каждую карту серии как отдельный матч.
+ * Дедублицируем по паре team_id: если два матча между теми же командами —
+ * оставляем тот, у которого наибольший match_id (более свежая карта).
+ */
+function deduplicateByTeamPair(matches: Record<string, unknown>[]): Record<string, unknown>[] {
+  const best = new Map<string, Record<string, unknown>>();
+  for (const m of matches) {
+    const r = Number(m['team_id_radiant'] ?? 0);
+    const d = Number(m['team_id_dire'] ?? 0);
+    const key = [Math.min(r, d), Math.max(r, d)].join(':');
+    const cur = best.get(key);
+    if (!cur || Number(m['match_id'] ?? 0) > Number(cur['match_id'] ?? 0)) {
+      best.set(key, m);
+    }
+  }
+  return Array.from(best.values());
+}
+
+/**
+ * Обогащает OpenDota pro-матчи данными из PandaScore /dota2/matches/running:
+ *  - Счёт серии (radiant_series_wins / dire_series_wins) по реально завершённым играм
+ *  - Номер текущей карты (current_map) = число завершённых игр + 1
+ *  - ps_match_id — ID матча в PandaScore (для будущей интеграции с букмекерами)
+ *  - Имена команд: PS-официальные если OpenDota не дал своих
+ *
+ * Матчинг по нормализованному имени команды (нечёткий: substring-match).
+ * Если совпадение не найдено — матч возвращается без изменений.
+ */
+function enrichWithPandaScoreRunning(
+  odMatches: unknown,
+  psMatches: PsRunningMatch[],
+): unknown {
+  if (!Array.isArray(odMatches) || psMatches.length === 0) return odMatches;
+
+  return odMatches.map(rawMatch => {
+    const m = rawMatch as Record<string, unknown>;
+    const odR = String(m['team_name_radiant'] ?? '');
+    const odD = String(m['team_name_dire'] ?? '');
+    const od1 = normTeamName(odR);
+    const od2 = normTeamName(odD);
+
+    const ps = psMatches.find(p => {
+      const ps1 = normTeamName(p.opponents?.[0]?.opponent?.name);
+      const ps2 = normTeamName(p.opponents?.[1]?.opponent?.name);
+      return (namesMatch(od1, ps1) && namesMatch(od2, ps2)) ||
+             (namesMatch(od1, ps2) && namesMatch(od2, ps1));
+    });
+
+    if (!ps) return m;
+
+    // Определяем направление (radiant = opponent[0] или [1])
+    const ps1 = ps.opponents?.[0]?.opponent;
+    const ps2 = ps.opponents?.[1]?.opponent;
+    const ps1Name = ps1?.name ?? '';
+    const ps2Name = ps2?.name ?? '';
+    const swapped = !namesMatch(od1, normTeamName(ps1Name));
+    const psRadiantOpp = swapped ? ps2 : ps1;
+    const psDireOpp    = swapped ? ps1 : ps2;
+    const psRadiantName = psRadiantOpp?.name ?? '';
+    const psDireName    = psDireOpp?.name ?? '';
+    const psRadiantId   = psRadiantOpp?.id ?? null;
+    const psDireId      = psDireOpp?.id ?? null;
+
+    // Счёт по завершённым картам — winner.id матчим против opponent.id.
+    // PandaScore возвращает winner:{id, type:"Team"} для finished-карт.
+    let radiantWins = 0, direWins = 0;
+    const games = ps.games ?? [];
+    const finishedGames = games.filter(g => g.status === 'finished');
+    finishedGames.forEach(g => {
+      const wId = g.winner?.id ?? null;
+      if (wId === null) return;
+      if (psRadiantId !== null && wId === psRadiantId) radiantWins++;
+      else if (psDireId !== null && wId === psDireId) direWins++;
+    });
+
+    const currentMap = finishedGames.length + 1;
+
+    return {
+      ...m,
+      // Имена: оставляем OD если есть, иначе PS-официальные
+      team_name_radiant: odR.trim() || psRadiantName,
+      team_name_dire:    odD.trim() || psDireName,
+      // Счёт серии и текущая карта из PS (надёжнее OD)
+      radiant_series_wins: radiantWins,
+      dire_series_wins:    direWins,
+      current_map: currentMap,
+      ps_match_id: ps.id,
+    };
+  });
+}
+
 interface RequestOptions {
   timeout?: number;
   headers?: Record<string, string>;
@@ -134,6 +255,11 @@ router.get('/live', async (req, res) => {
   const payload = await withCache('matches:live', 30_000, async () => {
     const results: { source: string; data: unknown; error?: string }[] = [];
 
+    const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
+
+    // Запрашиваем OpenDota live, PandaScore running и Stratz параллельно.
+    // PandaScore /running даёт официальные имена команд, счёт серии и номер
+    // текущей карты. OpenDota даёт реальный game state (kills, gold, time).
     const openDotaPromise = apiFetch(`${OPENDOTA_BASE}/live`)
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -142,10 +268,12 @@ router.get('/live', async (req, res) => {
         // team_id_radiant/dire > 0. Паблики (100% трафика /api/live) отбрасываем —
         // у них нет имён команд и они не релевантны для беттинг-аналитики.
         const proOnly = Array.isArray(raw)
-          ? raw.filter((m: Record<string, unknown>) =>
-              (typeof m['league_id'] === 'number' && m['league_id'] > 0) ||
-              (typeof m['team_id_radiant'] === 'number' && m['team_id_radiant'] > 0) ||
-              (typeof m['team_id_dire'] === 'number' && m['team_id_dire'] > 0)
+          ? deduplicateByTeamPair(
+              raw.filter((m: Record<string, unknown>) =>
+                (typeof m['league_id'] === 'number' && m['league_id'] > 0) ||
+                (typeof m['team_id_radiant'] === 'number' && m['team_id_radiant'] > 0) ||
+                (typeof m['team_id_dire'] === 'number' && m['team_id_dire'] > 0)
+              )
             )
           : raw;
         const enriched = await enrichLiveMatchesWithTeamNames(proOnly).catch(err => {
@@ -160,6 +288,17 @@ router.get('/live', async (req, res) => {
       })
       .catch(err => ({ source: 'opendota', data: [], error: String(err) }));
 
+    // PandaScore /running: официальные метаданные про-матчей (счёт серии, карта).
+    // Timeout 5s чтобы не тормозить ответ если PS недоступен.
+    const pandascoreRunningPromise = pandascoreKey
+      ? apiFetch(
+          `${PANDASCORE_BASE}/dota2/matches/running?token=${pandascoreKey}&page[size]=20`,
+          { timeout: 5000 },
+        )
+          .then(async r => r.ok ? (await r.json() as PsRunningMatch[]) : [])
+          .catch(() => [] as PsRunningMatch[])
+      : Promise.resolve([] as PsRunningMatch[]);
+
     const stratzToken = getApiKey('STRATZ_TOKEN');
     const stratzPromise = stratzToken
       ? apiFetch(`${STRATZ_BASE}/League/live`, { headers: { Authorization: `Bearer ${stratzToken}` } })
@@ -171,14 +310,28 @@ router.get('/live', async (req, res) => {
           .catch(err => ({ source: 'stratz', data: null, error: String(err) }))
       : Promise.resolve({ source: 'stratz', data: null, error: 'STRATZ_TOKEN не настроен' });
 
-    const [openDota, stratz] = await Promise.allSettled([openDotaPromise, stratzPromise]);
-    if (openDota.status === 'fulfilled') results.push(openDota.value);
+    const [openDota, stratz, psRunning] = await Promise.allSettled([
+      openDotaPromise, stratzPromise, pandascoreRunningPromise,
+    ]);
+
+    const psMatches = psRunning.status === 'fulfilled' ? psRunning.value : [];
+
+    if (openDota.status === 'fulfilled') {
+      // Если PandaScore вернул running-матчи — обогащаем OD данные:
+      // счёт серии, текущая карта, ps_match_id.
+      const enrichedData = psMatches.length > 0
+        ? enrichWithPandaScoreRunning(openDota.value.data, psMatches)
+        : openDota.value.data;
+      results.push({ ...openDota.value, data: enrichedData });
+    }
     if (stratz.status === 'fulfilled') results.push(stratz.value);
+
     const hasData = results.some(r => !r.error && Array.isArray(r.data) && (r.data as unknown[]).length > 0);
     return {
       sources: results,
       isMock: !hasData,
       mockData: hasData ? undefined : getMockLiveMatches(),
+      pandascoreRunning: psMatches.length,
     };
   }, (v) => !(v as { isMock?: boolean }).isMock);
   res.json(payload);

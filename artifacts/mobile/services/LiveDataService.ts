@@ -33,6 +33,9 @@ interface OpenDotaLiveMatch {
   // Подмешивается на бэке (routes/matches.ts → enrichWithLeagueNames)
   league_name?: string;
   league_tier?: string;
+  // Подмешивается на бэке (routes/matches.ts → enrichWithPandaScoreRunning)
+  current_map?: number;    // номер текущей карты (1-based)
+  ps_match_id?: number;    // ID матча в PandaScore (для букмекеров)
 }
 
 interface OddsData {
@@ -128,13 +131,13 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
     tournamentTier: raw.league_tier === 'premium' ? 1 : raw.league_tier === 'professional' ? 2 : 2,
     format: formatBOFormat(raw.series_type),
     status: 'live',
-    currentMapNumber: 1,
+    currentMapNumber: raw.current_map ?? 1,
     team1MapsWon: raw.radiant_series_wins ?? 0,
     team2MapsWon: raw.dire_series_wins ?? 0,
     startTime: new Date((raw.activate_time ?? Date.now() / 1000) * 1000),
     isFavorite: false,
     currentMap: {
-      mapNumber: 1,
+      mapNumber: raw.current_map ?? 1,
       gameTimeSeconds: gameSec,
       score: { radiant: radiantKills, dire: direKills },
     },
