@@ -80,10 +80,11 @@ export function useFeatureFlagsConfig(): FeatureFlagsConfig {
 }
 
 export function useUserTier(): SubscriptionTier {
-  const { isSubscribed: rcSubscribed } = useSubscription();
-  const { isSubscribed: serverSubscribed } = useServerSubscription();
-  // Basic тир ещё не реализован. Если RC или серверная подписка активна → premium.
-  return (rcSubscribed || serverSubscribed) ? 'premium' : 'free';
+  // TODO(monetization): раскомментировать когда включим подписку в сторах
+  // const { isSubscribed: rcSubscribed } = useSubscription();
+  // const { isSubscribed: serverSubscribed } = useServerSubscription();
+  // return (rcSubscribed || serverSubscribed) ? 'premium' : 'free';
+  return 'premium'; // Приложение бесплатное на этапе запуска
 }
 
 /** Side-effect компонент: при потере доступа к alerts_edge глушит

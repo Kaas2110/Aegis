@@ -234,7 +234,40 @@ function page(title: string, body: string) {
 // ── GET /landing ──────────────────────────────────────────────────────────────
 router.get("/", (req, res) => res.redirect("/landing"));
 
-router.get("/landing", (_req, res) => {
+router.get("/landing", async (_req, res) => {
+  // Читаем настройки магазинов динамически
+  let stores: { rustore: { enabled: boolean; url: string }; googlePlay: { enabled: boolean; url: string }; appStore: { enabled: boolean; url: string } };
+  try {
+    const { getAppSettings, normalizeStoreSettings } = await import('../services/AppSettings');
+    const settings = await getAppSettings();
+    stores = normalizeStoreSettings(settings.storeSettings);
+  } catch {
+    stores = {
+      rustore:    { enabled: false, url: '' },
+      googlePlay: { enabled: false, url: '' },
+      appStore:   { enabled: false, url: '' },
+    };
+  }
+
+  function storeBtn(svg: string, name: string, sub: string, cfg: { enabled: boolean; url: string }) {
+    if (cfg.enabled && cfg.url) {
+      return `<a class="store-btn" href="${cfg.url}" target="_blank" rel="noopener noreferrer">
+      ${svg}
+      <div class="store-btn-inner">
+        <span class="store-btn-sub">${sub}</span>
+        <span class="store-btn-name">${name}</span>
+      </div>
+    </a>`;
+    }
+    return `<span class="store-btn store-soon" title="Скоро в ${name}">
+      ${svg}
+      <div class="store-btn-inner">
+        <span class="store-btn-sub">Скоро в</span>
+        <span class="store-btn-name">${name}</span>
+      </div>
+    </span>`;
+  }
+
   const html = page(PRODUCT_NAME, `
 <section class="hero">
   <div class="hero-badge">Dota 2 Analytics</div>
@@ -242,27 +275,9 @@ router.get("/landing", (_req, res) => {
   <p>${PRODUCT_DESC}</p>
 
   <div class="stores">
-    <a class="store-btn store-soon" title="Скоро в RuStore" href="#" onclick="return false">
-      ${ruStoreSvg}
-      <div class="store-btn-inner">
-        <span class="store-btn-sub">Скоро в</span>
-        <span class="store-btn-name">RuStore</span>
-      </div>
-    </a>
-    <a class="store-btn store-soon" title="Скоро в Google Play" href="#" onclick="return false">
-      ${googlePlaySvg}
-      <div class="store-btn-inner">
-        <span class="store-btn-sub">Скоро в</span>
-        <span class="store-btn-name">Google Play</span>
-      </div>
-    </a>
-    <a class="store-btn store-soon" title="Скоро в App Store" href="#" onclick="return false">
-      ${appStoreSvg}
-      <div class="store-btn-inner">
-        <span class="store-btn-sub">Скоро в</span>
-        <span class="store-btn-name">App Store</span>
-      </div>
-    </a>
+    ${storeBtn(ruStoreSvg,    "RuStore",     "Доступно в",  stores.rustore)}
+    ${storeBtn(googlePlaySvg, "Google Play", "Доступно в",  stores.googlePlay)}
+    ${storeBtn(appStoreSvg,   "App Store",   "Доступно в",  stores.appStore)}
   </div>
 </section>
 

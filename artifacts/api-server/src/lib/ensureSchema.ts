@@ -29,6 +29,13 @@ const REQUIRED_TABLES = [
   'server_subscriptions',
 ];
 
+// Колонки, добавленные в более поздних версиях схемы.
+// Если хоть одной нет — тоже запускаем push.
+const REQUIRED_COLUMNS: Array<{ table: string; column: string }> = [
+  { table: 'app_settings', column: 'store_settings' },
+  { table: 'live_snapshots', column: 'building_state' },
+];
+
 const WORKSPACE_ROOT = path.resolve(process.cwd(), '../..');
 
 function runDbPush(timeoutMs = 60_000): Promise<{ code: number; tail: string }> {
@@ -73,11 +80,22 @@ export async function ensureSchema(): Promise<void> {
     `));
     const present = new Set(rows.rows.map((r) => r.table_name));
     const missing = REQUIRED_TABLES.filter((t) => !present.has(t));
-    if (missing.length === 0) {
-      logger.info({ tables: REQUIRED_TABLES.length }, '[ensureSchema] все критичные таблицы на месте');
+
+    // Проверяем отсутствующие колонки
+    const colList = REQUIRED_COLUMNS.map((c) => `('${c.table}','${c.column}')`).join(', ');
+    const colRows = await db.execute<{ table_name: string; column_name: string }>(sql.raw(`
+      SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND (table_name, column_name) IN (${colList})
+    `));
+    const presentCols = new Set(colRows.rows.map((r) => `${r.table_name}.${r.column_name}`));
+    const missingCols = REQUIRED_COLUMNS.filter((c) => !presentCols.has(`${c.table}.${c.column}`));
+
+    if (missing.length === 0 && missingCols.length === 0) {
+      logger.info({ tables: REQUIRED_TABLES.length }, '[ensureSchema] все критичные таблицы и колонки на месте');
       return;
     }
-    logger.warn({ missing }, '[ensureSchema] отсутствуют таблицы — запускаю drizzle-kit push');
+    if (missing.length > 0) logger.warn({ missing }, '[ensureSchema] отсутствуют таблицы — запускаю drizzle-kit push');
+    if (missingCols.length > 0) logger.warn({ missingCols }, '[ensureSchema] отсутствуют колонки — запускаю drizzle-kit push');
   } catch (err) {
     // Любая ошибка при INFORMATION_SCHEMA-запросе (например, нет прав или
     // битый коннект) — лучше попробовать push, чем молча пропустить.

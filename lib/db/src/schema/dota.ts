@@ -409,6 +409,11 @@ export const appSettingsTable = pgTable('app_settings', {
   monetizationMode: text('monetization_mode').notNull().default('freemium'),
   featureFlags: jsonb('feature_flags').$type<Record<string, { free: boolean; basic: boolean; premium: boolean }>>().notNull().default({}),
   notes: text('notes'),
+  storeSettings: jsonb('store_settings').$type<{
+    rustore:    { enabled: boolean; url: string };
+    googlePlay: { enabled: boolean; url: string };
+    appStore:   { enabled: boolean; url: string };
+  }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

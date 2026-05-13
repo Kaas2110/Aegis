@@ -11,6 +11,7 @@ import {
   FEATURE_CATALOG,
   normalizeFeatureFlags,
   canonicalizeFlagsForMode,
+  normalizeStoreSettings,
   type MonetizationMode,
 } from '../services/AppSettings';
 
@@ -25,6 +26,13 @@ router.get('/monetization', async (_req, res) => {
     flags: canonicalizeFlagsForMode(normalizeFeatureFlags(settings.featureFlags), mode),
     features: FEATURE_CATALOG,
   });
+});
+
+// Публичный endpoint — включённые магазины + ссылки для лендинга и мобилки
+router.get('/stores', async (_req, res) => {
+  const settings = await getAppSettings();
+  res.set('Cache-Control', 'public, max-age=30');
+  res.json(normalizeStoreSettings(settings.storeSettings));
 });
 
 export default router;

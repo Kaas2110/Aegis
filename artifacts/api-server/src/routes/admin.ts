@@ -93,6 +93,38 @@ router.post('/settings', async (req, res) => {
   res.json({ settings });
 });
 
+// ── GET /api/admin/stores ─────────────────────────────────────────────────
+router.get('/stores', async (_req, res) => {
+  const settings = await getAppSettings(true);
+  const { normalizeStoreSettings } = await import('../services/AppSettings');
+  res.json(normalizeStoreSettings(settings.storeSettings));
+});
+
+// ── POST /api/admin/stores ────────────────────────────────────────────────
+router.post('/stores', async (req, res) => {
+  const { normalizeStoreSettings } = await import('../services/AppSettings');
+  const body = req.body ?? {};
+  const current = normalizeStoreSettings((await getAppSettings()).storeSettings);
+
+  function parseStore(key: 'rustore' | 'googlePlay' | 'appStore') {
+    const v = body[key];
+    if (!v || typeof v !== 'object') return current[key];
+    return {
+      enabled: typeof v.enabled === 'boolean' ? v.enabled : current[key].enabled,
+      url:     typeof v.url === 'string' ? v.url.trim().slice(0, 500) : current[key].url,
+    };
+  }
+
+  const storeSettings = {
+    rustore:    parseStore('rustore'),
+    googlePlay: parseStore('googlePlay'),
+    appStore:   parseStore('appStore'),
+  };
+
+  const settings = await updateAppSettings({ storeSettings });
+  res.json({ storeSettings: normalizeStoreSettings(settings.storeSettings) });
+});
+
 router.get('/metrics', async (req, res) => {
   try {
     const metrics = await getModelAccuracyMetrics();

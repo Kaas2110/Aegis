@@ -101,6 +101,40 @@ export function canonicalizeFlagsForMode(
   return out;
 }
 
+// ── Магазины приложений ────────────────────────────────────────────────────
+export interface StoreConfig {
+  enabled: boolean;
+  url: string;
+}
+export interface StoreSettings {
+  rustore:    StoreConfig;
+  googlePlay: StoreConfig;
+  appStore:   StoreConfig;
+}
+
+export const DEFAULT_STORE_SETTINGS: StoreSettings = {
+  rustore:    { enabled: false, url: '' },
+  googlePlay: { enabled: false, url: '' },
+  appStore:   { enabled: false, url: '' },
+};
+
+export function normalizeStoreSettings(raw: unknown): StoreSettings {
+  const out: StoreSettings = structuredClone(DEFAULT_STORE_SETTINGS);
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Record<string, unknown>;
+  for (const k of ['rustore', 'googlePlay', 'appStore'] as const) {
+    const v = r[k];
+    if (v && typeof v === 'object') {
+      const s = v as Record<string, unknown>;
+      out[k] = {
+        enabled: s['enabled'] === true,
+        url: typeof s['url'] === 'string' ? s['url'] : '',
+      };
+    }
+  }
+  return out;
+}
+
 const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   id: 1,
   useBookmakerOdds: false,
@@ -111,6 +145,7 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   monetizationMode: 'freemium',
   featureFlags: DEFAULT_FEATURE_FLAGS,
   notes: null,
+  storeSettings: DEFAULT_STORE_SETTINGS,
 };
 
 let cache: AppSettings | null = null;
@@ -148,6 +183,7 @@ export async function updateAppSettings(
     | 'monetizationMode'
     | 'featureFlags'
     | 'notes'
+    | 'storeSettings'
   >>,
 ): Promise<AppSettings> {
   await getAppSettings();
