@@ -9,15 +9,13 @@
  * Идемпотентно: только матчи без записи в match_drafts.
  *
  * Запуск:
- *   pnpm --filter @workspace/scripts run ingest:drafts                # все (фильтр Glicko >=1200)
- *   pnpm --filter @workspace/scripts run ingest:drafts 500            # лимит 500
+ *   pnpm --filter @workspace/scripts run ingest:drafts           # все
+ *   pnpm --filter @workspace/scripts run ingest:drafts 500       # лимит 500
  *   pnpm --filter @workspace/scripts run ingest:drafts --backfill-accounts
- *   pnpm --filter @workspace/scripts run ingest:drafts --no-stratz    # форс OpenDota
- *   pnpm --filter @workspace/scripts run ingest:drafts --live-backfill      # матчи из live_snapshots без драфта (без фильтра Glicko)
- *   pnpm --filter @workspace/scripts run ingest:drafts --live-backfill 200  # с лимитом
+ *   pnpm --filter @workspace/scripts run ingest:drafts --no-stratz  # форс OpenDota
  */
 
-import { db, proMatchesTable, matchDraftsTable, teamsTable, liveSnapshotsTable } from '@workspace/db';
+import { db, proMatchesTable, matchDraftsTable, teamsTable } from '@workspace/db';
 import { sql, isNull, and } from 'drizzle-orm';
 import {
   fetchMatchDetail,
@@ -143,7 +141,6 @@ function extractAccountIdsStratz(
 async function main() {
   const args = process.argv.slice(2);
   const backfill = args.includes('--backfill-accounts');
-  const liveBackfill = args.includes('--live-backfill');
   const forceOpenDota = args.includes('--no-stratz');
   const limitArg = args.find(a => /^\d+$/.test(a));
   const limit = limitArg ? Number(limitArg) : null;
@@ -168,18 +165,6 @@ async function main() {
         ),
       )
       .orderBy(sql`${matchDraftsTable.matchId} DESC`);
-    todo = limit !== null ? await q.limit(limit) : await q;
-  } else if (liveBackfill) {
-    // Режим --live-backfill: матчи из live_snapshots без записи в match_drafts.
-    // Без фильтра по рейтингу команд — нужны все матчи у которых есть снапшоты,
-    // даже если команды не попадают в обычный порог Glicko.
-    console.log('[ingest-drafts] LIVE-BACKFILL: live_snapshot matches without drafts (no team rating filter) …');
-    const q = db
-      .selectDistinct({ matchId: liveSnapshotsTable.matchId })
-      .from(liveSnapshotsTable)
-      .leftJoin(matchDraftsTable, sql`${matchDraftsTable.matchId} = ${liveSnapshotsTable.matchId}`)
-      .where(isNull(matchDraftsTable.matchId))
-      .orderBy(sql`${liveSnapshotsTable.matchId} DESC`);
     todo = limit !== null ? await q.limit(limit) : await q;
   } else {
     console.log('[ingest-drafts] Selecting v2-eligible matches without drafts …');

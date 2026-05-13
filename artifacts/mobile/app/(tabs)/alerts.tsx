@@ -12,22 +12,12 @@ import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { notificationService, type EvAlert } from '@/services/notifications/NotificationService';
 import type { Alert, MarketType } from '@/types';
-import { useFeatureAccess } from '@/lib/featureFlags';
-import { PremiumGate } from '@/components/PremiumGate';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
 
 const ALERTS_KEY = '@dea_alerts_v2';
-
-// Демо-алерты для превью на залоченном экране — чтобы пользователь
-// видел, что именно даёт Premium, а не пустую страницу.
-const DEMO_ALERTS = [
-  { id: 'demo1', team1: 'Team Spirit', team2: 'PARIVISION', confidence: 0.78, betType: 'match_winner', side: 'team1' as const, odds: 1.62, time: '12м назад' },
-  { id: 'demo2', team1: 'Tundra Esports', team2: 'Gaimin Gladiators', confidence: 0.71, betType: 'total_kills', side: 'team1' as const, odds: 1.85, time: '1ч назад' },
-  { id: 'demo3', team1: 'BetBoom Team', team2: 'Falcons', confidence: 0.83, betType: 'first_blood', side: 'team2' as const, odds: 1.95, time: '3ч назад' },
-];
 
 const MARKET_OPTIONS: Array<{ id: MarketType; label: string }> = [
   { id: 'match_winner',   label: 'Победитель матча' },
@@ -57,7 +47,6 @@ export default function AlertsScreen() {
   const [activeTab, setActiveTab] = useState<'triggered' | 'rules'>('triggered');
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const access = useFeatureAccess('alerts_edge');
 
   useEffect(() => {
     logProductEvent('match_list_viewed', 'alerts');
@@ -143,24 +132,10 @@ export default function AlertsScreen() {
       <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.title, { color: colors.foreground }]}>Алерты</Text>
-          {access.canAccess && (
-            <TouchableOpacity onPress={() => setShowModal(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
-              <Feather name="plus" size={18} color={colors.primaryForeground} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={() => setShowModal(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
+            <Feather name="plus" size={18} color={colors.primaryForeground} />
+          </TouchableOpacity>
         </View>
-        {!access.canAccess && (
-          <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
-            <PremiumGate
-              feature="alerts_edge"
-              variant="inline"
-              title="Алерты по edge доступны в Premium"
-              subtitle="Получайте уведомления о высокой уверенности модели и +EV событиях"
-            >
-              {null}
-            </PremiumGate>
-          </View>
-        )}
 
         <View style={[styles.tabs, { backgroundColor: colors.muted }]}>
           {(['triggered', 'rules'] as const).map(t => {
@@ -216,53 +191,10 @@ export default function AlertsScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Feather name="bell" size={36} color={colors.mutedForeground} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                {access.canAccess ? 'Нет сработавших алертов' : 'Так выглядят алерты Premium'}
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Нет сработавших алертов</Text>
               <Text style={[styles.emptySubtext, { color: colors.mutedForeground }]}>
-                {access.canAccess
-                  ? 'Алерты приходят когда уверенность модели в исходе ≥ настроенного порога'
-                  : 'Это превью. Подключите Premium чтобы получать настоящие пуши.'}
+                Алерты приходят когда уверенность модели в исходе ≥ настроенного порога
               </Text>
-              {!access.canAccess && (
-                <View style={{ width: '100%', gap: 8, marginTop: 14 }}>
-                  {DEMO_ALERTS.map(d => (
-                    <View key={d.id} style={[styles.evCard, {
-                      backgroundColor: colors.card,
-                      borderColor: colors.primary + '33',
-                      borderLeftColor: colors.primary,
-                      borderLeftWidth: 3,
-                      opacity: 0.85,
-                    }]}>
-                      <View style={styles.evHeader}>
-                        <View style={[styles.evBadge, { backgroundColor: colors.primary + '1A' }]}>
-                          <Feather name="zap" size={11} color={colors.primary} />
-                          <Text style={[styles.evBadgeText, { color: colors.primary }]}>
-                            Уверенность {Math.round(d.confidence * 100)}%
-                          </Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                          <View style={{ backgroundColor: colors.warning + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 9, color: colors.warning, letterSpacing: 0.5 }}>ДЕМО</Text>
-                          </View>
-                          <Text style={[styles.evTime, { color: colors.mutedForeground }]}>{d.time}</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.evMatchup, { color: colors.foreground }]}>{d.team1} — {d.team2}</Text>
-                      <View style={styles.evMeta}>
-                        <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
-                          <Text style={[styles.metaPillText, { color: colors.mutedForeground }]}>{betTypeShort(d.betType)}</Text>
-                        </View>
-                        <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
-                          <Text style={[styles.metaPillText, { color: colors.mutedForeground }]}>
-                            {d.side === 'team1' ? 'П1' : 'П2'} · спр. коэф {d.odds.toFixed(2)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
             </View>
           }
         />

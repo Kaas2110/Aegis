@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { UserSettings, Filters } from '@/types';
-import { initLogger, logProductEvent, flushEvents } from '@/services/logging/EventLogger';
-import { API_BASE_URL } from '@/lib/api/baseUrl';
+import { initLogger, logProductEvent } from '@/services/logging/EventLogger';
 
 const DEFAULT_SETTINGS: UserSettings = {
   language: 'ru',
@@ -22,7 +21,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 const DEFAULT_FILTERS: Filters = {
-  bookmaker: 'none',
+  bookmaker: 'all',
   minOdds: 1.5,
   minEdge: 0.03,
   minConfidence: 60,
@@ -82,20 +81,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               .filter((n: number) => Number.isFinite(n));
           }
           setSettings({ ...DEFAULT_SETTINGS, ...parsed });
-          // Flush analytics events если пользователь дал согласие
-          if (parsed.analyticsConsent) {
-            flushEvents(API_BASE_URL).catch(() => {});
-          }
         }
-        if (fRaw) {
-          const parsed = JSON.parse(fRaw);
-          // Миграция: устаревшие значения 'all' / 'mock' схлопываем в 'none'
-          // (новый дефолт «без ставок, только вероятности»).
-          if (parsed.bookmaker === 'all' || parsed.bookmaker === 'mock' || parsed.bookmaker === 'betfair') {
-            parsed.bookmaker = 'none';
-          }
-          setFilters({ ...DEFAULT_FILTERS, ...parsed });
-        }
+        if (fRaw) setFilters({ ...DEFAULT_FILTERS, ...JSON.parse(fRaw) });
       } catch {
         // use defaults
       }

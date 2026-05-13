@@ -35,7 +35,6 @@ outputType = "console"
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
-integrations = ["revenuecat:1.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -58,24 +57,8 @@ localPort = 18115
 externalPort = 3000
 
 [[ports]]
-localPort = 18116
-externalPort = 4200
-
-[[ports]]
 localPort = 24276
 externalPort = 3002
 
 [nix]
 channel = "stable-25_05"
-
-[userenv]
-
-[userenv.shared]
-EXPO_PUBLIC_REVENUECAT_TEST_API_KEY = "test_dcDZGOxebphylDwHPVVqDhywZKZ"
-EXPO_PUBLIC_REVENUECAT_IOS_API_KEY = "appl_YkcKurLQamTGucDzjhOtxMFEPMs"
-EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY = "goog_RRNArHkQwZYaUBjbQyAFLJGERRM"
-REVENUECAT_PROJECT_ID = "proj48120b95"
-REVENUECAT_TEST_STORE_APP_ID = "appc8245f3bd2"
-REVENUECAT_APPLE_APP_STORE_APP_ID = "appcbea2caee8"
-REVENUECAT_GOOGLE_PLAY_STORE_APP_ID = "app4bdb9e6696"
-EXPO_PUBLIC_ADAPTY_KEY = "public_live_F5sCkHNB.7i9EEsOzoCW0Vx8dcihj"

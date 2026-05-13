@@ -18,18 +18,7 @@
  */
 
 import { Router, type IRouter } from 'express';
-import {
-  getAppSettings,
-  updateAppSettings,
-  FEATURE_KEYS,
-  FEATURE_CATALOG,
-  DEFAULT_FEATURE_FLAGS,
-  normalizeFeatureFlags,
-  type SubscriptionTier,
-  type MonetizationMode,
-  type FeatureKey,
-} from '../services/AppSettings';
-import { isRevenueCatConfigured, getOfferingInfo, updatePackagePrice } from '../services/RevenueCatService';
+import { getAppSettings, updateAppSettings } from '../services/AppSettings';
 import {
   triggerManualRetrain,
   getSchedulerState,
@@ -44,9 +33,6 @@ import { requireAdminSession } from './adminAuth';
 import { KNOWN_SOURCE_IDS, probeSource, type SourceProbeResult } from './bookmakers';
 import { db, modelVersionsTable } from '@workspace/db';
 import { desc, eq } from 'drizzle-orm';
-import { getLogs, getLogStats, MAX_ENTRIES as LOG_BUF_MAX } from '../lib/logBuffer';
-import { Readable } from 'node:stream';
-import { spawn } from 'node:child_process';
 
 const router: IRouter = Router();
 
@@ -92,38 +78,6 @@ router.post('/settings', async (req, res) => {
   }
   const settings = await updateAppSettings(patch);
   res.json({ settings });
-});
-
-// ── GET /api/admin/stores ─────────────────────────────────────────────────
-router.get('/stores', async (_req, res) => {
-  const settings = await getAppSettings(true);
-  const { normalizeStoreSettings } = await import('../services/AppSettings');
-  res.json(normalizeStoreSettings(settings.storeSettings));
-});
-
-// ── POST /api/admin/stores ────────────────────────────────────────────────
-router.post('/stores', async (req, res) => {
-  const { normalizeStoreSettings } = await import('../services/AppSettings');
-  const body = req.body ?? {};
-  const current = normalizeStoreSettings((await getAppSettings()).storeSettings);
-
-  function parseStore(key: 'rustore' | 'googlePlay' | 'appStore') {
-    const v = body[key];
-    if (!v || typeof v !== 'object') return current[key];
-    return {
-      enabled: typeof v.enabled === 'boolean' ? v.enabled : current[key].enabled,
-      url:     typeof v.url === 'string' ? v.url.trim().slice(0, 500) : current[key].url,
-    };
-  }
-
-  const storeSettings = {
-    rustore:    parseStore('rustore'),
-    googlePlay: parseStore('googlePlay'),
-    appStore:   parseStore('appStore'),
-  };
-
-  const settings = await updateAppSettings({ storeSettings });
-  res.json({ storeSettings: normalizeStoreSettings(settings.storeSettings) });
 });
 
 router.get('/metrics', async (req, res) => {
@@ -280,130 +234,6 @@ router.post('/bookmakers/probe', async (req, res) => {
   });
 });
 
-/**
- * GET /api/admin/subscriptions
- * Returns current RevenueCat offering with packages and test store prices.
- */
-router.get('/subscriptions', async (req, res) => {
-  if (!isRevenueCatConfigured()) {
-    res.status(503).json({ error: 'RevenueCat not configured (missing REVENUECAT_PROJECT_ID or REVENUECAT_TEST_STORE_APP_ID)' });
-    return;
-  }
-  try {
-    const data = await getOfferingInfo();
-    res.json(data);
-  } catch (err) {
-    req.log.error({ err }, 'admin/subscriptions GET failed');
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-/**
- * POST /api/admin/subscriptions/update-price
- * Creates a new test-store product at the new price, swaps the package, deletes the old one.
- */
-router.post('/subscriptions/update-price', async (req, res) => {
-  if (!isRevenueCatConfigured()) {
-    res.status(503).json({ error: 'RevenueCat not configured' });
-    return;
-  }
-  const body = req.body as { packageId?: unknown; offeringId?: unknown; newPriceUsd?: unknown; periodDuration?: unknown; productIdentifierSuffix?: unknown };
-  if (typeof body.packageId !== 'string' || typeof body.offeringId !== 'string') {
-    res.status(400).json({ error: 'packageId and offeringId (strings) required' });
-    return;
-  }
-  const price = typeof body.newPriceUsd === 'number' ? body.newPriceUsd : parseFloat(String(body.newPriceUsd));
-  if (isNaN(price) || price <= 0 || price > 9999) {
-    res.status(400).json({ error: 'newPriceUsd must be a positive number' });
-    return;
-  }
-  try {
-    const result = await updatePackagePrice({
-      packageId: body.packageId,
-      offeringId: body.offeringId,
-      newPriceUsd: price,
-      periodDuration: typeof body.periodDuration === 'string' ? body.periodDuration : undefined,
-      productIdentifierSuffix: typeof body.productIdentifierSuffix === 'string' ? body.productIdentifierSuffix : undefined,
-    });
-    res.json(result);
-  } catch (err) {
-    req.log.error({ err }, 'admin/subscriptions/update-price failed');
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-/**
- * GET /api/admin/feature-flags
- * Returns current monetization mode + per-feature minTier matrix + catalog.
- */
-router.get('/feature-flags', async (_req, res) => {
-  const settings = await getAppSettings(true);
-  const flags = normalizeFeatureFlags(settings.featureFlags);
-  res.json({
-    mode: settings.monetizationMode as MonetizationMode,
-    flags,
-    features: FEATURE_CATALOG,
-  });
-});
-
-/**
- * PUT /api/admin/feature-flags
- * Body: { mode?: 'freemium'|'tiered', flags?: { [FeatureKey]: { free, basic, premium } } }
- * Независимые булевы per-tier — никакого каскада «минимального тира».
- */
-router.put('/feature-flags', async (req, res) => {
-  const body = (req.body ?? {}) as { mode?: unknown; flags?: unknown };
-  const patch: Parameters<typeof updateAppSettings>[0] = {};
-
-  if (body.mode !== undefined) {
-    if (body.mode !== 'freemium' && body.mode !== 'tiered') {
-      res.status(400).json({ error: 'mode must be "freemium" or "tiered"' });
-      return;
-    }
-    patch.monetizationMode = body.mode;
-  }
-
-  if (body.flags !== undefined) {
-    if (!body.flags || typeof body.flags !== 'object') {
-      res.status(400).json({ error: 'flags must be an object' });
-      return;
-    }
-    const incoming = body.flags as Record<string, unknown>;
-    const current = normalizeFeatureFlags((await getAppSettings(true)).featureFlags);
-    const next = structuredClone(current);
-    for (const k of Object.keys(incoming)) {
-      if (!(FEATURE_KEYS as readonly string[]).includes(k)) {
-        res.status(400).json({ error: `unknown feature: ${k}`, allowed: FEATURE_KEYS });
-        return;
-      }
-      const v = incoming[k];
-      if (!v || typeof v !== 'object') {
-        res.status(400).json({ error: `flags.${k} must be { free, basic, premium } object` });
-        return;
-      }
-      const ta = v as Record<string, unknown>;
-      next[k as FeatureKey] = {
-        free:    ta['free']    === true,
-        basic:   ta['basic']   === true,
-        premium: ta['premium'] === true,
-      };
-    }
-    patch.featureFlags = next;
-  }
-
-  if (Object.keys(patch).length === 0) {
-    res.status(400).json({ error: 'no valid fields in body' });
-    return;
-  }
-
-  const settings = await updateAppSettings(patch);
-  res.json({
-    mode: settings.monetizationMode as MonetizationMode,
-    flags: normalizeFeatureFlags(settings.featureFlags),
-    features: FEATURE_CATALOG,
-  });
-});
-
 router.get('/models', async (_req, res) => {
   const rows = await db
     .select({
@@ -424,89 +254,6 @@ router.get('/models', async (_req, res) => {
     .where(eq(modelVersionsTable.isActive, true))
     .orderBy(desc(modelVersionsTable.createdAt));
   res.json({ models: rows });
-});
-
-/**
- * Логи: статистика in-memory ring-буфера (для подсказки админу, что есть в выгрузке).
- */
-router.get('/logs/stats', async (_req, res) => {
-  res.json(getLogStats());
-});
-
-/**
- * Логи: выгрузка NDJSON-файла за период / по уровню.
- *   minutes — окно назад в минутах (1..10080 = 7д), default 60
- *   minLevel — pino-числовой уровень (10 trace, 20 debug, 30 info, 40 warn, 50 error, 60 fatal), default 30
- *   limit — максимум записей (1..MAX_ENTRIES=20000), default = MAX_ENTRIES
- */
-router.get('/logs/export', async (req, res) => {
-  const minutes = Math.max(1, Math.min(7 * 24 * 60,
-    parseInt(String(req.query.minutes ?? '60'), 10) || 60));
-  const minLevel = Math.max(10, Math.min(60,
-    parseInt(String(req.query.minLevel ?? '30'), 10) || 30));
-  // Лимит ограничен размером ring-буфера: больше физически нет.
-  const limit = Math.max(1, Math.min(LOG_BUF_MAX,
-    parseInt(String(req.query.limit ?? String(LOG_BUF_MAX)), 10) || LOG_BUF_MAX));
-
-  const sinceMs = Date.now() - minutes * 60 * 1000;
-  const entries = getLogs({ sinceMs, minLevel, limit });
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Content-Disposition',
-    `attachment; filename="aegis-logs-${stamp}-${minutes}min-l${minLevel}.ndjson"`);
-  res.setHeader('X-Log-Entries', String(entries.length));
-  res.setHeader('X-Log-Buffer-Capacity', String(LOG_BUF_MAX));
-
-  // Стримим через Readable.from → корректный backpressure (важно при 20k строк).
-  Readable.from((function* () {
-    for (const e of entries) yield e.raw;
-  })()).pipe(res);
-});
-
-/**
- * Экспорт базы данных: стримит pg_dump прямо в браузер как .sql-файл.
- * Требует pg_dump на сервере (входит в postgresql-client).
- */
-router.get('/export-db', (req, res) => {
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) {
-    res.status(503).json({ error: 'DATABASE_URL не задан' });
-    return;
-  }
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const filename = `aegis-backup-${stamp}.sql`;
-
-  res.setHeader('Content-Type', 'application/sql; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-  const dump = spawn('pg_dump', [
-    dbUrl,
-    '--no-owner',
-    '--no-acl',
-    '--clean',
-    '--if-exists',
-  ]);
-
-  dump.stdout.pipe(res);
-
-  dump.stderr.on('data', (chunk: Buffer) => {
-    req.log.warn({ msg: 'pg_dump stderr', text: chunk.toString() });
-  });
-
-  dump.on('error', (err) => {
-    req.log.error({ msg: 'pg_dump spawn error', err: err.message });
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'pg_dump недоступен на сервере' });
-    } else {
-      res.destroy();
-    }
-  });
-
-  dump.on('close', (code) => {
-    if (code !== 0) req.log.warn({ msg: 'pg_dump exited', code });
-  });
 });
 
 export default router;

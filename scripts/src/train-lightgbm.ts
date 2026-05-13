@@ -28,24 +28,27 @@ import {
   matchDraftsTable,
   heroStatsTable,
   heroMatchupsTable,
+  playerHeroStatsTable,
+  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
-import { asc, gte, and, eq, inArray, sql } from 'drizzle-orm';
+import { asc, gte, and, eq, inArray } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier } from './lib/tier';
 import {
   buildHeroFeatures,
   buildExtraFeatures,
-  computeRosterStability,
   HERO_FEATURE_NAMES,
+  HERO_FEATURE_DIM,
   EXTRA_FEATURE_NAMES,
+  EXTRA_FEATURE_DIM,
   type HeroStatsMap,
   type HeroMatchupsMap,
+  type PlayerHeroStatsMap,
   type RecentFormMap,
   type H2HMap,
-  type SoSMap,
-  type RosterStabilityMap,
+  type PlayerGlickoMap,
 } from './lib/hero-features';
 
 const TRAIN_WINDOW_DAYS = 365;
@@ -80,24 +83,8 @@ function mlServiceToken(): string | null {
 }
 const TRAIN_TIMEOUT_MS = 120_000;  // тренировка может быть долгой
 
-// fv9 (12 фич, см. train-model.ts).
-const TEAM_FEATURE_NAMES = [
-  'bias',
-  'elo_diff_norm',
-  'winrate_diff',
-  'experience_diff',
-  'is_high_tier',
-  'radiant_side_logit',
-  'recency_days_norm',
-  'series_type_norm',
-  'map_no_norm',
-  'tier_t1',
-  'tier_t2',
-  'tier_t3',
-] as const;
+const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
 const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
-const RADIANT_SIDE_LOGIT = 0.08;
-const TRAIN_WINDOW_DAYS_PREMATCH = 365;
 
 interface Sample { features: number[]; label: number; }
 interface TeamRating { rating: number; wins: number; losses: number; }
@@ -121,40 +108,19 @@ interface TrainResponse {
   train_seconds: number;
 }
 
-interface TeamCtx {
-  seriesType: number | null;
-  mapNo: number | null;
-  recencyDaysNorm: number;
-  tier: Tier | null;
-}
-
 function buildTeamFeatures(
   rId: number, dId: number, teams: Map<number, TeamRating>,
-  ctx?: TeamCtx,
 ): number[] | null {
   const r = teams.get(rId); const d = teams.get(dId);
   if (!r || !d) return null;
   const rG = r.wins + r.losses; const dG = d.wins + d.losses;
   if (rG < 5 || dG < 5) return null;
-  const seriesType = ctx?.seriesType ?? null;
-  const seriesTypeNorm = seriesType != null ? Math.min(1, Math.max(0, seriesType / 2)) : 0.5;
-  const mapNo = ctx?.mapNo ?? null;
-  const mapNoNorm = mapNo != null ? Math.min(1, Math.max(0, (mapNo - 1) / 4)) : 0;
-  const recency = ctx?.recencyDaysNorm ?? 0;
-  const tier = ctx?.tier ?? null;
   return [
     1,
     (r.rating - d.rating) / 200,
     r.wins / rG - d.wins / dG,
     Math.log(rG + 1) - Math.log(dG + 1),
     rG >= 50 && dG >= 50 ? 1 : 0,
-    RADIANT_SIDE_LOGIT,
-    recency,
-    seriesTypeNorm,
-    mapNoNorm,
-    tier === 't1' ? 1 : 0,
-    tier === 't2' ? 1 : 0,
-    tier === 't3' ? 1 : 0,
   ];
 }
 
@@ -247,29 +213,11 @@ async function main() {
     direTeamId: proMatchesTable.direTeamId,
     radiantWin: proMatchesTable.radiantWin,
     startTime: proMatchesTable.startTime,
-    seriesId: proMatchesTable.series_id,
-    seriesType: proMatchesTable.series_type,
   })
     .from(proMatchesTable)
     .where(gte(proMatchesTable.startTime, minStartTime))
     .orderBy(asc(proMatchesTable.startTime));
   console.log(`[train-lightgbm] matches in window=${matches.length}`);
-
-  // map_no per match (см. train-model.ts).
-  const mapNoMap = new Map<number, number>();
-  const bySeries = new Map<number, Array<{ matchId: number; t: number }>>();
-  for (const m of matches) {
-    const sid = m.seriesId ?? 0;
-    if (!sid) { mapNoMap.set(m.matchId, 1); continue; }
-    let arr = bySeries.get(sid);
-    if (!arr) { arr = []; bySeries.set(sid, arr); }
-    arr.push({ matchId: m.matchId, t: m.startTime ?? 0 });
-  }
-  for (const arr of bySeries.values()) {
-    arr.sort((a, b) => a.t - b.t || a.matchId - b.matchId);
-    arr.forEach((it, i) => mapNoMap.set(it.matchId, i + 1));
-  }
-  const nowSecPrematch = Math.floor(Date.now() / 1000);
 
   const draftsRows = await db.select({
     matchId: matchDraftsTable.matchId,
@@ -302,66 +250,33 @@ async function main() {
     inner.set(m.vsHeroId, { games: m.games, winRate: m.winRate });
   }
 
-  const formRows = await db.select({
-    teamId: teamRecentFormTable.teamId,
-    winRate: teamRecentFormTable.winRate,
-    games: teamRecentFormTable.games,
-    avgKillsFor: teamRecentFormTable.avgKillsFor,
-    avgDurationSec: teamRecentFormTable.avgDurationSec,
-  }).from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30));
-  const recentForm: RecentFormMap = new Map();
-  for (const r of formRows) {
-    recentForm.set(r.teamId, {
-      winRate: r.winRate,
-      games: r.games,
-      avgKillsFor: r.avgKillsFor ?? undefined,
-      avgDurationSec: r.avgDurationSec ?? undefined,
-    });
+  const phsRows = await db.select().from(playerHeroStatsTable);
+  const playerHeroStats: PlayerHeroStatsMap = new Map();
+  for (const r of phsRows) {
+    let inner = playerHeroStats.get(r.accountId);
+    if (!inner) { inner = new Map(); playerHeroStats.set(r.accountId, inner); }
+    inner.set(r.heroId, { games: r.games, wins: r.wins });
   }
+  const formRows = await db.select().from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30));
+  const recentForm: RecentFormMap = new Map();
+  for (const r of formRows) recentForm.set(r.teamId, { winRate: r.winRate, games: r.games });
   const h2hRows = await db.select().from(teamH2HTable).where(eq(teamH2HTable.periodDays, 365));
   const h2h: H2HMap = new Map();
   for (const r of h2hRows) h2h.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
 
-  // Strength of Schedule — avg рейтинг соперников за 30 дней
-  const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
-  const sosResult = await db.execute(sql`
-    SELECT team_id::bigint, AVG(opp_rating)::float AS avg_opp_elo
-    FROM (
-      SELECT pm.radiant_team_id AS team_id, t.rating AS opp_rating
-      FROM pro_matches pm JOIN teams t ON t.team_id = pm.dire_team_id
-      WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
-      UNION ALL
-      SELECT pm.dire_team_id AS team_id, t.rating AS opp_rating
-      FROM pro_matches pm JOIN teams t ON t.team_id = pm.radiant_team_id
-      WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
-    ) sub
-    GROUP BY team_id
-  `);
-  const sos: SoSMap = new Map();
-  for (const row of (sosResult.rows as { team_id: string; avg_opp_elo: string }[])) {
-    sos.set(Number(row.team_id), Number(row.avg_opp_elo));
-  }
-
-  // Roster stability: Jaccard similarity over last 10 lineups per team
-  const matchTeamMapLgb = new Map<number, { r: number | null; d: number | null }>();
-  for (const m of matches) matchTeamMapLgb.set(m.matchId, { r: m.radiantTeamId, d: m.direTeamId });
-  const rosterInputsArr = draftsRows.map(d => ({
-    matchId: d.matchId,
-    radiantTeamId: matchTeamMapLgb.get(d.matchId)?.r ?? null,
-    direTeamId: matchTeamMapLgb.get(d.matchId)?.d ?? null,
-    radiantAccountIds: d.radiantAccountIds,
-    direAccountIds: d.direAccountIds,
-  }));
-  const rosterStability: RosterStabilityMap = computeRosterStability(rosterInputsArr);
+  const prRows = await db.select({
+    accountId: playerRatingsTable.accountId,
+    rating: playerRatingsTable.rating,
+    rd: playerRatingsTable.rd,
+  }).from(playerRatingsTable);
+  const playerGlicko: PlayerGlickoMap = new Map();
+  for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
 
   console.log(
-    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} form=${recentForm.size} h2h=${h2h.size} sos=${sos.size} rosterStability=${rosterStability.size}`,
+    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size}`,
   );
 
   // Сборка бакетов
-  // v1 = team(12)               — все матчи, без драфта
-  // v2 = team(12) + extra(7)    — все матчи, без драфта (form/h2h/kills/duration/SoS/roster)
-  // v3 = team(12) + extra(7) + hero(7) — только матчи с драфтом
   const v1All: Sample[] = [];
   const v1Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
   const v2All: Sample[] = [];
@@ -375,32 +290,14 @@ async function main() {
     const d = teams.get(m.direTeamId);
     if (!r || !d) continue;
     if ((r.rating + d.rating) / 2 < MIN_AVG_GLICKO) continue;
-    const tier = classifyTier(r.rating, d.rating);
-    const ageDaysNorm = Math.min(1, Math.max(0, (nowSecPrematch - (m.startTime ?? nowSecPrematch)) / 86_400 / TRAIN_WINDOW_DAYS_PREMATCH));
-    const ctx: TeamCtx = {
-      seriesType: m.seriesType ?? null,
-      mapNo: mapNoMap.get(m.matchId) ?? null,
-      recencyDaysNorm: ageDaysNorm,
-      tier,
-    };
-    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams, ctx);
+    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
-
-    // v1: только командные фичи
+    const tier = classifyTier(r.rating, d.rating);
     const v1S: Sample = { features: teamFeats, label };
     v1All.push(v1S); if (tier) v1Bucket[tier].push(v1S);
 
-    // v2: командные + team-context extras (всегда, без драфта)
-    const extraFeats = buildExtraFeatures({
-      radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
-      recentForm, h2h, sos, rosterStability,
-    });
-    const v2S: Sample = { features: [...teamFeats, ...extraFeats], label };
-    v2All.push(v2S); if (tier) v2Bucket[tier].push(v2S);
-
-    // v3: v2 + hero-фичи (только если есть драфт)
     const draft = drafts.get(m.matchId);
     if (!draft) continue;
     const heroFeats = buildHeroFeatures(
@@ -408,7 +305,17 @@ async function main() {
       heroStats, matchups,
     );
     if (!heroFeats) continue;
-    const v3S: Sample = { features: [...teamFeats, ...extraFeats, ...heroFeats], label };
+    const v2S: Sample = { features: [...teamFeats, ...heroFeats], label };
+    v2All.push(v2S); if (tier) v2Bucket[tier].push(v2S);
+
+    if (!draft.radiantAccountIds && !draft.direAccountIds) continue;
+    const extraFeats = buildExtraFeatures({
+      radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
+      radiantPicks: draft.radiantPicks, direPicks: draft.direPicks,
+      radiantAccountIds: draft.radiantAccountIds, direAccountIds: draft.direAccountIds,
+      playerHeroStats, heroStats, recentForm, h2h, playerGlicko,
+    });
+    const v3S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats], label };
     v3All.push(v3S); if (tier) v3Bucket[tier].push(v3S);
   }
 
@@ -419,8 +326,8 @@ async function main() {
   );
 
   const v1Names = [...TEAM_FEATURE_NAMES];
-  const v2Names = [...TEAM_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES];
-  const v3Names = [...TEAM_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES, ...HERO_FEATURE_NAMES];
+  const v2Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES];
+  const v3Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES];
 
   // Фильтрация по меткам бакетов: env LIGHTGBM_KINDS (comma-separated)
   // и/или CLI `--label v3/t1` (можно повторять). Whitelist валидируется

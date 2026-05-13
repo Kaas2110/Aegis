@@ -20,7 +20,7 @@ import { db, liveSnapshotsTable, proMatchesTable, prematchOutcomesTable } from '
 import { sql } from 'drizzle-orm';
 
 const OPENDOTA_BASE = 'https://api.opendota.com/api';
-const RATE_LIMIT_MS = 1050; // ~0.95 req/sec — OpenDota лимит 60/min, небольшой буфер
+const RATE_LIMIT_MS = 1200; // ~0.83 req/sec — OpenDota бесплатный: 60/min
 
 const TRAIN_WINDOW_DAYS = 365;
 
@@ -93,30 +93,34 @@ async function main() {
     process.exit(0);
   }
 
-  // Кандидаты: любые pro_matches без снапшотов (ANY source), в окне, случайный порядок.
-  // NOT EXISTS в SQL быстрее чем загружать все match_ids в память.
-  const candidatesRes = FORCE
-    ? await db.execute(sql`
-        SELECT pm.match_id, pm.start_time, pm.radiant_team_id, pm.dire_team_id
-        FROM pro_matches pm
-        WHERE pm.radiant_win IS NOT NULL AND pm.start_time >= ${SINCE_UNIX}
-        ORDER BY RANDOM()
-        LIMIT ${LIMIT}
-      `)
-    : await db.execute(sql`
-        SELECT pm.match_id, pm.start_time, pm.radiant_team_id, pm.dire_team_id
-        FROM pro_matches pm
-        WHERE pm.radiant_win IS NOT NULL
-          AND pm.start_time >= ${SINCE_UNIX}
-          AND NOT EXISTS (
-            SELECT 1 FROM live_snapshots ls WHERE ls.match_id = pm.match_id
-          )
-        ORDER BY RANDOM()
-        LIMIT ${LIMIT}
-      `);
+  // Матчи, уже имеющие снапшоты (любой источник) — пропускаем
+  const alreadyDoneRes = FORCE
+    ? { rows: [] }
+    : await db.execute(sql`SELECT DISTINCT match_id FROM live_snapshots`);
+  const alreadyDone = new Set(
+    (alreadyDoneRes.rows as { match_id: string | number }[]).map(r => Number(r.match_id)),
+  );
+  console.log(`[backfill] matches already have snapshots: ${alreadyDone.size}`);
+
+  // Кандидаты: любые pro_matches с известным исходом, БЕЗ снапшотов, в окне
+  const candidatesRes = await db.execute(sql`
+    SELECT
+      pm.match_id,
+      pm.start_time,
+      pm.radiant_team_id,
+      pm.dire_team_id
+    FROM pro_matches pm
+    WHERE pm.radiant_win IS NOT NULL
+      AND pm.start_time >= ${SINCE_UNIX}
+    ORDER BY RANDOM()
+    LIMIT ${LIMIT + alreadyDone.size + 50}
+  `);
 
   type CandRow = { match_id: string; start_time: string; radiant_team_id: string | null; dire_team_id: string | null };
-  const candidates = candidatesRes.rows as CandRow[];
+  const candidates = (candidatesRes.rows as CandRow[])
+    .filter(r => !alreadyDone.has(Number(r.match_id)))
+    .slice(0, LIMIT);
+
   console.log(`[backfill] candidates to process: ${candidates.length}`);
 
   let processed = 0, insertedSnapshots = 0, skipped = 0;

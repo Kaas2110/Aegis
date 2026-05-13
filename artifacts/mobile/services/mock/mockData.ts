@@ -1,4 +1,4 @@
-import type { Team, Match, Market, BookmakerOdds, SourceHealth } from '@/types';
+import type { Team, Match, Market, BookmakerOdds, SourceHealth, TimelinePoint } from '@/types';
 
 export const MOCK_TEAMS: Team[] = [
   { id: 't1', name: 'Team Liquid', shortName: 'TL', logoPlaceholder: 'TL', region: 'EU', eloRating: 1820, recentForm: ['W', 'W', 'L', 'W', 'W'] },
@@ -14,6 +14,19 @@ export const MOCK_TEAMS: Team[] = [
 function team(id: string): Team {
   return MOCK_TEAMS.find(t => t.id === id)!;
 }
+
+export const MOCK_TIMELINE: TimelinePoint[] = [
+  { gameTimeSec: 0, modelProbTeam1: 0.38, marketProbTeam1: 0.40 },
+  { gameTimeSec: 300, modelProbTeam1: 0.36, marketProbTeam1: 0.39, event: 'First Blood (Dire)' },
+  { gameTimeSec: 600, modelProbTeam1: 0.34, marketProbTeam1: 0.37 },
+  { gameTimeSec: 900, modelProbTeam1: 0.32, marketProbTeam1: 0.35, event: 'Tower (Radiant T1)' },
+  { gameTimeSec: 1200, modelProbTeam1: 0.33, marketProbTeam1: 0.34 },
+  { gameTimeSec: 1500, modelProbTeam1: 0.35, marketProbTeam1: 0.35, event: 'Roshan (Dire Aegis)' },
+  { gameTimeSec: 1800, modelProbTeam1: 0.47, marketProbTeam1: 0.42, event: 'Big Fight (Radiant +3)' },
+  { gameTimeSec: 1900, modelProbTeam1: 0.58, marketProbTeam1: 0.51, event: 'Net Worth Swing +8k' },
+  { gameTimeSec: 2000, modelProbTeam1: 0.63, marketProbTeam1: 0.55, event: 'Aegis expired, Buyback Disadvantage (Dire)' },
+  { gameTimeSec: 2100, modelProbTeam1: 0.67, marketProbTeam1: 0.59 },
+];
 
 export const MOCK_MATCHES: Match[] = [
   {

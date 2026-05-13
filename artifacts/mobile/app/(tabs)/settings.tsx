@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,10 +8,6 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
-import { useSubscription, getTrialDays, getPlanLabel, sortPackages, isAnnualPackage, type AdaptyPackageInfo } from '@/lib/revenuecat';
-import { getApiUrl } from '@/lib/api/baseUrl';
-import { PAYMENT_CHANNEL } from '@/lib/paymentChannel';
-import { RuStoreSubscriptionCard } from '@/components/RuStorePaywall';
 
 interface Tier1Team {
   teamId: number;
@@ -32,7 +28,7 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
     if (!expanded || teams !== null || loading) return;
     setLoading(true);
     setError(null);
-    fetch(getApiUrl('/api/teams/tier1?limit=50'))
+    fetch('/api/teams/tier1?limit=50')
       .then(r => r.json())
       .then((data: { teams: Tier1Team[] }) => {
         setTeams(data.teams ?? []);
@@ -99,249 +95,10 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
   );
 }
 
-function SubscriptionCard({ colors }: { colors: ReturnType<typeof import('@/hooks/useColors').useColors> }) {
-  const { isSubscribed, isLoading, offerings, purchase, restore, isPurchasing, isRestoring } = useSubscription();
-  const [showPaywall, setShowPaywall] = useState(false);
-  const [selectedPkg, setSelectedPkg] = useState<AdaptyPackageInfo | null>(null);
-
-  const currentOffering = offerings?.current;
-  const packages = sortPackages(currentOffering?.availablePackages ?? []);
-  const defaultPkg = packages.find(p =>
-    p.identifier.toLowerCase().includes('month')
-  ) ?? packages[0] ?? null;
-  const activePkg = selectedPkg ?? defaultPkg;
-
-  if (isLoading) {
-    return (
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', padding: 20 }]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (isSubscribed) {
-    return (
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[styles.row, { borderBottomColor: 'transparent' }]}>
-          <Feather name="award" size={18} color={colors.primary} style={{ marginRight: 8 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowLabel, { color: colors.foreground }]}>Aegis Premium</Text>
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>Подписка активна</Text>
-          </View>
-          <View style={{ backgroundColor: colors.primary + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.primary }}>PRO</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          onPress={async () => { try { await restore(); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
-          disabled={isRestoring}
-          style={[styles.row, { borderBottomColor: 'transparent' }]}
-        >
-          <Text style={[styles.rowLabel, { color: colors.mutedForeground, fontSize: 13 }]}>Восстановить покупки</Text>
-          {isRestoring ? <ActivityIndicator size="small" color={colors.mutedForeground} /> : <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />}
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const bestPriceStr = activePkg?.product.priceString ?? '—';
-  const trialDays = getTrialDays(activePkg);
-
-  return (
-    <>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '55', borderWidth: 1.5 }]}>
-        <View style={{ padding: 16, gap: 10 }}>
-          {trialDays > 0 && (
-            <View style={{
-              alignSelf: 'flex-start',
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              backgroundColor: colors.positive + '22', borderRadius: 6,
-              paddingHorizontal: 10, paddingVertical: 5,
-            }}>
-              <Feather name="gift" size={12} color={colors.positive} />
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: colors.positive, letterSpacing: 0.5 }}>
-                {trialDays} ДНЕЙ БЕСПЛАТНО
-              </Text>
-            </View>
-          )}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Feather name="zap" size={18} color={colors.primary} />
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.foreground }}>Aegis Premium</Text>
-          </View>
-          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.mutedForeground, lineHeight: 19 }}>
-            Полный доступ к бэктесту модели, расширенным алертам по уверенности и всем рынкам прогнозов.
-          </Text>
-          <View style={{ gap: 6 }}>
-            {['Бэктест и equity-кривая', 'Анализ драфтов и факторов', 'Алерты по edge и минимальной уверенности'].map(f => (
-              <View key={f} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Feather name="check-circle" size={14} color={colors.positive} />
-                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.foreground }}>{f}</Text>
-              </View>
-            ))}
-          </View>
-          <TouchableOpacity
-            onPress={() => setShowPaywall(true)}
-            style={{ backgroundColor: colors.primary, borderRadius: 12, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}
-          >
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.primaryForeground }}>
-              {trialDays > 0
-                ? `Попробовать ${trialDays} дней бесплатно`
-                : (bestPriceStr !== '—' ? `Подключить за ${bestPriceStr}` : 'Попробовать Premium')}
-            </Text>
-          </TouchableOpacity>
-          {trialDays > 0 && bestPriceStr !== '—' && (
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.mutedForeground, textAlign: 'center' }}>
-              Затем {bestPriceStr} {activePkg ? getPlanLabel(activePkg) : ''} · отмена в любой момент
-            </Text>
-          )}
-          <TouchableOpacity
-            onPress={async () => { try { await restore(); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
-            disabled={isRestoring}
-            style={{ alignItems: 'center', paddingVertical: 8 }}
-          >
-            <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.primary, textDecorationLine: 'underline' }}>
-              Восстановить покупки
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <Modal visible={showPaywall} transparent animationType="slide" onRequestClose={() => setShowPaywall(false)}>
-        <View style={{ flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, gap: 18 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: colors.foreground }}>Aegis Premium</Text>
-              <TouchableOpacity onPress={() => setShowPaywall(false)}>
-                <Feather name="x" size={22} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ gap: 10 }}>
-              {[
-                { icon: 'trending-up' as const, text: 'Бэктест модели — equity-кривая и KPI' },
-                { icon: 'layers' as const, text: 'Анализ пиков / банов в драфте' },
-                { icon: 'bell' as const, text: 'Алерты по edge и уверенности' },
-                { icon: 'bar-chart-2' as const, text: 'Все 15 рынков прогнозов' },
-              ].map(({ icon, text }) => (
-                <View key={text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary + '22', alignItems: 'center', justifyContent: 'center' }}>
-                    <Feather name={icon} size={16} color={colors.primary} />
-                  </View>
-                  <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 14, color: colors.foreground, flex: 1 }}>{text}</Text>
-                </View>
-              ))}
-            </View>
-
-            {packages.length > 1 && (
-              <View style={{ gap: 8 }}>
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.mutedForeground, letterSpacing: 1, textTransform: 'uppercase' }}>
-                  Выберите тариф
-                </Text>
-                {packages.map(pkg => {
-                  const isActive = (activePkg?.identifier ?? '') === pkg.identifier;
-                  return (
-                    <TouchableOpacity
-                      key={pkg.identifier}
-                      onPress={() => setSelectedPkg(pkg)}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        borderRadius: 12,
-                        borderWidth: 1.5,
-                        borderColor: isActive ? colors.primary : colors.border,
-                        backgroundColor: isActive ? colors.primary + '12' : colors.background,
-                        paddingHorizontal: 14,
-                        paddingVertical: 12,
-                      }}
-                    >
-                      <View style={{
-                        width: 18, height: 18, borderRadius: 9,
-                        borderWidth: 2,
-                        borderColor: isActive ? colors.primary : colors.mutedForeground,
-                        backgroundColor: isActive ? colors.primary : 'transparent',
-                        marginRight: 10,
-                        alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {isActive && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primaryForeground }} />}
-                      </View>
-                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.foreground, flex: 1 }}>
-                        {pkg.product.priceString}
-                        <Text style={{ fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>
-                          {' '}{getPlanLabel(pkg)}
-                        </Text>
-                      </Text>
-                      {isAnnualPackage(pkg) && (
-                        <View style={{ backgroundColor: colors.positive + '33', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: colors.positive }}>ВЫГОДНО</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-
-            {packages.length === 0 && (
-              <View style={{ backgroundColor: colors.muted, borderRadius: 14, padding: 16, alignItems: 'center', gap: 4 }}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 28, color: colors.foreground }}>
-                  {bestPriceStr !== '—' ? bestPriceStr : '...'}
-                </Text>
-                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.mutedForeground }}>
-                  {activePkg ? getPlanLabel(activePkg) : 'в месяц'} · отмена в любой момент
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              onPress={async () => {
-                if (!activePkg) { Alert.alert('Нет доступных тарифов'); return; }
-                try {
-                  await purchase(activePkg);
-                  setShowPaywall(false);
-                  await logProductEvent('subscription_purchased', 'paywall', { price: activePkg.product.priceString, plan: activePkg.identifier });
-                } catch (e: any) {
-                  if (!e.userCancelled) Alert.alert('Ошибка покупки', e.message ?? 'Попробуйте позже');
-                }
-              }}
-              disabled={isPurchasing || !activePkg}
-              style={{ backgroundColor: colors.primary, borderRadius: 14, height: 56, alignItems: 'center', justifyContent: 'center' }}
-            >
-              {isPurchasing
-                ? <ActivityIndicator color={colors.primaryForeground} />
-                : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.primaryForeground }}>
-                    {trialDays > 0 && activePkg
-                      ? `Начать ${trialDays} дней бесплатно`
-                      : (activePkg ? `Подключить за ${activePkg.product.priceString}` : 'Подключить Premium')}
-                  </Text>
-              }
-            </TouchableOpacity>
-
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: colors.mutedForeground, textAlign: 'center', lineHeight: 16 }}>
-              {trialDays > 0 && activePkg
-                ? `Бесплатный пробный период ${trialDays} дней. Затем ${activePkg.product.priceString} ${getPlanLabel(activePkg)}. Отмена в любой момент в настройках магазина — деньги не спишутся.`
-                : 'Оплата через App Store / Google Play. Отмена в любое время в настройках магазина.'}
-            </Text>
-
-            <TouchableOpacity
-              onPress={async () => { try { await restore(); setShowPaywall(false); } catch (e: any) { Alert.alert('Ошибка', e.message ?? 'Не удалось восстановить'); } }}
-              disabled={isRestoring}
-              style={{ alignItems: 'center', paddingVertical: 6 }}
-            >
-              <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 13, color: colors.primary, textDecorationLine: 'underline' }}>
-                Восстановить покупки
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </>
-  );
-}
-
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, setOnboarded, setAgeConfirmed } = useApp();
+  const { settings, updateSettings, setOnboarded, setAgeConfirmed, isAdmin } = useApp();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   function Row({ label, value, onPress, danger, right }: { label: string; value?: string; onPress?: () => void; danger?: boolean; right?: React.ReactNode }) {
@@ -389,6 +146,10 @@ export default function SettingsScreen() {
     Alert.alert('Экспорт данных', 'В MVP 1 данные хранятся локально в AsyncStorage. Функция полного экспорта доступна в следующих версиях.');
   }
 
+  async function handleEnableAdmin() {
+    await updateSettings({ role: settings.role === 'admin' ? 'user' : 'admin' });
+  }
+
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
@@ -396,12 +157,6 @@ export default function SettingsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.title, { color: colors.foreground }]}>Профиль</Text>
-
-      {/* Подписка идёт первой — самый важный CTA / статус пользователя. */}
-      {PAYMENT_CHANNEL === 'rustore'
-        ? <RuStoreSubscriptionCard colors={colors} />
-        : <SubscriptionCard colors={colors} />
-      }
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="ОТОБРАЖЕНИЕ" />
@@ -475,21 +230,21 @@ export default function SettingsScreen() {
       <FavoriteTeamsCard colors={colors} />
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <SectionHeader title="ПРАВОВАЯ ИНФОРМАЦИЯ" />
-        <Row
-          label="Политика конфиденциальности"
-          onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'privacy' } })}
-        />
-        <Row
-          label="Условия использования"
-          onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'terms' } })}
-        />
-      </View>
-
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="РАЗРАБОТКА" />
-        {/* Админ-функционал переехал в отдельный web-кабинет (/admin-web/).
-            В мобильном приложении остаётся только сброс онбординга. */}
+        <Row
+          label={`Режим Admin ${isAdmin ? '(включен)' : ''}`}
+          right={
+            <Switch
+              value={isAdmin}
+              onValueChange={handleEnableAdmin}
+              trackColor={{ false: colors.muted, true: colors.warning + '88' }}
+              thumbColor={isAdmin ? colors.warning : colors.mutedForeground}
+            />
+          }
+        />
+        {isAdmin && (
+          <Row label="Debug: Sources & Logs" onPress={() => router.push('/admin')} />
+        )}
         <Row label="Сброс онбординга" onPress={async () => { await setOnboarded(false); router.replace('/onboarding'); }} />
       </View>
 
@@ -502,7 +257,8 @@ export default function SettingsScreen() {
 
       <View style={styles.version}>
         <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Aegis · 1.0.0</Text>
-        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · ML-прогнозы: LightGBM</Text>
+        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Модель: baseline_v1.0.0</Text>
+        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · Коэффициенты: demo (до подключения API)</Text>
       </View>
     </ScrollView>
   );

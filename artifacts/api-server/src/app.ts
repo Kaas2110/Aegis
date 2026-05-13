@@ -4,7 +4,6 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
-import landingRouter from "./routes/landing";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -40,6 +39,5 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
-app.use(landingRouter);
 
 export default app;

@@ -7,14 +7,10 @@ id = "3B4_FFSkEVBkAeYMFRJ2e"
 [[services]]
 localPort = 8080
 name = "API Server"
-paths = ["/api", "/landing", "/"]
+paths = ["/api"]
 
 [services.development]
 run = "pnpm --filter @workspace/api-server run dev"
-
-[services.development.env]
-ML_SERVICE_TOKEN = "aegis-dev-shared-ml-token-do-not-use-in-prod"
-ML_SERVICE_URL = "http://localhost:8090"
 
 [services.production]
 

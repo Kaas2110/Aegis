@@ -10,8 +10,6 @@ import Login from "@/pages/login";
 import Settings from "@/pages/settings";
 import Metrics from "@/pages/metrics";
 import Operations from "@/pages/operations";
-import Subscriptions from "@/pages/subscriptions";
-import Stores from "@/pages/stores";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -61,8 +59,6 @@ function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/metrics" element={<Metrics />} />
                 <Route path="/operations" element={<Operations />} />
-                <Route path="/stores" element={<Stores />} />
-                <Route path="/subscriptions" element={<Subscriptions />} />
               </Route>
             </Route>
 

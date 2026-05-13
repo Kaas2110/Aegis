@@ -4,6 +4,7 @@
  */
 
 import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
+import { buildFeaturedMatch } from '@/services/featuredMatch';
 import type { Match, Market, Team, Prediction, BookmakerOdds } from '@/types';
 
 const API_BASE = '/api';
@@ -86,26 +87,18 @@ function formatBOFormat(seriesType?: number): 'BO1' | 'BO3' | 'BO5' {
   return 'BO3';
 }
 
-function cleanTeamName(raw: string): string {
-  // OpenDota иногда отдаёт имена с ведущим подчёркиванием («_PoWeRRangers»),
-  // отделом неудачного парсинга/нормализации на их стороне. Убираем
-  // лидирующие `_` / пробелы, чтобы UI не показывал «_PO» в hex-бейдже.
-  return raw.replace(/^[_\s]+/, '').replace(/\s+/g, ' ').trim();
-}
-
 function buildTeam(name: string, id: number | undefined, side: 'radiant' | 'dire'): Team {
   // Если ни OpenDota, ни локальный enrichment имени не дали — показываем
   // нейтральный «Без названия» вместо «Team Radiant»/«Team Dire», чтобы
   // пользователь не путал плейсхолдер с реальной фракционной меткой.
-  const cleaned = cleanTeamName(name ?? '');
-  const hasRealName = cleaned.length > 0;
-  const displayName = hasRealName ? cleaned : 'Без названия';
-  const shortBase = hasRealName ? cleaned.replace(/^team\s+/i, '') : (side === 'radiant' ? 'R' : 'D');
+  const hasRealName = !!name && name.trim().length > 0;
+  const displayName = hasRealName ? name : 'Без названия';
+  const shortBase = hasRealName ? name.replace(/^team\s+/i, '') : (side === 'radiant' ? 'R' : 'D');
   return {
     id: id ? String(id) : `${side}_anon`,
     name: displayName,
     shortName: shortBase.substring(0, 3).toUpperCase(),
-    logoPlaceholder: (hasRealName ? cleaned : '?').substring(0, 2).toUpperCase(),
+    logoPlaceholder: (hasRealName ? name : '?').substring(0, 2).toUpperCase(),
     region: 'Unknown',
     eloRating: 1720,
     recentForm: [],
@@ -423,11 +416,7 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
   const team2Name = isPandaScore
     ? (raw.opponents?.[1]?.opponent?.name ?? '').trim()
     : (raw.team2 ?? '').trim();
-  // Если у одного из соперников нет имени (например, PandaScore вернул TBD),
-  // прячем матч из списка вместо показа «Без названия». Для бьюера такие
-  // карточки бесполезны.
   if (!team1Name || !team2Name) return null;
-  if (/^tbd$/i.test(team1Name) || /^tbd$/i.test(team2Name)) return null;
 
   const team1Id = isPandaScore ? raw.opponents?.[0]?.opponent?.id : undefined;
   const team2Id = isPandaScore ? raw.opponents?.[1]?.opponent?.id : undefined;
@@ -460,205 +449,20 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
   };
 }
 
-interface PredictByNameResponse {
-  radiantTeamId: number;
-  radiantTeamName: string;
-  direTeamId: number;
-  direTeamName: string;
-  radiantWinProbability: number;
-  direWinProbability: number;
-  modelVersion: string;
-  features: Record<string, number>;
-}
-
-/**
- * Обогащает прематч-матч ML-предсказанием через /api/analytics/predict-by-name.
- * Если команды не найдены в БД или модели нет — возвращает матч без markets.
- * Таймаут 3 секунды чтобы не тормозить загрузку списка.
- */
-async function enrichPrematch(match: Match): Promise<EnrichedMatch> {
-  const empty = (): EnrichedMatch => ({
-    match, markets: [], availableBookmakers: [], dataSource: 'real',
-  });
-  try {
-    const t1 = encodeURIComponent(match.team1.name);
-    const t2 = encodeURIComponent(match.team2.name);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 3000);
-    let resp: Response;
-    try {
-      resp = await fetch(
-        `${API_BASE}/analytics/predict-by-name?radiantTeamName=${t1}&direTeamName=${t2}`,
-        { signal: ctrl.signal },
-      );
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!resp.ok) return empty();
-    const pred = await resp.json() as PredictByNameResponse;
-
-    // Синтезируем analyticsResult в формате, который ожидает analyticsToMarkets.
-    const analyticsResult: NonNullable<EnrichedMatch['analyticsResult']> = {
-      predictions: [{
-        betType: 'match_winner',
-        labelRu: 'Победитель серии',
-        probTeam1: pred.radiantWinProbability,
-        probTeam2: pred.direWinProbability,
-        confidence: 0.65,
-        edge: 0,
-        ev: 0,
-        mainFactors: [],
-      }],
-      modelVersion: pred.modelVersion,
-      generatedAt: new Date().toISOString(),
-    };
-
-    // Обновляем team.id до OpenDota teamId (нужен для /api/analytics/explain при открытии детального экрана)
-    const enrichedMatch: Match = {
-      ...match,
-      team1: { ...match.team1, id: String(pred.radiantTeamId) },
-      team2: { ...match.team2, id: String(pred.direTeamId) },
-    };
-
-    const markets = analyticsToMarkets(enrichedMatch, analyticsResult);
-    return { match: enrichedMatch, markets, analyticsResult, availableBookmakers: [], dataSource: 'real' };
-  } catch {
-    return empty();
-  }
-}
-
-// ---------- Bookmaker-joined prematch (GET /api/bookmakers/upcoming-joined) ----------
-
-interface JoinedMatchRaw {
-  pandaScoreId: string | number;
-  team1: string;
-  team2: string;
-  team1Id?: number;
-  team2Id?: number;
-  startsAt: string | null;
-  tournament: string;
-  numberOfGames: number;
-  league_tier?: string;
-  bookmakerEvent?: {
-    source: string;
-    sourceName: string;
-    eventId: string;
-    winner?: { team1: number; team2: number };
-  };
-}
-
-interface JoinedResponse {
-  source: string;
-  isMock: boolean;
-  count: number;
-  matches: JoinedMatchRaw[];
-  error?: string;
-  hint?: string;
-}
-
-/**
- * Конвертирует ответ /api/bookmakers/upcoming-joined в EnrichedMatch[].
- * Если у матча есть bookmakerEvent.winner — инжектирует кэфы как OddsData
- * и передаёт в analyticsToMarkets.
- */
-async function fetchBookmakerJoined(bookmakerSource: string): Promise<EnrichedMatch[]> {
-  const src = encodeURIComponent(bookmakerSource);
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
-  let resp: Response;
-  try {
-    resp = await fetch(`${API_BASE}/bookmakers/upcoming-joined?source=${src}`, {
-      signal: ctrl.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!resp.ok) return [];
-  const data = await resp.json() as JoinedResponse;
-  if (!data.matches || data.matches.length === 0) return [];
-
-  return Promise.all(
-    data.matches.map(async (raw): Promise<EnrichedMatch> => {
-      const format = raw.numberOfGames === 1 ? 'BO1' : raw.numberOfGames === 5 ? 'BO5' : 'BO3';
-      const startMs = raw.startsAt ? Date.parse(raw.startsAt) : Date.now();
-      const match: Match = {
-        id: `up_${raw.pandaScoreId}`,
-        team1: buildTeam(raw.team1, raw.team1Id, 'radiant'),
-        team2: buildTeam(raw.team2, raw.team2Id, 'dire'),
-        team1Side: 'radiant',
-        team2Side: 'dire',
-        tournamentName: raw.tournament || 'Pro Match',
-        tournamentTier: raw.league_tier === 'premium' ? 1 : 2,
-        format,
-        status: 'prematch',
-        currentMapNumber: 1,
-        team1MapsWon: 0,
-        team2MapsWon: 0,
-        startTime: new Date(startMs),
-        isFavorite: false,
-      };
-
-      // Строим OddsData из bookmakerEvent.winner если есть
-      const bkEv = raw.bookmakerEvent;
-      const oddsData: OddsData | undefined = (bkEv?.winner)
-        ? {
-            eventId: bkEv.eventId,
-            team1: raw.team1,
-            team2: raw.team2,
-            commenceTime: raw.startsAt ?? '',
-            bookmakers: [{
-              bookmakerId: bkEv.source,
-              bookmakerName: bkEv.sourceName,
-              team1Odds: bkEv.winner.team1,
-              team2Odds: bkEv.winner.team2,
-              lastUpdate: new Date().toISOString(),
-            }],
-          }
-        : undefined;
-
-      // Обогащаем ML-предсказанием
-      const base = await enrichPrematch(match);
-      if (!base.analyticsResult) {
-        return { ...base, availableBookmakers: buildBookmakerOptions(oddsData) };
-      }
-
-      // Пересчитываем markets с реальными кэфами букмекера
-      const markets = analyticsToMarkets(base.match, base.analyticsResult, oddsData);
-      return {
-        match: base.match,
-        markets,
-        analyticsResult: base.analyticsResult,
-        availableBookmakers: buildBookmakerOptions(oddsData),
-        dataSource: data.isMock ? 'mock' : 'real',
-      };
-    }),
-  );
-}
-
-export async function fetchLiveData(bookmakerSource?: string): Promise<LiveDataResult> {
+export async function fetchLiveData(): Promise<LiveDataResult> {
   const fetchedAt = new Date().toISOString();
-  const effectiveBookmaker = bookmakerSource && bookmakerSource !== 'all' ? bookmakerSource : undefined;
+  // Закреплённый featured-матч (PARIVISION vs PlayTime, 1W Essence) запрашиваем
+  // параллельно с остальными источниками — он всегда первый в списке live.
+  const featuredPromise = buildFeaturedMatch().catch(() => null);
   try {
     // 1. Fetch live + upcoming matches + odds
-    // Если выбран букмекер — upcoming берём через joined endpoint (только пересечение)
-    const upcomingUrl = effectiveBookmaker
-      ? `${API_BASE}/bookmakers/upcoming-joined?source=${encodeURIComponent(effectiveBookmaker)}`
-      : `${API_BASE}/matches/upcoming`;
-
     const [liveResp, upcomingResp, oddsResp] = await Promise.allSettled([
       fetch(`${API_BASE}/matches/live`).then(r => r.json()),
-      fetch(upcomingUrl).then(r => r.json()),
+      fetch(`${API_BASE}/matches/upcoming`).then(r => r.json()),
       fetch(`${API_BASE}/odds/dota2`).then(r => r.json()),
     ]);
-    // Если выбран букмекер — upcoming пришёл в формате JoinedResponse, а не обычного { isMock, data }.
-    // Различаем по наличию поля `matches` (joined) vs `data` (стандартный PandaScore).
-    const upcomingRaw = upcomingResp.status === 'fulfilled' ? upcomingResp.value as Record<string, unknown> : null;
-    const isJoinedFormat = upcomingRaw && Array.isArray(upcomingRaw['matches']);
-    const upcomingData = (!isJoinedFormat && upcomingRaw)
-      ? (upcomingRaw as { isMock: boolean; data: UpcomingRaw[] })
-      : null;
-    const upcomingJoined = isJoinedFormat
-      ? (upcomingRaw as { source: string; isMock: boolean; matches: JoinedMatchRaw[] })
+    const upcomingData = upcomingResp.status === 'fulfilled'
+      ? (upcomingResp.value as { isMock: boolean; data: UpcomingRaw[] })
       : null;
 
     const liveData = liveResp.status === 'fulfilled' ? liveResp.value as {
@@ -677,52 +481,29 @@ export async function fetchLiveData(bookmakerSource?: string): Promise<LiveDataR
     const hasRealData = !liveData?.isMock && Array.isArray(rawMatches) && rawMatches.length > 0;
 
     if (!hasRealData) {
-      // Live упал (OpenDota недоступен) — но это не повод показывать пустой
-      // экран. Берём upcoming с PandaScore (если есть) как prematch-список,
-      // а live дополняем mock-матчами + featured. Так пользователь видит
-      // настоящие будущие матчи реальных команд, а не только mock.
       const mockMarkets = buildMockMarkets();
       const buildMock = (match: Match): EnrichedMatch => {
         const mkts = mockMarkets.filter(mkt => mkt.matchId === match.id);
+        // Берём всех букмекеров из первого рынка — у mock-данных там полный список.
         const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
         return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
       };
-      const liveList = MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock);
-      // Реальные upcoming с PandaScore — если бэк отдал, используем
-      // вместо mock prematch.
-      // Поддерживаем оба формата: стандартный PandaScore и joined (с кэфами букмекера)
-      const realUpcomingRaws: UpcomingRaw[] = (upcomingData && !upcomingData.isMock && Array.isArray(upcomingData.data))
-        ? upcomingData.data
-        : upcomingJoined && !upcomingJoined.isMock
-          ? (upcomingJoined.matches as unknown as UpcomingRaw[])
-          : [];
-      const realUpcomingMatches: Match[] = realUpcomingRaws
-        .map(upcomingToMatch)
-        .filter((m): m is Match => m !== null)
-        .slice(0, 30);
-      const prematchList: EnrichedMatch[] = realUpcomingMatches.length > 0
-        ? await Promise.all(realUpcomingMatches.map(m => enrichPrematch(m)))
-        : MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
+      const featured = await featuredPromise;
+      const liveList = [
+        ...(featured ? [featured] : []),
+        ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
+      ];
+      const prematchList = MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
       cacheEnriched([...liveList, ...prematchList]);
-      const hasRealUpcoming = realUpcomingMatches.length > 0;
-      const sources: string[] = [];
-      if (hasRealUpcoming) sources.push('pandascore');
-      sources.push('demo-live');
       return {
         liveMatches: liveList,
         prematchMatches: prematchList,
-        // isMock=false если есть хотя бы один реальный источник (upcoming)
-        isMock: !hasRealUpcoming,
-        sources,
-        fetchedAt,
+        isMock: !featured, sources: featured ? ['featured', 'mock'] : ['mock'], fetchedAt,
       };
     }
-    // 2. Convert OpenDota data to our Match format.
-    // Фильтруем матчи без имён команд (как правило, высокорейтинговые паблики
-    // без турнирного контекста) — они бесполезны для ставочного приложения.
+    // 2. Convert OpenDota data to our Match format
     const matches = (rawMatches as OpenDotaLiveMatch[])
-      .filter(m => (m.team_name_radiant ?? '').trim() && (m.team_name_dire ?? '').trim())
-      .slice(0, 10)
+      .slice(0, 10) // Show max 10 live matches
       .map(openDotaToMatch);
 
     // 3. Run analytics for each match
@@ -744,41 +525,33 @@ export async function fetchLiveData(bookmakerSource?: string): Promise<LiveDataR
       })
     );
 
-    const finalLive = enriched;
+    const featured = await featuredPromise;
+    const finalLive = featured ? [featured, ...enriched] : enriched;
 
-    // Если выбран букмекер — используем уже обогащённые joined-матчи (со встроенными кэфами).
-    // Иначе — стандартный PandaScore путь с enrichPrematch.
-    let prematchEnriched: EnrichedMatch[];
-    const bookmakerSourceLabel = effectiveBookmaker ?? null;
-
-    if (upcomingJoined && !upcomingJoined.isMock && upcomingJoined.matches.length > 0) {
-      // Данные пришли через /upcoming-joined — строим матчи напрямую из joined-формата
-      prematchEnriched = await fetchBookmakerJoined(effectiveBookmaker!);
-      // Фильтруем дубликаты с live
-      prematchEnriched = prematchEnriched.filter(
-        em => !finalLive.some(lm => lm.match.team1.id === em.match.team1.id && lm.match.team2.id === em.match.team2.id)
-      );
-    } else {
-      // Стандартный путь: PandaScore upcoming → enrichPrematch
-      const stdRaws = Array.isArray(upcomingData?.data) ? upcomingData!.data : [];
-      const prematchMatches: Match[] = stdRaws
-        .map(upcomingToMatch)
-        .filter((m): m is Match => m !== null)
-        .filter(m => !finalLive.some(em => em.match.team1.id === m.team1.id && em.match.team2.id === m.team2.id))
-        .slice(0, 20);
-      prematchEnriched = await Promise.all(prematchMatches.map(match => enrichPrematch(match)));
-    }
+    // Маппим upcoming PandaScore → Match. Без analytics (для prematch обычно
+    // нет live-снапшота); markets пустые до старта матча. Этого достаточно для
+    // карточки в списке: имя турнира, время старта, формат.
+    const upcomingRaws = Array.isArray(upcomingData?.data) ? upcomingData!.data : [];
+    const prematchMatches: Match[] = upcomingRaws
+      .map(upcomingToMatch)
+      .filter((m): m is Match => m !== null)
+      .filter(m => !finalLive.some(em => em.match.team1.id === m.team1.id && em.match.team2.id === m.team2.id))
+      .slice(0, 30);
+    const prematchEnriched: EnrichedMatch[] = prematchMatches.map(match => ({
+      match, markets: [], availableBookmakers: [], dataSource: 'real' as const,
+    }));
 
     cacheEnriched([...finalLive, ...prematchEnriched]);
-    const sources: string[] = ['opendota'];
-    if (bookmakerSourceLabel) sources.push(bookmakerSourceLabel);
-    else if (upcomingData && !upcomingData.isMock) sources.push('pandascore');
-    if (oddsData?.isMock === false) sources.push('the_odds_api');
     return {
       liveMatches: finalLive,
       prematchMatches: prematchEnriched,
       isMock: false,
-      sources,
+      sources: [
+        ...(featured ? ['featured'] : []),
+        'opendota',
+        ...(upcomingData && !upcomingData.isMock ? ['pandascore'] : []),
+        ...(oddsData?.isMock === false ? ['the_odds_api'] : []),
+      ],
       fetchedAt,
     };
   } catch {
@@ -788,14 +561,18 @@ export async function fetchLiveData(bookmakerSource?: string): Promise<LiveDataR
       const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
       return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
     };
-    const liveList = MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock);
+    const featured = await featuredPromise;
+    const liveList = [
+      ...(featured ? [featured] : []),
+      ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
+    ];
     const prematchList = MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
     cacheEnriched([...liveList, ...prematchList]);
     return {
       liveMatches: liveList,
       prematchMatches: prematchList,
-      isMock: true,
-      sources: ['demo-live'],
+      isMock: !featured,
+      sources: featured ? ['featured', 'mock'] : ['mock'],
       fetchedAt,
     };
   }

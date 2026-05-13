@@ -11,6 +11,3 @@ paths = []
 
 [services.development]
 run = "pnpm --filter @workspace/ml-service run dev"
-
-[services.development.env]
-ML_SERVICE_TOKEN = "aegis-dev-shared-ml-token-do-not-use-in-prod"

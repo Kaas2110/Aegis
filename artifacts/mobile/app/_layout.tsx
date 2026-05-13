@@ -18,20 +18,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { Alert } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
-import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
-import { FeatureFlagsProvider, FeatureFlagsSideEffects } from "@/lib/featureFlags";
 
 SplashScreen.preventAutoHideAsync();
-
-// RevenueCat — primary провайдер монетизации. Adapty оставлен как
-// альтернатива в lib/adapty.tsx (можно переключиться, поменяв импорты здесь
-// и в lib/featureFlags.tsx). Ошибки инициализации не роняют приложение.
-initializeRevenueCat().catch((err: any) => {
-  if (__DEV__) console.warn('[RevenueCat] init error:', err?.message ?? err);
-});
 
 const queryClient = new QueryClient();
 
@@ -45,7 +35,6 @@ function RootLayoutNav() {
       <Stack.Screen name="market-compare/[id]" options={{ presentation: 'card' }} />
       <Stack.Screen name="admin" options={{ presentation: 'card' }} />
       <Stack.Screen name="glossary" options={{ presentation: 'card' }} />
-      <Stack.Screen name="legal" options={{ presentation: 'card' }} />
     </Stack>
   );
 }
@@ -73,18 +62,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <SubscriptionProvider>
-            <FeatureFlagsProvider>
-              <FeatureFlagsSideEffects />
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardProvider>
-                  <AppProvider>
-                    <RootLayoutNav />
-                  </AppProvider>
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </FeatureFlagsProvider>
-          </SubscriptionProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <KeyboardProvider>
+              <AppProvider>
+                <RootLayoutNav />
+              </AppProvider>
+            </KeyboardProvider>
+          </GestureHandlerRootView>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

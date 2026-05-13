@@ -1,23 +1,13 @@
 /**
  * OddsTile — лаконичная плитка коэффициента в стиле букмекерского приложения.
  *
- * Два режима отображения, выбор зависит от того, выбран ли букмекер
- * (передаётся через `showOdds` — это `filters.bookmaker !== 'none'`):
+ * Простой режим:
+ *   ┌──────────────┐
+ *   │ П1  Team R.  │
+ *   │ 67%    2.00  │
+ *   └──────────────┘
  *
- *   showOdds=false (режим «Без ставок»):
- *     ┌──────────────┐
- *     │ П1  Team R.  │
- *     │     67%      │   ← большой % модели в центре
- *     └──────────────┘
- *
- *   showOdds=true (выбран Fonbet / PARI / …):
- *     ┌──────────────┐
- *     │ П1  Team R.  │
- *     │ 67%    2.00  │   ← % модели слева, кэф бука справа
- *     └──────────────┘
- *
- * Клик по плитке (если onPress задан) открывает экран матча с подробной
- * аналитикой (ОЦ, EV, факторы модели).
+ * Подробный режим: + строка с ОЦ и БК
  */
 
 import React from 'react';
@@ -29,20 +19,26 @@ interface OddsTileProps {
   shortLabel: string;          // П1 / П2
   outcomeLabel: string;        // Team Liquid / Больше 52.5
   modelProbability: number;    // 0..1
+  marketProbability: number;   // 0..1 (для подробной аналитики)
   odds: number;
-  /** Если true — показываем коэф бука рядом с %. Иначе — только %. */
-  showOdds?: boolean;
+  bookmakerName: string;
+  edge: number;                // прогноз − рынок
+  ev: number;                  // ожидаемая ценность
+  confidence: number;          // 0..1
+  forceDetailed?: boolean;     // принудительно показать подробности (на экране матча)
   onPress?: () => void;
 }
 
 export function OddsTile({
-  shortLabel, outcomeLabel, modelProbability, odds, showOdds = false, onPress,
+  shortLabel, outcomeLabel, modelProbability,
+  onPress,
 }: OddsTileProps) {
   const colors = useColors();
+  // TODO(bookmakers): по запросу пользователя оставлена только вероятность модели.
+  // Кэф, EV/ОЦ и название букмекера скрыты до подключения реальных кэфов.
   const modelPct = Math.round(modelProbability * 100);
   // «Уверенный» прогноз (≥60%) выделяем сильнее золотом — Dota inventory vibe.
   const isStrong = modelPct >= 60;
-  const hasOdds = showOdds && Number.isFinite(odds) && odds > 1;
 
   return (
     <TouchableOpacity
@@ -69,49 +65,26 @@ export function OddsTile({
         </Text>
       </View>
 
-      {hasOdds ? (
-        // Режим с букмекером: % модели слева, коэф справа.
-        // Цветовая логика: % акцентный (золото), кэф нейтральный, чтобы
-        // визуально считывался прогноз модели, а не цифра бука.
-        <View style={styles.dualRow}>
-          <View style={[styles.probHalf, {
-            backgroundColor: isStrong ? colors.primary : colors.goldDeep + 'AA',
-          }]}>
-            <Text style={[styles.probabilitySmall, {
-              color: isStrong ? colors.primaryForeground : colors.primary,
-            }]}>
-              {modelPct}%
-            </Text>
-          </View>
-          <View style={[styles.oddsHalf, { borderColor: colors.borderGold + '66' }]}>
-            <Text style={[styles.oddsValue, { color: colors.foreground }]}>
-              {odds.toFixed(2)}
-            </Text>
-          </View>
-        </View>
-      ) : (
-        // Режим без ставок: чистая большая плитка вероятности.
-        <View style={styles.mainRow}>
-          <LinearGradient
-            colors={isStrong
-              ? [colors.goldHi, colors.primary, colors.goldLo]
-              : [colors.goldDeep, colors.goldDeep + 'AA']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.probBadge}
+      <View style={styles.mainRow}>
+        <LinearGradient
+          colors={isStrong
+            ? [colors.goldHi, colors.primary, colors.goldLo]
+            : [colors.goldDeep, colors.goldDeep + 'AA']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.probBadge}
+        >
+          <Text
+            style={[
+              styles.probability,
+              { color: isStrong ? colors.primaryForeground : colors.primary },
+            ]}
+            numberOfLines={1}
           >
-            <Text
-              style={[
-                styles.probability,
-                { color: isStrong ? colors.primaryForeground : colors.primary },
-              ]}
-              numberOfLines={1}
-            >
-              {modelPct}%
-            </Text>
-          </LinearGradient>
-        </View>
-      )}
+            {modelPct}%
+          </Text>
+        </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -122,19 +95,27 @@ interface OddsTilesPairProps {
   team1Label: string;
   team2Label: string;
   modelProbTeam1: number;
+  fairProbTeam1: number;
   oddsTeam1: number;
   oddsTeam2: number;
-  /** true — показываем кэфы рядом с %. false — только %. */
-  showOdds?: boolean;
+  bookmakerName: string;
+  edgeTeam1: number;
+  evTeam1: number;
+  confidence: number;
+  forceDetailed?: boolean;
   onPressTeam1?: () => void;
   onPressTeam2?: () => void;
 }
 
 export function OddsTilesPair({
-  team1Label, team2Label, modelProbTeam1,
-  oddsTeam1, oddsTeam2, showOdds, onPressTeam1, onPressTeam2,
+  team1Label, team2Label, modelProbTeam1, fairProbTeam1,
+  oddsTeam1, oddsTeam2, bookmakerName, edgeTeam1, evTeam1,
+  confidence, forceDetailed, onPressTeam1, onPressTeam2,
 }: OddsTilesPairProps) {
   const modelProbTeam2 = 1 - modelProbTeam1;
+  const fairProbTeam2 = 1 - fairProbTeam1;
+  const edgeTeam2 = modelProbTeam2 - fairProbTeam2;
+  const evTeam2 = modelProbTeam2 * (oddsTeam2 - 1) - (1 - modelProbTeam2);
 
   return (
     <View style={pairStyles.row}>
@@ -143,8 +124,13 @@ export function OddsTilesPair({
           shortLabel="П1"
           outcomeLabel={team1Label}
           modelProbability={modelProbTeam1}
+          marketProbability={fairProbTeam1}
           odds={oddsTeam1}
-          showOdds={showOdds}
+          bookmakerName={bookmakerName}
+          edge={edgeTeam1}
+          ev={evTeam1}
+          confidence={confidence}
+          forceDetailed={forceDetailed}
           onPress={onPressTeam1}
         />
       </View>
@@ -153,8 +139,13 @@ export function OddsTilesPair({
           shortLabel="П2"
           outcomeLabel={team2Label}
           modelProbability={modelProbTeam2}
+          marketProbability={fairProbTeam2}
           odds={oddsTeam2}
-          showOdds={showOdds}
+          bookmakerName={bookmakerName}
+          edge={edgeTeam2}
+          ev={evTeam2}
+          confidence={confidence}
+          forceDetailed={forceDetailed}
           onPress={onPressTeam2}
         />
       </View>
@@ -207,36 +198,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel_700Bold',
     fontSize: 26,
     letterSpacing: -0.4,
-  },
-  // Двухколоночный режим (с кэфом)
-  dualRow: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  probHalf: {
-    flex: 1,
-    borderRadius: 3,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  probabilitySmall: {
-    fontFamily: 'Cinzel_700Bold',
-    fontSize: 18,
-    letterSpacing: -0.2,
-  },
-  oddsHalf: {
-    flex: 1,
-    borderRadius: 3,
-    borderWidth: 1,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  oddsValue: {
-    fontFamily: 'Cinzel_700Bold',
-    fontSize: 18,
-    letterSpacing: -0.2,
   },
 });
 

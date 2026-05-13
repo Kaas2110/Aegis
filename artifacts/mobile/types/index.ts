@@ -313,16 +313,7 @@ export interface ProductEvent {
   properties?: Record<string, unknown>;
 }
 
-/**
- * Режим букмекера в фильтре:
- *   - `none` — «Без ставок (только вероятности)». Плитки рынков рендерятся
- *     лаконично: только % модели, без коэффициентов.
- *   - конкретный бук → плитки показывают % + коэффициент этого бука.
- *
- * `all` исключён намеренно — пользователь хочет видеть кэфы строго одного
- * выбранного бука (или вообще их не видеть), а не агрегированный «лучший».
- */
-export type FilterBookmaker = 'none' | 'fonbet' | 'liga_stavok' | 'pari' | 'betboom' | 'x1stavka' | 'olimp';
+export type FilterBookmaker = 'all' | 'fonbet' | 'liga_stavok' | 'pari' | 'betboom' | 'x1stavka' | 'olimp' | 'betfair' | 'mock';
 export type FilterMinOdds = 1.2 | 1.5 | 2.0 | 3.0 | number;
 export type FilterMode = 'prematch' | 'live' | 'finished' | 'all';
 export type FilterEventType = 'all' | 'winner' | 'map_winner' | 'match_winner' | 'total_kills' | 'total_duration';

@@ -135,7 +135,7 @@ export default function MarketCompareScreen() {
             </View>
           </View>
           <Text style={[styles.modelMeta, { color: colors.mutedForeground }]}>
-            Уверенность модели: {Math.round(selectedMarket.prediction.confidence * 100)}%
+            {selectedMarket.prediction.modelVersion} · confidence {selectedMarket.prediction.confidence}% · {selectedMarket.prediction.calibrationMethod}
           </Text>
         </View>
 

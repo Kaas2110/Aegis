@@ -14,7 +14,7 @@ import {
 } from '../services/SchedulerWorker';
 import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable } from '@workspace/db';
 import { requireAdminSession } from './adminAuth';
-import { eq, desc, sql, and, gte, isNotNull, inArray, ilike, or } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, isNotNull, inArray } from 'drizzle-orm';
 
 const router: IRouter = Router();
 
@@ -163,68 +163,6 @@ router.get('/ml-predict', async (req, res) => {
     direWinProbability: 1 - result.probRadiantWin,
     modelVersion: result.modelVersion,
     features: result.features,
-  });
-});
-
-/**
- * GET /api/analytics/predict-by-name?radiantTeamName=X&direTeamName=Y
- * Резолвит имена команд → teamId в нашей БД → запускает ML-предсказание.
- * Используется мобилкой для обогащения прематч-карточек с PandaScore,
- * где есть реальные имена команд, но нет OpenDota teamId.
- */
-router.get('/predict-by-name', async (req, res) => {
-  const radiantName = String(req.query.radiantTeamName ?? '').trim();
-  const direName   = String(req.query.direTeamName   ?? '').trim();
-
-  if (radiantName.length < 2 || direName.length < 2) {
-    res.status(400).json({ error: 'radiantTeamName и direTeamName должны быть не менее 2 символов' });
-    return;
-  }
-
-  const searchTeam = async (q: string) =>
-    db.select({ teamId: teamsTable.teamId, name: teamsTable.name, rating: teamsTable.rating })
-      .from(teamsTable)
-      .where(or(ilike(teamsTable.name, `%${q}%`), ilike(teamsTable.tag, `%${q}%`)))
-      .orderBy(desc(teamsTable.rating))
-      .limit(1);
-
-  const [radiantRows, direRows] = await Promise.all([
-    searchTeam(radiantName),
-    searchTeam(direName),
-  ]);
-
-  const radiantTeam = radiantRows[0];
-  const direTeam    = direRows[0];
-
-  if (!radiantTeam || !direTeam) {
-    res.status(404).json({
-      error: 'team_not_found',
-      detail: !radiantTeam
-        ? `"${radiantName}" не найдена в БД`
-        : `"${direName}" не найдена в БД`,
-    });
-    return;
-  }
-  if (radiantTeam.teamId === direTeam.teamId) {
-    res.status(400).json({ error: 'Оба имени указывают на одну и ту же команду' });
-    return;
-  }
-
-  const result = await mlPredictMatchWinner(radiantTeam.teamId, direTeam.teamId);
-  if (!result) {
-    res.status(503).json({ error: 'no_model', detail: 'Нет активной ML-модели или недостаточно данных' });
-    return;
-  }
-
-  res.json({
-    radiantTeamId:          radiantTeam.teamId,
-    radiantTeamName:        radiantTeam.name,
-    direTeamId:             direTeam.teamId,
-    direTeamName:           direTeam.name,
-    radiantWinProbability:  result.probRadiantWin,
-    direWinProbability:     1 - result.probRadiantWin,
-    modelVersion:           result.modelVersion,
-    features:               result.features,
   });
 });
 
@@ -443,27 +381,11 @@ router.get('/totals-ladder', async (req, res) => {
     res.status(400).json({ error: 'format must be BO1, BO3 or BO5' });
     return;
   }
-  const formatNorm = formatRaw === 'BO1' ? 0 : formatRaw === 'BO5' ? 1 : 0.5;
   const rawLineCount = Number(req.query.lineCount);
   const lineCount = Math.min(15, Math.max(3, Number.isFinite(rawLineCount) && rawLineCount > 0 ? Math.floor(rawLineCount) : 7));
   const liveCurrent = req.query.liveCurrent != null ? Number(req.query.liveCurrent) : null;
   const liveMinute = req.query.liveMinute != null ? Number(req.query.liveMinute) : null;
   const isLive = liveCurrent != null && liveMinute != null && liveCurrent >= 0 && liveMinute > 0;
-
-  // Опциональные букмекерские линии: ?lines=42.5,43.5,44.5
-  // Если переданы — используем как есть (реальные линии бука), иначе генерируем синтетические.
-  let bookmakerLines: number[] | null = null;
-  let bookmakerSource: string | null = null;
-  if (req.query.lines) {
-    const parsed = String(req.query.lines)
-      .split(',')
-      .map(s => parseFloat(s.trim()))
-      .filter(n => Number.isFinite(n) && n > 0 && n < 1000);
-    if (parsed.length >= 2) {
-      bookmakerLines = parsed;
-      bookmakerSource = req.query.bookmakerSource ? String(req.query.bookmakerSource) : null;
-    }
-  }
 
   const { predictTotalKills, predictTotalDuration } = await import('../services/BetTypeModels');
   const { predictMatchWinner } = await import('../services/PredictionModel');
@@ -514,6 +436,7 @@ router.get('/totals-ladder', async (req, res) => {
       const projectedKills = currentVal + killsPerMin * (estimatedFinalMin - minute);
       projection = { current: currentVal, minute, projected: projectedKills, remainingMin: estimatedFinalMin - minute };
     } else {
+      // duration: показываем, сколько уже прошло; «projected» = ожид. финал
       projection = { current: minute, projected: Math.max(minute + 1, baseExpectedDuration), minute, remainingMin: Math.max(1, baseExpectedDuration - minute) };
     }
   }
@@ -521,49 +444,26 @@ router.get('/totals-ladder', async (req, res) => {
   // Центр лестницы: для прематч — μ модели, для live — projection.projected
   const center = projection ? projection.projected : (type === 'kills' ? baseExpectedKills : baseExpectedDuration);
   const step = type === 'kills' ? 1 : 0.5;
-
-  // Генерируем линии — или реальные от букмекера, или синтетические вокруг μ
-  let lineValues: number[];
-  const usingBookmakerLines = bookmakerLines !== null && bookmakerLines.length >= 2;
-  if (usingBookmakerLines) {
-    lineValues = bookmakerLines!;
+  // Линии у буков:
+  //   kills — всегда X.5 (49.5, 50.5, 51.5...) — snap к ближайшему X.5
+  //   duration — шаг 0.5, допускаются и .0 и .5 (42.0, 42.5, 43.0...) — snap к ближайшему .5
+  let snappedCenter: number;
+  if (type === 'kills') {
+    snappedCenter = Math.round(center - 0.5) + 0.5;
   } else {
-    let snappedCenter: number;
-    if (type === 'kills') {
-      snappedCenter = Math.round(center - 0.5) + 0.5;
-    } else {
-      snappedCenter = Math.round(center * 2) / 2;
-    }
-    const startOffset = -Math.floor(lineCount / 2);
-    lineValues = [];
-    for (let i = 0; i < lineCount; i++) {
-      lineValues.push(snappedCenter + (startOffset + i) * step);
-    }
+    snappedCenter = Math.round(center * 2) / 2;
+  }
+  const startOffset = -Math.floor(lineCount / 2);
+  const lineValues: number[] = [];
+  for (let i = 0; i < lineCount; i++) {
+    lineValues.push(snappedCenter + (startOffset + i) * step);
   }
 
-  // Опциональные picks для draft-фич: ?radiantPicks=1,2,3,4,5&direPicks=6,7,8,9,10
-  let radiantPickIds: number[] | undefined;
-  let direPickIds: number[] | undefined;
-  if (req.query.radiantPicks) {
-    const p = String(req.query.radiantPicks)
-      .split(',')
-      .map(s => parseInt(s.trim(), 10))
-      .filter(n => Number.isInteger(n) && n > 0);
-    if (p.length > 0) radiantPickIds = p;
-  }
-  if (req.query.direPicks) {
-    const p = String(req.query.direPicks)
-      .split(',')
-      .map(s => parseInt(s.trim(), 10))
-      .filter(n => Number.isInteger(n) && n > 0);
-    if (p.length > 0) direPickIds = p;
-  }
-
-  // Wave 4 v3: LGB market-модель с 16 фичами (форма + patch_kpm + format + draft)
+  // Wave 4: пытаемся LGB market-модель; на отсутствие/ошибку — heuristic.
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
-  const lgb = await predictMarketsFor(radiantId, direId, formatNorm, radiantPickIds, direPickIds).catch(() => null);
+  const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
   const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
-  const linesScale = type === 'duration' ? 60 : 1;
+  const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
 
   const lines = lineValues.map(line => {
     let pOver: number;
@@ -580,9 +480,10 @@ router.get('/totals-ladder', async (req, res) => {
     };
   });
 
-  const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0] ?? center) : predictTotalDuration(fv, lineValues[0] ?? center);
+  // Confidence у моделей фиксированный (0.62/0.64) — берём из первой строки
+  const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0]) : predictTotalDuration(fv, lineValues[0]);
   const confidence = lgbLogN ? 0.72 : sample.confidence;
-  const modelVersion = lgbLogN ? 'lightgbm-market-v3' : sample.modelVersion;
+  const modelVersion = lgbLogN ? 'lightgbm-market' : sample.modelVersion;
 
   res.json({
     type,
@@ -592,8 +493,6 @@ router.get('/totals-ladder', async (req, res) => {
     lines,
     confidence,
     modelVersion,
-    bookmakerSource: bookmakerSource ?? undefined,
-    linesSource: usingBookmakerLines ? 'bookmaker' : 'synthetic',
     generatedAt: new Date().toISOString(),
   });
 });
@@ -777,27 +676,7 @@ router.get('/explain', async (req, res) => {
  * Body: { minConfidence: 50..95, minOdds: 1.0..5.0, periodDays: 7..365 }
  * Ответ: KPI + equity-кривая + распределения по типам/уверенности.
  */
-// Простой in-memory rate-limit на /backtest: эндпоинт публичный (нет user-identity слоя),
-// но премиум-замок в мобильном UI чисто конверсионный. Защищаем от тривиального DoS/скрейпа:
-// 30 req/мин на IP. TODO(auth): когда появится identity, заменить на subscription gate.
-const _backtestRl = new Map<string, { count: number; resetAt: number }>();
-function backtestRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const e = _backtestRl.get(ip);
-  if (!e || e.resetAt < now) {
-    _backtestRl.set(ip, { count: 1, resetAt: now + 60_000 });
-    return false;
-  }
-  e.count += 1;
-  return e.count > 30;
-}
-
 router.post('/backtest', async (req, res) => {
-  const ip = (req.ip ?? req.socket.remoteAddress ?? 'unknown').toString();
-  if (backtestRateLimit(ip)) {
-    res.status(429).json({ ok: false, message: 'Too many requests, try again in a minute' });
-    return;
-  }
   const body = req.body as { minConfidence?: number; minOdds?: number; periodDays?: number };
   // NaN-guard: Number(undefined) и Number('abc') → NaN, Math.max/min их не отфильтрует.
   // Используем дефолты при невалидном/отсутствующем входе.

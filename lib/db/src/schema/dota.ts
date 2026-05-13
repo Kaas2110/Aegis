@@ -389,11 +389,11 @@ export const prematchOutcomesTable = pgTable('prematch_outcomes', {
 // Сейчас:
 //  - useBookmakerOdds: включает/отключает запросы к Odds API на бэкенде.
 //    Когда выключено, мобилка показывает «популярные рынки» вместо edge vs odds.
-//  - liveSnapshotPruneDays: за сколько дней чистить live_snapshots (default 365).
+//  - liveSnapshotPruneDays: за сколько дней чистить live_snapshots (default 7).
 export const appSettingsTable = pgTable('app_settings', {
   id: integer('id').primaryKey(),
   useBookmakerOdds: boolean('use_bookmaker_odds').notNull().default(false),
-  liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(365),
+  liveSnapshotPruneDays: integer('live_snapshot_prune_days').notNull().default(7),
   // ── Настройки тренировочного датасета ─────────────────────────────────
   // trainWindowDays:  максимальное кол-во дней истории (hard cap)
   // trainMaxPatches:  максимальное кол-во последних патчей (берётся более
@@ -402,18 +402,7 @@ export const appSettingsTable = pgTable('app_settings', {
   trainWindowDays: integer('train_window_days').notNull().default(365),
   trainMaxPatches: integer('train_max_patches').notNull().default(4),
   trainMinSamples: integer('train_min_samples').notNull().default(1000),
-  // ── Монетизация ───────────────────────────────────────────────────────
-  // monetizationMode: 'freemium' (Free + Premium) | 'tiered' (Free + Basic + Premium)
-  // featureFlags: матрица доступа { [featureKey]: { free, basic, premium } }
-  //   независимые булевы per-tier per-feature. Меняется без деплоя.
-  monetizationMode: text('monetization_mode').notNull().default('freemium'),
-  featureFlags: jsonb('feature_flags').$type<Record<string, { free: boolean; basic: boolean; premium: boolean }>>().notNull().default({}),
   notes: text('notes'),
-  storeSettings: jsonb('store_settings').$type<{
-    rustore:    { enabled: boolean; url: string };
-    googlePlay: { enabled: boolean; url: string };
-    appStore:   { enabled: boolean; url: string };
-  }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -508,26 +497,3 @@ export type InsertBo3Series = typeof bo3SeriesTable.$inferInsert;
 
 export type League = typeof leaguesTable.$inferSelect;
 export type InsertLeague = typeof leaguesTable.$inferInsert;
-
-// ── СЕРВЕРНЫЕ ПОДПИСКИ (RuStore / внешний шлюз) ───────────────────────────
-// Используется, когда RevenueCat недоступен (RuStore APK).
-// Оплата через внешний шлюз (YooKassa) в WebBrowser; статус хранится здесь.
-export const serverSubscriptionsTable = pgTable('server_subscriptions', {
-  id: serial('id').primaryKey(),
-  deviceId: text('device_id').notNull(),
-  provider: text('provider').notNull().default('yookassa'),
-  plan: text('plan').notNull(),           // 'monthly' | 'annual'
-  status: text('status').notNull().default('pending'), // 'pending' | 'active' | 'expired'
-  yookassaPaymentId: text('yookassa_payment_id'),
-  amountRub: real('amount_rub'),
-  startedAt: timestamp('started_at', { withTimezone: true }),
-  expiresAt: timestamp('expires_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('server_subs_device_id_idx').on(t.deviceId),
-  index('server_subs_yk_id_idx').on(t.yookassaPaymentId),
-]);
-
-export type ServerSubscription = typeof serverSubscriptionsTable.$inferSelect;
-export type InsertServerSubscription = typeof serverSubscriptionsTable.$inferInsert;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Platform, BackHandler,
+  Switch, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -10,12 +10,11 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
-import { notificationService } from '@/services/notifications/NotificationService';
 
 // Шаг выбора букмекеров убран из онбординга: теперь пользователь выбирает
 // букмекера прямо на экране конкретного матча через попап-пикер.
-type Step = 'welcome' | 'filters' | 'notifications';
-const STEPS: Step[] = ['welcome', 'filters', 'notifications'];
+type Step = 'welcome' | 'filters';
+const STEPS: Step[] = ['welcome', 'filters'];
 
 export default function OnboardingScreen() {
   const colors = useColors();
@@ -43,29 +42,13 @@ export default function OnboardingScreen() {
     nextStep();
   }
 
-  async function handleFiltersNext() {
+  async function handleFinish() {
     await updateSettings({
       minOdds,
       minEdge,
       minConfidence: minConf,
       analyticsConsent,
     });
-    nextStep();
-  }
-
-  async function handleEnableNotifications() {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try { await notificationService.requestPermissions(); } catch {}
-    await logProductEvent('notifications_permission_requested', 'onboarding');
-    await finishOnboarding();
-  }
-
-  async function handleSkipNotifications() {
-    await logProductEvent('notifications_permission_skipped', 'onboarding');
-    await finishOnboarding();
-  }
-
-  async function finishOnboarding() {
     await setOnboarded(true);
     await logProductEvent('onboarding_completed', 'onboarding');
     router.replace('/(tabs)');
@@ -168,24 +151,9 @@ export default function OnboardingScreen() {
             </View>
 
             <PrimaryButton label="Мне есть 18 лет — принять и продолжить" onPress={handleWelcomeConfirm} />
-            <TouchableOpacity onPress={() => {
-              if (Platform.OS === 'android') {
-                BackHandler.exitApp();
-              } else {
-                router.replace('/onboarding');
-              }
-            }}>
+            <TouchableOpacity>
               <Text style={[styles.exitLink, { color: colors.mutedForeground }]}>Мне нет 18 лет — выйти</Text>
             </TouchableOpacity>
-            <View style={styles.legalRow}>
-              <TouchableOpacity onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'privacy' } })}>
-                <Text style={[styles.legalLink, { color: colors.mutedForeground }]}>Конфиденциальность</Text>
-              </TouchableOpacity>
-              <Text style={[styles.legalSep, { color: colors.mutedForeground }]}>·</Text>
-              <TouchableOpacity onPress={() => (router.push as Function)({ pathname: '/legal', params: { type: 'terms' } })}>
-                <Text style={[styles.legalLink, { color: colors.mutedForeground }]}>Условия использования</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         )}
 
@@ -230,45 +198,7 @@ export default function OnboardingScreen() {
               />
             </View>
 
-            <PrimaryButton label="Дальше" onPress={handleFiltersNext} />
-          </View>
-        )}
-
-        {/* ── NOTIFICATIONS ────────────────────── */}
-        {step === 'notifications' && (
-          <View style={styles.centeredStep}>
-            <View style={[styles.iconWrap, { borderColor: p + '30' }]}>
-              <View style={[styles.iconOuter, { backgroundColor: p + '18' }]}>
-                <View style={[styles.iconInner, { backgroundColor: p + '30' }]}>
-                  <Feather name="bell" size={26} color={p} />
-                </View>
-              </View>
-            </View>
-
-            <Text style={[styles.appTitle, { color: fg }]}>Алерты по уверенности</Text>
-            <Text style={[styles.appSubtitle, { color: colors.mutedForeground }]}>
-              Получайте пуш, когда модель уверена в исходе ≥ {minConf}% — чтобы не пропустить выгодный момент
-            </Text>
-
-            <View style={[styles.featuresList, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {[
-                { icon: 'zap', text: 'Сигнал когда модель ≥ заданного порога' },
-                { icon: 'star', text: 'Пуш на старт матча любимой команды' },
-                { icon: 'shield', text: 'Полный контроль: можно выключить в настройках' },
-              ].map(({ icon, text }) => (
-                <View key={text} style={styles.featureRow}>
-                  <View style={[styles.featureIcon, { backgroundColor: p + '18' }]}>
-                    <Feather name={icon as any} size={14} color={p} />
-                  </View>
-                  <Text style={[styles.featureText, { color: colors.foreground }]}>{text}</Text>
-                </View>
-              ))}
-            </View>
-
-            <PrimaryButton label="Включить уведомления" onPress={handleEnableNotifications} />
-            <TouchableOpacity onPress={handleSkipNotifications}>
-              <Text style={[styles.exitLink, { color: colors.mutedForeground }]}>Пропустить — включу позже</Text>
-            </TouchableOpacity>
+            <PrimaryButton label="Начать работу" onPress={handleFinish} />
           </View>
         )}
       </ScrollView>
@@ -397,9 +327,6 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   exitLink: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center' },
-  legalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  legalLink: { fontFamily: 'Inter_400Regular', fontSize: 11, textDecorationLine: 'underline' },
-  legalSep: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   stepTitle: { fontFamily: 'Inter_700Bold', fontSize: 24 },
   stepSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
   filterLabel: { fontFamily: 'Inter_400Regular', fontSize: 12 },

@@ -2,12 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@/hooks/useColors';
-import { useApp } from '@/context/AppContext';
 import type { Match, Market } from '@/types';
 import { OddsTilesPair } from './OddsTile';
 import { OrnateCorners } from './OrnateFrame';
 import { HexBadge } from './HexBadge';
-import { PremiumGate } from './PremiumGate';
 
 interface Props {
   match: Match;
@@ -33,10 +31,6 @@ function marketTypeRu(type: string): string {
 
 export function MatchCard({ match, bestMarket, onPress }: Props) {
   const colors = useColors();
-  const { filters } = useApp();
-  // Показываем кэфы в плитках только если пользователь явно выбрал бук.
-  // В режиме «Без ставок» (default) — только % модели.
-  const showOdds = filters.bookmaker !== 'none';
   const isLive = match.status === 'live';
   const isPrematch = match.status === 'prematch';
   const snap = match.liveSnapshot;
@@ -115,13 +109,7 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
                 {match.team1.name}
               </Text>
             </View>
-            {/* Карты выигранные показываем только в BO≥3 (когда есть факт серии).
-                В BO1 / на первой карте серии оба значения = 0, и большая «0»
-                рядом с именем команды визуально шумит и сжимает имя.
-                Показываем колонку только если хотя бы одна команда что-то взяла
-                (или формат явно BO3/BO5 — но факт серии важнее). */}
-            {isLive && match.team1MapsWon !== undefined &&
-             ((match.team1MapsWon ?? 0) + (match.team2MapsWon ?? 0) > 0) && (
+            {isLive && match.team1MapsWon !== undefined && (
               <Text style={[styles.mapScore, { color: colors.radiant }]}>{match.team1MapsWon}</Text>
             )}
           </View>
@@ -147,8 +135,7 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
           {/* Team 2 — Dire side. Аналогично: красный цвет + hex-бэйдж = Dire,
               лейбл фракции убран, осталось только имя команды. */}
           <View style={[styles.teamSide, { justifyContent: 'flex-end' }]}>
-            {isLive && match.team2MapsWon !== undefined &&
-             ((match.team1MapsWon ?? 0) + (match.team2MapsWon ?? 0) > 0) && (
+            {isLive && match.team2MapsWon !== undefined && (
               <Text style={[styles.mapScore, { color: colors.dire }]}>{match.team2MapsWon}</Text>
             )}
             <View style={[styles.teamCol, { alignItems: 'flex-end' }]}>
@@ -166,29 +153,31 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
         </View>
 
         {/* ── MARKET PREVIEW ────────────────────── */}
-        {/* Прогноз вероятности победы — premium-фича. На free тире
-            виден силуэт через blur + замок-CTA, кликом ведёт на paywall. */}
         {bestMarket && (
-          <PremiumGate feature="win_probability" variant="overlay">
-            <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
-              <View style={styles.marketHeader}>
-                <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
-                  {marketTypeRu(bestMarket.type).toUpperCase()}
-                </Text>
-              </View>
-
-              <OddsTilesPair
-                team1Label={match.team1.shortName}
-                team2Label={match.team2.shortName}
-                modelProbTeam1={bestMarket.prediction.modelProbability}
-                oddsTeam1={bestMarket.bestOdds.oddsTeam1}
-                oddsTeam2={bestMarket.bestOdds.oddsTeam2}
-                showOdds={showOdds}
-                onPressTeam1={onPress}
-                onPressTeam2={onPress}
-              />
+          <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
+            <View style={styles.marketHeader}>
+              <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
+                {marketTypeRu(bestMarket.type).toUpperCase()}
+              </Text>
+              {/* TODO(bookmakers): бейдж «ПЕРЕВЕС» считался от букмекерских кэфов.
+                  Без них значение шумит — возвращаем вместе с букмекерским UI. */}
             </View>
-          </PremiumGate>
+
+            <OddsTilesPair
+              team1Label={match.team1.shortName}
+              team2Label={match.team2.shortName}
+              modelProbTeam1={bestMarket.prediction.modelProbability}
+              fairProbTeam1={bestMarket.bestOdds.fairProbTeam1}
+              oddsTeam1={bestMarket.bestOdds.oddsTeam1}
+              oddsTeam2={bestMarket.bestOdds.oddsTeam2}
+              bookmakerName={bestMarket.bestOdds.bookmakerName}
+              edgeTeam1={bestMarket.prediction.edge}
+              evTeam1={bestMarket.prediction.ev}
+              confidence={bestMarket.prediction.confidence}
+              onPressTeam1={onPress}
+              onPressTeam2={onPress}
+            />
+          </View>
         )}
       </View>
     </TouchableOpacity>

@@ -5,57 +5,6 @@
  * Aegis API specification
  * OpenAPI spec version: 0.1.0
  */
-export type FeatureTier = (typeof FeatureTier)[keyof typeof FeatureTier];
-
-export const FeatureTier = {
-  free: "free",
-  basic: "basic",
-  premium: "premium",
-} as const;
-
-export type MonetizationMode =
-  (typeof MonetizationMode)[keyof typeof MonetizationMode];
-
-export const MonetizationMode = {
-  freemium: "freemium",
-  tiered: "tiered",
-} as const;
-
-/**
- * Independent per-tier access flags for a single feature
- */
-export interface TierAccess {
-  free: boolean;
-  basic: boolean;
-  premium: boolean;
-}
-
-/**
- * Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } })
- */
-export type FeatureFlagsConfigFlags = { [key: string]: TierAccess };
-
-export type FeatureFlagsConfigFeaturesItem = {
-  key: string;
-  label: string;
-  description?: string;
-};
-
-export interface FeatureFlagsConfig {
-  mode: MonetizationMode;
-  /** Independent per-tier access per feature key (e.g. { win_probability: { free: false, basic: false, premium: true } }) */
-  flags: FeatureFlagsConfigFlags;
-  /** Catalog of feature keys with display labels (Russian) */
-  features: FeatureFlagsConfigFeaturesItem[];
-}
-
-export type FeatureFlagsUpdateInputFlags = { [key: string]: TierAccess };
-
-export interface FeatureFlagsUpdateInput {
-  mode?: MonetizationMode;
-  flags?: FeatureFlagsUpdateInputFlags;
-}
-
 export interface HealthStatus {
   status: string;
 }
@@ -290,47 +239,6 @@ export interface AdminBookmakerProbeResponse {
   probedAt: string;
   proxyConfigured: boolean;
   results: AdminBookmakerProbeResult[];
-}
-
-export type AdminSubscriptionPackageTestStoreProduct = {
-  productId?: string;
-  identifier?: string;
-  priceUsd?: number | null;
-  priceMicros?: number | null;
-} | null;
-
-export interface AdminSubscriptionPackage {
-  packageId: string;
-  offeringId: string;
-  lookupKey: string;
-  displayName: string;
-  testStoreProduct?: AdminSubscriptionPackageTestStoreProduct;
-}
-
-export interface AdminSubscriptionsResponse {
-  offeringId: string;
-  offeringDisplayName: string;
-  isCurrent: boolean;
-  packages: AdminSubscriptionPackage[];
-}
-
-export interface AdminSubscriptionUpdatePriceInput {
-  packageId: string;
-  offeringId: string;
-  /** New price in USD (e.g. 4.99) */
-  newPriceUsd: number;
-  /** ISO 8601 duration (P1W, P1M, P1Y). Required when creating new product. */
-  periodDuration?: string;
-  /** Optional suffix for new product identifier (e.g. _v2) */
-  productIdentifierSuffix?: string;
-}
-
-export interface AdminSubscriptionUpdatePriceResponse {
-  ok: boolean;
-  oldProductId: string | null;
-  newProductId: string;
-  newPriceUsd: number;
-  message?: string;
 }
 
 export interface AdminOpenObject {

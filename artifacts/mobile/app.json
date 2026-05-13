@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Aegis — Dota 2 Аналитика",
+    "name": "Aegis — Dota 2 match analytics",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "aegis",
+    "scheme": "dotaedge",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,24 +15,21 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.aegis.dota",
+      "bundleIdentifier": "com.dotaedge.analyzer",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Камера не используется.",
-        "NSPhotoLibraryUsageDescription": "Фотогалерея не используется."
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.aegis.dota",
+      "package": "com.dotaedge.analyzer",
       "versionCode": 1,
       "backgroundColor": "#080604",
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#080604"
-      },
-      "permissions": []
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -51,17 +48,11 @@
         {
           "color": "#E8830A"
         }
-      ],
-      "react-native-purchases"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
-      }
     }
   }
 }

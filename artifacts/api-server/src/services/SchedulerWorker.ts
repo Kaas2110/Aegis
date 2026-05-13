@@ -30,7 +30,7 @@ import { pruneLiveSnapshots } from './OutcomeTracker';
 import { getAppSettings } from './AppSettings';
 
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
-const PATCH_DELAY_DAYS = 10;                    // ждать 10 дней после нового патча
+const PATCH_DELAY_DAYS = 7;                     // ждать 7 дней после нового патча
 const REGULAR_RETRAIN_DAYS = 30;                // плановое переобучение раз в месяц
 const TRAIN_WINDOW_DAYS = 365;                  // скользящее окно: храним и тренируем на матчах за 12 мес.
 const PATCH_API = 'https://api.opendota.com/api/constants/patch';

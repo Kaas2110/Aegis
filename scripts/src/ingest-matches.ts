@@ -43,15 +43,9 @@ async function fetchPage(lessThan?: number): Promise<OpenDotaProMatch[]> {
 
 async function main() {
   const pages = Number(process.argv[2] ?? 20);
-  // --less-than N: начать пагинацию с конкретного match_id (для дозаполнения истории)
-  const ltIdx = process.argv.indexOf('--less-than');
-  const initialLessThan = ltIdx !== -1 && process.argv[ltIdx + 1]
-    ? Number(process.argv[ltIdx + 1])
-    : undefined;
   console.log(`[ingest-matches] Pulling ${pages} pages from OpenDota /api/proMatches …`);
-  if (initialLessThan) console.log(`[ingest-matches] Starting from less_than_match_id=${initialLessThan}`);
 
-  let lessThan: number | undefined = initialLessThan;
+  let lessThan: number | undefined;
   let totalInserted = 0;
   let totalSkipped = 0;
 

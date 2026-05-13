@@ -20,7 +20,10 @@ function NativeTabLayout({ isAdmin }: { isAdmin: boolean }) {
         <Icon sf={{ default: 'bell', selected: 'bell.fill' }} />
         <Label>Алерты</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="backtest">
+      {/* TODO(backtest): экран временно скрыт по запросу пользователя — функционал
+          ждёт накопления prematch_outcomes. Файл `backtest.tsx` оставлен;
+          вернётся когда наберётся ≥200 резолвнутых прогнозов. */}
+      <NativeTabs.Trigger name="backtest" hidden>
         <Icon sf={{ default: 'chart.xyaxis.line', selected: 'chart.xyaxis.line' }} />
         <Label>Бэктест</Label>
       </NativeTabs.Trigger>
@@ -87,16 +90,13 @@ function ClassicTabLayout({ isAdmin }: { isAdmin: boolean }) {
             ),
         }}
       />
+      {/* TODO(backtest): см. NativeTabLayout — экран скрыт от пользователя,
+          но маршрут оставлен чтобы можно было быстро вернуть. */}
       <Tabs.Screen
         name="backtest"
         options={{
+          href: null,
           title: 'Бэктест',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="chart.xyaxis.line" tintColor={color} size={22} />
-            ) : (
-              <Feather name="trending-up" size={22} color={color} />
-            ),
         }}
       />
       <Tabs.Screen

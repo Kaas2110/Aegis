@@ -27,49 +27,30 @@ import {
   teamsTable,
   heroStatsTable,
   heroMatchupsTable,
+  playerHeroStatsTable,
+  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
-  matchDraftsTable,
-  proMatchesTable,
 } from '@workspace/db';
-import { eq, desc, and, inArray, sql } from 'drizzle-orm';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { applyCalibration, type CalibrationModel } from '../lib/isotonic';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier, type PrematchKind } from '../lib/tier';
 import {
   buildHeroFeatures,
   buildExtraFeatures,
-  computeRosterStability,
   HERO_FEATURE_NAMES,
   EXTRA_FEATURE_NAMES,
   type HeroStatsMap,
   type HeroMatchupsMap,
+  type PlayerHeroStatsMap,
+  type PlayerGlickoMap,
   type RecentFormMap,
   type H2HMap,
-  type SoSMap,
-  type RosterStabilityMap,
 } from '../lib/hero-features';
 
-// fv9 (12 фич): расширено с 5 для prematch (см. train-model.ts).
-// При inference у нас нет matchContext в момент прогноза — defaults:
-//   seriesTypeNorm=0.5 (нейтрально), mapNoNorm=0 (трактуем как «map 1»),
-//   recencyDaysNorm=0 (свежий), tier_* — берём из classifyTier(r,d).
-const TEAM_FEATURE_NAMES = [
-  'bias',
-  'elo_diff_norm',
-  'winrate_diff',
-  'experience_diff',
-  'is_high_tier',
-  'radiant_side_logit',
-  'recency_days_norm',
-  'series_type_norm',
-  'map_no_norm',
-  'tier_t1',
-  'tier_t2',
-  'tier_t3',
-] as const;
+const TEAM_FEATURE_NAMES = ['bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier'] as const;
 const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length;
-const RADIANT_SIDE_LOGIT = 0.08;
 
 type Engine = 'logreg' | 'lightgbm';
 
@@ -162,16 +143,13 @@ const HERO_CACHE_TTL_MS = 60 * 60 * 1000;
 
 let heroStatsCache: HeroStatsMap = new Map();
 let heroMatchupsCache: HeroMatchupsMap = new Map();
-let heroPowerTimingCache: Map<number, number> = new Map(); // heroId → avg win minutes
-let globalAvgWinMin = 39;
 let lastHeroLoad = 0;
 
-// Wave 3 caches — team-level, не требуют текущего драфта/account_ids.
-// Загружаются лениво при первом v2-запросе (т.е. при каждом прогнозе).
+// Wave 3 caches (загружаются лениво при первом v3-запросе).
+let playerHeroStatsCache: PlayerHeroStatsMap = new Map();
 let recentFormCache: RecentFormMap = new Map();
 let h2hCache: H2HMap = new Map();
-let sosCache: SoSMap = new Map();
-let rosterStabilityCache: RosterStabilityMap = new Map();
+let playerGlickoCache: PlayerGlickoMap = new Map();
 let lastWave3Load = 0;
 const WAVE3_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -373,20 +351,20 @@ async function refreshTeamRatings(): Promise<void> {
   }
 }
 
-/**
- * Загружает team-context данные для v2-extra фичей.
- * Не требует драфта/account_ids — используется для всех upcoming-матчей.
- */
 async function refreshWave3Data(): Promise<void> {
-  if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && recentFormCache.size > 0) return;
+  if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && playerHeroStatsCache.size > 0) return;
   try {
-    const [form, h2hRows] = await Promise.all([
+    const [phs, form, h2hRows, prRows] = await Promise.all([
+      db.select({
+        accountId: playerHeroStatsTable.accountId,
+        heroId: playerHeroStatsTable.heroId,
+        games: playerHeroStatsTable.games,
+        wins: playerHeroStatsTable.wins,
+      }).from(playerHeroStatsTable),
       db.select({
         teamId: teamRecentFormTable.teamId,
         winRate: teamRecentFormTable.winRate,
         games: teamRecentFormTable.games,
-        avgKillsFor: teamRecentFormTable.avgKillsFor,
-        avgDurationSec: teamRecentFormTable.avgDurationSec,
       })
         .from(teamRecentFormTable)
         .where(eq(teamRecentFormTable.periodDays, 30)),
@@ -398,77 +376,35 @@ async function refreshWave3Data(): Promise<void> {
       })
         .from(teamH2HTable)
         .where(eq(teamH2HTable.periodDays, 365)),
+      db.select({
+        accountId: playerRatingsTable.accountId,
+        rating: playerRatingsTable.rating,
+        rd: playerRatingsTable.rd,
+      }).from(playerRatingsTable),
     ]);
-
-    const formMap: RecentFormMap = new Map();
-    for (const r of form) {
-      formMap.set(r.teamId, {
-        winRate: r.winRate,
-        games: r.games,
-        avgKillsFor: r.avgKillsFor ?? undefined,
-        avgDurationSec: r.avgDurationSec ?? undefined,
-      });
+    const phsMap: PlayerHeroStatsMap = new Map();
+    for (const r of phs) {
+      let inner = phsMap.get(r.accountId);
+      if (!inner) { inner = new Map(); phsMap.set(r.accountId, inner); }
+      inner.set(r.heroId, { games: r.games, wins: r.wins });
     }
+    const formMap: RecentFormMap = new Map();
+    for (const r of form) formMap.set(r.teamId, { winRate: r.winRate, games: r.games });
     const h2hMap: H2HMap = new Map();
     for (const r of h2hRows) {
       h2hMap.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
     }
+    const prMap: PlayerGlickoMap = new Map();
+    for (const r of prRows) prMap.set(r.accountId, { rating: r.rating, rd: r.rd });
 
-    // SoS: avg рейтинг соперников за последние 30 дней
-    const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
-    const sosResult = await db.execute(sql`
-      SELECT team_id::bigint, AVG(opp_rating)::float AS avg_opp_elo
-      FROM (
-        SELECT pm.radiant_team_id AS team_id, t.rating AS opp_rating
-        FROM pro_matches pm JOIN teams t ON t.team_id = pm.dire_team_id
-        WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
-        UNION ALL
-        SELECT pm.dire_team_id AS team_id, t.rating AS opp_rating
-        FROM pro_matches pm JOIN teams t ON t.team_id = pm.radiant_team_id
-        WHERE pm.start_time > ${sinceUnix30d} AND t.rating IS NOT NULL
-      ) sub
-      GROUP BY team_id
-    `);
-    const newSosCache: SoSMap = new Map();
-    for (const row of (sosResult.rows as { team_id: string; avg_opp_elo: string }[])) {
-      newSosCache.set(Number(row.team_id), Number(row.avg_opp_elo));
-    }
-
-    // Roster stability: Jaccard similarity of lineups over last 10 matches
-    const draftsForStability = await db.select({
-      matchId: matchDraftsTable.matchId,
-      radiantAccountIds: matchDraftsTable.radiantAccountIds,
-      direAccountIds: matchDraftsTable.direAccountIds,
-    }).from(matchDraftsTable);
-    const pmForStability = await db.select({
-      matchId: proMatchesTable.matchId,
-      radiantTeamId: proMatchesTable.radiantTeamId,
-      direTeamId: proMatchesTable.direTeamId,
-    }).from(proMatchesTable);
-    const pmTeamMap = new Map<number, { r: number | null; d: number | null }>();
-    for (const pm of pmForStability) pmTeamMap.set(pm.matchId, { r: pm.radiantTeamId, d: pm.direTeamId });
-    const rosterInputs = draftsForStability.map(d => ({
-      matchId: d.matchId,
-      radiantTeamId: pmTeamMap.get(d.matchId)?.r ?? null,
-      direTeamId: pmTeamMap.get(d.matchId)?.d ?? null,
-      radiantAccountIds: d.radiantAccountIds,
-      direAccountIds: d.direAccountIds,
-    }));
-    const newRosterStabilityCache: RosterStabilityMap = computeRosterStability(rosterInputs);
-
+    playerHeroStatsCache = phsMap;
     recentFormCache = formMap;
     h2hCache = h2hMap;
-    sosCache = newSosCache;
-    rosterStabilityCache = newRosterStabilityCache;
+    playerGlickoCache = prMap;
     lastWave3Load = Date.now();
     logger.info(
-      {
-        formTeams: formMap.size,
-        h2hPairs: h2hMap.size,
-        sosTeams: newSosCache.size,
-        rosterStabilityTeams: newRosterStabilityCache.size,
-      },
-      '[PredictionModel] Wave 3 (team-context) data refreshed',
+      { phsAccounts: phsMap.size, formTeams: formMap.size, h2hPairs: h2hMap.size, glickoPlayers: prMap.size },
+      '[PredictionModel] Wave 3 data refreshed',
     );
   } catch (err) {
     logger.error({ err }, '[PredictionModel] Failed to load Wave 3 data');
@@ -478,7 +414,7 @@ async function refreshWave3Data(): Promise<void> {
 async function refreshHeroData(): Promise<void> {
   if (Date.now() - lastHeroLoad < HERO_CACHE_TTL_MS && heroStatsCache.size > 0) return;
   try {
-    const [statRows, matchRows, timingResult] = await Promise.all([
+    const [statRows, matchRows] = await Promise.all([
       db
         .select({
           heroId: heroStatsTable.heroId,
@@ -494,20 +430,6 @@ async function refreshHeroData(): Promise<void> {
           winRate: heroMatchupsTable.winRate,
         })
         .from(heroMatchupsTable),
-      // hero power timing: avg winning game duration = proxy for power peak minute
-      db.execute(sql`
-        WITH wins AS (
-          SELECT (jsonb_array_elements(md.radiant_picks))::int AS hero_id, pm.duration
-          FROM match_drafts md JOIN pro_matches pm ON pm.match_id = md.match_id
-          WHERE pm.radiant_win = true
-          UNION ALL
-          SELECT (jsonb_array_elements(md.dire_picks))::int AS hero_id, pm.duration
-          FROM match_drafts md JOIN pro_matches pm ON pm.match_id = md.match_id
-          WHERE pm.radiant_win = false
-        )
-        SELECT hero_id::int AS "heroId", AVG(duration)::float / 60.0 AS "avgWinMin"
-        FROM wins GROUP BY hero_id HAVING COUNT(*) >= 5
-      `),
     ]);
     const stats: HeroStatsMap = new Map();
     for (const h of statRows) {
@@ -522,23 +444,11 @@ async function refreshHeroData(): Promise<void> {
       }
       inner.set(m.vsHeroId, { games: m.games, winRate: m.winRate });
     }
-    const timings = new Map<number, number>();
-    let tTotal = 0, tCount = 0;
-    for (const row of (timingResult.rows as { heroId: number; avgWinMin: number }[])) {
-      const min = Number(row.avgWinMin);
-      if (Number.isFinite(min) && min > 0) {
-        timings.set(Number(row.heroId), min);
-        tTotal += min;
-        tCount++;
-      }
-    }
     heroStatsCache = stats;
     heroMatchupsCache = matchups;
-    heroPowerTimingCache = timings;
-    globalAvgWinMin = tCount > 0 ? tTotal / tCount : 39;
     lastHeroLoad = Date.now();
     logger.info(
-      { heroes: stats.size, matchupPairs: matchRows.length, powerTimingHeroes: timings.size },
+      { heroes: stats.size, matchupPairs: matchRows.length },
       '[PredictionModel] Hero data refreshed',
     );
   } catch (err) {
@@ -549,100 +459,6 @@ async function refreshHeroData(): Promise<void> {
 export async function getTeamRating(teamId: number) {
   await refreshTeamRatings();
   return teamRatings.get(teamId) ?? null;
-}
-
-/**
- * Возвращает командные контекстные фичи для live-модели:
- *   eloDiffNorm = (elo_r − elo_d) / 200
- *   formDiff    = form30_r − form30_d
- * 0 если данные отсутствуют.
- * Используется LiveWorker для подготовки snap в predictLiveWinner.
- */
-export function getTeamLiveContext(
-  radiantTeamId: number,
-  direTeamId: number,
-): { eloDiffNorm: number; formDiff: number } {
-  const r = teamRatings.get(radiantTeamId);
-  const d = teamRatings.get(direTeamId);
-  const eloDiffNorm = (r && d) ? (r.rating - d.rating) / 200 : 0;
-  const formDiff = recentFormCache.size > 0
-    ? (recentFormCache.get(radiantTeamId)?.winRate ?? 0.5) -
-      (recentFormCache.get(direTeamId)?.winRate ?? 0.5)
-    : 0;
-  return { eloDiffNorm, formDiff };
-}
-
-/**
- * Вычисляет power_spike_delta и spike_x_nw для live-модели.
- *
- * Для каждого героя определяет "пик силы" = avg_win_min (среднее время побед
- * с этим героем). Gaussian(currentMin − peakMin, σ=8) показывает, насколько
- * герой близок к своему пику прямо сейчас.
- *
- * power_spike_delta = mean(R spike scores) − mean(D spike scores) → 0 без драфта
- * spike_x_nw = power_spike_delta × nwLeadNorm (взаимодействие: пик + голд = решает)
- */
-export async function computeHeroPowerSpike(
-  radiantPicks: number[],
-  direPicks: number[],
-  gameTimeSec: number,
-  nwLeadNorm: number,
-): Promise<{ powerSpikeDelta: number; spikeXNw: number }> {
-  if (radiantPicks.length !== 5 || direPicks.length !== 5) {
-    return { powerSpikeDelta: 0, spikeXNw: 0 };
-  }
-  await refreshHeroData();
-  if (heroPowerTimingCache.size === 0) return { powerSpikeDelta: 0, spikeXNw: 0 };
-
-  const gameTimeMins = gameTimeSec / 60;
-  const SIGMA = 8;
-  const teamSpike = (heroIds: number[]) =>
-    heroIds.reduce((sum, h) => {
-      const peak = heroPowerTimingCache.get(h) ?? globalAvgWinMin;
-      const d = gameTimeMins - peak;
-      return sum + Math.exp(-0.5 * (d / SIGMA) ** 2);
-    }, 0) / heroIds.length;
-
-  const powerSpikeDelta = teamSpike(radiantPicks) - teamSpike(direPicks);
-  const spikeXNw = powerSpikeDelta * nwLeadNorm;
-  return { powerSpikeDelta, spikeXNw };
-}
-
-/**
- * Возвращает взвешенное matchup-преимущество Radiant над Dire.
- * Формат: log-weighted среднее (winRate - 0.5) для 25 пар героев.
- * Возвращает 0 если данных недостаточно.
- * Используется LiveWorker для подготовки hero_advantage фичи live-модели.
- */
-export async function computeHeroMatchupAdvantage(
-  radiantPicks: number[],
-  direPicks: number[],
-): Promise<number> {
-  if (radiantPicks.length !== 5 || direPicks.length !== 5) return 0;
-  await refreshHeroData();
-  const matchups = heroMatchupsCache;
-  if (matchups.size === 0) return 0;
-  let totalAdv = 0;
-  let totalWeight = 0;
-  for (const r of radiantPicks) {
-    const outerMap = matchups.get(r);
-    for (const d of direPicks) {
-      const direct = outerMap?.get(d);
-      if (direct && direct.games >= 5) {
-        const w = Math.log(direct.games + 1);
-        totalAdv += (direct.winRate - 0.5) * w;
-        totalWeight += w;
-        continue;
-      }
-      const inverse = matchups.get(d)?.get(r);
-      if (inverse && inverse.games >= 5) {
-        const w = Math.log(inverse.games + 1);
-        totalAdv += (0.5 - inverse.winRate) * w;
-        totalWeight += w;
-      }
-    }
-  }
-  return totalWeight > 0 ? totalAdv / totalWeight : 0;
 }
 
 function sigmoid(z: number): number {
@@ -657,7 +473,6 @@ function sigmoid(z: number): number {
 function buildTeamFeatures(
   r: { rating: number; wins: number; losses: number },
   d: { rating: number; wins: number; losses: number },
-  tier: Tier | null,
 ): number[] {
   const rGames = r.wins + r.losses;
   const dGames = d.wins + d.losses;
@@ -667,13 +482,6 @@ function buildTeamFeatures(
     r.wins / rGames - d.wins / dGames,
     Math.log(rGames + 1) - Math.log(dGames + 1),
     rGames >= 50 && dGames >= 50 ? 1 : 0,
-    RADIANT_SIDE_LOGIT,
-    0,                                     // recency_days_norm: 0 в проде (свежий запрос)
-    0.5,                                   // series_type_norm: нейтрально (BO?)
-    0,                                     // map_no_norm: трактуем как map 1
-    tier === 't1' ? 1 : 0,
-    tier === 't2' ? 1 : 0,
-    tier === 't3' ? 1 : 0,
   ];
 }
 
@@ -690,22 +498,6 @@ function modelUsable(m: LoadedModel): boolean {
     return m.blobB64 != null && lightgbmAvailable();
   }
   return m.weights.length > 0;
-}
-
-/**
- * Возвращает 7 v2-extra фичей для текущей пары команд.
- * Использует кеши form/h2h/sos/rosterStability (всегда доступны без драфта).
- * Должен вызываться ПОСЛЕ refreshWave3Data().
- */
-function buildTeamExtraFeatures(radiantTeamId: number, direTeamId: number): number[] {
-  return buildExtraFeatures({
-    radiantTeamId,
-    direTeamId,
-    recentForm: recentFormCache,
-    h2h: h2hCache,
-    sos: sosCache,
-    rosterStability: rosterStabilityCache,
-  });
 }
 
 /**
@@ -785,7 +577,7 @@ export async function predictMatchWinner(
   if (rGames < 5 || dGames < 5) return null;
 
   const tier = classifyTier(r.rating, d.rating);
-  const teamFeats = buildTeamFeatures(r, d, tier);
+  const teamFeats = buildTeamFeatures(r, d);
 
   let model: LoadedModel | null = null;
   let features = teamFeats;
@@ -793,12 +585,12 @@ export async function predictMatchWinner(
   let extraFeats: number[] | null = null;
   let usedFv: 1 | 2 | 3 = 1;
 
-  // v2-extra фичи (team-context: form/h2h/sos/roster) всегда доступны без драфта.
-  await refreshWave3Data();
-  extraFeats = buildTeamExtraFeatures(radiantTeamId, direTeamId);
-
-  // Hero-фичи для v3: нужен полный драфт (5+5 пиков).
-  if (drafts && drafts.radiantPicks.length === 5 && drafts.direPicks.length === 5) {
+  // Сначала готовим hero-фичи, если есть драфт.
+  if (
+    drafts &&
+    drafts.radiantPicks.length === 5 &&
+    drafts.direPicks.length === 5
+  ) {
     await refreshHeroData();
     if (heroStatsCache.size > 0) {
       heroFeats = buildHeroFeatures(
@@ -812,40 +604,59 @@ export async function predictMatchWinner(
     }
   }
 
-  // Попытка v3: team(12) + extra(7) + hero(7) = 26 — только если есть драфт.
-  if (heroFeats && extraFeats) {
-    const v3Feats = [...teamFeats, ...extraFeats, ...heroFeats];
+  // Wave 3: пытаемся v3 если есть драфт + heroFeats + хотя бы один из account_ids
+  // массивов передан. Если v3-модели не существует — падаем дальше в v2.
+  if (
+    heroFeats &&
+    drafts &&
+    (drafts.radiantAccountIds || drafts.direAccountIds)
+  ) {
+    await refreshWave3Data();
+    extraFeats = buildExtraFeatures({
+      radiantTeamId,
+      direTeamId,
+      radiantPicks: drafts.radiantPicks,
+      direPicks: drafts.direPicks,
+      radiantAccountIds: drafts.radiantAccountIds ?? null,
+      direAccountIds: drafts.direAccountIds ?? null,
+      playerHeroStats: playerHeroStatsCache,
+      heroStats: heroStatsCache,
+      recentForm: recentFormCache,
+      h2h: h2hCache,
+      playerGlicko: playerGlickoCache,
+    });
+    const v3Dim = teamFeats.length + heroFeats.length + extraFeats.length;
     const v3Model = pickModel(tier, 3);
-    if (v3Model && v3Model.featureDim === v3Feats.length) {
+    if (v3Model && v3Model.featureDim === v3Dim) {
       model = v3Model;
-      features = v3Feats;
+      features = [...teamFeats, ...heroFeats, ...extraFeats];
       usedFv = 3;
     } else if (v3Model && v3Model.engine === 'lightgbm') {
-      const v3LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 3, v3Feats.length);
+      // LightGBM v3 устарел (другая dim) — пробуем v3 LR того же tier/generic перед v2 fallback.
+      const v3LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 3, v3Dim);
       if (v3LR) {
         logger.info(
           { lgbmVersion: v3Model.version, lgbmDim: v3Model.featureDim, lrVersion: v3LR.version, lrDim: v3LR.weights.length },
-          '[PredictionModel] v3 LightGBM dim mismatch, falling back to v3 LR',
+          '[PredictionModel] v3 LightGBM dim mismatch, falling back to v3 LR (kept Wave 3 features)',
         );
         model = v3LR;
-        features = v3Feats;
+        features = [...teamFeats, ...heroFeats, ...extraFeats];
         usedFv = 3;
       }
     }
   }
 
-  // Попытка v2: team(12) + extra(7) = 19 — всегда (если нет v3 или нет драфта).
-  if (!model && extraFeats) {
-    const v2Feats = [...teamFeats, ...extraFeats];
+  // v2 fallback
+  if (!model && heroFeats) {
     const v2Model = pickModel(tier, 2);
-    if (v2Model && v2Model.featureDim === v2Feats.length) {
+    if (v2Model && v2Model.featureDim === teamFeats.length + heroFeats.length) {
       model = v2Model;
-      features = v2Feats;
+      features = [...teamFeats, ...heroFeats];
       usedFv = 2;
     }
   }
 
-  // v1 fallback: team(12)
+  // v1 fallback
   if (!model) {
     model = pickModel(tier, 1);
     features = teamFeats;
@@ -898,20 +709,18 @@ export async function predictMatchWinner(
     calibrated = applyCalibration(rawProb, model.calibration);
   }
 
-  // feature order: team(12) + extra(7) + hero(7)
-  // v1: team only; v2: team+extra; v3: team+extra+hero
   const featureRecord: Record<string, number> = {};
   for (let i = 0; i < TEAM_FEATURE_NAMES.length; i++) {
     featureRecord[TEAM_FEATURE_NAMES[i]] = teamFeats[i];
   }
-  if (extraFeats && (usedFv === 2 || usedFv === 3)) {
-    for (let i = 0; i < EXTRA_FEATURE_NAMES.length; i++) {
-      featureRecord[EXTRA_FEATURE_NAMES[i]] = extraFeats[i];
-    }
-  }
-  if (heroFeats && usedFv === 3) {
+  if (heroFeats && (usedFv === 2 || usedFv === 3)) {
     for (let i = 0; i < HERO_FEATURE_NAMES.length; i++) {
       featureRecord[HERO_FEATURE_NAMES[i]] = heroFeats[i];
+    }
+  }
+  if (extraFeats && usedFv === 3) {
+    for (let i = 0; i < EXTRA_FEATURE_NAMES.length; i++) {
+      featureRecord[EXTRA_FEATURE_NAMES[i]] = extraFeats[i];
     }
   }
 

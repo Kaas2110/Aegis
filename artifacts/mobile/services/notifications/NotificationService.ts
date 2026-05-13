@@ -85,16 +85,7 @@ class NotificationService {
    *   3) если правило onlyFavoriteTeams — одна из команд в favoriteTeamIds
    * Если правил нет совсем — fallback по DEFAULT_MIN_CONFIDENCE.
    */
-  /** Глобальный «выключатель» для алертов. Выставляется из FeatureFlagsProvider:
-   *  если у пользователя нет доступа к фиче `alerts_edge`, любые
-   *  накопленные/persisted правила перестают вызывать уведомления. */
-  private enabled = true;
-  setEnabled(v: boolean): void {
-    this.enabled = v;
-  }
-
   async checkAndNotify(enrichedMatches: EnrichedMatch[]): Promise<EvAlert[]> {
-    if (!this.enabled) return [];
     const newAlerts: EvAlert[] = [];
     const favs = new Set(this.favoriteTeamIds.map(Number));
     const activeRules = this.rules;

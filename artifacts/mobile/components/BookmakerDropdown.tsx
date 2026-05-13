@@ -9,28 +9,27 @@ import type { FilterBookmaker } from '@/types';
 
 interface Option {
   label: string;
-  shortLabel: string;
   value: FilterBookmaker;
 }
 
-/**
- * Первая опция — «без ставок» (показываем только вероятности модели).
- * Остальные — конкретные букмекеры; при выборе плитки рынков начинают
- * показывать пары «вероятность + коэффициент этого бука».
- */
 const BOOKMAKER_OPTIONS: Option[] = [
-  { label: 'Без ставок (только вероятности)', shortLabel: 'Без ставок', value: 'none' },
-  { label: 'Fonbet', shortLabel: 'Fonbet', value: 'fonbet' },
-  { label: 'Лига Ставок', shortLabel: 'Лига С.', value: 'liga_stavok' },
-  { label: 'PARI', shortLabel: 'PARI', value: 'pari' },
-  { label: 'BetBoom', shortLabel: 'BetBoom', value: 'betboom' },
-  { label: '1xStavka', shortLabel: '1xStavka', value: 'x1stavka' },
-  { label: 'Olimp.bet', shortLabel: 'Olimp', value: 'olimp' },
+  { label: 'Все БК', value: 'all' },
+  { label: 'Fonbet', value: 'fonbet' },
+  { label: 'Лига Ставок', value: 'liga_stavok' },
+  { label: 'PARI', value: 'pari' },
+  { label: 'BetBoom', value: 'betboom' },
+  { label: '1xStavka', value: 'x1stavka' },
+  { label: 'Olimp.bet', value: 'olimp' },
+  { label: 'Mock', value: 'mock' },
 ];
 
 /**
- * Компактный пикер букмекера в шапке. Открывается как Modal-оверлей
- * под кнопкой-триггером без сдвига контента.
+ * Компактный выпадающий пикер букмекера для строки заголовка ЛАЙВ.
+ * Открывается как Modal-оверлей: список рисуется поверх всего экрана,
+ * под кнопкой-триггером, и не сдвигает вниз остальной контент.
+ *
+ * Координаты якорения берём через measureInWindow триггера в момент
+ * открытия — это даёт корректное позиционирование и на iOS, и на web.
  */
 export function BookmakerDropdown() {
   const colors = useColors();
@@ -53,16 +52,15 @@ export function BookmakerDropdown() {
     setOpen(false);
   };
 
-  // Шире чем раньше — длинная подпись «Без ставок (только вероятности)» влезает.
-  const PANEL_WIDTH = 240;
+  // Фиксированная ширина дропдауна, чтобы помещались длинные названия типа "Лига Ставок".
+  const PANEL_WIDTH = 160;
 
-  // Если триггер ближе к правому краю — выравниваем панель по правому краю триггера.
+  // Если триггер ближе к правому краю — выравниваем панель по правому краю триггера,
+  // чтобы не вылезала за границу экрана.
   const panelLeft = anchor
     ? Math.max(8, anchor.x + anchor.w - PANEL_WIDTH)
     : 0;
   const panelTop = anchor ? anchor.y + anchor.h + 4 : 0;
-
-  const isNone = current.value === 'none';
 
   return (
     <>
@@ -71,27 +69,16 @@ export function BookmakerDropdown() {
         onPress={handleOpen}
         style={[styles.trigger, {
           backgroundColor: colors.card,
-          borderColor: isNone ? colors.borderGold + '88' : colors.primary,
+          borderColor: colors.borderGold,
         }]}
         accessibilityRole="button"
         accessibilityLabel={`Букмекер: ${current.label}`}
       >
-        <Feather
-          name={isNone ? 'eye-off' : 'bar-chart-2'}
-          size={11}
-          color={isNone ? colors.mutedForeground : colors.primary}
-        />
-        <Text
-          style={[styles.triggerLabel, { color: isNone ? colors.mutedForeground : colors.primary }]}
-          numberOfLines={1}
-        >
-          {current.shortLabel}
+        <Feather name="bar-chart-2" size={11} color={colors.primary} />
+        <Text style={[styles.triggerLabel, { color: colors.primary }]} numberOfLines={1}>
+          {current.label}
         </Text>
-        <Feather
-          name={open ? 'chevron-up' : 'chevron-down'}
-          size={12}
-          color={isNone ? colors.mutedForeground : colors.primary}
-        />
+        <Feather name={open ? 'chevron-up' : 'chevron-down'} size={12} color={colors.primary} />
       </TouchableOpacity>
 
       <Modal
@@ -100,6 +87,7 @@ export function BookmakerDropdown() {
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
+        {/* Прозрачный backdrop — клик закрывает */}
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           {anchor && (
             <View
@@ -110,11 +98,11 @@ export function BookmakerDropdown() {
                 backgroundColor: colors.card,
                 borderColor: colors.borderGold,
               }]}
+              // Останавливаем всплытие, чтобы клик по самому списку не закрывал его.
               onStartShouldSetResponder={() => true}
             >
               {BOOKMAKER_OPTIONS.map((opt, idx) => {
                 const active = opt.value === filters.bookmaker;
-                const isFirst = idx === 0;
                 return (
                   <TouchableOpacity
                     key={opt.value}
@@ -125,19 +113,12 @@ export function BookmakerDropdown() {
                       active && { backgroundColor: colors.primary + '1A' },
                     ]}
                   >
-                    <View style={{ flexShrink: 1 }}>
-                      <Text style={[styles.itemLabel, {
-                        color: active ? colors.primary : colors.foreground,
-                        fontFamily: active ? 'Inter_700Bold' : 'Inter_500Medium',
-                      }]}>
-                        {opt.label}
-                      </Text>
-                      {isFirst && (
-                        <Text style={[styles.itemHint, { color: colors.mutedForeground }]}>
-                          Чистый ML-режим
-                        </Text>
-                      )}
-                    </View>
+                    <Text style={[styles.itemLabel, {
+                      color: active ? colors.primary : colors.foreground,
+                      fontFamily: active ? 'Inter_700Bold' : 'Inter_500Medium',
+                    }]}>
+                      {opt.label}
+                    </Text>
                     {active && <Feather name="check" size={13} color={colors.primary} />}
                   </TouchableOpacity>
                 );
@@ -158,13 +139,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 4,
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
+    marginLeft: 6,
   },
   triggerLabel: {
     fontFamily: 'Cinzel_700Bold',
     fontSize: 10,
     letterSpacing: 1,
-    maxWidth: 90,
+    maxWidth: 80,
   },
   backdrop: {
     flex: 1,
@@ -175,10 +157,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 6,
     overflow: 'hidden',
+    // iOS shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
+    // Android shadow
     elevation: 12,
   },
   item: {
@@ -186,17 +170,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    paddingVertical: 9,
   },
   itemLabel: {
     fontSize: 12,
     letterSpacing: 0.4,
-  },
-  itemHint: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 10,
-    marginTop: 2,
-    letterSpacing: 0.3,
   },
 });

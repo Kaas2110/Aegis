@@ -10,10 +10,9 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { MatchCard } from '@/components/MatchCard';
 import { FilterBar } from '@/components/FilterBar';
-import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { AegisLogo } from '@/components/AegisLogo';
-import { useSubscription } from '@/lib/revenuecat';
-import { TouchableOpacity as RNTouchable } from 'react-native';
+// TODO(bookmakers): см. ниже — компонент скрыт до подключения платных кэфов.
+// import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
 import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
 import { logProductEvent } from '@/services/logging/EventLogger';
@@ -21,33 +20,6 @@ import { notificationService, notifyFavoriteTeamMatchStart } from '@/services/no
 import type { Match, Market } from '@/types';
 
 const REFRESH_INTERVAL_MS = 60_000;
-
-/**
- * Маленький значок-индикатор статуса подписки в шапке.
- * Premium → золотая корона, Free → замок (открывает экран подписки).
- */
-function PremiumHeaderBadge() {
-  const colors = useColors();
-  const { isSubscribed } = useSubscription();
-  if (isSubscribed) {
-    return (
-      <RNTouchable
-        onPress={() => router.push('/(tabs)/settings')}
-        style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}
-      >
-        <Feather name="award" size={18} color={colors.primary} />
-      </RNTouchable>
-    );
-  }
-  return (
-    <RNTouchable
-      onPress={() => router.push('/(tabs)/settings')}
-      style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}
-    >
-      <Feather name="zap" size={18} color={colors.warning} />
-    </RNTouchable>
-  );
-}
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -68,8 +40,7 @@ export default function HomeScreen() {
   async function loadData(silent = false) {
     if (!silent) setLoading(true);
     try {
-      const bookmakerSource = filters.bookmaker !== 'none' ? filters.bookmaker : undefined;
-      const result = await fetchLiveData(bookmakerSource);
+      const result = await fetchLiveData();
       setEnrichedLive(result.liveMatches);
       setEnrichedPrematch(result.prematchMatches);
       setIsMock(result.isMock);
@@ -98,7 +69,7 @@ export default function HomeScreen() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [filters.bookmaker]);
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -235,15 +206,10 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <PremiumHeaderBadge />
+            <TouchableOpacity onPress={() => router.push('/admin')} style={styles.actionBtn}>
+              <Feather name="settings" size={18} color={colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
-        </View>
-        {/* Букмекер-пикер вынесен под шапку: триггер занимает почти всю
-            ширину строки фильтров, чтобы пользователь сразу видел,
-            какой режим активен («Без ставок» / Fonbet / …). */}
-        <View style={styles.bookmakerRow}>
-          <Text style={[styles.bookmakerHint, { color: colors.mutedForeground }]}>Источник кэфов:</Text>
-          <BookmakerDropdown />
         </View>
         <FilterBar />
       </View>
@@ -292,7 +258,9 @@ export default function HomeScreen() {
                 </View>
                 <View style={[styles.sectionDiamond, { borderColor: accentColor, backgroundColor: accentColor + '22' }]} />
                 <View style={[styles.sectionLine, { backgroundColor: colors.borderGold }]} />
-                    </View>
+                {/* TODO(bookmakers): см. replit.md → Bookmakers roadmap. */}
+                {/* {item.isLive && <BookmakerDropdown />} */}
+              </View>
             );
           }
 
@@ -339,29 +307,13 @@ function DataSourceBar({
     ? lastUpdated.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
 
-  // Внутренние идентификаторы источников → понятные пользователю русские лейблы.
-  const SOURCE_LABEL_RU: Record<string, string> = {
-    opendota: 'OpenDota (лайв)',
-    pandascore: 'PandaScore (расписание)',
-    the_odds_api: 'The Odds API',
-    'demo-live': 'демо-лайв',
-    fonbet: 'Fonbet',
-    liga_stavok: 'Лига Ставок',
-    pari: 'PARI',
-    betboom: 'BetBoom',
-    x1stavka: '1xStavka',
-    olimp: 'Olimp.bet',
-    mock: 'Mock (тест)',
-  };
-  const labels = sources.map(s => SOURCE_LABEL_RU[s] ?? s);
-
   return (
     <View style={[barStyles.bar, { backgroundColor: colors.muted, borderColor: colors.border }]}>
       <View style={[barStyles.dot, { backgroundColor: isMock ? colors.warning : colors.positive }]} />
-      <Text style={[barStyles.text, { color: colors.mutedForeground }]} numberOfLines={1}>
+      <Text style={[barStyles.text, { color: colors.mutedForeground }]}>
         {isMock
-          ? 'Демо-данные'
-          : `Источники: ${labels.join(' · ')}`}
+          ? 'Demo-данные'
+          : `${sources.join(' · ')}`}
       </Text>
       <Text style={[barStyles.time, { color: colors.mutedForeground }]}>{timeStr}</Text>
     </View>
@@ -413,20 +365,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { fontFamily: 'Inter_700Bold', fontSize: 9 },
-  bookmakerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingTop: 4,
-    paddingBottom: 2,
-    gap: 8,
-  },
-  bookmakerHint: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: 11,
-    letterSpacing: 0.3,
-    flex: 1,
-  },
   list: { padding: 14, gap: 0 },
   sectionHeader: {
     flexDirection: 'row',

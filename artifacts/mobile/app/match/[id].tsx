@@ -6,22 +6,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { getApiUrl } from '@/lib/api/baseUrl';
 import { useColors } from '@/hooks/useColors';
 import {
-  MOCK_MATCHES, buildMockMarkets,
+  MOCK_MATCHES, buildMockMarkets, MOCK_TIMELINE,
 } from '@/services/mock/mockData';
 import {
-  getCachedMatch, rebuildMarketsForBookmaker,
+  getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker,
 } from '@/services/LiveDataService';
 import { MarketCard } from '@/components/MarketCard';
 import { TotalsLadder } from '@/components/TotalsLadder';
 import { ProbabilityBar } from '@/components/ProbabilityBar';
+import { ProbabilityTimeline } from '@/components/ProbabilityTimeline';
 import { FreshnessIndicator } from '@/components/FreshnessIndicator';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { Match, Market } from '@/types';
-import { useFeatureAccess } from '@/lib/featureFlags';
-import { PremiumGate } from '@/components/PremiumGate';
 
 // TODO(bookmakers): см. replit.md → «Bookmakers roadmap». Включить когда
 // подключим платный источник кэфов (The Odds API Pro / OddsJam).
@@ -227,38 +225,6 @@ export default function MatchDetailScreen() {
     if (match) logProductEvent('match_detail_opened', 'match_detail', { matchId: match.id });
   }, [match?.id]);
 
-  // Wave 4: тоталы от букмекеров — пробуем найти реальные линии по именам команд.
-  // Оба типа (kills/duration) за один обход источников не получить через текущий API,
-  // поэтому делаем два параллельных запроса. Ошибки — silent (fallback на синтетику).
-  interface BkLinesResult { lines: number[]; source: string; sourceName: string }
-  const [bkKills, setBkKills] = useState<BkLinesResult | null>(null);
-  const [bkDuration, setBkDuration] = useState<BkLinesResult | null>(null);
-
-  useEffect(() => {
-    if (!match) return;
-    const t1 = match.team1.name?.trim();
-    const t2 = match.team2.name?.trim();
-    if (!t1 || !t2) return;
-    let cancelled = false;
-    const fetchLines = async (type: 'kills' | 'duration', setter: (v: BkLinesResult | null) => void) => {
-      try {
-        const r = await fetch(getApiUrl(
-          `/api/bookmakers/match-lines?team1=${encodeURIComponent(t1)}&team2=${encodeURIComponent(t2)}&type=${type}`
-        ));
-        if (!r.ok || cancelled) return;
-        const json = await r.json() as { found: boolean; lines?: number[]; source?: string; sourceName?: string };
-        if (!cancelled && json.found && json.lines && json.lines.length >= 2) {
-          setter({ lines: json.lines, source: json.source ?? '', sourceName: json.sourceName ?? json.source ?? '' });
-        }
-      } catch { /* silent — bookmakers may be geo-blocked */ }
-    };
-    Promise.all([
-      fetchLines('kills', setBkKills),
-      fetchLines('duration', setBkDuration),
-    ]);
-    return () => { cancelled = true; };
-  }, [match?.id]);
-
   // T006: подтягиваем гуманизированный прогноз
   useEffect(() => {
     if (!match) return;
@@ -268,7 +234,7 @@ export default function MatchDetailScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(getApiUrl(`/api/analytics/explain?radiantTeamId=${tR}&direTeamId=${tD}`));
+        const r = await fetch(`/api/analytics/explain?radiantTeamId=${tR}&direTeamId=${tD}`);
         if (!r.ok) return;
         const json = await r.json() as ExplainResp;
         if (!cancelled) {
@@ -332,23 +298,6 @@ export default function MatchDetailScreen() {
   });
   const bestMarket = sortedMarkets.find(m => m.type === 'map_winner') ?? sortedMarkets[0];
 
-  // Без режима букмекера показываем только победителей (матча и карты).
-  // Тоталы/гандикапы/первая кровь и т.д. имеют смысл только как «вероятность
-  // против линии бука» — без линии это просто П1/П2 проценты, которые путают
-  // пользователя (см. фидбэк по «Тотал убийств 52% / 48%»).
-  // Когда подключим букмекеров (SHOW_BOOKMAKER_PICKER=true), фильтр снимется
-  // и для тоталов будет рендериться TotalsLadder с реальными ТБ/ТМ-линиями.
-  const WINNER_ONLY_MARKETS: ReadonlySet<string> = new Set(['match_winner', 'map_winner']);
-  const visibleMarkets = SHOW_BOOKMAKER_PICKER
-    ? sortedMarkets
-    : sortedMarkets.filter(m => WINNER_ONLY_MARKETS.has(m.type));
-
-  // ── Feature access ──────────────────────────────────────────────────────────
-  const winProbAccess    = useFeatureAccess('win_probability');
-  const marketAccess     = useFeatureAccess('market_predictions');
-  const draftAccess      = useFeatureAccess('draft_analysis');
-  const liveAccess       = useFeatureAccess('live_predictions');
-
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* ── ШАПКА ─────────────────────────────── */}
@@ -399,33 +348,23 @@ export default function MatchDetailScreen() {
         backgroundColor: colors.card,
         borderBottomColor: colors.border,
       }]}>
-        {(['markets', 'draft', 'overview'] as const).map(tab => {
-          const isActive = activeTab === tab;
-          const locked =
-            (tab === 'markets' && !marketAccess.canAccess) ||
-            (tab === 'draft' && !draftAccess.canAccess) ||
-            (tab === 'overview' && !winProbAccess.canAccess);
-          return (
-            <TouchableOpacity
-              key={tab}
-              onPress={() => setActiveTab(tab)}
-              style={[
-                styles.tab,
-                isActive && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
-              ]}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={[
-                  styles.tabText,
-                  { color: isActive ? colors.primary : colors.mutedForeground },
-                ]}>
-                  {tab === 'markets' ? 'Прогнозы' : tab === 'draft' ? 'Драфт' : 'Обзор'}
-                </Text>
-                {locked && <Feather name="lock" size={10} color={colors.mutedForeground} />}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        {(['markets', 'draft', 'overview'] as const).map(tab => (
+          <TouchableOpacity
+            key={tab}
+            onPress={() => setActiveTab(tab)}
+            style={[
+              styles.tab,
+              activeTab === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
+            ]}
+          >
+            <Text style={[
+              styles.tabText,
+              { color: activeTab === tab ? colors.primary : colors.mutedForeground },
+            ]}>
+              {tab === 'markets' ? 'Прогнозы' : tab === 'draft' ? 'Драфт' : 'Обзор'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* ── КОНТЕНТ ───────────────────────────── */}
@@ -439,53 +378,50 @@ export default function MatchDetailScreen() {
           <View style={styles.section}>
             {/* ПЕРВЫМ блоком — вероятности событий (по требованию пользователя). */}
             {bestMarket && (
-              <PremiumGate feature="win_probability" variant="overlay">
-                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '55' }]}>
-                  <SectionTitle title="Вероятность победы" colors={colors} />
-                  <ProbabilityBar
-                    team1Name={match.team1.name}
-                    team2Name={match.team2.name}
-                    modelProb={bestMarket.prediction.modelProbability}
-                    marketProb={bestMarket.bestOdds.fairProbTeam1}
-                  />
-                </View>
-              </PremiumGate>
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '55' }]}>
+                <SectionTitle title="Вероятность победы" colors={colors} />
+                <ProbabilityBar
+                  team1Name={match.team1.name}
+                  team2Name={match.team2.name}
+                  modelProb={bestMarket.prediction.modelProbability}
+                  marketProb={bestMarket.bestOdds.fairProbTeam1}
+                />
+              </View>
             )}
 
-            {/* Популярные рынки — только вероятность модели. */}
+            {/* Популярные рынки — только вероятность модели. Справ. коэффициент,
+                edge и прочая букмекерская математика спрятаны до подключения
+                реальных кэфов (TODO(bookmakers)). */}
             {markets.length > 1 && (
-              <PremiumGate feature="market_predictions" variant="overlay">
-                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <SectionTitle title="Популярные ставки" colors={colors} />
-                  {markets.slice(1, 5).map(mkt => {
-                    const pct = Math.round(mkt.prediction.modelProbability * 100);
-                    return (
-                      <View key={mkt.id} style={[styles.factorRow, { borderBottomColor: colors.border }]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.factorName, { color: colors.foreground }]}>{mkt.label}</Text>
-                        </View>
-                        <View style={[styles.factorImpact, {
-                          backgroundColor: colors.muted,
-                          borderColor: colors.border,
-                          alignItems: 'center',
-                          minWidth: 56,
-                        }]}>
-                          <Text style={[styles.factorImpactText, { color: colors.foreground }]}>
-                            {pct}%
-                          </Text>
-                        </View>
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <SectionTitle title="Популярные ставки" colors={colors} />
+                {markets.slice(1, 5).map(mkt => {
+                  const pct = Math.round(mkt.prediction.modelProbability * 100);
+                  return (
+                    <View key={mkt.id} style={[styles.factorRow, { borderBottomColor: colors.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.factorName, { color: colors.foreground }]}>{mkt.label}</Text>
                       </View>
-                    );
-                  })}
-                </View>
-              </PremiumGate>
+                      <View style={[styles.factorImpact, {
+                        backgroundColor: colors.muted,
+                        borderColor: colors.border,
+                        alignItems: 'center',
+                        minWidth: 56,
+                      }]}>
+                        <Text style={[styles.factorImpactText, { color: colors.foreground }]}>
+                          {pct}%
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             )}
 
             {isLive && snap && (
-              <PremiumGate feature="live_predictions" variant="overlay">
-                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <SectionTitle title="Лайв-статистика" colors={colors} />
-                  <View style={styles.statsGrid}>
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <SectionTitle title="Лайв-статистика" colors={colors} />
+                <View style={styles.statsGrid}>
                   <StatItem label="Убийства Р/Д" value={`${snap.radiantKills} / ${snap.direKills}`} colors={colors} />
                   <StatItem label="Голд Radiant" value={`${(snap.netWorthRadiant / 1000).toFixed(1)}k`} colors={colors} positive />
                   <StatItem label="Голд Dire" value={`${(snap.netWorthDire / 1000).toFixed(1)}k`} colors={colors} />
@@ -507,13 +443,18 @@ export default function MatchDetailScreen() {
                   </View>
                 )}
               </View>
-              </PremiumGate>
             )}
 
-            {/* Блок «Динамика вероятностей» отключён: реальной таймсерии лайв-вероятностей
-                сейчас нет (есть только текущий снимок), а прежний MOCK_TIMELINE рисовал
-                неотличимый от реального график на основе фейковых точек. Включим, когда
-                бэк начнёт хранить полноценную historic-таймлайн вероятностей по матчу. */}
+            {isLive && (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <SectionTitle title="Динамика вероятностей" colors={colors} />
+                <ProbabilityTimeline
+                  data={MOCK_TIMELINE}
+                  team1Name={match.team1.shortName}
+                  team2Name={match.team2.shortName}
+                />
+              </View>
+            )}
 
             {/* T006: гуманизированный обзор. Заменил собой сухой dump explanationJson. */}
             {explain && (
@@ -614,16 +555,6 @@ export default function MatchDetailScreen() {
         {/* ДРАФТ */}
         {activeTab === 'draft' && (
           <View style={styles.section}>
-            {!draftAccess.canAccess && (
-              <PremiumGate
-                feature="draft_analysis"
-                variant="inline"
-                title="Анализ драфта доступен в Premium"
-                subtitle="Пики, баны и Draft Score по синергии, контрпикам и масштабированию"
-              >
-                {null}
-              </PremiumGate>
-            )}
             {/* T005: подвкладки по картам. Для BO3/BO5 — реальные карты,
                 для BO1 — единственная карта без выбора. */}
             {(match.format === 'BO3' || match.format === 'BO5') && (
@@ -648,7 +579,6 @@ export default function MatchDetailScreen() {
             {/* Драфт показываем только когда выбранная карта = текущей.
                 Для других карт — контентная заглушка, пока бэк не отдаёт
                 драфты per-map (TODO: расширить /api/matches/live). */}
-            <View style={{ opacity: draftAccess.canAccess ? 1 : 0.35 }} pointerEvents={draftAccess.canAccess ? 'auto' : 'none'}>
             {draftMapTab !== (match.currentMapNumber ?? 1) ? (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.emptyCard}>
@@ -713,23 +643,12 @@ export default function MatchDetailScreen() {
                 </View>
               </View>
             )}
-            </View>
           </View>
         )}
 
         {/* РЫНКИ */}
         {activeTab === 'markets' && (
           <View style={styles.section}>
-            {!marketAccess.canAccess && (
-              <PremiumGate
-                feature="market_predictions"
-                variant="inline"
-                title="Прогнозы по рынкам доступны в Premium"
-                subtitle="Все 15 рынков: winner, тоталы, первая кровь, форы и длительность"
-              >
-                {null}
-              </PremiumGate>
-            )}
             {/* TODO(bookmakers): пикер букмекера скрыт до появления реальных
                 платных кэфов. Бэкенд-логика (availableBookmakers, selectedBookmakerId,
                 pickerOpen state, модалка ниже) оставлена нетронутой — при включении
@@ -763,9 +682,8 @@ export default function MatchDetailScreen() {
               </TouchableOpacity>
             )}
 
-            <View style={{ opacity: marketAccess.canAccess ? 1 : 0.35 }} pointerEvents={marketAccess.canAccess ? 'auto' : 'none'}>
-            {visibleMarkets.length > 0 ? (
-              visibleMarkets.map(mkt => {
+            {sortedMarkets.length > 0 ? (
+              sortedMarkets.map(mkt => {
                 // Тоталы рендерим лестницей ТБ/ТМ (как у буков), а не П1/П2.
                 // Нужны числовые team_id (OpenDota) — у mock-матчей их нет, поэтому
                 // показываем ladder только когда есть оба ID.
@@ -781,16 +699,6 @@ export default function MatchDetailScreen() {
                       : null;
                     const liveMinute = isLive && snap ? Math.floor(snap.gameTimeSeconds / 60) : null;
                     const fmt = (match.format ?? 'BO3').toUpperCase() as 'BO1' | 'BO3' | 'BO5';
-                    const bkResult = ladderType === 'kills' ? bkKills : bkDuration;
-                    // Извлекаем числовые hero_id для draft-фич v3
-                    const draftRadiantPicks = draft?.picks
-                      .filter(p => p.side === 'radiant')
-                      .map(p => parseInt(p.heroId, 10))
-                      .filter(n => Number.isInteger(n) && n > 0);
-                    const draftDirePicks = draft?.picks
-                      .filter(p => p.side === 'dire')
-                      .map(p => parseInt(p.heroId, 10))
-                      .filter(n => Number.isInteger(n) && n > 0);
                     return (
                       <TotalsLadder
                         key={mkt.id}
@@ -800,10 +708,6 @@ export default function MatchDetailScreen() {
                         format={fmt}
                         liveCurrent={liveCurrent}
                         liveMinute={liveMinute}
-                        bookmakerLines={bkResult?.lines}
-                        bookmakerSource={bkResult?.sourceName}
-                        radiantPicks={draftRadiantPicks}
-                        direPicks={draftDirePicks}
                       />
                     );
                   }
@@ -831,7 +735,6 @@ export default function MatchDetailScreen() {
                 </View>
               </View>
             )}
-            </View>
           </View>
         )}
       </ScrollView>
