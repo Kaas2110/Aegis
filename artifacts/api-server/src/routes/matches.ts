@@ -138,9 +138,19 @@ router.get('/live', async (req, res) => {
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const raw = await r.json() as unknown;
-        const enriched = await enrichLiveMatchesWithTeamNames(raw).catch(err => {
-          req.log.warn({ err }, 'team-name enrichment failed, returning raw');
-          return raw;
+        // Фильтруем только профессиональные матчи: у них league_id > 0 или
+        // team_id_radiant/dire > 0. Паблики (100% трафика /api/live) отбрасываем —
+        // у них нет имён команд и они не релевантны для беттинг-аналитики.
+        const proOnly = Array.isArray(raw)
+          ? raw.filter((m: Record<string, unknown>) =>
+              (typeof m['league_id'] === 'number' && m['league_id'] > 0) ||
+              (typeof m['team_id_radiant'] === 'number' && m['team_id_radiant'] > 0) ||
+              (typeof m['team_id_dire'] === 'number' && m['team_id_dire'] > 0)
+            )
+          : raw;
+        const enriched = await enrichLiveMatchesWithTeamNames(proOnly).catch(err => {
+          req.log.warn({ err }, 'team-name enrichment failed, returning pro-only raw');
+          return proOnly;
         });
         const data = await enrichWithLeagueNames(enriched).catch(err => {
           req.log.warn({ err }, 'league enrichment failed, returning raw');
