@@ -26,6 +26,7 @@ const REQUIRED_TABLES = [
   'player_ratings',
   'live_snapshots',
   'prematch_outcomes',
+  'server_subscriptions',
 ];
 
 const WORKSPACE_ROOT = path.resolve(process.cwd(), '../..');

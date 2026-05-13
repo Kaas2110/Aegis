@@ -15,6 +15,7 @@
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSubscription } from './revenuecat';
+import { useServerSubscription } from './serverSubscription';
 import { getApiUrl } from './api/baseUrl';
 import { notificationService } from '@/services/notifications/NotificationService';
 
@@ -79,10 +80,10 @@ export function useFeatureFlagsConfig(): FeatureFlagsConfig {
 }
 
 export function useUserTier(): SubscriptionTier {
-  const { isSubscribed } = useSubscription();
-  // Basic тир ещё не реализован (нет entitlement в RC).
-  // Когда появится — добавить проверку active['basic'] здесь.
-  return isSubscribed ? 'premium' : 'free';
+  const { isSubscribed: rcSubscribed } = useSubscription();
+  const { isSubscribed: serverSubscribed } = useServerSubscription();
+  // Basic тир ещё не реализован. Если RC или серверная подписка активна → premium.
+  return (rcSubscribed || serverSubscribed) ? 'premium' : 'free';
 }
 
 /** Side-effect компонент: при потере доступа к alerts_edge глушит

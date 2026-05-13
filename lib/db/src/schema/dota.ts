@@ -503,3 +503,26 @@ export type InsertBo3Series = typeof bo3SeriesTable.$inferInsert;
 
 export type League = typeof leaguesTable.$inferSelect;
 export type InsertLeague = typeof leaguesTable.$inferInsert;
+
+// ── СЕРВЕРНЫЕ ПОДПИСКИ (RuStore / внешний шлюз) ───────────────────────────
+// Используется, когда RevenueCat недоступен (RuStore APK).
+// Оплата через внешний шлюз (YooKassa) в WebBrowser; статус хранится здесь.
+export const serverSubscriptionsTable = pgTable('server_subscriptions', {
+  id: serial('id').primaryKey(),
+  deviceId: text('device_id').notNull(),
+  provider: text('provider').notNull().default('yookassa'),
+  plan: text('plan').notNull(),           // 'monthly' | 'annual'
+  status: text('status').notNull().default('pending'), // 'pending' | 'active' | 'expired'
+  yookassaPaymentId: text('yookassa_payment_id'),
+  amountRub: real('amount_rub'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('server_subs_device_id_idx').on(t.deviceId),
+  index('server_subs_yk_id_idx').on(t.yookassaPaymentId),
+]);
+
+export type ServerSubscription = typeof serverSubscriptionsTable.$inferSelect;
+export type InsertServerSubscription = typeof serverSubscriptionsTable.$inferInsert;

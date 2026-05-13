@@ -10,6 +10,8 @@ import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
 import { useSubscription, getTrialDays, getPlanLabel, sortPackages, isAnnualPackage, type AdaptyPackageInfo } from '@/lib/revenuecat';
 import { getApiUrl } from '@/lib/api/baseUrl';
+import { PAYMENT_CHANNEL } from '@/lib/paymentChannel';
+import { RuStoreSubscriptionCard } from '@/components/RuStorePaywall';
 
 interface Tier1Team {
   teamId: number;
@@ -396,7 +398,10 @@ export default function SettingsScreen() {
       <Text style={[styles.title, { color: colors.foreground }]}>Профиль</Text>
 
       {/* Подписка идёт первой — самый важный CTA / статус пользователя. */}
-      <SubscriptionCard colors={colors} />
+      {PAYMENT_CHANNEL === 'rustore'
+        ? <RuStoreSubscriptionCard colors={colors} />
+        : <SubscriptionCard colors={colors} />
+      }
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="ОТОБРАЖЕНИЕ" />
