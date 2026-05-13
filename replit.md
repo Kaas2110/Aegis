@@ -79,66 +79,49 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 - **`lib/api-spec/openapi.yaml`** — OpenAPI contract; codegen: `pnpm --filter @workspace/api-spec run codegen`
 - pnpm-workspace skill — monorepo structure, TypeScript, project references
 
-## ML state (as of 2026-05-12, retrain #9 — extra features wave)
+## ML state (as of 2026-05-13, retrain #10 — v2/v3 version routing fix)
 
 **Deep-research items shipped (retrain #8):** prematch fv 5→12 (radiant_side_logit, recency_days_norm, series_type_norm, map_no_norm, tier_t1/t2/t3) · live fv 7→8 (is_real_live, tower_diff_norm from `building_state` bitmap, has_draft, recency_days_norm) · chronological B6 split (1d gap train/test) · composite-score primary selection (brier-only when only one model has logloss; brier+0.3·logloss when both) · ml-service quantile task_type with proper pinball/coverage metrics · 3 quantile models (α=0.25/0.5/0.75) for `total_duration` market.
 
-**Extra features added (retrain #9):** EXTRA_FEATURE_NAMES 5→9 (v3 dim 24→28): `avg_kills_diff` (avgKillsFor 30d diff / 10) · `avg_duration_diff` (avgDurationSec 30d diff / 3600) · `sos_diff` (strength of schedule: avg opp elo diff / 200, 30d window) · `roster_stability_diff` (Jaccard overlap of last 10 lineups, radiant−dire). Prematch LR improved +3.4pp on winner, +0.5pp on t2.
+**Architecture redesign (retrain #10, 2026-05-13):** v2/v3 routing was broken — v2 needed draft picks (unavailable from PandaScore for upcoming matches), v3 needed picks + account_ids (also unavailable). 100% of upcoming predictions fell through to v1.
 
-**LiveWorker now persists `building_state` to live_snapshots** (was lost — only stored in raw_payload). New snapshots have tower data; old snapshots remain null until natural rotation.
+**New feature layout:**
+- v1 = team(12) — ELO, winrate, experience, is_high_tier, side_logit, recency, series_type, map_no, tier_t1/t2/t3
+- **v2 = team(12) + extra(7) = 19** — + recent_form_diff, h2h_advantage_radiant, side_advantage, avg_kills_diff, avg_duration_diff, sos_diff, roster_stability_diff. **No draft needed → fires for ALL upcoming matches.**
+- **v3 = v2(19) + hero(7) = 26** — + pick/ban/matchup features. Fires when draft is known (live matches).
+- Removed: player_skill_diff, player_glicko_diff (require account_ids from current match, unavailable in PandaScore)
 
-### Latest training results (retrain #9, 2026-05-12)
+**LiveWorker now persists `building_state` to live_snapshots** (was lost — only stored in raw_payload).
 
-**Prematch winner (fv=3, 12 team + 7 hero + 9 extra = 28 dim for v3):**
-- LR best: v3/winner **79.8%/0.155** · v3/t2 **79.8%/0.153** (was 76.4%/0.157 · 79.3%/0.143)
-- LGB best: v3/winner 78.5%/0.1528 · v3/t2 **81.7%/0.1497**
+### Latest training results (retrain #10, 2026-05-13)
 
-**Market models (16-dim team features, unchanged):**
+**Prematch winner — LR (18 models: v1/v2/v3 × winner/t1/t2):**
+- v1/winner: 63.3% / brier 0.227 · v1/t1: 51.6% · v1/t2: 61.0%
+- **v2/winner: 71.6% / brier 0.190** · v2/t1: 68.1% / brier 0.206 · **v2/t2: 71.2% / brier 0.187**
+- **v3/winner: 81.0% / brier 0.146** · v3/t1: 72.5% / brier 0.184 · **v3/t2: 79.1% / brier 0.134**
+- v2 train samples: 3262 (t1=909, t2=2353) — same as v1, no draft needed ✓
+- v3 train samples: 3251 (t1=908, t2=2343) — only 11 dropped for unknown hero
+
+**Prematch winner — LGB (9 models, LR is primary when LGB brier worse):**
+- v2/winner: 66.4% / brier 0.199 · v2/t2: 69.5% / brier 0.196
+- v3/winner: 74.2% / brier 0.153 · v3/t1: 75.8% / brier 0.174 · v3/t2: 79.6% / brier 0.144
+- LR v2/v3 outperform LGB on calibrated brier → LR primary for v2/v3
+
+**Inference routing (verified, 2026-05-13):** BackgroundPoller predicted 41/50 upcoming matches, **all 41 using v2** (was v1 = 100% before). v3 will fire automatically once live drafts are available.
+
+**Market models (16-dim team features, unchanged from retrain #9):**
 - first_blood (LGB clf): 61.9% / brier 0.231
 - total_kills (LGB reg): R²=0.053, RMSE=0.270
 - total_duration (LGB reg): R²=0.057, RMSE=0.270
 - total_duration quantiles: q25 cov=0.227 (target 0.25 ✓) · q50 cov=0.469 (target 0.5 ✓) · q75 cov=0.716 (target 0.75 ✓)
 
-**Live winner (fv=8, 20 features, retrain #9):**
+**Live winner (fv=8, 20 features, retrained #9, 2026-05-12):**
 - **LR primary** 71.82% / brier **0.1819** (lift +5.31pp over prematch baseline 66.51%)
 - LGB secondary 69.05% / brier 0.2803 (train 99.5%, overfits on hero_advantage)
 - Composite selection: `brier_only` mode → LR wins by lower brier
 - LR weights top-5: `kill_diff_norm=3.11, kill_ratio=1.50, kill_diff_x_phase=0.66, elo_diff_norm=0.22, nw_lead_per_min=0.19`
-- LGB feature importance top-5: `hero_advantage=197, kill_ratio=194, form_diff=127, kill_pace_norm=126, recency_days_norm=123`
 
-**Data:** 28.9k matches in 365d window · 5505 snapshots (3-min bucket dedup) · 4480 raw → 4294 balanced (50/50) train · 433 test · is_real_live=309/5505 · has_draft=5268/5505 (95.7%) · prematch_logit sources: stored=1415, elo=22, neutral=4068.
-
-### LEGACY (2026-05-12, retrain #5)
-
-**Training window:** 365d optimal for all model types (540d worse due to meta drift ~9pp).
-
-**Active models (25 total, prematch/market retrained #4, live retrained #5):**
-- Prematch winner: 9 LGB + 9 LR (v1/v2/v3 × winner/t1/t2) — all 18 active
-  - Best LGB: v3/prematch_winner 78.5% / brier 0.1573 · v3/t2 78.9% / brier 0.1489
-  - v3/t1 69.0% — overfits (train 94.5%, only 840 t1 samples)
-  - Best LR: v3/winner 76.4% / brier 0.164 · v3/t2 77.0% / brier 0.156 · v3/t1 63.1%
-  - LGB margin over LR: winner +2.1pp · t2 +1.9pp · t1 +5.9pp → LGB correctly primary
-  - **Bug fix: train:model (LR) no longer deactivates LGB models** (added engine='logreg' filter to deactivation WHERE)
-- Market v3 (retrained #4, 2026-05-12): 3 LGB — first_blood 58.8%, total_kills R²=0.059, total_duration R²=0.039
-  - **Bug fix: `patch_kpm` was a global constant (importance=0 in all 3 models). Replaced with `expected_tempo_norm` = (avgKillsR + avgKillsD) / (2×GLOBAL_AVG_KILLS) — varies per matchup, non-zero importance.**
-  - expected_tempo_norm: top-5 for total_duration (importance=32). total_kills top: elo_diff, winrate_diff, experience_diff, draft_aggression_r/d
-- Live winner (fv=7, 16 features): 1 LGB + 1 LR — **retrained #7 (2026-05-12)**
-  - **LR: 69.98% (+3.46pp over prematch baseline 66.51%), brier 0.1782. LR is primary (testAcc > LGB).**
-  - LGB: 66.74% (+2.54pp, train 99.21%) — hero_advantage top feature (importance=250), overfitting; LGB secondary
-  - Primary selection: auto by testAccuracy
-  - `prematch_logit` sources: stored=1415, elo=22, neutral=4068
-  - LR weights: `kill_diff_norm=3.061, kill_ratio=1.521, kill_diff_x_phase=0.618, kill_pace_norm=0.181, nw_lead_norm=0.193, elo_diff_norm=0.138, nw_lead_per_min=0.178, form_diff=-0.234, hero_advantage=0.112, power_spike_delta=0.005, spike_x_nw=0.009`
-  - LGB feature importance top-5: `hero_advantage=250, kill_ratio=231, form_diff=188, kill_pace_norm=169, elo_diff_norm=54`
-  - **Features (16, fv=7):** `bias, game_time_norm, nw_lead_norm, kill_diff_norm, prematch_logit, kill_pace_norm, game_phase, nw_x_phase, kill_diff_x_phase, hero_advantage, nw_lead_per_min, kill_ratio, elo_diff_norm, form_diff, power_spike_delta, spike_x_nw`
-  - fv=6→7 changes: +power_spike_delta (Gaussian team spike score diff, σ=8min), +spike_x_nw (spike×nw interaction); power timing = avg winning game duration per hero from match history (127 heroes, global avg 39.0 min)
-  - Late heroes (≥41 min): Spectre(68), Morphling(70), Terrorblade(135), Doom(69); early (≤36 min): Brewmaster(91), Juggernaut(8), Zeus(22), Clockwerk(14)
-  - **Draft coverage: 100%** (95.7% from match_drafts after `ingest:drafts --live-backfill`; raw_payload fallback covers residual). power_spike_delta now fully active.
-  - Note: retrain #7 LR accuracy -2.31pp vs #6 (72.29%→69.98%) — likely due to hero_advantage signal noise from newly ingested lower-quality matches (bypassed Glicko filter). Will improve naturally as draft data quality grows.
-  - **50/50 train balance:** undersample majority class in train set only (test unbalanced = real distribution); raw 4480 → balanced 4294 (2147/class, dropped 186)
-  - Group C: class_weight='balanced' in LGB retained
-  - Root data: 519 training matches / 5505 bucketed snapshots
-
-**Data:** 44.6k matches total · 28.9k in 365d window · 5237 drafts · 384 player_ratings · **7292 prematch_outcomes** (backfilled via `backfill:prematch-outcomes`) · 18.7k live snapshots (5505 after 3-min bucket dedup).
+**Data:** 28.9k matches in 365d window · 5727 drafts · 5505 snapshots (3-min bucket dedup) · prematch_logit sources: stored=1415, elo=22, neutral=4068.
 
 **Training dataset settings** (stored in `app_settings`):
 - `trainWindowDays` (default 365, range 30–730)

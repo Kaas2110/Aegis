@@ -28,8 +28,6 @@ import {
   matchDraftsTable,
   heroStatsTable,
   heroMatchupsTable,
-  playerHeroStatsTable,
-  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
 } from '@workspace/db';
@@ -41,15 +39,11 @@ import {
   buildExtraFeatures,
   computeRosterStability,
   HERO_FEATURE_NAMES,
-  HERO_FEATURE_DIM,
   EXTRA_FEATURE_NAMES,
-  EXTRA_FEATURE_DIM,
   type HeroStatsMap,
   type HeroMatchupsMap,
-  type PlayerHeroStatsMap,
   type RecentFormMap,
   type H2HMap,
-  type PlayerGlickoMap,
   type SoSMap,
   type RosterStabilityMap,
 } from './lib/hero-features';
@@ -308,13 +302,6 @@ async function main() {
     inner.set(m.vsHeroId, { games: m.games, winRate: m.winRate });
   }
 
-  const phsRows = await db.select().from(playerHeroStatsTable);
-  const playerHeroStats: PlayerHeroStatsMap = new Map();
-  for (const r of phsRows) {
-    let inner = playerHeroStats.get(r.accountId);
-    if (!inner) { inner = new Map(); playerHeroStats.set(r.accountId, inner); }
-    inner.set(r.heroId, { games: r.games, wins: r.wins });
-  }
   const formRows = await db.select({
     teamId: teamRecentFormTable.teamId,
     winRate: teamRecentFormTable.winRate,
@@ -335,15 +322,7 @@ async function main() {
   const h2h: H2HMap = new Map();
   for (const r of h2hRows) h2h.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
 
-  const prRows = await db.select({
-    accountId: playerRatingsTable.accountId,
-    rating: playerRatingsTable.rating,
-    rd: playerRatingsTable.rd,
-  }).from(playerRatingsTable);
-  const playerGlicko: PlayerGlickoMap = new Map();
-  for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
-
-  // Wave 3+4: Strength of Schedule — avg рейтинг соперников за 30 дней
+  // Strength of Schedule — avg рейтинг соперников за 30 дней
   const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
   const sosResult = await db.execute(sql`
     SELECT team_id::bigint, AVG(opp_rating)::float AS avg_opp_elo
@@ -376,10 +355,13 @@ async function main() {
   const rosterStability: RosterStabilityMap = computeRosterStability(rosterInputsArr);
 
   console.log(
-    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size} sos=${sos.size} rosterStability=${rosterStability.size}`,
+    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} form=${recentForm.size} h2h=${h2h.size} sos=${sos.size} rosterStability=${rosterStability.size}`,
   );
 
   // Сборка бакетов
+  // v1 = team(12)               — все матчи, без драфта
+  // v2 = team(12) + extra(7)    — все матчи, без драфта (form/h2h/kills/duration/SoS/roster)
+  // v3 = team(12) + extra(7) + hero(7) — только матчи с драфтом
   const v1All: Sample[] = [];
   const v1Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
   const v2All: Sample[] = [];
@@ -405,9 +387,20 @@ async function main() {
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
+
+    // v1: только командные фичи
     const v1S: Sample = { features: teamFeats, label };
     v1All.push(v1S); if (tier) v1Bucket[tier].push(v1S);
 
+    // v2: командные + team-context extras (всегда, без драфта)
+    const extraFeats = buildExtraFeatures({
+      radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
+      recentForm, h2h, sos, rosterStability,
+    });
+    const v2S: Sample = { features: [...teamFeats, ...extraFeats], label };
+    v2All.push(v2S); if (tier) v2Bucket[tier].push(v2S);
+
+    // v3: v2 + hero-фичи (только если есть драфт)
     const draft = drafts.get(m.matchId);
     if (!draft) continue;
     const heroFeats = buildHeroFeatures(
@@ -415,17 +408,7 @@ async function main() {
       heroStats, matchups,
     );
     if (!heroFeats) continue;
-    const v2S: Sample = { features: [...teamFeats, ...heroFeats], label };
-    v2All.push(v2S); if (tier) v2Bucket[tier].push(v2S);
-
-    if (!draft.radiantAccountIds && !draft.direAccountIds) continue;
-    const extraFeats = buildExtraFeatures({
-      radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
-      radiantPicks: draft.radiantPicks, direPicks: draft.direPicks,
-      radiantAccountIds: draft.radiantAccountIds, direAccountIds: draft.direAccountIds,
-      playerHeroStats, heroStats, recentForm, h2h, playerGlicko, sos, rosterStability,
-    });
-    const v3S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats], label };
+    const v3S: Sample = { features: [...teamFeats, ...extraFeats, ...heroFeats], label };
     v3All.push(v3S); if (tier) v3Bucket[tier].push(v3S);
   }
 
@@ -436,8 +419,8 @@ async function main() {
   );
 
   const v1Names = [...TEAM_FEATURE_NAMES];
-  const v2Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES];
-  const v3Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES];
+  const v2Names = [...TEAM_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES];
+  const v3Names = [...TEAM_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES, ...HERO_FEATURE_NAMES];
 
   // Фильтрация по меткам бакетов: env LIGHTGBM_KINDS (comma-separated)
   // и/или CLI `--label v3/t1` (можно повторять). Whitelist валидируется

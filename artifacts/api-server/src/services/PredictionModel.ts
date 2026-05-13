@@ -27,8 +27,6 @@ import {
   teamsTable,
   heroStatsTable,
   heroMatchupsTable,
-  playerHeroStatsTable,
-  playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
   matchDraftsTable,
@@ -46,8 +44,6 @@ import {
   EXTRA_FEATURE_NAMES,
   type HeroStatsMap,
   type HeroMatchupsMap,
-  type PlayerHeroStatsMap,
-  type PlayerGlickoMap,
   type RecentFormMap,
   type H2HMap,
   type SoSMap,
@@ -170,11 +166,10 @@ let heroPowerTimingCache: Map<number, number> = new Map(); // heroId → avg win
 let globalAvgWinMin = 39;
 let lastHeroLoad = 0;
 
-// Wave 3 caches (загружаются лениво при первом v3-запросе).
-let playerHeroStatsCache: PlayerHeroStatsMap = new Map();
+// Wave 3 caches — team-level, не требуют текущего драфта/account_ids.
+// Загружаются лениво при первом v2-запросе (т.е. при каждом прогнозе).
 let recentFormCache: RecentFormMap = new Map();
 let h2hCache: H2HMap = new Map();
-let playerGlickoCache: PlayerGlickoMap = new Map();
 let sosCache: SoSMap = new Map();
 let rosterStabilityCache: RosterStabilityMap = new Map();
 let lastWave3Load = 0;
@@ -378,16 +373,14 @@ async function refreshTeamRatings(): Promise<void> {
   }
 }
 
+/**
+ * Загружает team-context данные для v2-extra фичей.
+ * Не требует драфта/account_ids — используется для всех upcoming-матчей.
+ */
 async function refreshWave3Data(): Promise<void> {
-  if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && playerHeroStatsCache.size > 0) return;
+  if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && recentFormCache.size > 0) return;
   try {
-    const [phs, form, h2hRows, prRows] = await Promise.all([
-      db.select({
-        accountId: playerHeroStatsTable.accountId,
-        heroId: playerHeroStatsTable.heroId,
-        games: playerHeroStatsTable.games,
-        wins: playerHeroStatsTable.wins,
-      }).from(playerHeroStatsTable),
+    const [form, h2hRows] = await Promise.all([
       db.select({
         teamId: teamRecentFormTable.teamId,
         winRate: teamRecentFormTable.winRate,
@@ -405,18 +398,8 @@ async function refreshWave3Data(): Promise<void> {
       })
         .from(teamH2HTable)
         .where(eq(teamH2HTable.periodDays, 365)),
-      db.select({
-        accountId: playerRatingsTable.accountId,
-        rating: playerRatingsTable.rating,
-        rd: playerRatingsTable.rd,
-      }).from(playerRatingsTable),
     ]);
-    const phsMap: PlayerHeroStatsMap = new Map();
-    for (const r of phs) {
-      let inner = phsMap.get(r.accountId);
-      if (!inner) { inner = new Map(); phsMap.set(r.accountId, inner); }
-      inner.set(r.heroId, { games: r.games, wins: r.wins });
-    }
+
     const formMap: RecentFormMap = new Map();
     for (const r of form) {
       formMap.set(r.teamId, {
@@ -430,8 +413,6 @@ async function refreshWave3Data(): Promise<void> {
     for (const r of h2hRows) {
       h2hMap.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
     }
-    const prMap: PlayerGlickoMap = new Map();
-    for (const r of prRows) prMap.set(r.accountId, { rating: r.rating, rd: r.rd });
 
     // SoS: avg рейтинг соперников за последние 30 дней
     const sinceUnix30d = Math.floor(Date.now() / 1000) - 30 * 86_400;
@@ -475,23 +456,19 @@ async function refreshWave3Data(): Promise<void> {
     }));
     const newRosterStabilityCache: RosterStabilityMap = computeRosterStability(rosterInputs);
 
-    playerHeroStatsCache = phsMap;
     recentFormCache = formMap;
     h2hCache = h2hMap;
-    playerGlickoCache = prMap;
     sosCache = newSosCache;
     rosterStabilityCache = newRosterStabilityCache;
     lastWave3Load = Date.now();
     logger.info(
       {
-        phsAccounts: phsMap.size,
         formTeams: formMap.size,
         h2hPairs: h2hMap.size,
-        glickoPlayers: prMap.size,
         sosTeams: newSosCache.size,
         rosterStabilityTeams: newRosterStabilityCache.size,
       },
-      '[PredictionModel] Wave 3 data refreshed',
+      '[PredictionModel] Wave 3 (team-context) data refreshed',
     );
   } catch (err) {
     logger.error({ err }, '[PredictionModel] Failed to load Wave 3 data');
@@ -716,6 +693,22 @@ function modelUsable(m: LoadedModel): boolean {
 }
 
 /**
+ * Возвращает 7 v2-extra фичей для текущей пары команд.
+ * Использует кеши form/h2h/sos/rosterStability (всегда доступны без драфта).
+ * Должен вызываться ПОСЛЕ refreshWave3Data().
+ */
+function buildTeamExtraFeatures(radiantTeamId: number, direTeamId: number): number[] {
+  return buildExtraFeatures({
+    radiantTeamId,
+    direTeamId,
+    recentForm: recentFormCache,
+    h2h: h2hCache,
+    sos: sosCache,
+    rosterStability: rosterStabilityCache,
+  });
+}
+
+/**
  * Ищет logreg-модель в кеше как spare tire для LightGBM. Стратегия —
  * максимально близкая lineage:
  *   1. ровно тот же (kind, fv) на logreg
@@ -800,12 +793,12 @@ export async function predictMatchWinner(
   let extraFeats: number[] | null = null;
   let usedFv: 1 | 2 | 3 = 1;
 
-  // Сначала готовим hero-фичи, если есть драфт.
-  if (
-    drafts &&
-    drafts.radiantPicks.length === 5 &&
-    drafts.direPicks.length === 5
-  ) {
+  // v2-extra фичи (team-context: form/h2h/sos/roster) всегда доступны без драфта.
+  await refreshWave3Data();
+  extraFeats = buildTeamExtraFeatures(radiantTeamId, direTeamId);
+
+  // Hero-фичи для v3: нужен полный драфт (5+5 пиков).
+  if (drafts && drafts.radiantPicks.length === 5 && drafts.direPicks.length === 5) {
     await refreshHeroData();
     if (heroStatsCache.size > 0) {
       heroFeats = buildHeroFeatures(
@@ -819,61 +812,40 @@ export async function predictMatchWinner(
     }
   }
 
-  // Wave 3: пытаемся v3 если есть драфт + heroFeats + хотя бы один из account_ids
-  // массивов передан. Если v3-модели не существует — падаем дальше в v2.
-  if (
-    heroFeats &&
-    drafts &&
-    (drafts.radiantAccountIds || drafts.direAccountIds)
-  ) {
-    await refreshWave3Data();
-    extraFeats = buildExtraFeatures({
-      radiantTeamId,
-      direTeamId,
-      radiantPicks: drafts.radiantPicks,
-      direPicks: drafts.direPicks,
-      radiantAccountIds: drafts.radiantAccountIds ?? null,
-      direAccountIds: drafts.direAccountIds ?? null,
-      playerHeroStats: playerHeroStatsCache,
-      heroStats: heroStatsCache,
-      recentForm: recentFormCache,
-      h2h: h2hCache,
-      playerGlicko: playerGlickoCache,
-      sos: sosCache,
-      rosterStability: rosterStabilityCache,
-    });
-    const v3Dim = teamFeats.length + heroFeats.length + extraFeats.length;
+  // Попытка v3: team(12) + extra(7) + hero(7) = 26 — только если есть драфт.
+  if (heroFeats && extraFeats) {
+    const v3Feats = [...teamFeats, ...extraFeats, ...heroFeats];
     const v3Model = pickModel(tier, 3);
-    if (v3Model && v3Model.featureDim === v3Dim) {
+    if (v3Model && v3Model.featureDim === v3Feats.length) {
       model = v3Model;
-      features = [...teamFeats, ...heroFeats, ...extraFeats];
+      features = v3Feats;
       usedFv = 3;
     } else if (v3Model && v3Model.engine === 'lightgbm') {
-      // LightGBM v3 устарел (другая dim) — пробуем v3 LR того же tier/generic перед v2 fallback.
-      const v3LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 3, v3Dim);
+      const v3LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 3, v3Feats.length);
       if (v3LR) {
         logger.info(
           { lgbmVersion: v3Model.version, lgbmDim: v3Model.featureDim, lrVersion: v3LR.version, lrDim: v3LR.weights.length },
-          '[PredictionModel] v3 LightGBM dim mismatch, falling back to v3 LR (kept Wave 3 features)',
+          '[PredictionModel] v3 LightGBM dim mismatch, falling back to v3 LR',
         );
         model = v3LR;
-        features = [...teamFeats, ...heroFeats, ...extraFeats];
+        features = v3Feats;
         usedFv = 3;
       }
     }
   }
 
-  // v2 fallback
-  if (!model && heroFeats) {
+  // Попытка v2: team(12) + extra(7) = 19 — всегда (если нет v3 или нет драфта).
+  if (!model && extraFeats) {
+    const v2Feats = [...teamFeats, ...extraFeats];
     const v2Model = pickModel(tier, 2);
-    if (v2Model && v2Model.featureDim === teamFeats.length + heroFeats.length) {
+    if (v2Model && v2Model.featureDim === v2Feats.length) {
       model = v2Model;
-      features = [...teamFeats, ...heroFeats];
+      features = v2Feats;
       usedFv = 2;
     }
   }
 
-  // v1 fallback
+  // v1 fallback: team(12)
   if (!model) {
     model = pickModel(tier, 1);
     features = teamFeats;
@@ -926,18 +898,20 @@ export async function predictMatchWinner(
     calibrated = applyCalibration(rawProb, model.calibration);
   }
 
+  // feature order: team(12) + extra(7) + hero(7)
+  // v1: team only; v2: team+extra; v3: team+extra+hero
   const featureRecord: Record<string, number> = {};
   for (let i = 0; i < TEAM_FEATURE_NAMES.length; i++) {
     featureRecord[TEAM_FEATURE_NAMES[i]] = teamFeats[i];
   }
-  if (heroFeats && (usedFv === 2 || usedFv === 3)) {
-    for (let i = 0; i < HERO_FEATURE_NAMES.length; i++) {
-      featureRecord[HERO_FEATURE_NAMES[i]] = heroFeats[i];
-    }
-  }
-  if (extraFeats && usedFv === 3) {
+  if (extraFeats && (usedFv === 2 || usedFv === 3)) {
     for (let i = 0; i < EXTRA_FEATURE_NAMES.length; i++) {
       featureRecord[EXTRA_FEATURE_NAMES[i]] = extraFeats[i];
+    }
+  }
+  if (heroFeats && usedFv === 3) {
+    for (let i = 0; i < HERO_FEATURE_NAMES.length; i++) {
+      featureRecord[HERO_FEATURE_NAMES[i]] = heroFeats[i];
     }
   }
 
