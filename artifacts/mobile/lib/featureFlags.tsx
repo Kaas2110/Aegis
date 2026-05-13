@@ -14,7 +14,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSubscription } from './adapty';
+import { useSubscription } from './revenuecat';
 import { getApiUrl } from './api/baseUrl';
 import { notificationService } from '@/services/notifications/NotificationService';
 

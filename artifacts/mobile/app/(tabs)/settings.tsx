@@ -8,7 +8,7 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
-import { useSubscription, getTrialDays, getPlanLabel, sortPackages, isAnnualPackage, type AdaptyPackageInfo } from '@/lib/adapty';
+import { useSubscription, getTrialDays, getPlanLabel, sortPackages, isAnnualPackage, type AdaptyPackageInfo } from '@/lib/revenuecat';
 import { getApiUrl } from '@/lib/api/baseUrl';
 
 interface Tier1Team {

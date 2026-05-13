@@ -21,15 +21,16 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Alert } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
-import { initializeAdapty, SubscriptionProvider } from "@/lib/adapty";
+import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
 import { FeatureFlagsProvider, FeatureFlagsSideEffects } from "@/lib/featureFlags";
 
 SplashScreen.preventAutoHideAsync();
 
-// Adapty активируем асинхронно — SDK требует await, но layout не await-ится.
-// Ошибки инициализации не роняют приложение.
-initializeAdapty().catch((err: any) => {
-  if (__DEV__) console.warn('[Adapty] init error:', err?.message ?? err);
+// RevenueCat — primary провайдер монетизации. Adapty оставлен как
+// альтернатива в lib/adapty.tsx (можно переключиться, поменяв импорты здесь
+// и в lib/featureFlags.tsx). Ошибки инициализации не роняют приложение.
+initializeRevenueCat().catch((err: any) => {
+  if (__DEV__) console.warn('[RevenueCat] init error:', err?.message ?? err);
 });
 
 const queryClient = new QueryClient();
