@@ -199,12 +199,10 @@ router.post('/predict', async (req, res) => {
       return;
     }
 
-    // Ключ кэша включает teamIds/имена и формат — на случай если апстрим
+    // Ключ кэша включает имена команд и формат — на случай если апстрим
     // переиспользует matchId при ростер-замене или смене формата (BO3↔BO5).
     // Без этого мы могли бы вернуть stale-предикт для изменившегося матча.
-    const t1Key = input.team1.id ?? input.team1.name;
-    const t2Key = input.team2.id ?? input.team2.name;
-    const cacheKey = `predict:prematch:${input.matchId}:${t1Key}:${t2Key}:${input.format}`;
+    const cacheKey = `predict:prematch:${input.matchId}:${input.team1.name}:${input.team2.name}:${input.format}`;
     const result = await withCache(
       cacheKey,
       PREMATCH_PREDICT_TTL_MS,

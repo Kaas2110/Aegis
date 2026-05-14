@@ -96,10 +96,38 @@ let stats = {
   totalSnapshots: 0,
   totalPredictions: 0,
   totalLivePredictions: 0,
+  skippedUnchanged: 0,
   lastPollAt: null as Date | null,
   lastPollDurationMs: 0,
   lastError: null as string | null,
 };
+
+// Дедуп: последний хеш данных матча, по которому уже считали ML и писали
+// снапшот. Если OpenDota вернул те же значения (game_time/kills/lead/draft
+// не изменились), пропускаем повторную работу — детерминистическая модель
+// даст тот же ответ. Сбрасывается при рестарте процесса (не страшно: первый
+// poll после рестарта пройдёт без skip и снова проиндексирует все матчи).
+// Размер ограничен числом активных live-матчей (типично 10-50), очищаем
+// записи матчей, которых больше нет в текущем poll.
+const lastSeenHash = new Map<number, string>();
+
+/** Стабильный хеш ВСЕХ полей, влияющих на ML-предсказание и снапшот. */
+function hashLiveMatch(m: LiveMatch): string {
+  // Heroes сортируем чтобы изменение порядка игроков в payload не давало
+  // ложный «изменился». Account_ids тоже — для идемпотентности draft fingerprint.
+  const heroes = (m.players ?? [])
+    .map(p => `${p.team ?? p.team_slot ?? '?'}:${p.hero_id ?? 0}:${p.account_id ?? 0}`)
+    .sort()
+    .join(',');
+  return [
+    m.game_time ?? '',
+    m.radiant_score ?? '',
+    m.dire_score ?? '',
+    m.radiant_lead ?? '',
+    m.building_state ?? '',
+    heroes,
+  ].join('|');
+}
 
 async function pollOnce(): Promise<void> {
   stats.totalPolls++;
@@ -124,9 +152,36 @@ async function pollOnce(): Promise<void> {
   const valid = matches.filter(m => m.match_id && m.team_id_radiant && m.team_id_dire);
   if (valid.length === 0) return;
 
-  // Сохраняем снапшоты
+  // Чистим хеш-кэш от матчей, которых больше нет в эфире (закончились).
+  // Без этого Map рос бы бесконечно по мере появления/исчезновения матчей.
+  const currentIds = new Set(valid.map(m => m.match_id!));
+  for (const id of lastSeenHash.keys()) {
+    if (!currentIds.has(id)) lastSeenHash.delete(id);
+  }
+
+  // Дедуп: оставляем только матчи с изменившимися данными. Если хеш совпал
+  // с прошлым poll'ом — OpenDota вернул те же значения, скипаем и snapshot,
+  // и ML (детерминистическая модель даст тот же результат, БД будет писать
+  // дубликаты).
+  const changed = valid.filter(m => {
+    const h = hashLiveMatch(m);
+    const prev = lastSeenHash.get(m.match_id!);
+    if (prev === h) {
+      stats.skippedUnchanged++;
+      return false;
+    }
+    lastSeenHash.set(m.match_id!, h);
+    return true;
+  });
+
+  if (changed.length === 0) {
+    logger.info({ liveMatches: valid.length, skippedAll: true }, '[LiveWorker] no changes since last poll');
+    return;
+  }
+
+  // Сохраняем снапшоты только для изменившихся матчей.
   try {
-    const rows = valid.map(m => ({
+    const rows = changed.map(m => ({
       matchId: m.match_id!,
       gameTimeSec: m.game_time ?? null,
       radiantTeamId: m.team_id_radiant ?? null,
@@ -147,7 +202,7 @@ async function pollOnce(): Promise<void> {
   const model = getActiveModel();
   if (!model) return;
 
-  for (const m of valid) {
+  for (const m of changed) {
     if (!m.team_id_radiant || !m.team_id_dire) continue;
     try {
       const draft = extractDraftFromLive(m);

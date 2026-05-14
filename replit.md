@@ -107,6 +107,15 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 `/running` параллельно (5s timeout), кэш 30с. PandaScore работает как fallback, если
 OpenDota упал. `/api/matches/upcoming` — PandaScore, кэш 60с.
 
+**Live-воркер dedup (DONE 2026-05-14):** `LiveWorker.pollOnce` хеширует
+game_time + scores + radiant_lead + building_state + draft (sorted heroes/accounts)
+и пропускает матчи, у которых хеш не изменился с прошлого poll'а — снапшот не
+пишется, ML не считается (детерминистическая модель → тот же результат). In-memory
+`Map<matchId,hash>` чистится от завершённых матчей каждый тик. Stat
+`skippedUnchanged` в `getWorkerStats()`. Без этого на каждый 60s-tick OpenDota
+со stale-данными (пауза в матче, апстрим лагает) тратили CPU и плодили дубликаты
+в `live_snapshots` / `predictions`.
+
 ## User preferences
 
 - Язык интерфейса — русский
