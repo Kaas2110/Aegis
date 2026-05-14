@@ -126,9 +126,70 @@ interface PsRunningMatch {
   id: number;
   opponents?: Array<{ opponent?: { name?: string; id?: number } }>;
   games?: PsGame[];
-  league?: { name?: string };
+  league?: { id?: number; name?: string };
+  serie?: { full_name?: string };
   begin_at?: string;
   number_of_games?: number;
+  results?: Array<{ team_id?: number; score?: number }>;
+  league_id?: number;
+}
+
+/**
+ * Конвертирует PandaScore /running матч в OpenDota-like форму, которую ждёт
+ * мобилка (`team_name_radiant`, `team_id_radiant`, `radiant_score`,
+ * `duration`, `league_id`, `league_name`, `current_map`,
+ * `radiant_series_wins`, `dire_series_wins`). Используется как fallback,
+ * когда OpenDota /api/live недоступен (HTTP 522/AbortError).
+ *
+ * Live game state (kills/duration) PS не отдаёт, оставляем нули — карточка
+ * всё равно покажет команды + турнир + счёт серии, что и нужно пользователю.
+ */
+function psRunningToLiveShape(ps: PsRunningMatch[]): Record<string, unknown>[] {
+  return ps.map((m, idx) => {
+    const o1 = m.opponents?.[0]?.opponent;
+    const o2 = m.opponents?.[1]?.opponent;
+    const o1Id = o1?.id ?? null;
+    const o2Id = o2?.id ?? null;
+    const games = m.games ?? [];
+    const finished = games.filter(g => g.status === 'finished');
+    let r1 = 0, r2 = 0;
+    finished.forEach(g => {
+      const wId = g.winner?.id ?? null;
+      if (wId === null) return;
+      if (o1Id !== null && wId === o1Id) r1++;
+      else if (o2Id !== null && wId === o2Id) r2++;
+    });
+    // Если winner.id отсутствует — fallback на results[].score (агрегат PS).
+    if (r1 === 0 && r2 === 0 && Array.isArray(m.results)) {
+      const a = m.results.find(x => x.team_id === o1Id)?.score ?? 0;
+      const b = m.results.find(x => x.team_id === o2Id)?.score ?? 0;
+      r1 = a; r2 = b;
+    }
+    const leagueId = m.league?.id ?? m.league_id ?? 0;
+    return {
+      // Используем синтетический match_id (отрицательный, не пересекается с OD).
+      match_id: -m.id,
+      ps_match_id: m.id,
+      team_id_radiant: o1Id ?? 0,
+      team_id_dire:    o2Id ?? 0,
+      team_name_radiant: o1?.name ?? '',
+      team_name_dire:    o2?.name ?? '',
+      radiant_score: 0,
+      dire_score: 0,
+      duration: 0,
+      spectators: 0,
+      game_mode: 2,
+      league_id: leagueId,
+      league_name: m.league?.name ?? m.serie?.full_name ?? '',
+      radiant_series_wins: r1,
+      dire_series_wins:    r2,
+      current_map: finished.length + 1,
+      number_of_games: m.number_of_games ?? 3,
+      source: 'pandascore',
+      // Поле для дедупликации с OD — порядковый номер на случай одинаковых пар.
+      _ps_idx: idx,
+    };
+  });
 }
 
 /**
@@ -398,7 +459,7 @@ router.get('/live', async (req, res) => {
     // Запрашиваем OpenDota live, PandaScore running и Stratz параллельно.
     // PandaScore /running даёт официальные имена команд, счёт серии и номер
     // текущей карты. OpenDota даёт реальный game state (kills, gold, time).
-    const openDotaPromise = apiFetch(`${OPENDOTA_BASE}/live`)
+    const openDotaPromise = apiFetch(`${OPENDOTA_BASE}/live`, { timeout: 20_000 })
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const raw = await r.json() as unknown;
@@ -454,6 +515,10 @@ router.get('/live', async (req, res) => {
 
     const psMatches = psRunning.status === 'fulfilled' ? psRunning.value : [];
 
+    const odData = openDota.status === 'fulfilled' ? openDota.value.data : [];
+    const odIsArray = Array.isArray(odData);
+    const odCount = odIsArray ? (odData as unknown[]).length : 0;
+
     if (openDota.status === 'fulfilled') {
       // Если PandaScore вернул running-матчи — обогащаем OD данные:
       // счёт серии, текущая карта, ps_match_id.
@@ -471,11 +536,22 @@ router.get('/live', async (req, res) => {
     }
     if (stratz.status === 'fulfilled') results.push(stratz.value);
 
+    // PandaScore /running как fallback-источник live-матчей. Если OpenDota /live
+    // упал (HTTP 522 / AbortError — Cloudflare часто так делает) или вернул 0
+    // pro-матчей, мы всё равно показываем актуальные команды + турнир + счёт
+    // серии. Live game state (kills/duration) недоступен — карточка покажет
+    // нули, но пара команд и название турнира — реальные.
+    if (odCount === 0 && psMatches.length > 0) {
+      const psShaped = await enrichWithLeagueNames(psRunningToLiveShape(psMatches)).catch(() => psRunningToLiveShape(psMatches));
+      results.push({ source: 'pandascore', data: psShaped });
+    }
+
     const hasData = results.some(r => !r.error && Array.isArray(r.data) && (r.data as unknown[]).length > 0);
     return {
       sources: results,
+      // mockData больше НЕ возвращаем: лучше пустой список, чем фейковые
+      // «International 2025» команды, которые путали пользователей.
       isMock: !hasData,
-      mockData: hasData ? undefined : getMockLiveMatches(),
       pandascoreRunning: psMatches.length,
     };
   }, (v) => !(v as { isMock?: boolean }).isMock);

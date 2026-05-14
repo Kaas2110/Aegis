@@ -3,7 +3,6 @@
  * При доступности — использует реальные данные. Fallback — mock.
  */
 
-import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
 import { buildFeaturedMatch } from '@/services/featuredMatch';
 import type { Match, Market, Team, Prediction, BookmakerOdds } from '@/types';
 
@@ -550,7 +549,6 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
     const liveData = liveResp.status === 'fulfilled' ? liveResp.value as {
       isMock: boolean;
       sources: Array<{ source: string; data: OpenDotaLiveMatch[] }>;
-      mockData?: OpenDotaLiveMatch[];
     } : null;
 
     const oddsData = oddsResp.status === 'fulfilled' ? oddsResp.value as {
@@ -558,29 +556,39 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
       data: OddsData[];
     } : null;
 
-    const openDotaSource = liveData?.sources?.find(s => s.source === 'opendota');
-    const rawMatches = openDotaSource?.data ?? liveData?.mockData ?? [];
+    // Берём первый источник, у которого есть реальные данные. Сначала OpenDota
+    // (полный live game state), затем PandaScore /running fallback (только
+    // имена команд + турнир + счёт серии, но это уже актуальные матчи).
+    const sourcesArr = liveData?.sources ?? [];
+    const liveSourceWithData = sourcesArr.find(
+      s => Array.isArray(s.data) && s.data.length > 0 && (s.source === 'opendota' || s.source === 'pandascore')
+    );
+    const rawMatches = liveSourceWithData?.data ?? [];
     const hasRealData = !liveData?.isMock && Array.isArray(rawMatches) && rawMatches.length > 0;
 
     if (!hasRealData) {
-      const mockMarkets = buildMockMarkets();
-      const buildMock = (match: Match): EnrichedMatch => {
-        const mkts = mockMarkets.filter(mkt => mkt.matchId === match.id);
-        // Берём всех букмекеров из первого рынка — у mock-данных там полный список.
-        const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
-        return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
-      };
+      // Если бэкенд не нашёл живых матчей и upcoming тоже пуст — показываем
+      // только featured (если есть) и пустой список. НИКАКИХ фейковых
+      // «International 2025» — это вводило пользователей в заблуждение.
+      const upcomingRawsFallback = Array.isArray(upcomingData?.data) ? upcomingData!.data : [];
+      const prematchFromUpcoming: EnrichedMatch[] = upcomingRawsFallback
+        .map(upcomingToMatch)
+        .filter((m): m is Match => m !== null)
+        .slice(0, 30)
+        .map(match => ({ match, markets: [], availableBookmakers: [], dataSource: 'real' as const }));
+
       const featured = await featuredPromise;
-      const liveList = [
-        ...(featured ? [featured] : []),
-        ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
-      ];
-      const prematchList = MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
-      cacheEnriched([...liveList, ...prematchList]);
+      const liveList: EnrichedMatch[] = featured ? [featured] : [];
+      cacheEnriched([...liveList, ...prematchFromUpcoming]);
       return {
         liveMatches: liveList,
-        prematchMatches: prematchList,
-        isMock: !featured, sources: featured ? ['featured', 'mock'] : ['mock'], fetchedAt,
+        prematchMatches: prematchFromUpcoming,
+        isMock: liveList.length === 0 && prematchFromUpcoming.length === 0,
+        sources: [
+          ...(featured ? ['featured'] : []),
+          ...(upcomingData && !upcomingData.isMock && prematchFromUpcoming.length > 0 ? ['pandascore'] : []),
+        ],
+        fetchedAt,
       };
     }
     // 2. Convert OpenDota data to our Match format
@@ -655,24 +663,17 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
       fetchedAt,
     };
   } catch {
-    const mockMarkets = buildMockMarkets();
-    const buildMock = (match: Match): EnrichedMatch => {
-      const mkts = mockMarkets.filter(mkt => mkt.matchId === match.id);
-      const availableBookmakers = mkts[0]?.allBookmakerOdds ?? [];
-      return { match, markets: mkts, availableBookmakers, dataSource: 'mock' as const };
-    };
+    // Полный отказ сети — показываем только featured если он есть. Никаких
+    // фейковых матчей с «International 2025», это вводило пользователей
+    // в заблуждение.
     const featured = await featuredPromise;
-    const liveList = [
-      ...(featured ? [featured] : []),
-      ...MOCK_MATCHES.filter(m => m.status === 'live').map(buildMock),
-    ];
-    const prematchList = MOCK_MATCHES.filter(m => m.status === 'prematch').map(buildMock);
-    cacheEnriched([...liveList, ...prematchList]);
+    const liveList: EnrichedMatch[] = featured ? [featured] : [];
+    cacheEnriched(liveList);
     return {
       liveMatches: liveList,
-      prematchMatches: prematchList,
-      isMock: !featured,
-      sources: featured ? ['featured', 'mock'] : ['mock'],
+      prematchMatches: [],
+      isMock: liveList.length === 0,
+      sources: featured ? ['featured'] : [],
       fetchedAt,
     };
   }
