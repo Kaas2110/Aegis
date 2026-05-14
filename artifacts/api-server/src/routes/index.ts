@@ -7,6 +7,7 @@ import analyticsRouter from "./analytics";
 import teamsRouter from "./teams";
 import adminRouter from "./admin";
 import adminAuthRouter from "./adminAuth";
+import clientLogsRouter from "./clientLogs";
 
 const router: IRouter = Router();
 
@@ -16,6 +17,7 @@ router.use("/matches", matchesRouter);
 router.use("/bookmakers", bookmakersRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/teams", teamsRouter);
+router.use("/client-logs", clientLogsRouter);
 
 // Auth endpoints (login/logout/whoami) — public, mounted BEFORE admin router so
 // they aren't gated by the admin auth middleware. They consume `req.body.token`

@@ -6,13 +6,80 @@ const APP_VERSION = '1.0.0-mvp1';
 const EVENTS_KEY = '@dea_product_events';
 const TECH_LOGS_KEY = '@dea_tech_logs';
 const AUDIT_LOGS_KEY = '@dea_audit_logs';
+const UPLOAD_QUEUE_KEY = '@dea_log_upload_queue';
 const MAX_STORED_EVENTS = 500;
+const MAX_UPLOAD_QUEUE = 1000;
+const UPLOAD_INTERVAL_MS = 30_000;
+const UPLOAD_BATCH_SIZE = 50;
 
 let currentSessionId = generateId();
 let currentAnonymousId = '';
+let uploadTimer: ReturnType<typeof setInterval> | null = null;
+let apiBaseUrl: string = '';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+}
+
+/**
+ * Запускает фоновую отправку логов на сервер (POST /api/client-logs).
+ * Каждые 30s пытается слить до 50 событий из очереди в `AsyncStorage`.
+ * Если бэкенд отвечает не-2xx — события возвращаются в очередь, чтобы при
+ * следующем интервале попробовать снова. На проде даёт единый поток логов
+ * (server pino + mobile events) для дебага.
+ */
+export function startLogUploader(baseUrl: string = ''): void {
+  apiBaseUrl = baseUrl.replace(/\/$/, '');
+  if (uploadTimer) return;
+  uploadTimer = setInterval(() => {
+    flushLogQueue().catch(() => { /* silent */ });
+  }, UPLOAD_INTERVAL_MS);
+}
+
+async function enqueueForUpload(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(UPLOAD_QUEUE_KEY);
+    const queue: Record<string, unknown>[] = raw ? JSON.parse(raw) : [];
+    queue.push(payload);
+    if (queue.length > MAX_UPLOAD_QUEUE) queue.splice(0, queue.length - MAX_UPLOAD_QUEUE);
+    await AsyncStorage.setItem(UPLOAD_QUEUE_KEY, JSON.stringify(queue));
+  } catch {
+    // silent
+  }
+}
+
+async function flushLogQueue(): Promise<void> {
+  // apiBaseUrl='' → relative '/api/client-logs' (works on web/Expo through proxy).
+  const raw = await AsyncStorage.getItem(UPLOAD_QUEUE_KEY);
+  const queue: Record<string, unknown>[] = raw ? JSON.parse(raw) : [];
+  if (queue.length === 0) return;
+
+  const batch = queue.slice(0, UPLOAD_BATCH_SIZE);
+  const remaining = queue.slice(UPLOAD_BATCH_SIZE);
+  // Сразу удаляем батч из очереди, чтобы при параллельном вызове не отправить
+  // его дважды. Если POST упадёт — вернём обратно в начало.
+  await AsyncStorage.setItem(UPLOAD_QUEUE_KEY, JSON.stringify(remaining));
+
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/client-logs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        events: batch,
+        appVersion: APP_VERSION,
+        platform: Platform.OS,
+      }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  } catch {
+    // Возвращаем батч обратно в очередь (в начало).
+    try {
+      const raw2 = await AsyncStorage.getItem(UPLOAD_QUEUE_KEY);
+      const cur: Record<string, unknown>[] = raw2 ? JSON.parse(raw2) : [];
+      const merged = [...batch, ...cur].slice(0, MAX_UPLOAD_QUEUE);
+      await AsyncStorage.setItem(UPLOAD_QUEUE_KEY, JSON.stringify(merged));
+    } catch { /* silent */ }
+  }
 }
 
 export async function initLogger(): Promise<void> {
@@ -65,6 +132,15 @@ export async function logProductEvent(
   } catch {
     // silent fail - logging should never crash the app
   }
+  void enqueueForUpload({
+    type: 'product',
+    eventName,
+    screenName,
+    timestamp: event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp),
+    sessionId: currentSessionId,
+    anonymousId: currentAnonymousId,
+    properties,
+  });
 }
 
 export async function logTechnicalEvent(
@@ -91,6 +167,15 @@ export async function logTechnicalEvent(
   } catch {
     // silent fail
   }
+  void enqueueForUpload({
+    type: 'technical',
+    category,
+    message,
+    timestamp: entry.timestamp,
+    sessionId: currentSessionId,
+    anonymousId: currentAnonymousId,
+    details,
+  });
 }
 
 export async function logPredictionAudit(audit: {

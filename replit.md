@@ -137,6 +137,38 @@ game_time + scores + radiant_lead + building_state + draft (sorted heroes/accoun
   сверху прогрессивно. Лимиты OpenDota тратим в первую очередь на то, что сейчас
   отображается у пользователя (live drafts), батчевые ingest'ы — фоном.
 
+## Логи (для прод-дебага)
+
+Сервер пишет structured JSON через pino. Каждая запись имеет `tag` для фильтрации:
+
+| tag | где | поля |
+|---|---|---|
+| `req`/`res` | `pino-http` middleware | method, url, statusCode, responseTime |
+| `bookmaker` | `routes/bookmakers.ts::fetchSource` | source, events, durationMs, err |
+| `matched` | `GET /api/bookmakers/matched/dota2` | groups, eventsTotal, matchedToTeams, teamsLoaded, sourcesPolled |
+| `cache` | `lib/responseCache.ts::withCache` | key, ttlMs, durationMs, hit/miss/coalesced/filled/cleared |
+| `predict` | `services/PredictionModel.ts` | reason, radiantTeamId, direTeamId (для skip) |
+| `admin` | `routes/admin.ts` | action: refresh-all и др. |
+| `mobile` | `POST /api/client-logs` | type, eventName, screenName, sessionId, anonymousId, appVersion, platform |
+| `upstream` | `lib/loggedFetch.ts` | host, path, status, durationMs, bytes (новый helper, использовать для будущих fetch'ей) |
+
+Mobile (`services/logging/EventLogger.ts`) сохраняет события в `AsyncStorage`
+**и параллельно** ставит их в очередь `@dea_log_upload_queue`. Каждые 30s
+`flushLogQueue` шлёт батчи (до 50) в `POST /api/client-logs` — все мобильные
+ивенты приходят в общий поток server pino. Старт: `startLogUploader()` в
+`AppContext.useEffect` после `initLogger()`. Если бэк недоступен — батч
+возвращается в очередь.
+
+Пример фильтрации прод-логов:
+```bash
+# все запросы букмекеров с длительностью
+grep '"tag":"bookmaker"' logs.json | jq '{source, events, durationMs, err}'
+# что мобилки делали в проде
+grep '"tag":"mobile"' logs.json | jq '{eventName, screenName, sessionId}'
+# проблемные кэши (часто miss)
+grep '"\\[cache\\] miss"' logs.json | jq '.key' | sort | uniq -c
+```
+
 ## Pointers
 
 - **`docs/architecture.md`** — полная архитектура: где что лежит, все API-эндпоинты,

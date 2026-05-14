@@ -31,6 +31,7 @@
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { getApiKey } from '../services/ApiKeysService';
+import { logger as bookmakerLogger } from '../lib/logger';
 
 const router: IRouter = Router();
 
@@ -601,17 +602,26 @@ async function fetchSource(source: string): Promise<SourceResponse> {
     };
   }
 
+  const startedAt = Date.now();
   try {
     const result = await adapter();
+    const durationMs = Date.now() - startedAt;
+    bookmakerLogger.info(
+      { tag: 'bookmaker', source, events: result.events.length, durationMs, error: result.error ?? null },
+      '[bookmaker] fetched',
+    );
     setCached(source, result);
     return result;
   } catch (err) {
+    const durationMs = Date.now() - startedAt;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    bookmakerLogger.warn({ tag: 'bookmaker', source, durationMs, err: errMsg }, '[bookmaker] fetch failed');
     const fail: SourceResponse = {
       source,
       noData: true,
       events: [],
       fetchedAt: new Date().toISOString(),
-      error: err instanceof Error ? err.message : String(err),
+      error: errMsg,
       hint: getApiKey('PROXY_URL')
         ? 'Прокси настроен, но запрос не удался. Проверьте PROXY_URL и доступность букмекера.'
         : 'Установите PROXY_URL для обхода гео-блокировки (РФ-прокси).',
@@ -861,7 +871,8 @@ router.get('/all/dota2', async (_req, res) => {
 // Маркеты: возвращаем UnifiedBookmakerEvent.markets как есть (winner / totalKills
 // / totalMaps / mapWinners / correctScore / firstBlood / totalDuration), чтобы
 // UI мог по своему усмотрению выводить кэф рядом с любым нашим прогнозом.
-router.get('/matched/dota2', async (_req, res) => {
+router.get('/matched/dota2', async (req, res) => {
+  const t0 = Date.now();
   if (!BOOKMAKERS_ENABLED) {
     res.status(503).json({
       enabled: false,
@@ -944,10 +955,24 @@ router.get('/matched/dota2', async (_req, res) => {
     g.sources.push(ev);
   }
 
+  const sourcesPolled = all.map((s) => ({ source: s.source, events: s.events.length, error: s.error ?? null }));
+  const matchedCount = enriched.filter((e) => e.matched).length;
+  req.log.info(
+    {
+      tag: 'matched',
+      durationMs: Date.now() - t0,
+      groups: groups.size,
+      eventsTotal: enriched.length,
+      matchedToTeams: matchedCount,
+      teamsLoaded: byNorm.size,
+      sourcesPolled,
+    },
+    '[bookmaker] /matched/dota2 done',
+  );
   res.json({
     enabled: true,
     fetchedAt: new Date().toISOString(),
-    sourcesPolled: all.map((s) => ({ source: s.source, events: s.events.length, error: s.error ?? null })),
+    sourcesPolled,
     count: groups.size,
     matched: Array.from(groups.values()),
   });

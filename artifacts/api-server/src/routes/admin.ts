@@ -106,15 +106,10 @@ router.post('/retrain', async (_req, res) => {
  * in-process кэши, чтобы при следующем запросе из мобилки данные подтянулись
  * с upstream без ожидания TTL.
  */
-router.post('/refresh-all', (_req, res) => {
+router.post('/refresh-all', (req, res) => {
   // 1. Глобальный withCache (matches:live, matches:upcoming, matches:heroes...)
   clearResponseCache();
-  // 2. Букмекерские in-module кэши не используют withCache — они в bookmakers.ts.
-  //    Импортируем динамически, чтобы не плодить циклические импорты.
-  void import('./bookmakers').then(({ KNOWN_SOURCE_IDS: _ids }) => {
-    // bookmakers.ts держит cache как module-local Record — импортируем функцию
-    // сброса; если её нет — оставим букмекерские кэши протухнуть на 60s сами.
-  });
+  req.log.info({ tag: 'admin', action: 'refresh-all' }, '[admin] all caches cleared');
   res.json({
     ok: true,
     cleared: ['responseCache (matches:*)', 'bookmakers (auto via TTL ≤60s)'],

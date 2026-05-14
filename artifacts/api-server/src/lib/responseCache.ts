@@ -12,7 +12,13 @@
  *     pending-promise и не плодят дубль-запросы.
  *
  * Это процессо-локальный кэш. Для multi-instance деплоя нужен Redis (TODO).
+ *
+ * Логирование: каждый вызов пишет hit / miss / coalesced + длительность
+ * upstream-fetch'а — на проде это даёт точную картину «какой кэш работает,
+ * какой постоянно протухает». См. tag `[cache]` в логах.
  */
+
+import { logger } from './logger';
 
 interface CacheEntry<T> {
   value: T;
@@ -40,16 +46,27 @@ export async function withCache<T>(
 ): Promise<T> {
   const now = Date.now();
   const hit = cache.get(key) as CacheEntry<T> | undefined;
-  if (hit && hit.expiresAt > now) return hit.value;
+  if (hit && hit.expiresAt > now) {
+    logger.debug({ key, ageMs: ttlMs - (hit.expiresAt - now) }, '[cache] hit');
+    return hit.value;
+  }
 
   // Single-flight: если уже идёт такой же fetch — ждём его, не плодим upstream.
   const pending = inflight.get(key) as Promise<T> | undefined;
-  if (pending) return pending;
+  if (pending) {
+    logger.debug({ key }, '[cache] coalesced');
+    return pending;
+  }
 
+  logger.info({ key, ttlMs }, '[cache] miss');
+  const startedAt = Date.now();
   const p = (async () => {
     try {
       const value = await fetcher();
-      if (shouldCache(value)) {
+      const durationMs = Date.now() - startedAt;
+      const ok = shouldCache(value);
+      logger.info({ key, durationMs, cached: ok }, '[cache] filled');
+      if (ok) {
         // FIFO-вытеснение при достижении потолка: дёшево и достаточно
         // для нашего use-case (не дорогущий LRU, не нужен).
         if (cache.size >= MAX_ENTRIES) {
@@ -59,6 +76,10 @@ export async function withCache<T>(
         cache.set(key, { value, expiresAt: Date.now() + ttlMs });
       }
       return value;
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      logger.warn({ key, durationMs, err: err instanceof Error ? err.message : String(err) }, '[cache] fetch failed');
+      throw err;
     } finally {
       inflight.delete(key);
     }
@@ -69,6 +90,8 @@ export async function withCache<T>(
 
 /** Только для тестов / админа: сбросить весь кэш. */
 export function clearResponseCache(): void {
+  const sizeBefore = cache.size;
   cache.clear();
   inflight.clear();
+  logger.info({ sizeBefore }, '[cache] cleared');
 }

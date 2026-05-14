@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { UserSettings, Filters } from '@/types';
-import { initLogger, logProductEvent } from '@/services/logging/EventLogger';
+import { initLogger, logProductEvent, startLogUploader } from '@/services/logging/EventLogger';
 
 const DEFAULT_SETTINGS: UserSettings = {
   language: 'ru',
@@ -59,6 +59,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function load() {
       await initLogger();
+      startLogUploader();
       try {
         const [ob, age, sRaw, fRaw] = await Promise.all([
           AsyncStorage.getItem(ONBOARDED_KEY),

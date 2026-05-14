@@ -644,16 +644,29 @@ export async function predictMatchWinner(
   tier: Tier | null;
   features: Record<string, number>;
 } | null> {
-  if (cachedModels.size === 0) return null;
-  if (!radiantTeamId || !direTeamId) return null;
+  const startedAt = Date.now();
+  if (cachedModels.size === 0) {
+    logger.debug({ tag: 'predict', reason: 'no_models', radiantTeamId, direTeamId }, '[predict] skip');
+    return null;
+  }
+  if (!radiantTeamId || !direTeamId) {
+    logger.debug({ tag: 'predict', reason: 'no_team_ids' }, '[predict] skip');
+    return null;
+  }
 
   const r = await getTeamRating(radiantTeamId);
   const d = await getTeamRating(direTeamId);
-  if (!r || !d) return null;
+  if (!r || !d) {
+    logger.debug({ tag: 'predict', reason: 'no_rating', radiantTeamId, direTeamId }, '[predict] skip');
+    return null;
+  }
 
   const rGames = r.wins + r.losses;
   const dGames = d.wins + d.losses;
-  if (rGames < 5 || dGames < 5) return null;
+  if (rGames < 5 || dGames < 5) {
+    logger.debug({ tag: 'predict', reason: 'too_few_games', rGames, dGames }, '[predict] skip');
+    return null;
+  }
 
   const tier = classifyTier(r.rating, d.rating);
   await refreshTeamExtended();
