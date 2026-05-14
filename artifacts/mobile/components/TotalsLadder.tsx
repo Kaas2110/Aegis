@@ -22,6 +22,7 @@ interface LadderResponse {
   isLive: boolean;
   projection: null | { current: number; minute: number; projected: number; remainingMin: number };
   lines: LadderLine[];
+  interval: null | { q25: number; q75: number };
   confidence: number;
   modelVersion: string;
   generatedAt: string;
@@ -102,6 +103,11 @@ export function TotalsLadder({
               {type === 'kills'
                 ? `Сейчас ${data.projection.current} к ${data.projection.minute} мин · проекция ~${Math.round(data.projection.projected)}`
                 : `Сейчас ${data.projection.minute} мин · проекция ~${Math.round(data.projection.projected)} мин`}
+            </Text>
+          )}
+          {data?.interval && type === 'duration' && (
+            <Text style={[styles.subline, { color: colors.mutedForeground }]} numberOfLines={1}>
+              Интервал q25–q75: {data.interval.q25.toFixed(1)}–{data.interval.q75.toFixed(1)} мин
             </Text>
           )}
         </View>

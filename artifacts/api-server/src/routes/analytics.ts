@@ -463,6 +463,8 @@ router.get('/totals-ladder', async (req, res) => {
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
   const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
   const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
+  const lgbQ25 = type === 'duration' ? lgb?.totalDurationLogQ25 ?? null : null;
+  const lgbQ75 = type === 'duration' ? lgb?.totalDurationLogQ75 ?? null : null;
   const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
 
   const lines = lineValues.map(line => {
@@ -491,6 +493,12 @@ router.get('/totals-ladder', async (req, res) => {
     isLive,
     projection,
     lines,
+    interval: type === 'duration' && lgbQ25 != null && lgbQ75 != null
+      ? {
+          q25: Number(Math.exp(lgbQ25).toFixed(2)),
+          q75: Number(Math.exp(lgbQ75).toFixed(2)),
+        }
+      : null,
     confidence,
     modelVersion,
     generatedAt: new Date().toISOString(),
