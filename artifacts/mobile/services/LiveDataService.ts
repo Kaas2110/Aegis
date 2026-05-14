@@ -36,6 +36,14 @@ interface OpenDotaLiveMatch {
   // Подмешивается на бэке (routes/matches.ts → enrichWithPandaScoreRunning)
   current_map?: number;    // номер текущей карты (1-based)
   ps_match_id?: number;    // ID матча в PandaScore (для букмекеров)
+  // Подмешивается на бэке (routes/matches.ts → enrichLiveMatchesWithDrafts):
+  // picks/bans тянутся из OD /api/matches/{id}, кешируется 60s per-match.
+  draft?: {
+    picks: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+    bans: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+    source: 'opendota';
+    fetchedAt: string;
+  };
 }
 
 interface OddsData {
@@ -118,6 +126,31 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
   const team1 = buildTeam(raw.team_name_radiant ?? '', raw.team_id_radiant, 'radiant');
   const team2 = buildTeam(raw.team_name_dire ?? '', raw.team_id_dire, 'dire');
 
+  // Если бэк подмешал picks/bans (раздельно по сторонам) — собираем Draft
+  // объект с дефолтными scoreами 0.5: реальные synergy/counter считаются на
+  // бэкенде в /api/analytics/explain, здесь нам важен сам список героев.
+  const draftFromOd = raw.draft && (raw.draft.picks.length > 0 || raw.draft.bans.length > 0)
+    ? {
+        picks: raw.draft.picks.map(p => ({
+          heroId: String(p.heroId),
+          heroName: p.heroName,
+          side: p.side,
+          order: p.order,
+        })),
+        bans: raw.draft.bans.map(b => ({
+          heroId: String(b.heroId),
+          heroName: b.heroName,
+          side: b.side,
+          order: b.order,
+        })),
+        radiantSynergy: 0.5, direSynergy: 0.5,
+        radiantCounter: 0.5, direCounter: 0.5,
+        radiantScalingScore: 0.5, direScalingScore: 0.5,
+        radiantEarlyGameScore: 0.5, direEarlyGameScore: 0.5,
+        comfortHeroes: [],
+      }
+    : undefined;
+
   return {
     id: `od_${raw.match_id ?? raw.lobby_id ?? Date.now()}`,
     team1,
@@ -162,6 +195,7 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
       snapshotAge: 15,
       sourceId: 'opendota',
     },
+    draft: draftFromOd,
   };
 }
 

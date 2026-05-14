@@ -114,6 +114,21 @@ Mobile (Expo) app for Russian-speaking Dota 2 bettors. Dark warm amber palette (
 
 - **Admin → отдельный web-артефакт (DONE 2026-05-11).** Inline `/api/admin-ui/` удалён вместе с `routes/adminUi.ts`. Активный admin-инструмент — артефакт `artifacts/admin-web` (React + Vite, slug `admin-web`, previewPath `/admin-web/`, путь в проксе `/admin-web`). Страницы: `/login`, `/` (дашборд: scheduler-state + активные модели + общие метрики), `/settings`, `/metrics`, `/operations` (ручной retrain + prune snapshots + odds-status). UI на русском, тёмная амбер-палитра (#080604 фон, #E8830A акцент, моноширинная типографика, sharp corners). **Auth.** `POST /api/admin/login { token }` сравнивает с `ADMIN_TOKEN` через `timingSafeEqual` (брутфорс-троттл 10 попыток / 15 мин на IP) и выставляет HttpOnly-cookie `aegis_admin_session` (24h, sameSite=lax, `secure` только в production). `GET /api/admin/whoami` возвращает `{authenticated, tokenConfigured}`. `POST /api/admin/logout` удаляет сессию и cookie. Все `/api/admin/*` и `POST /api/analytics/retrain` идут через `requireAdminSession` — **legacy `X-Admin-Token` header больше не принимается**. Сессии хранятся in-memory в одном процессе api-server (рестарт = relogin, для одного оператора достаточно). На фронте куки летят автоматически: в `lib/api-client-react/src/custom-fetch.ts` глобально выставлено `credentials: 'include'`. На любую 401-ошибку из защищённых хуков `QueryCache.onError` редиректит на `/admin-web/login`. Все вызовы из admin-web идут через сгенерированные хуки `@workspace/api-client-react` (OpenAPI-контракт в `lib/api-spec/openapi.yaml`, секция `admin-auth` + `admin`).
 
+## Live drafts enrichment (DONE 2026-05-14)
+
+OpenDota `/api/live` пики/баны не отдаёт, но `/api/matches/{id}` возвращает `picks_bans` уже на стадии драфта (до старта матча) и обновляет их по ходу. В `routes/matches.ts` добавлен `enrichLiveMatchesWithDrafts`:
+
+- Параллельный фетч (concurrency=4) `/matches/{id}` для всех pro-live с валидным `match_id`.
+- Per-match in-memory cache 60s (защита OD rate-limit 60/min — мобилка опрашивает /live раз в 30s).
+- Hero names из `hero_stats` (lazy cache 1h, fallback `Hero #${id}` если таблица пустая).
+- Маппинг team=0→radiant, team=1→dire; раздельные массивы picks/bans с `{heroId, heroName, side, order}`.
+- Fail-soft: упавший фетч → матч без поля `draft`, UI показывает «Драфт ещё не стартовал».
+- На клиенте `LiveDataService.openDotaToMatch` собирает `Draft` объект; synergy/counter/scaling = 0.5 (реальные считаются в `/api/analytics/explain`, здесь нужен только список героев).
+
+## Icon fonts loading (DONE 2026-05-14)
+
+`@expo/vector-icons` (Feather/MaterialCommunityIcons/Ionicons) на вебе и при первом старте на нативе нужно явно регистрировать через `useFonts({ ...Feather.font, ... })` — без этого иконки рендерятся пустыми квадратами. Добавлено в `app/_layout.tsx`.
+
 ## Wave 5 — ML quality improvements (DONE 2026-05-13)
 
 Реализованы 9 улучшений из deep-research-report. Все модели переобучены.

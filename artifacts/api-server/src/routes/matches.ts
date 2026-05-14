@@ -1,5 +1,5 @@
 import { Router, type IRouter } from 'express';
-import { db, teamsTable, leaguesTable } from '@workspace/db';
+import { db, teamsTable, leaguesTable, heroStatsTable } from '@workspace/db';
 import { inArray } from 'drizzle-orm';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
@@ -223,6 +223,144 @@ function enrichWithPandaScoreRunning(
   });
 }
 
+// ── Hero name cache (lazy, refreshed раз в час) ────────────────────────────
+//
+// hero_stats заполняется ingest:hero-stats. Имена там — внутренние OD slugs
+// (например, "antimage"). Этого достаточно для UI: на клиенте они мапятся в
+// локализованные имена через локальный hero-каталог. Если кеш пуст (свежая
+// БД) — отдаём `Hero #${id}` как fallback.
+let heroNameCache: Map<number, string> | null = null;
+let heroNameCacheAt = 0;
+const HERO_CACHE_TTL_MS = 60 * 60 * 1000;
+
+async function getHeroNames(): Promise<Map<number, string>> {
+  const now = Date.now();
+  if (heroNameCache && (now - heroNameCacheAt) < HERO_CACHE_TTL_MS) return heroNameCache;
+  try {
+    const rows = await db.select({ id: heroStatsTable.heroId, name: heroStatsTable.name }).from(heroStatsTable);
+    heroNameCache = new Map(rows.map(r => [r.id, r.name] as const));
+    heroNameCacheAt = now;
+  } catch {
+    heroNameCache = heroNameCache ?? new Map();
+  }
+  return heroNameCache;
+}
+
+// ── Live-draft enrichment ──────────────────────────────────────────────────
+//
+// OpenDota `/api/live` НЕ отдаёт пики/баны. Но `/api/matches/{id}` возвращает
+// `picks_bans` даже для матча в процессе (как только драфт стартовал). Эту
+// функцию мы вызываем после того, как PandaScore уже подмешал ps_match_id и
+// мы знаем, какая карта сейчас идёт.
+//
+// Стратегия:
+//  1. Параллельно (concurrency=4) fetch'им /api/matches/{match_id} для всех
+//     pro-live матчей с валидным match_id.
+//  2. Per-match cache 60s, чтобы при опросе мобилкой раз в 30s не бить OD на
+//     тот же матч заново (rate limit OD = 60 req/min).
+//  3. Маппим picks_bans → { picks: [{heroId, heroName, side, order}], bans: [...] }.
+//     team=0 → radiant, team=1 → dire.
+//  4. Если фетч упал/таймаут — матч возвращается без поля `draft` (UI покажет
+//     placeholder «Драфт ещё не стартовал»).
+
+interface OpenDotaPickBan {
+  is_pick: boolean;
+  hero_id: number;
+  team: number; // 0 = radiant, 1 = dire
+  order: number;
+}
+
+interface LiveDraftPayload {
+  picks: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+  bans: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+  source: 'opendota';
+  fetchedAt: string;
+}
+
+const draftCache = new Map<number, { payload: LiveDraftPayload | null; at: number }>();
+const DRAFT_CACHE_TTL_MS = 60_000;
+const DRAFT_CACHE_MAX = 200;
+
+function setDraftCache(matchId: number, payload: LiveDraftPayload | null) {
+  // Простая bounded LRU: при переполнении выкидываем самые старые записи
+  // (Map сохраняет порядок вставки). 200 записей × ~5 KB = ~1 MB макс.
+  draftCache.set(matchId, { payload, at: Date.now() });
+  if (draftCache.size > DRAFT_CACHE_MAX) {
+    const excess = draftCache.size - DRAFT_CACHE_MAX;
+    const it = draftCache.keys();
+    for (let i = 0; i < excess; i++) {
+      const k = it.next().value;
+      if (k !== undefined) draftCache.delete(k);
+    }
+  }
+}
+
+async function fetchOpenDotaDraft(matchId: number): Promise<LiveDraftPayload | null> {
+  const cached = draftCache.get(matchId);
+  if (cached && (Date.now() - cached.at) < DRAFT_CACHE_TTL_MS) return cached.payload;
+  try {
+    const resp = await apiFetch(`${OPENDOTA_BASE}/matches/${matchId}`, { timeout: 4000 });
+    if (!resp.ok) {
+      setDraftCache(matchId, null);
+      return null;
+    }
+    const data = await resp.json() as { picks_bans?: OpenDotaPickBan[] };
+    const pb = Array.isArray(data.picks_bans) ? data.picks_bans : [];
+    if (pb.length === 0) {
+      setDraftCache(matchId, null);
+      return null;
+    }
+    const heroes = await getHeroNames();
+    const heroName = (id: number) => heroes.get(id) ?? `Hero #${id}`;
+    const payload: LiveDraftPayload = {
+      picks: pb.filter(p => p.is_pick).map(p => ({
+        heroId: p.hero_id,
+        heroName: heroName(p.hero_id),
+        side: p.team === 0 ? 'radiant' : 'dire',
+        order: p.order,
+      })),
+      bans: pb.filter(p => !p.is_pick).map(p => ({
+        heroId: p.hero_id,
+        heroName: heroName(p.hero_id),
+        side: p.team === 0 ? 'radiant' : 'dire',
+        order: p.order,
+      })),
+      source: 'opendota',
+      fetchedAt: new Date().toISOString(),
+    };
+    setDraftCache(matchId, payload);
+    return payload;
+  } catch {
+    setDraftCache(matchId, null);
+    return null;
+  }
+}
+
+async function enrichLiveMatchesWithDrafts(matches: unknown): Promise<unknown> {
+  if (!Array.isArray(matches) || matches.length === 0) return matches;
+  // Concurrency=4: типично 5-10 live-матчей, не хотим съесть весь rate-limit
+  // OD (60/min). Fetch занимает ~300-800ms, total <2s даже для 10 матчей.
+  const idSet = new Set<number>();
+  for (const raw of matches) {
+    const id = Number((raw as Record<string, unknown>)['match_id'] ?? 0);
+    if (id > 0) idSet.add(id);
+  }
+  const ids = Array.from(idSet);
+  const drafts = new Map<number, LiveDraftPayload | null>();
+  const CONCURRENCY = 4;
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    const batch = ids.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(id => fetchOpenDotaDraft(id)));
+    batch.forEach((id, idx) => drafts.set(id, results[idx] ?? null));
+  }
+  return matches.map(raw => {
+    const m = raw as Record<string, unknown>;
+    const id = Number(m['match_id'] ?? 0);
+    const draft = id > 0 ? drafts.get(id) : null;
+    return draft ? { ...m, draft } : m;
+  });
+}
+
 interface RequestOptions {
   timeout?: number;
   headers?: Record<string, string>;
@@ -319,10 +457,17 @@ router.get('/live', async (req, res) => {
     if (openDota.status === 'fulfilled') {
       // Если PandaScore вернул running-матчи — обогащаем OD данные:
       // счёт серии, текущая карта, ps_match_id.
-      const enrichedData = psMatches.length > 0
+      const psEnriched = psMatches.length > 0
         ? enrichWithPandaScoreRunning(openDota.value.data, psMatches)
         : openDota.value.data;
-      results.push({ ...openDota.value, data: enrichedData });
+      // Подмешиваем picks_bans для каждого live-матча из OD /matches/{id}.
+      // Кешируется per-match на 60s, поэтому даже при cache miss верхнего
+      // уровня (раз в 30s) мы не убиваем rate-limit OpenDota.
+      const withDrafts = await enrichLiveMatchesWithDrafts(psEnriched).catch(err => {
+        req.log.warn({ err }, 'live draft enrichment failed, returning without drafts');
+        return psEnriched;
+      });
+      results.push({ ...openDota.value, data: withDrafts });
     }
     if (stratz.status === 'fulfilled') results.push(stratz.value);
 
