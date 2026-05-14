@@ -119,6 +119,12 @@ export const modelVersionsTable = pgTable('model_versions', {
   brierScore: real('brier_score'),
   trainSampleSize: integer('train_sample_size'),
   testSampleSize: integer('test_sample_size'),
+  // Wave 5: метрики на «близких матчах» (subset тестового сета где
+  // |elo_diff_norm| < hard_threshold ≈ 0.4 → ~80 ELO разница).
+  // Главный показатель полезности модели — точность когда фаворит неочевиден.
+  hardMatchAccuracy: real('hard_match_accuracy'),
+  hardMatchBrier: real('hard_match_brier'),
+  hardMatchCount: integer('hard_match_count'),
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
   isActive: boolean('is_active').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -253,6 +259,27 @@ export const teamRecentFormTable = pgTable('team_recent_form', {
 // ── ВОЛНА 3: HEAD-TO-HEAD ────────────────────────────────────────────────
 // Двусторонняя таблица hero vs hero, ключ — отсортированная пара (low, high).
 // winsLow = победы команды с меньшим teamId. periodDays = 365 (по умолчанию).
+// ── РАСШИРЕННЫЕ TEAM-ФИЧИ (snapshot для prematch inference) ─────────────
+// Один ряд на команду — текущее состояние "как сейчас". Используется
+// PredictionModel.buildTeamFeatures для расширенных фичей v1 (Wave 5).
+// Заполняется `compute:team-extended` за один chronological pass по pro_matches.
+//
+// При тренировке — те же значения вычисляются "as-of-match" в train-script'е
+// (чтобы избежать leakage будущих игр), а здесь — финальное «текущее»
+// состояние для inference.
+export const teamExtendedFeaturesTable = pgTable('team_extended_features', {
+  teamId: bigint('team_id', { mode: 'number' }).primaryKey(),
+  winStreak: integer('win_streak').notNull().default(0),       // signed: +N подряд побед / -N поражений
+  daysSinceLastMatch: real('days_since_last_match'),           // null если матчей не было
+  matches30d: integer('matches_30d').notNull().default(0),
+  avgDurationSec30d: real('avg_duration_sec_30d'),             // средняя длительность матча, секунды
+  firstBloodRate30d: real('first_blood_rate_30d'),             // доля матчей где FB до 5 мин
+  radiantWinrate: real('radiant_winrate'),                     // wr когда играли как radiant (cumulative)
+  direWinrate: real('dire_winrate'),                           // wr когда играли как dire (cumulative)
+  lastMatchTime: bigint('last_match_time', { mode: 'number' }),
+  computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const teamH2HTable = pgTable('team_h2h', {
   teamLowId: bigint('team_low_id', { mode: 'number' }).notNull(),
   teamHighId: bigint('team_high_id', { mode: 'number' }).notNull(),
@@ -488,6 +515,9 @@ export type InsertPlayerHeroStat = typeof playerHeroStatsTable.$inferInsert;
 
 export type TeamRecentForm = typeof teamRecentFormTable.$inferSelect;
 export type InsertTeamRecentForm = typeof teamRecentFormTable.$inferInsert;
+
+export type TeamExtendedFeatures = typeof teamExtendedFeaturesTable.$inferSelect;
+export type InsertTeamExtendedFeatures = typeof teamExtendedFeaturesTable.$inferInsert;
 
 export type TeamH2H = typeof teamH2HTable.$inferSelect;
 export type InsertTeamH2H = typeof teamH2HTable.$inferInsert;

@@ -31,6 +31,7 @@ import {
   playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
+  teamExtendedFeaturesTable,
 } from '@workspace/db';
 import { eq, desc, and, inArray } from 'drizzle-orm';
 import { logger } from '../lib/logger';
@@ -48,13 +49,21 @@ import {
   type RecentFormMap,
   type H2HMap,
 } from '../lib/hero-features';
+import {
+  EXTENDED_TEAM_FEATURE_NAMES,
+  buildExtendedTeamFeatures,
+  type TeamExtendedSnapshot,
+} from '../lib/team-extended';
 
+// Wave 5: team фичи расширены 12 → 18 (12 base + 6 extended).
+// Имена и порядок ОБЯЗАНЫ совпадать с scripts/src/train-{model,lightgbm}.ts.
 const TEAM_FEATURE_NAMES = [
   'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
   'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
   'tier_t1', 'tier_t2', 'tier_t3',
+  ...EXTENDED_TEAM_FEATURE_NAMES,
 ] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 12
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 18
 /** Inference-time constant: logit(0.52) ≈ radiant historical side advantage in pro matches. */
 const RADIANT_SIDE_LOGIT = 0.08;
 
@@ -158,6 +167,11 @@ let h2hCache: H2HMap = new Map();
 let playerGlickoCache: PlayerGlickoMap = new Map();
 let lastWave3Load = 0;
 const WAVE3_CACHE_TTL_MS = 30 * 60 * 1000;
+
+// Wave 5: расширенные team-фичи (snapshot из team_extended_features).
+let teamExtendedCache: Map<number, TeamExtendedSnapshot> = new Map();
+let lastTeamExtendedLoad = 0;
+const TEAM_EXTENDED_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
   const wRaw = (m.weights ?? {}) as Record<string, number>;
@@ -363,6 +377,39 @@ async function refreshTeamRatings(): Promise<void> {
   }
 }
 
+async function refreshTeamExtended(): Promise<void> {
+  if (Date.now() - lastTeamExtendedLoad < TEAM_EXTENDED_CACHE_TTL_MS && teamExtendedCache.size > 0) return;
+  try {
+    const rows = await db.select({
+      teamId: teamExtendedFeaturesTable.teamId,
+      winStreak: teamExtendedFeaturesTable.winStreak,
+      daysSinceLastMatch: teamExtendedFeaturesTable.daysSinceLastMatch,
+      matches30d: teamExtendedFeaturesTable.matches30d,
+      avgDurationSec30d: teamExtendedFeaturesTable.avgDurationSec30d,
+      firstBloodRate30d: teamExtendedFeaturesTable.firstBloodRate30d,
+      radiantWinrate: teamExtendedFeaturesTable.radiantWinrate,
+      direWinrate: teamExtendedFeaturesTable.direWinrate,
+    }).from(teamExtendedFeaturesTable);
+    const next = new Map<number, TeamExtendedSnapshot>();
+    for (const r of rows) {
+      next.set(r.teamId, {
+        winStreak: r.winStreak,
+        daysSinceLastMatch: r.daysSinceLastMatch,
+        matches30d: r.matches30d,
+        avgDurationSec30d: r.avgDurationSec30d,
+        firstBloodRate30d: r.firstBloodRate30d,
+        radiantWinrate: r.radiantWinrate,
+        direWinrate: r.direWinrate,
+      });
+    }
+    teamExtendedCache = next;
+    lastTeamExtendedLoad = Date.now();
+    logger.info({ teams: next.size }, '[PredictionModel] Team extended features refreshed');
+  } catch (err) {
+    logger.error({ err }, '[PredictionModel] Failed to load team_extended_features (table missing? run db push + compute:team-extended)');
+  }
+}
+
 async function refreshWave3Data(): Promise<void> {
   if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && playerHeroStatsCache.size > 0) return;
   try {
@@ -486,6 +533,8 @@ function buildTeamFeatures(
   r: { rating: number; wins: number; losses: number },
   d: { rating: number; wins: number; losses: number },
   tier: Tier | null,
+  rExt: TeamExtendedSnapshot | null,
+  dExt: TeamExtendedSnapshot | null,
   ctx?: {
     seriesTypeNorm?: number;  // default 0.5 (BO3)
     mapNoNorm?: number;       // default 0.0 (game 1)
@@ -497,6 +546,7 @@ function buildTeamFeatures(
   const seriesTypeNorm = ctx?.seriesTypeNorm ?? 0.5;
   const mapNoNorm = ctx?.mapNoNorm ?? 0.0;
   const recencyDaysNorm = ctx?.recencyDaysNorm ?? 0.0;
+  const ext = buildExtendedTeamFeatures(rExt, dExt);
   return [
     1,
     (r.rating - d.rating) / 200,
@@ -510,6 +560,7 @@ function buildTeamFeatures(
     tier === 't1' ? 1 : 0,
     tier === 't2' ? 1 : 0,
     tier === 't3' ? 1 : 0,
+    ...ext,
   ];
 }
 
@@ -605,7 +656,10 @@ export async function predictMatchWinner(
   if (rGames < 5 || dGames < 5) return null;
 
   const tier = classifyTier(r.rating, d.rating);
-  const teamFeats = buildTeamFeatures(r, d, tier);
+  await refreshTeamExtended();
+  const rExt = teamExtendedCache.get(radiantTeamId) ?? null;
+  const dExt = teamExtendedCache.get(direTeamId) ?? null;
+  const teamFeats = buildTeamFeatures(r, d, tier, rExt, dExt);
 
   let model: LoadedModel | null = null;
   let features = teamFeats;

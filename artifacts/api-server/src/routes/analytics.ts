@@ -43,6 +43,9 @@ router.get('/model-status', async (_req, res) => {
     testAccuracy: number | null;
     brierScore: number | null;
     trainSampleSize: number | null;
+    hardMatchAccuracy: number | null;
+    hardMatchBrier: number | null;
+    hardMatchCount: number | null;
     createdAt: Date;
   }[] = [];
   try {
@@ -55,6 +58,9 @@ router.get('/model-status', async (_req, res) => {
         testAccuracy: modelVersionsTable.testAccuracy,
         brierScore: modelVersionsTable.brierScore,
         trainSampleSize: modelVersionsTable.trainSampleSize,
+        hardMatchAccuracy: modelVersionsTable.hardMatchAccuracy,
+        hardMatchBrier: modelVersionsTable.hardMatchBrier,
+        hardMatchCount: modelVersionsTable.hardMatchCount,
         createdAt: modelVersionsTable.createdAt,
       })
       .from(modelVersionsTable)

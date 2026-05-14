@@ -109,6 +109,12 @@ class TrainRequest(BaseModel):
     min_data_in_leaf: int = 20
     feature_fraction: float = 0.8
     early_stopping_rounds: int = 20
+    # Wave 5: «hard-match» evaluation. Если задан hard_feature_index —
+    # после теста на полном test-сете считаем дополнительные метрики на
+    # subset где |X_test[:, hard_feature_index]| < hard_threshold.
+    # Для prematch_winner это elo_diff_norm — близкие по силе матчи.
+    hard_feature_index: int | None = None
+    hard_threshold: float = 0.4
 
 
 class TrainMetrics(BaseModel):
@@ -134,6 +140,9 @@ class TrainResponse(BaseModel):
     train_seconds: float
     residual_std: float | None = None  # только для regression
     alpha: float | None = None  # только для quantile
+    # Wave 5: метрики на «близких» матчах (subset test'а).
+    # Не None если в TrainRequest задан hard_feature_index И в subset было n>=10.
+    hard_test_metrics: TrainMetrics | None = None
 
 
 class PredictRequest(BaseModel):
@@ -403,6 +412,29 @@ def train(req: TrainRequest) -> TrainResponse:
         for name, imp in zip(req.feature_names, model.feature_importances_)
     }
 
+    # Wave 5: hard-match метрики (только для classification, и только если
+    # клиент указал hard_feature_index с разумными границами).
+    hard_test_metrics: TrainMetrics | None = None
+    if (
+        not (is_reg or is_quantile)
+        and req.hard_feature_index is not None
+        and 0 <= req.hard_feature_index < X_train.shape[1]
+        and len(X_test) > 0
+    ):
+        feat_col = X_test[:, req.hard_feature_index]
+        mask = np.abs(feat_col) < req.hard_threshold
+        if int(mask.sum()) >= 10:
+            X_hard = X_test[mask]
+            y_hard = y_test[mask]
+            hard_raw = model.predict_proba(X_hard)[:, 1]
+            hard_cal = calibrator.predict(hard_raw) if calibrator is not None else hard_raw
+            hard_test_metrics = _metrics(hard_cal, y_hard)
+            log.info(
+                "[%s] hard-match eval: n=%d acc=%.3f brier=%.4f (threshold |x[%d]|<%.2f)",
+                req.label, hard_test_metrics.n, hard_test_metrics.accuracy,
+                hard_test_metrics.brier, req.hard_feature_index, req.hard_threshold,
+            )
+
     blob = _serialize_bundle(model, calibrator, req.feature_names,
                              task_type=req.task_type, residual_std=residual_std)
     blob_b64 = base64.b64encode(blob).decode("ascii")
@@ -428,6 +460,7 @@ def train(req: TrainRequest) -> TrainResponse:
         train_seconds=elapsed,
         residual_std=residual_std,
         alpha=req.alpha if is_quantile else None,
+        hard_test_metrics=hard_test_metrics,
     )
 
 

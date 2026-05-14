@@ -50,6 +50,15 @@ import {
   type H2HMap,
   type PlayerGlickoMap,
 } from './lib/hero-features';
+import {
+  EXTENDED_TEAM_FEATURE_NAMES,
+  buildExtendedTeamFeatures,
+  newRollingState,
+  applyMatch,
+  snapshotAt,
+  type TeamRollingState,
+  type TeamExtendedSnapshot,
+} from './lib/team-extended';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES_PER_BUCKET = 80;  // LightGBM нужно чуть больше чем LR
@@ -83,12 +92,16 @@ function mlServiceToken(): string | null {
 }
 const TRAIN_TIMEOUT_MS = 120_000;  // тренировка может быть долгой
 
+// Wave 5: 12 base + 6 extended = 18.
 const TEAM_FEATURE_NAMES = [
   'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
   'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
   'tier_t1', 'tier_t2', 'tier_t3',
+  ...EXTENDED_TEAM_FEATURE_NAMES,
 ] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 12
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 18
+const ELO_DIFF_NORM_IDX = 1;
+const HARD_MATCH_THRESHOLD = 0.4;
 
 interface Sample { features: number[]; label: number; }
 interface TeamRating { rating: number; wins: number; losses: number; }
@@ -110,6 +123,7 @@ interface TrainResponse {
   baseline_acc: number;
   feature_importance: Record<string, number>;
   train_seconds: number;
+  hard_test_metrics?: MlMetrics | null;
 }
 
 interface TeamMatchContext {
@@ -123,6 +137,7 @@ interface TeamMatchContext {
 
 function buildTeamFeatures(
   rId: number, dId: number, teams: Map<number, TeamRating>, ctx: TeamMatchContext,
+  rExt: TeamExtendedSnapshot | null, dExt: TeamExtendedSnapshot | null,
 ): number[] | null {
   const r = teams.get(rId); const d = teams.get(dId);
   if (!r || !d) return null;
@@ -131,6 +146,7 @@ function buildTeamFeatures(
   const seriesTypeNorm = ctx.seriesType === 0 ? 0.0 : ctx.seriesType === 2 ? 1.0 : 0.5;
   const mapNoNorm = Math.min(Math.max(ctx.mapNo - 1, 0), 4) / 4;
   const recencyDaysNorm = (ctx.startTime - ctx.nowUnix) / (365 * 86400);
+  const ext = buildExtendedTeamFeatures(rExt, dExt);
   return [
     1,
     (r.rating - d.rating) / 200,
@@ -139,6 +155,7 @@ function buildTeamFeatures(
     rG >= 50 && dG >= 50 ? 1 : 0,
     ctx.radiantSideLogit, recencyDaysNorm, seriesTypeNorm, mapNoNorm,
     ctx.tier === 't1' ? 1 : 0, ctx.tier === 't2' ? 1 : 0, ctx.tier === 't3' ? 1 : 0,
+    ...ext,
   ];
 }
 
@@ -171,7 +188,13 @@ async function trainBucket(
     const res = await fetch(`${ML_SERVICE_URL}/train`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-ml-token': token },
-      body: JSON.stringify({ label, feature_names: featureNames, train, calib, test }),
+      body: JSON.stringify({
+        label, feature_names: featureNames, train, calib, test,
+        // Wave 5: hard-match eval. elo_diff_norm — фича index 1 во всех v1/v2/v3
+        // (после bias). Threshold 0.4 ≈ 80 ELO разница между командами.
+        hard_feature_index: ELO_DIFF_NORM_IDX,
+        hard_threshold: HARD_MATCH_THRESHOLD,
+      }),
       signal: ctrl.signal,
     });
     if (!res.ok) {
@@ -191,6 +214,12 @@ async function trainBucket(
     console.log(
       `  [${label}] TEST cal  acc=${(tm.accuracy * 100).toFixed(1)}% brier=${tm.brier.toFixed(4)} logloss=${tm.log_loss.toFixed(4)} (baseline=${(data.baseline_acc * 100).toFixed(1)}%) — ${data.train_seconds.toFixed(1)}s`,
     );
+    if (data.hard_test_metrics && data.hard_test_metrics.n > 0) {
+      const hm = data.hard_test_metrics;
+      console.log(
+        `  [${label}] HARD     acc=${(hm.accuracy * 100).toFixed(1)}% brier=${hm.brier.toFixed(4)} n=${hm.n} (|elo_diff_norm|<${HARD_MATCH_THRESHOLD})`,
+      );
+    }
     return data;
   } catch (e) {
     console.error(`  [${label}] training failed: ${(e as Error).message}`);
@@ -316,6 +345,40 @@ async function main() {
   }
   console.log(`[train-lightgbm] radiantWR=${(radiantWR * 100).toFixed(1)}% logit=${radiantSideLogit.toFixed(4)}`);
 
+  // ── Wave 5: as-of pre-pass для расширенных team-фичей ─────────────────
+  console.log('[train-lightgbm] Computing as-of team-extended snapshots …');
+  const allMatchesForRoll = await db.select({
+    matchId: proMatchesTable.matchId,
+    startTime: proMatchesTable.startTime,
+    duration: proMatchesTable.duration,
+    radiantTeamId: proMatchesTable.radiantTeamId,
+    direTeamId: proMatchesTable.direTeamId,
+    radiantWin: proMatchesTable.radiantWin,
+    firstBloodTime: proMatchesTable.firstBloodTime,
+  }).from(proMatchesTable).orderBy(asc(proMatchesTable.startTime));
+  const rollStates = new Map<number, TeamRollingState>();
+  const getState = (id: number) => {
+    let s = rollStates.get(id);
+    if (!s) { s = newRollingState(); rollStates.set(id, s); }
+    return s;
+  };
+  const extByMatch = new Map<number, { r: TeamExtendedSnapshot; d: TeamExtendedSnapshot }>();
+  for (const m of allMatchesForRoll) {
+    if (!m.radiantTeamId || !m.direTeamId) continue;
+    const rState = getState(m.radiantTeamId);
+    const dState = getState(m.direTeamId);
+    extByMatch.set(m.matchId, {
+      r: snapshotAt(rState, m.startTime),
+      d: snapshotAt(dState, m.startTime),
+    });
+    applyMatch(rState, dState, {
+      matchId: m.matchId, startTime: m.startTime, duration: m.duration,
+      radiantTeamId: m.radiantTeamId, direTeamId: m.direTeamId,
+      radiantWin: m.radiantWin, firstBloodTime: m.firstBloodTime,
+    });
+  }
+  console.log(`[train-lightgbm] as-of snapshots: ${extByMatch.size} matches, ${rollStates.size} teams`);
+
   // Сборка бакетов
   const v1All: Sample[] = [];
   const v1Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
@@ -331,6 +394,7 @@ async function main() {
     if (!r || !d) continue;
     if ((r.rating + d.rating) / 2 < MIN_AVG_GLICKO) continue;
     const tier = classifyTier(r.rating, d.rating);
+    const ext = extByMatch.get(m.matchId);
     const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams, {
       startTime: m.startTime,
       seriesType: m.seriesType ?? null,
@@ -338,7 +402,7 @@ async function main() {
       tier,
       radiantSideLogit,
       nowUnix,
-    });
+    }, ext?.r ?? null, ext?.d ?? null);
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
@@ -441,6 +505,9 @@ async function main() {
       brierScore: r.test_metrics_calibrated.brier,
       trainSampleSize: r.train_metrics.n,
       testSampleSize: r.test_metrics_calibrated.n,
+      hardMatchAccuracy: r.hard_test_metrics && r.hard_test_metrics.n > 0 ? r.hard_test_metrics.accuracy : null,
+      hardMatchBrier: r.hard_test_metrics && r.hard_test_metrics.n > 0 ? r.hard_test_metrics.brier : null,
+      hardMatchCount: r.hard_test_metrics ? r.hard_test_metrics.n : 0,
       metadata: {
         tier: j.tier,
         engine: 'lightgbm',

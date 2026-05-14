@@ -52,6 +52,15 @@ import {
   type H2HMap,
   type PlayerGlickoMap,
 } from './lib/hero-features';
+import {
+  EXTENDED_TEAM_FEATURE_NAMES,
+  buildExtendedTeamFeatures,
+  newRollingState,
+  applyMatch,
+  snapshotAt,
+  type TeamRollingState,
+  type TeamExtendedSnapshot,
+} from './lib/team-extended';
 
 const TRAIN_WINDOW_DAYS = 365;
 const EPOCHS = 200;
@@ -74,12 +83,18 @@ const L2 = 0.001;
 const MIN_SAMPLES_PER_TIER = 50;
 const MIN_AVG_GLICKO = 1200;  // отсекаем T3 — рейтинги шумные
 
+// Wave 5: 12 base + 6 extended = 18. Имена и порядок ОБЯЗАНЫ совпадать с
+// PredictionModel.ts и train-lightgbm.ts.
 const TEAM_FEATURE_NAMES = [
   'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
   'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
   'tier_t1', 'tier_t2', 'tier_t3',
+  ...EXTENDED_TEAM_FEATURE_NAMES,
 ] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 12
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 18
+// Index фичи `elo_diff_norm` для hard-match subset eval (после bias).
+const ELO_DIFF_NORM_IDX = 1;
+const HARD_MATCH_THRESHOLD = 0.4;
 
 interface Sample {
   features: number[];
@@ -121,6 +136,8 @@ function buildTeamFeatures(
   direId: number,
   teams: Map<number, TeamRating>,
   ctx: TeamMatchContext,
+  rExt: TeamExtendedSnapshot | null,
+  dExt: TeamExtendedSnapshot | null,
 ): number[] | null {
   const r = teams.get(radiantId);
   const d = teams.get(direId);
@@ -141,10 +158,12 @@ function buildTeamFeatures(
   const mapNoNorm = Math.min(Math.max(ctx.mapNo - 1, 0), 4) / 4;
   const recencyDaysNorm = (ctx.startTime - ctx.nowUnix) / (365 * 86400);
 
+  const ext = buildExtendedTeamFeatures(rExt, dExt);
   return [
     1, eloDiff, wrDiff, expDiff, isHighTier,
     ctx.radiantSideLogit, recencyDaysNorm, seriesTypeNorm, mapNoNorm,
     ctx.tier === 't1' ? 1 : 0, ctx.tier === 't2' ? 1 : 0, ctx.tier === 't3' ? 1 : 0,
+    ...ext,
   ];
 }
 
@@ -180,6 +199,28 @@ interface Metrics {
   brier: number;
 }
 
+interface HardMetrics {
+  acc: number;
+  brier: number;
+  count: number;
+}
+
+/** Wave 5: метрика на «близких» матчах — subset тестовой выборки где
+ *  |elo_diff_norm| < HARD_MATCH_THRESHOLD. Главный показатель полезности
+ *  модели когда фаворит неочевиден. */
+function evaluateHard(samples: Sample[], w: number[], calib: CalibrationModel | null): HardMetrics {
+  const hard = samples.filter(s => Math.abs(s.features[ELO_DIFF_NORM_IDX] ?? 0) < HARD_MATCH_THRESHOLD);
+  if (hard.length === 0) return { acc: 0, brier: 0, count: 0 };
+  let correct = 0, brier = 0;
+  for (const s of hard) {
+    const raw = sigmoid(dot(w, s.features));
+    const p = calib ? applyCalibration(raw, calib) : raw;
+    if ((p >= 0.5 ? 1 : 0) === s.label) correct++;
+    brier += (p - s.label) ** 2;
+  }
+  return { acc: correct / hard.length, brier: brier / hard.length, count: hard.length };
+}
+
 function evaluate(samples: Sample[], w: number[], calib: CalibrationModel | null): Metrics {
   if (samples.length === 0) return { acc: 0, logLoss: 0, brier: 0 };
   let correct = 0;
@@ -213,6 +254,7 @@ interface BucketResult {
   trainMetrics: Metrics;
   testMetricsRaw: Metrics;
   testMetricsCalibrated: Metrics;
+  hardMetrics: HardMetrics;
   baselineAcc: number;
   brierImprovement: number;
 }
@@ -249,11 +291,13 @@ function trainBucket(
   const trainMetrics = evaluate(train, w, null);
   const testMetricsRaw = evaluate(test, w, null);
   const testMetricsCalibrated = evaluate(test, w, calibration);
+  const hardMetrics = evaluateHard(test, w, calibration);
   const baselineAcc = test.length > 0 ? test.filter(s => s.label === 1).length / test.length : 0;
 
   console.log(`  [${label}] TRAIN  acc=${(trainMetrics.acc * 100).toFixed(1)}% brier=${trainMetrics.brier.toFixed(4)}`);
   console.log(`  [${label}] TEST raw  acc=${(testMetricsRaw.acc * 100).toFixed(1)}% brier=${testMetricsRaw.brier.toFixed(4)} logloss=${testMetricsRaw.logLoss.toFixed(4)}`);
   console.log(`  [${label}] TEST cal  acc=${(testMetricsCalibrated.acc * 100).toFixed(1)}% brier=${testMetricsCalibrated.brier.toFixed(4)} logloss=${testMetricsCalibrated.logLoss.toFixed(4)}`);
+  console.log(`  [${label}] HARD     acc=${(hardMetrics.acc * 100).toFixed(1)}% brier=${hardMetrics.brier.toFixed(4)} n=${hardMetrics.count} (|elo_diff_norm|<${HARD_MATCH_THRESHOLD})`);
   console.log(`  [${label}] baseline always-radiant=${(baselineAcc * 100).toFixed(1)}% calib bins=${calibration.bins.length}`);
 
   return {
@@ -268,6 +312,7 @@ function trainBucket(
     trainMetrics,
     testMetricsRaw,
     testMetricsCalibrated,
+    hardMetrics,
     baselineAcc,
     brierImprovement: testMetricsRaw.brier - testMetricsCalibrated.brier,
   };
@@ -305,6 +350,8 @@ async function main() {
       startTime: proMatchesTable.startTime,
       seriesType: proMatchesTable.series_type,
       leagueId: proMatchesTable.leagueId,
+      duration: proMatchesTable.duration,
+      firstBloodTime: proMatchesTable.firstBloodTime,
     })
     .from(proMatchesTable)
     .where(gte(proMatchesTable.startTime, minStartTime))
@@ -431,6 +478,49 @@ async function main() {
   }
   console.log(`[train-model] radiantWR=${(radiantWR * 100).toFixed(1)}% logit=${radiantSideLogit.toFixed(4)}`);
 
+  // ── Wave 5: as-of pre-pass для расширенных team-фичей ─────────────────
+  // Считаем snapshot per-team НА МОМЕНТ матча (before update) → исключаем
+  // leakage будущих игр в фичи. Загружаем ВСЕ pro_matches (не только окно
+  // тренировки) чтобы новые команды не имели нулевых snapshot'ов.
+  console.log('[train-model] Computing as-of team-extended snapshots …');
+  const allMatchesForRoll = await db.select({
+    matchId: proMatchesTable.matchId,
+    startTime: proMatchesTable.startTime,
+    duration: proMatchesTable.duration,
+    radiantTeamId: proMatchesTable.radiantTeamId,
+    direTeamId: proMatchesTable.direTeamId,
+    radiantWin: proMatchesTable.radiantWin,
+    firstBloodTime: proMatchesTable.firstBloodTime,
+  })
+    .from(proMatchesTable)
+    .orderBy(asc(proMatchesTable.startTime));
+  const rollStates = new Map<number, TeamRollingState>();
+  const getState = (id: number) => {
+    let s = rollStates.get(id);
+    if (!s) { s = newRollingState(); rollStates.set(id, s); }
+    return s;
+  };
+  const extByMatch = new Map<number, { r: TeamExtendedSnapshot; d: TeamExtendedSnapshot }>();
+  for (const m of allMatchesForRoll) {
+    if (!m.radiantTeamId || !m.direTeamId) continue;
+    const rState = getState(m.radiantTeamId);
+    const dState = getState(m.direTeamId);
+    extByMatch.set(m.matchId, {
+      r: snapshotAt(rState, m.startTime),
+      d: snapshotAt(dState, m.startTime),
+    });
+    applyMatch(rState, dState, {
+      matchId: m.matchId,
+      startTime: m.startTime,
+      duration: m.duration,
+      radiantTeamId: m.radiantTeamId,
+      direTeamId: m.direTeamId,
+      radiantWin: m.radiantWin,
+      firstBloodTime: m.firstBloodTime,
+    });
+  }
+  console.log(`[train-model] as-of snapshots ready: ${extByMatch.size} matches, ${rollStates.size} teams`);
+
   // ── Сборка фичей за один проход ────────────────────────────────────────
   const v1All: Sample[] = [];
   const v1Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
@@ -454,14 +544,20 @@ async function main() {
       continue;
     }
     const tier = classifyTier(r.rating, d.rating);
-    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams, {
-      startTime: m.startTime,
-      seriesType: m.seriesType ?? null,
-      mapNo: mapNoByMatch.get(m.matchId) ?? 1,
-      tier,
-      radiantSideLogit,
-      nowUnix,
-    });
+    const ext = extByMatch.get(m.matchId);
+    const teamFeats = buildTeamFeatures(
+      m.radiantTeamId, m.direTeamId, teams,
+      {
+        startTime: m.startTime,
+        seriesType: m.seriesType ?? null,
+        mapNo: mapNoByMatch.get(m.matchId) ?? 1,
+        tier,
+        radiantSideLogit,
+        nowUnix,
+      },
+      ext?.r ?? null,
+      ext?.d ?? null,
+    );
     if (!teamFeats) continue;
 
     const label = m.radiantWin ? 1 : 0;
@@ -620,6 +716,9 @@ async function main() {
       brierScore: r.testMetricsCalibrated.brier,
       trainSampleSize: r.trainSize,
       testSampleSize: r.testSize,
+      hardMatchAccuracy: r.hardMetrics.count > 0 ? r.hardMetrics.acc : null,
+      hardMatchBrier: r.hardMetrics.count > 0 ? r.hardMetrics.brier : null,
+      hardMatchCount: r.hardMetrics.count,
       metadata: {
         tier: r.tier,
         calibration: r.calibration,

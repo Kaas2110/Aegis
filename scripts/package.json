@@ -17,6 +17,7 @@
     "compute:h2h": "tsx ./src/compute-h2h.ts",
     "compute:player-glicko": "tsx ./src/compute-player-glicko.ts",
     "compute:bo3-series": "tsx ./src/compute-bo3-series.ts",
+    "compute:team-extended": "tsx ./src/compute-team-extended.ts",
     "train:model": "tsx ./src/train-model.ts",
     "train:market-models": "tsx ./src/train-market-models.ts",
     "train:live-model": "tsx ./src/train-live-model.ts",
