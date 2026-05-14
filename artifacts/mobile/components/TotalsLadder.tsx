@@ -106,9 +106,14 @@ export function TotalsLadder({
             </Text>
           )}
           {data?.interval && type === 'duration' && (
-            <Text style={[styles.subline, { color: colors.mutedForeground }]} numberOfLines={1}>
-              Интервал q25–q75: {data.interval.q25.toFixed(1)}–{data.interval.q75.toFixed(1)} мин
-            </Text>
+            <View style={styles.intervalWrap}>
+              <View style={[styles.intervalBand, { backgroundColor: colors.muted }]}>
+                <View style={[styles.intervalFill, { backgroundColor: colors.primary }]} />
+              </View>
+              <Text style={[styles.intervalText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                q25–q75: {data.interval.q25.toFixed(1)}–{data.interval.q75.toFixed(1)} мин
+              </Text>
+            </View>
           )}
         </View>
         <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.mutedForeground} />
@@ -227,6 +232,18 @@ const styles = StyleSheet.create({
   typeLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 9, letterSpacing: 1.2 },
   marketLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   subline: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 2 },
+  intervalWrap: { marginTop: 4, gap: 4 },
+  intervalBand: {
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  intervalFill: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.85,
+  },
+  intervalText: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   body: {
     borderTopWidth: 1,
     paddingHorizontal: 12,
