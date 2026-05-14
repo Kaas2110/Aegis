@@ -68,16 +68,23 @@ interface TokenState {
 let pool: TokenState[] | null = null;
 
 function loadPool(): TokenState[] {
-  const raw = process.env['STRATZ_TOKEN'] ?? '';
-  // Дедупликация: дубликат не даёт прироста capacity (один JWT — одни лимиты),
-  // но создал бы иллюзию двух слотов и путал бы LRU. Сохраняем порядок появления.
+  // Собираем токены из двух форматов (оба поддерживаются одновременно):
+  //  1. STRATZ_TOKEN=tok1,tok2,tok3   — comma-separated пул в одном секрете
+  //  2. STRATZ_TOKEN + STRATZ_TOKEN_2 + STRATZ_TOKEN_3 … — по одному секрету на токен
+  // Дедупликация: одинаковый JWT → одни лимиты, не нужно два слота.
   const seen = new Set<string>();
   const unique: string[] = [];
-  for (const tok of raw.split(',').map((s) => s.trim())) {
-    if (tok.length === 0 || seen.has(tok)) continue;
-    seen.add(tok);
-    unique.push(tok);
+
+  const envNames = ['STRATZ_TOKEN', ...Array.from({ length: 9 }, (_, i) => `STRATZ_TOKEN_${i + 2}`)];
+  for (const envName of envNames) {
+    const raw = process.env[envName] ?? '';
+    for (const tok of raw.split(',').map((s) => s.trim())) {
+      if (tok.length === 0 || seen.has(tok)) continue;
+      seen.add(tok);
+      unique.push(tok);
+    }
   }
+
   return unique.map((token) => ({
     token,
     tail: token.length >= 4 ? token.slice(-4) : '????',

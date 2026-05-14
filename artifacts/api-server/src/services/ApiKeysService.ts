@@ -191,8 +191,16 @@ let stratzRrIndex = 0;
  * Если пул пуст — возвращает пустую строку (caller проверяет).
  */
 export function getStratzToken(): string {
-  const raw = getApiKey('STRATZ_TOKEN');
-  const tokens = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  // Собираем пул из STRATZ_TOKEN (может быть comma-sep), STRATZ_TOKEN_2 … _10
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  const envNames = ['STRATZ_TOKEN', ...Array.from({ length: 9 }, (_, i) => `STRATZ_TOKEN_${i + 2}`)];
+  for (const name of envNames) {
+    const raw = getApiKey(name);
+    for (const tok of raw.split(',').map((s) => s.trim())) {
+      if (tok.length > 0 && !seen.has(tok)) { seen.add(tok); tokens.push(tok); }
+    }
+  }
   if (tokens.length === 0) return '';
   const token = tokens[stratzRrIndex % tokens.length]!;
   stratzRrIndex = (stratzRrIndex + 1) % tokens.length;
