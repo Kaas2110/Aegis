@@ -12,7 +12,13 @@ import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './Li
 import { recordPrematchPrediction } from './OutcomeTracker';
 
 const POLL_INTERVAL_MS = 60_000;
+const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
 const OPENDOTA_LIVE_URL = 'https://api.opendota.com/api/live';
+
+// Текущая задержка следующего poll'а. При HTTP 429 удваивается до MAX_BACKOFF_MS,
+// при первом успешном ответе сбрасывается обратно к POLL_INTERVAL_MS. Без этого
+// мы каждые 60с гарантированно ловим 429 и впустую тратим квоту OpenDota.
+let currentBackoffMs = POLL_INTERVAL_MS;
 
 interface LiveMatch {
   match_id?: number;
@@ -138,11 +144,25 @@ async function pollOnce(): Promise<void> {
     const resp = await fetch(OPENDOTA_LIVE_URL, {
       headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' },
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) {
+      // 429/5xx — увеличиваем backoff чтобы не выжигать квоту OpenDota.
+      // Любой 4xx/5xx считаем «надо подождать»: 522/429 транзиентны на Replit IP.
+      if (resp.status === 429 || resp.status >= 500) {
+        currentBackoffMs = Math.min(currentBackoffMs * 2, MAX_BACKOFF_MS);
+        logger.warn({ status: resp.status, nextDelayMs: currentBackoffMs },
+          '[LiveWorker] upstream throttled, backing off');
+      }
+      throw new Error(`HTTP ${resp.status}`);
+    }
     matches = (await resp.json()) as LiveMatch[];
+    // Успешный ответ — сбрасываем backoff к нормальным 60s.
+    if (currentBackoffMs !== POLL_INTERVAL_MS) {
+      logger.info({ resetTo: POLL_INTERVAL_MS }, '[LiveWorker] backoff reset after success');
+      currentBackoffMs = POLL_INTERVAL_MS;
+    }
   } catch (err) {
     stats.lastError = String(err);
-    logger.warn({ err }, '[LiveWorker] OpenDota fetch failed');
+    logger.warn({ err, nextDelayMs: currentBackoffMs }, '[LiveWorker] OpenDota fetch failed');
     return;
   }
 
@@ -310,7 +330,7 @@ async function scheduleNextPoll(delayMs: number): Promise<void> {
     if (pollInFlight) {
       // На всякий случай: если предыдущий прогон ещё идёт — пропускаем тик.
       logger.warn('[LiveWorker] previous poll still in flight, skipping');
-      void scheduleNextPoll(POLL_INTERVAL_MS);
+      void scheduleNextPoll(currentBackoffMs);
       return;
     }
     pollInFlight = true;
@@ -322,7 +342,8 @@ async function scheduleNextPoll(delayMs: number): Promise<void> {
     } finally {
       stats.lastPollDurationMs = Date.now() - startedAt;
       pollInFlight = false;
-      void scheduleNextPoll(POLL_INTERVAL_MS);
+      // Используем динамический backoff: при 429/5xx будет 120s/240s/...
+      void scheduleNextPoll(currentBackoffMs);
     }
   }, delayMs);
 }

@@ -285,11 +285,15 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
     cachedModels = next;
     lastModelLoad = Date.now();
 
+    // Fallback display: prefer лучшие фичи (v3) и LightGBM, чтобы model-status
+    // показывал реально маршрутизируемую модель, а не худший v1 baseline.
     const surface =
-      next.get(modelKey('prematch_winner', 1, 'lightgbm')) ??
-      next.get(modelKey('prematch_winner', 1, 'logreg')) ??
+      next.get(modelKey('prematch_winner', 3, 'lightgbm')) ??
+      next.get(modelKey('prematch_winner', 3, 'logreg')) ??
       next.get(modelKey('prematch_winner', 2, 'lightgbm')) ??
       next.get(modelKey('prematch_winner', 2, 'logreg')) ??
+      next.get(modelKey('prematch_winner', 1, 'lightgbm')) ??
+      next.get(modelKey('prematch_winner', 1, 'logreg')) ??
       next.values().next().value ?? null;
 
     logger.info(
@@ -309,13 +313,15 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
   }
 }
 
-/** Backward-compat: возвращает v1 fallback (lightgbm > logreg). */
+/** Backward-compat: возвращает лучшую активную prematch модель (v3 > v2 > v1, lightgbm > logreg). */
 export function getActiveModel(): LoadedModel | null {
   return (
-    cachedModels.get(modelKey('prematch_winner', 1, 'lightgbm')) ??
-    cachedModels.get(modelKey('prematch_winner', 1, 'logreg')) ??
+    cachedModels.get(modelKey('prematch_winner', 3, 'lightgbm')) ??
+    cachedModels.get(modelKey('prematch_winner', 3, 'logreg')) ??
     cachedModels.get(modelKey('prematch_winner', 2, 'lightgbm')) ??
     cachedModels.get(modelKey('prematch_winner', 2, 'logreg')) ??
+    cachedModels.get(modelKey('prematch_winner', 1, 'lightgbm')) ??
+    cachedModels.get(modelKey('prematch_winner', 1, 'logreg')) ??
     cachedModels.values().next().value ??
     null
   );

@@ -210,8 +210,21 @@ async function fetchAnalytics(match: Match, odds?: OddsData, signal?: AbortSigna
     const snap = match.liveSnapshot;
     const body = {
       matchId: match.id,
-      team1: { name: match.team1.name, elo: match.team1.eloRating, form: match.team1.recentForm },
-      team2: { name: match.team2.name, elo: match.team2.eloRating, form: match.team2.recentForm },
+      team1: {
+        name: match.team1.name,
+        elo: match.team1.eloRating,
+        form: match.team1.recentForm,
+        // teamId — числовой OpenDota id; нужен для вызова ML-модели
+        // (LightGBM v3 prematch_winner). Если id отсутствует/анонимный —
+        // сервер откатывается на математическую модель.
+        teamId: /^\d+$/.test(match.team1.id) ? Number(match.team1.id) : undefined,
+      },
+      team2: {
+        name: match.team2.name,
+        elo: match.team2.eloRating,
+        form: match.team2.recentForm,
+        teamId: /^\d+$/.test(match.team2.id) ? Number(match.team2.id) : undefined,
+      },
       format: match.format,
       tournamentTier: match.tournamentTier,
       draft: match.draft ? {

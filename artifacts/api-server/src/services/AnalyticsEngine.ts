@@ -18,8 +18,11 @@ import {
 
 export interface MatchInput {
   matchId: string;
-  team1: { name: string; elo?: number; form?: number[]; region?: string };
-  team2: { name: string; elo?: number; form?: number[]; region?: string };
+  // teamId — числовой OpenDota id команды; если передан для обеих команд,
+  // /api/analytics/predict переопределяет match_winner предсказание выходом
+  // ML-модели (LightGBM v3 prematch_winner) вместо математической эвристики.
+  team1: { name: string; elo?: number; form?: number[]; region?: string; teamId?: number };
+  team2: { name: string; elo?: number; form?: number[]; region?: string; teamId?: number };
   format: 'BO1' | 'BO3' | 'BO5';
   tournamentTier?: 1 | 2 | 3;
   draft?: {

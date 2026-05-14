@@ -176,6 +176,59 @@ router.get('/ml-predict', async (req, res) => {
 // свежестью (~6 пересчётов в сутки) и экономией CPU/DB.
 const PREMATCH_PREDICT_TTL_MS = 4 * 60 * 60 * 1000;
 
+/**
+ * Если переданы оба numeric teamId — вызываем активную ML-модель
+ * (LightGBM v3 / LR fallback) и переопределяем `match_winner` в
+ * математическом результате. Остальные 13 рынков остаются от математики
+ * (для них пока нет ML). Если ML не вернул прогноз (модель не загружена,
+ * мало матчей у команды и т.д.) — оставляем математику без изменений.
+ */
+async function applyMlMatchWinner(
+  result: ReturnType<typeof runAnalytics>,
+  input: MatchInput,
+): Promise<ReturnType<typeof runAnalytics>> {
+  const t1 = input.team1.teamId;
+  const t2 = input.team2.teamId;
+  if (!t1 || !t2 || t1 === t2) return result;
+
+  let ml;
+  try {
+    ml = await mlPredictMatchWinner(t1, t2);
+  } catch (err) {
+    // ML-провал не должен сваливать весь предикт. Логируем и отдаём math.
+    return result;
+  }
+  if (!ml) return result;
+
+  const idx = result.predictions.findIndex(p => p.betType === 'match_winner');
+  if (idx === -1) return result;
+
+  const old = result.predictions[idx];
+  const probTeam1 = ml.probRadiantWin; // team1 = radiant в нашей нотации
+  const probTeam2 = 1 - probTeam1;
+  // Edge/EV пересчитываем относительно тех же букмекерских коэффициентов.
+  const odds1 = old.bookmakerOdds1;
+  const odds2 = old.bookmakerOdds2;
+  let edge = 0;
+  let ev = 0;
+  if (odds1 && odds2) {
+    const fairProb1 = (1 / odds1) / (1 / odds1 + 1 / odds2);
+    edge = probTeam1 - fairProb1;
+    ev = probTeam1 * (odds1 - 1) - (1 - probTeam1);
+  }
+  result.predictions[idx] = {
+    ...old,
+    probTeam1,
+    probTeam2,
+    confidence: Math.max(probTeam1, probTeam2),
+    edge,
+    ev,
+  };
+  // Помечаем что match_winner посчитан ML-моделью; остальные рынки — math.
+  result.modelVersion = `${ml.modelVersion}+math_v1.0.0`;
+  return result;
+}
+
 router.post('/predict', async (req, res) => {
   try {
     const input = req.body as MatchInput & {
@@ -194,19 +247,33 @@ router.post('/predict', async (req, res) => {
     // меняются редко, нет смысла гонять модель на каждый refresh клиента.
     const isLive = !!input.liveSnapshot;
     if (isLive) {
+      // ВАЖНО: для live НЕ вызываем applyMlMatchWinner — он подменил бы
+      // live-aware математический выход (учитывающий netWorthLead/killsLead/
+      // tower/aegis из liveSnapshot) статичным прематч-предсказанием ML, что
+      // де-факто откатывает прогноз к состоянию на старт матча. Динамическая
+      // live-winner ML-модель (LiveWinnerModel) работает отдельно: LiveWorker
+      // считает её на каждый снапшот и пишет в predictionsTable, а UI читает
+      // через /api/matches/live → predictions. Здесь оставляем чистую
+      // математику с live-features.
       const result = runAnalytics(input, input.bookmakerOdds);
       res.json(result);
       return;
     }
 
-    // Ключ кэша включает имена команд и формат — на случай если апстрим
+    // Ключ кэша включает имена команд, формат, И teamId — на случай если апстрим
     // переиспользует matchId при ростер-замене или смене формата (BO3↔BO5).
-    // Без этого мы могли бы вернуть stale-предикт для изменившегося матча.
-    const cacheKey = `predict:prematch:${input.matchId}:${input.team1.name}:${input.team2.name}:${input.format}`;
+    // teamId в ключе нужен потому что ML-вывод зависит от teamId, а не только
+    // от имени; без него можно отдать stale-предикт после изменения id.
+    const cacheKey =
+      `predict:prematch:${input.matchId}:${input.team1.name}:${input.team2.name}` +
+      `:${input.format}:${input.team1.teamId ?? 0}:${input.team2.teamId ?? 0}`;
     const result = await withCache(
       cacheKey,
       PREMATCH_PREDICT_TTL_MS,
-      async () => runAnalytics(input, input.bookmakerOdds),
+      async () => {
+        const r = runAnalytics(input, input.bookmakerOdds);
+        return applyMlMatchWinner(r, input);
+      },
     );
     res.json(result);
   } catch (err) {
