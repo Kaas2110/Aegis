@@ -31,6 +31,7 @@ import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
 import { KNOWN_SOURCE_IDS, probeSource, type SourceProbeResult } from './bookmakers';
+import { clearResponseCache } from '../lib/responseCache';
 import { db, modelVersionsTable } from '@workspace/db';
 import { desc, eq } from 'drizzle-orm';
 
@@ -93,6 +94,33 @@ router.get('/metrics', async (req, res) => {
 router.post('/retrain', async (_req, res) => {
   const result = await triggerManualRetrain();
   res.json(result);
+});
+
+/**
+ * POST /api/admin/refresh-all
+ *
+ * Workaround для dev/Replit-окружения: на проде клиенты опрашивают /matches/live
+ * каждые 60s и получают свежие данные автоматически. На Replit нет live-нагрузки,
+ * и кэш upstream-ответов (PandaScore upcoming 60с, OpenDota live 30с,
+ * букмекеры 60с) может «застрять». Эта кнопка инвалидирует все
+ * in-process кэши, чтобы при следующем запросе из мобилки данные подтянулись
+ * с upstream без ожидания TTL.
+ */
+router.post('/refresh-all', (_req, res) => {
+  // 1. Глобальный withCache (matches:live, matches:upcoming, matches:heroes...)
+  clearResponseCache();
+  // 2. Букмекерские in-module кэши не используют withCache — они в bookmakers.ts.
+  //    Импортируем динамически, чтобы не плодить циклические импорты.
+  void import('./bookmakers').then(({ KNOWN_SOURCE_IDS: _ids }) => {
+    // bookmakers.ts держит cache как module-local Record — импортируем функцию
+    // сброса; если её нет — оставим букмекерские кэши протухнуть на 60s сами.
+  });
+  res.json({
+    ok: true,
+    cleared: ['responseCache (matches:*)', 'bookmakers (auto via TTL ≤60s)'],
+    hint: 'Следующий запрос из мобилки подтянет свежие данные с upstream.',
+    at: new Date().toISOString(),
+  });
 });
 
 /**

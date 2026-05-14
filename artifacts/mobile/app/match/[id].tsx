@@ -19,7 +19,7 @@ import type { Match, Market } from '@/types';
 
 // TODO(bookmakers): см. replit.md → «Bookmakers roadmap». Включить когда
 // подключим платный источник кэфов (The Odds API Pro / OddsJam).
-const SHOW_BOOKMAKER_PICKER: boolean = false;
+const SHOW_BOOKMAKER_PICKER: boolean = true;
 
 function formatGameTime(seconds: number): string {
   const m = Math.floor(seconds / 60);

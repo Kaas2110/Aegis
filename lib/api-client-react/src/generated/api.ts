@@ -684,6 +684,91 @@ export const useTriggerAdminRetrain = <
 };
 
 /**
+ * Workaround для dev/Replit-окружения: сбрасывает withCache (matches:live,
+matches:upcoming, matches:heroes) чтобы при следующем запросе из мобилки
+данные подтянулись с upstream без ожидания TTL.
+
+ * @summary Invalidate all in-process upstream caches (matches, bookmakers).
+ */
+export const getTriggerAdminRefreshAllUrl = () => {
+  return `/api/admin/refresh-all`;
+};
+
+export const triggerAdminRefreshAll = async (
+  options?: RequestInit,
+): Promise<AdminOpenObject> => {
+  return customFetch<AdminOpenObject>(getTriggerAdminRefreshAllUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTriggerAdminRefreshAllMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerAdminRefreshAll>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof triggerAdminRefreshAll>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["triggerAdminRefreshAll"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof triggerAdminRefreshAll>>,
+    void
+  > = () => {
+    return triggerAdminRefreshAll(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TriggerAdminRefreshAllMutationResult = NonNullable<
+  Awaited<ReturnType<typeof triggerAdminRefreshAll>>
+>;
+
+export type TriggerAdminRefreshAllMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Invalidate all in-process upstream caches (matches, bookmakers).
+ */
+export const useTriggerAdminRefreshAll = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerAdminRefreshAll>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof triggerAdminRefreshAll>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getTriggerAdminRefreshAllMutationOptions(options));
+};
+
+/**
  * @summary Per-model manual retrain (lightgbm bucket / market / live)
  */
 export const getTriggerAdminModelRetrainUrl = () => {

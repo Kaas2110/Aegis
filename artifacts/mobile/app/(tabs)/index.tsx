@@ -11,8 +11,7 @@ import { useApp } from '@/context/AppContext';
 import { MatchCard } from '@/components/MatchCard';
 import { FilterBar } from '@/components/FilterBar';
 import { AegisLogo } from '@/components/AegisLogo';
-// TODO(bookmakers): см. ниже — компонент скрыт до подключения платных кэфов.
-// import { BookmakerDropdown } from '@/components/BookmakerDropdown';
+import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { notificationService, notifyFavoriteTeamMatchStart } from '@/services/notifications/NotificationService';
@@ -285,8 +284,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={[styles.sectionDiamond, { borderColor: accentColor, backgroundColor: accentColor + '22' }]} />
                 <View style={[styles.sectionLine, { backgroundColor: colors.borderGold }]} />
-                {/* TODO(bookmakers): см. replit.md → Bookmakers roadmap. */}
-                {/* {item.isLive && <BookmakerDropdown />} */}
+                {item.isLive && <BookmakerDropdown />}
               </View>
             );
           }

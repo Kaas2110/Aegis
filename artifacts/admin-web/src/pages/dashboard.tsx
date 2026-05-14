@@ -1,20 +1,56 @@
-import { useGetAdminSchedulerState, useGetAdminModels, useGetAdminMetrics } from "@workspace/api-client-react";
+import { useState } from "react";
+import {
+  useGetAdminSchedulerState,
+  useGetAdminModels,
+  useGetAdminMetrics,
+  useTriggerAdminRefreshAll,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatDate, formatMetric } from "@/lib/utils";
-import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert } from "lucide-react";
+import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert, RefreshCw } from "lucide-react";
 
 export default function Dashboard() {
   const { data: schedulerState, isLoading: isLoadingScheduler } = useGetAdminSchedulerState();
   const { data: modelsData, isLoading: isLoadingModels } = useGetAdminModels();
   const { data: metricsData, isLoading: isLoadingMetrics } = useGetAdminMetrics();
+  const refreshAll = useTriggerAdminRefreshAll();
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+
+  const handleRefresh = async () => {
+    try {
+      const r = await refreshAll.mutateAsync();
+      const at = (r as { at?: string } | undefined)?.at;
+      setRefreshMsg(`Готово: кэши очищены ${at ? `(${formatDate(at)})` : ''}. Открой мобилку и потяни pull-to-refresh.`);
+    } catch (e) {
+      setRefreshMsg(`Ошибка: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setTimeout(() => setRefreshMsg(null), 6000);
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight">Операционная панель</h2>
-        <p className="text-muted-foreground font-mono text-xs uppercase tracking-wider mt-1">Текущее состояние системы и ML-моделей</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">Операционная панель</h2>
+          <p className="text-muted-foreground font-mono text-xs uppercase tracking-wider mt-1">Текущее состояние системы и ML-моделей</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            onClick={handleRefresh}
+            disabled={refreshAll.isPending}
+            variant="outline"
+            className="rounded-none border-primary/40 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-wider"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshAll.isPending ? 'animate-spin' : ''}`} />
+            Обновить приложение
+          </Button>
+          {refreshMsg && (
+            <span className="text-[11px] font-mono text-muted-foreground max-w-xs text-right">{refreshMsg}</span>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

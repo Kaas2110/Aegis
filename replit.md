@@ -122,8 +122,16 @@ game_time + scores + radiant_lead + building_state + draft (sorted heroes/accoun
 - Pinnacle парсим самостоятельно, без платного API (пользователь предупреждён про ToS)
 - Не предлагать Reserved VM деплой пока пользователь не попросит
 - Не платить за The Odds API на этом этапе
-- В мобилке букмекерский UI скрыт до появления первых пользователей
-  (бэкенд оставлен нетронутым, помечено `TODO(bookmakers)`)
+- Букмекерский UI включён через **Bovada** (200 OK с Replit-IP, без ключа). Все 6 РФ-буков с
+  Replit заблокированы (DNS / Cloudflare / 404), Pinnacle требует guest API key (нет).
+  `BOOKMAKERS_ENABLED` дефолт = true (opt-out через `=false`). Маркеты Bovada: Moneyline
+  (winner серии + Map 1/2), Total Maps, Under/Over Kills, Correct Score, Asian Handicap.
+  НЕ покрыто Bovada: Total Duration, First Blood — для них только наш прогноз.
+- `/api/bookmakers/matched/dota2` — fuzzy-match букмекерских ивентов с `teamsTable`
+  (по нормализованному имени + tag), группировка по упорядоченной паре team_id.
+- Admin кнопка «Обновить приложение» (`POST /api/admin/refresh-all`) сбрасывает
+  все withCache (`matches:live`, `matches:upcoming`, `matches:heroes`) — workaround
+  для dev/Replit-окружения, где TTL может «застрять» без live-нагрузки.
 - Алерты — только по `minConfidence` модели; `minEdge`/`minOdds` вернутся вместе с букмекерским UI
 - При проблемах с данными приоритет — показать актуальные матчи; ML-скоринг догружается
   сверху прогрессивно. Лимиты OpenDota тратим в первую очередь на то, что сейчас

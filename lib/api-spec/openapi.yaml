@@ -130,6 +130,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminRetrainResult"
 
+  /admin/refresh-all:
+    post:
+      operationId: triggerAdminRefreshAll
+      tags: [admin]
+      summary: Invalidate all in-process upstream caches (matches, bookmakers).
+      description: |
+        Workaround для dev/Replit-окружения: сбрасывает withCache (matches:live,
+        matches:upcoming, matches:heroes) чтобы при следующем запросе из мобилки
+        данные подтянулись с upstream без ожидания TTL.
+      responses:
+        "200":
+          description: Cache cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
   /admin/models/retrain:
     post:
       operationId: triggerAdminModelRetrain

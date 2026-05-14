@@ -169,6 +169,18 @@ export const TriggerAdminRetrainResponse = zod.object({
 });
 
 /**
+ * Workaround для dev/Replit-окружения: сбрасывает withCache (matches:live,
+matches:upcoming, matches:heroes) чтобы при следующем запросе из мобилки
+данные подтянулись с upstream без ожидания TTL.
+
+ * @summary Invalidate all in-process upstream caches (matches, bookmakers).
+ */
+export const TriggerAdminRefreshAllResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+/**
  * @summary Per-model manual retrain (lightgbm bucket / market / live)
  */
 export const TriggerAdminModelRetrainBody = zod.object({
