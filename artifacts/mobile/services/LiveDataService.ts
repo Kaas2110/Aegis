@@ -552,38 +552,12 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
     const rawMatches = liveSourceWithData?.data ?? [];
     const hasRealData = !liveData?.noData && Array.isArray(rawMatches) && rawMatches.length > 0;
 
-    if (!hasRealData) {
-      // Если бэкенд не нашёл живых матчей — показываем только featured
-      // (если есть) и upcoming. Никаких заглушечных «International 2025».
-      const upcomingRawsFallback = Array.isArray(upcomingData?.data) ? upcomingData!.data : [];
-      const prematchFromUpcoming: EnrichedMatch[] = upcomingRawsFallback
-        .map(upcomingToMatch)
-        .filter((m): m is Match => m !== null)
-        .slice(0, 30)
-        .map(match => ({ match, markets: [], availableBookmakers: [] }));
+    // 2. Convert OpenDota live data to our Match format (если есть).
+    const matches = hasRealData
+      ? (rawMatches as OpenDotaLiveMatch[]).slice(0, 10).map(openDotaToMatch)
+      : [];
 
-      const featured = await featuredPromise;
-      const liveList: EnrichedMatch[] = featured ? [featured] : [];
-      cacheEnriched([...liveList, ...prematchFromUpcoming]);
-      return {
-        liveMatches: liveList,
-        prematchMatches: prematchFromUpcoming,
-        noData: liveList.length === 0 && prematchFromUpcoming.length === 0,
-        sources: [
-          ...(featured ? ['featured'] : []),
-          ...(upcomingData && !upcomingData.noData && prematchFromUpcoming.length > 0 ? ['pandascore'] : []),
-        ],
-        fetchedAt,
-      };
-    }
-    // 2. Convert OpenDota data to our Match format
-    const matches = (rawMatches as OpenDotaLiveMatch[])
-      .slice(0, 10) // Show max 10 live matches
-      .map(openDotaToMatch);
-
-    // Маппим upcoming PandaScore → Match. Без analytics (для prematch обычно
-    // нет live-снапшота); markets пустые до старта матча. Этого достаточно для
-    // карточки в списке: имя турнира, время старта, формат.
+    // Маппим upcoming PandaScore → Match. Дедуп по парам команд против live.
     const upcomingRaws = Array.isArray(upcomingData?.data) ? upcomingData!.data : [];
     const prematchMatches: Match[] = upcomingRaws
       .map(upcomingToMatch)
@@ -591,58 +565,127 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
       .filter(m => !matches.some(lm => lm.team1.id === m.team1.id && lm.team2.id === m.team2.id))
       .slice(0, 30);
 
-    // Сначала отдаём «скелеты» в UI: пользователь видит реальные карточки
-    // матчей мгновенно (без ожидания /api/analytics/predict). ML-предсказания
-    // подгружаются ниже последовательно и обновляют конкретные карточки
-    // через onMatchEnriched.
+    // Если нет ни live, ни прематчей — показываем featured как fallback,
+    // чтобы экран не был пустым.
+    if (matches.length === 0 && prematchMatches.length === 0) {
+      const featured = await featuredPromise;
+      const liveList: EnrichedMatch[] = featured ? [featured] : [];
+      cacheEnriched(liveList);
+      return {
+        liveMatches: liveList,
+        prematchMatches: [],
+        noData: liveList.length === 0,
+        sources: featured ? ['featured'] : [],
+        fetchedAt,
+      };
+    }
+
+    // Сначала отдаём «скелеты» в UI — пользователь видит реальные карточки
+    // мгновенно, без ожидания ML. Прогноз догружается ниже через пул.
     const liveShells: EnrichedMatch[] = matches.map(match => ({
       match, markets: [], availableBookmakers: [],
     }));
-    const prematchEnriched: EnrichedMatch[] = prematchMatches.map(match => ({
+    const prematchShells: EnrichedMatch[] = prematchMatches.map(match => ({
       match, markets: [], availableBookmakers: [],
     }));
     const sources = [
-      'opendota',
-      ...(upcomingData && !upcomingData.noData ? ['pandascore'] : []),
+      ...(matches.length > 0 ? ['opendota'] : []),
+      ...(upcomingData && !upcomingData.noData && prematchMatches.length > 0 ? ['pandascore'] : []),
       ...(oddsData?.noData === false ? ['the_odds_api'] : []),
     ];
-    cacheEnriched([...liveShells, ...prematchEnriched]);
+    cacheEnriched([...liveShells, ...prematchShells]);
     cbs?.onShellsReady?.({
       liveMatches: liveShells,
-      prematchMatches: prematchEnriched,
+      prematchMatches: prematchShells,
       noData: false,
       sources,
       fetchedAt,
     });
 
-    // 3. Run analytics SEQUENTIALLY in display order — первый матч в списке
-    // обогащается первым, что важно при ограниченных лимитах OpenDota
-    // (если что-то падает — мы успели обработать самые важные карточки).
-    const enriched: EnrichedMatch[] = [];
-    for (let i = 0; i < matches.length; i++) {
-      // Если внешний AbortSignal сработал — выходим: новый loadData уже
-      // подгружает свежие данные, старые колбэки больше не нужны.
-      if (cbs?.signal?.aborted) break;
-      const match = matches[i];
-      if (!match) continue;
-      const matchingOdds = oddsData?.data?.find(o =>
-        o.team1.toLowerCase().includes(match.team1.name.toLowerCase().split(' ')[1] ?? '') ||
-        o.team2.toLowerCase().includes(match.team2.name.toLowerCase().split(' ')[1] ?? '')
-      );
+    // 3. Run analytics через bounded parallel pool (concurrency=3) с
+    // ORDERED EMISSION: воркеры могут завершать jobs в любом порядке (быстрые
+    // прематчи раньше медленного live), но `onMatchEnriched(em, i)`
+    // вызывается строго в порядке index. Это сохраняет UX-инвариант
+    // «первая карточка обновляется первой» даже при параллельной обработке.
+    // Live идут первыми (приоритет — самый верх списка), за ними прематч
+    // (отсортированы PandaScore по begin_at). Прематч-предикты кэшируются
+    // на сервере 4 часа (routes/analytics.ts → PREMATCH_PREDICT_TTL_MS).
+    const ENRICH_CONCURRENCY = 3;
+
+    const findOdds = (match: Match) => oddsData?.data?.find(o =>
+      o.team1.toLowerCase().includes(match.team1.name.toLowerCase().split(' ')[1] ?? '') ||
+      o.team2.toLowerCase().includes(match.team2.name.toLowerCase().split(' ')[1] ?? '')
+    );
+
+    const enrichOne = async (match: Match): Promise<EnrichedMatch> => {
+      const matchingOdds = findOdds(match);
       const analyticsResult = await fetchAnalytics(match, matchingOdds, cbs?.signal);
       const markets = analyticsResult
         ? analyticsToMarkets(match, analyticsResult, matchingOdds)
         : [];
       const availableBookmakers = buildBookmakerOptions(matchingOdds);
       const em: EnrichedMatch = { match, markets, analyticsResult, availableBookmakers };
-      enriched.push(em);
       cachePut(em);
-      if (!cbs?.signal?.aborted) cbs?.onMatchEnriched?.(em, i);
-    }
+      return em;
+    };
+
+    type Job = { match: Match; index: number; isLive: boolean };
+    const jobs: Job[] = [
+      ...matches.map((m, i) => ({ match: m, index: i, isLive: true })),
+      ...prematchMatches.map((m, i) => ({ match: m, index: matches.length + i, isLive: false })),
+    ];
+
+    const enrichedLive: EnrichedMatch[] = [...liveShells];
+    const enrichedPrematch: EnrichedMatch[] = [...prematchShells];
+
+    // Буфер для ordered emission: results[i] заполняется по факту завершения
+    // job i; nextEmit двигается вперёд только когда results[nextEmit] готов.
+    const results: (EnrichedMatch | undefined)[] = new Array(jobs.length);
+    const done: boolean[] = new Array(jobs.length).fill(false);
+    let nextEmit = 0;
+    const tryEmit = () => {
+      while (nextEmit < jobs.length && done[nextEmit]) {
+        const em = results[nextEmit];
+        const job = jobs[nextEmit];
+        if (em && job && !cbs?.signal?.aborted) {
+          cbs?.onMatchEnriched?.(em, job.index);
+        }
+        nextEmit++;
+      }
+    };
+
+    let nextJob = 0;
+    const worker = async () => {
+      while (true) {
+        if (cbs?.signal?.aborted) return;
+        const myIdx = nextJob++;
+        if (myIdx >= jobs.length) return;
+        const job = jobs[myIdx];
+        if (!job) continue;
+        try {
+          const em = await enrichOne(job.match);
+          if (cbs?.signal?.aborted) return;
+          if (job.isLive) enrichedLive[job.index] = em;
+          else enrichedPrematch[job.index - matches.length] = em;
+          results[myIdx] = em;
+        } catch {
+          // Один упавший /predict не валит цикл — карточка остаётся с пустым
+          // markets[] и UI покажет «данные собираются». results[myIdx]
+          // = undefined, в emit-цикле такой слот скипается, но nextEmit
+          // продолжает двигаться, не блокируя последующих.
+        } finally {
+          done[myIdx] = true;
+          tryEmit();
+        }
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(ENRICH_CONCURRENCY, jobs.length) }, worker);
+    await Promise.all(workers);
 
     return {
-      liveMatches: enriched,
-      prematchMatches: prematchEnriched,
+      liveMatches: enrichedLive,
+      prematchMatches: enrichedPrematch,
       noData: false,
       sources,
       fetchedAt,

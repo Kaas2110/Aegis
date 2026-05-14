@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@/hooks/useColors';
 import type { Match, Market } from '@/types';
@@ -153,7 +153,7 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
         </View>
 
         {/* ── MARKET PREVIEW ────────────────────── */}
-        {bestMarket && (
+        {bestMarket ? (
           <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
             <View style={styles.marketHeader}>
               <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
@@ -177,6 +177,16 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
               onPressTeam1={onPress}
               onPressTeam2={onPress}
             />
+          </View>
+        ) : (
+          /* Прогноз ещё не подгружен (см. fetchLiveData в LiveDataService.ts —
+             карточки рендерятся мгновенно, ML догружается асинхронно по
+             приоритету сверху списка вниз). */
+          <View style={[styles.pendingSection, { borderTopColor: colors.borderGold + '33' }]}>
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
+            <Text style={[styles.pendingText, { color: colors.mutedForeground }]}>
+              Данные собираются, скоро выдадим прогноз
+            </Text>
           </View>
         )}
       </View>
@@ -249,6 +259,19 @@ const styles = StyleSheet.create({
   gameTime: { fontFamily: 'Inter_500Medium', fontSize: 10, marginTop: 2, letterSpacing: 0.5 },
   vsText: { fontFamily: 'Cinzel_700Bold', fontSize: 14, letterSpacing: 1.5 },
   marketSection: { borderTopWidth: 1, paddingTop: 11, gap: 8 },
+  pendingSection: {
+    borderTopWidth: 1,
+    paddingTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pendingText: {
+    fontFamily: 'Forum_400Regular',
+    fontSize: 11,
+    letterSpacing: 0.3,
+    flex: 1,
+  },
   marketHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   marketLabel: { fontFamily: 'Cinzel_500Medium', fontSize: 10, letterSpacing: 1.4 },
   edgeBadge: {

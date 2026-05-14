@@ -66,7 +66,10 @@ export default function HomeScreen() {
         },
         onMatchEnriched: (em) => {
           if (!isCurrent()) return;
+          // Карточка может быть как live, так и прематч — обновляем в обоих
+          // массивах по match.id (id уникален между live/prematch: `od_*` vs `up_*`).
           setEnrichedLive(prev => prev.map(p => p.match.id === em.match.id ? em : p));
+          setEnrichedPrematch(prev => prev.map(p => p.match.id === em.match.id ? em : p));
         },
       });
       if (!isCurrent()) return;

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { runAnalytics, type MatchInput } from '../services/AnalyticsEngine';
+import { withCache } from '../lib/responseCache';
 import {
   getActiveModel,
   loadActiveModel,
@@ -170,7 +171,12 @@ router.get('/ml-predict', async (req, res) => {
  * POST /api/analytics/predict
  * Принимает данные матча, возвращает предсказания для всех 15 типов ставок.
  */
-router.post('/predict', (req, res) => {
+// TTL для прематч-кэша. Прематч-фичи меняются редко: ELO обновляется раз в
+// сутки, ростер-замены — единичные случаи, h2h ещё реже. 4 часа — баланс между
+// свежестью (~6 пересчётов в сутки) и экономией CPU/DB.
+const PREMATCH_PREDICT_TTL_MS = 4 * 60 * 60 * 1000;
+
+router.post('/predict', async (req, res) => {
   try {
     const input = req.body as MatchInput & {
       bookmakerOdds?: { odds1: number; odds2: number };
@@ -183,7 +189,27 @@ router.post('/predict', (req, res) => {
       return;
     }
 
-    const result = runAnalytics(input, input.bookmakerOdds);
+    // Если liveSnapshot есть — это live-матч, состояние меняется каждую минуту,
+    // НЕ кэшируем. Иначе (прематч) кэшируем по matchId на 4 часа: ELO/h2h
+    // меняются редко, нет смысла гонять модель на каждый refresh клиента.
+    const isLive = !!input.liveSnapshot;
+    if (isLive) {
+      const result = runAnalytics(input, input.bookmakerOdds);
+      res.json(result);
+      return;
+    }
+
+    // Ключ кэша включает teamIds/имена и формат — на случай если апстрим
+    // переиспользует matchId при ростер-замене или смене формата (BO3↔BO5).
+    // Без этого мы могли бы вернуть stale-предикт для изменившегося матча.
+    const t1Key = input.team1.id ?? input.team1.name;
+    const t2Key = input.team2.id ?? input.team2.name;
+    const cacheKey = `predict:prematch:${input.matchId}:${t1Key}:${t2Key}:${input.format}`;
+    const result = await withCache(
+      cacheKey,
+      PREMATCH_PREDICT_TTL_MS,
+      async () => runAnalytics(input, input.bookmakerOdds),
+    );
     res.json(result);
   } catch (err) {
     req.log.error({ err }, 'Analytics predict error');

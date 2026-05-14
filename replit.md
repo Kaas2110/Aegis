@@ -83,19 +83,29 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   для будущей калибровки ladder без допущения о log-нормали. Метаданные пишутся
   под каноническим ключом `task_type` (legacy `taskType` оставлен как алиас).
 
-### UX поведение списка (DONE 2026-05-14)
+### UX поведение списка (DONE 2026-05-14, v2)
 
-`fetchLiveData(cbs)` поддерживает прогрессивную отрисовку:
+`fetchLiveData(cbs)` поддерживает прогрессивную отрисовку с параллельным
+обогащением и ordered emission:
 
 1. **Сразу после `/api/matches/live` + `/api/matches/upcoming`** колбэк `onShellsReady`
-   получает «скелеты» матчей — карточки появляются в UI мгновенно, без ожидания
-   ML-предсказаний.
-2. **Затем последовательно** (в порядке списка) для каждого live-матча зовётся
-   `/api/analytics/predict`; колбэк `onMatchEnriched` обновляет конкретную карточку.
+   получает «скелеты» матчей (live + prematch) — карточки появляются в UI мгновенно,
+   без ожидания ML-предсказаний. Под карточками без прогноза `MatchCard.tsx` показывает
+   плейсхолдер «Данные собираются, скоро выдадим прогноз» с ActivityIndicator.
+2. **Bounded parallel pool (concurrency=3)** обогащает одновременно live + prematch.
+   Воркеры берут jobs из общей очереди (live первыми, prematch следом). Прематч-предикты
+   кэшируются на сервере 4 часа (`predict:prematch:${matchId}:${t1}:${t2}:${format}`),
+   поэтому повторные refresh почти бесплатны.
+3. **Ordered emission**: `onMatchEnriched(em, i)` вызывается строго в порядке index
+   (через буфер `results[]` + `nextEmit`). Быстрые прематчи могут завершиться раньше
+   медленного live, но UI обновляется сверху вниз — UX-инвариант «первая карточка
+   обновляется первой» сохраняется.
+4. **AbortSignal**: при новом `loadData` (interval / pull-to-refresh) старый цикл
+   отменяется; внутри fetchAnalytics локальный 5s timeout + поддержка внешнего signal.
 
-Это значит: даже если api-server холодный или OpenDota медленный, пользователь видит
-актуальные матчи моментально, а ML-скоринг подтягивается прогрессивно. Первая карточка
-в списке всегда обогащается первой.
+Сервер: `/api/matches/live` опрашивает OpenDota + Stratz `/League/live` + PandaScore
+`/running` параллельно (5s timeout), кэш 30с. PandaScore работает как fallback, если
+OpenDota упал. `/api/matches/upcoming` — PandaScore, кэш 60с.
 
 ## User preferences
 
