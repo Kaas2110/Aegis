@@ -66,12 +66,9 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   Live-винер модель обучена на `live_snapshots × prematch_outcomes`.
 - **Match-winner model** обучен на OpenDota historical pro matches (LightGBM v3 +
   LR fallback, маршрутизация по tier и наличию draft + account_ids). Текущие
-  метрики (2026-05-14, Stratz DIVINE_IMMORTAL matchups): LightGBM v3 fallback
-  test_acc=72.5% brier=0.181; v3/t2 test_acc=71.0% brier=0.178. ⚠️ Заметное
-  падение с 79.5%→72.5% по сравнению с OpenDota pro-only матчапами —
-  возможно, ranked DIVINE_IMMORTAL matchups менее предсказуемы для про-матчей.
-  LR v3 fallback acc=78.5% brier=0.162. Live-винер lr-live-v8: acc=70.5% vs
-  прематч baseline 55.2% (Δ=+15.3 п.п.).
+  метрики (2026-05-14): LightGBM v3 fallback test_acc=79.5% brier=0.160; LR v3
+  fallback acc=78.5% brier=0.162. Live-винер lr-live-v8: acc=70.5% vs прематч
+  baseline 55.2% (Δ=+15.3 п.п.).
 - **15 mathematical models** для derivative markets (FB, total_kills, total_duration
   ± q25/q75 квантили).
 - **Bookmaker odds aggregation** (когда настроено — сейчас скрыто в UI, см.
