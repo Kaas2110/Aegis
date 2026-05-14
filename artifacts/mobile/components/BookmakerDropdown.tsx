@@ -20,7 +20,6 @@ const BOOKMAKER_OPTIONS: Option[] = [
   { label: 'BetBoom', value: 'betboom' },
   { label: '1xStavka', value: 'x1stavka' },
   { label: 'Olimp.bet', value: 'olimp' },
-  { label: 'Mock', value: 'mock' },
 ];
 
 /**

@@ -4,7 +4,6 @@ export interface DataSourceAdapter {
   sourceId: string;
   sourceName: string;
   sourceType: 'match_data' | 'odds_data' | 'hero_data' | 'player_data' | 'patch_data' | 'combined';
-  isMock: boolean;
 
   fetchUpcomingMatches(): Promise<Match[]>;
   fetchLiveMatches(): Promise<Match[]>;
@@ -20,7 +19,6 @@ export interface DataSourceAdapter {
 export interface BookmakerAdapter {
   bookmakerId: string;
   bookmakerName: string;
-  isMock: boolean;
   isLegal: boolean;
   hasOfficialApi: boolean;
 
@@ -91,7 +89,6 @@ export interface AdapterStatus {
   id: string;
   name: string;
   available: boolean;
-  isMock: boolean;
   checkedAt: number;
   error?: string;
 }

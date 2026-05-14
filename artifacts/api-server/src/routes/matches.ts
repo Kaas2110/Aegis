@@ -449,7 +449,7 @@ async function apiFetch(url: string, options: RequestOptions = {}): Promise<Resp
 // Кэшируем live-ответ на 30с: мобилка опрашивает раз в 60с, и при N клиентах
 // без кэша мы бы N раз в минуту били OpenDota (rate-limit 60/min).
 router.get('/live', async (req, res) => {
-  // Не кэшируем неудачные ответы (isMock=true): если у OpenDota транзиентный
+  // Не кэшируем неудачные ответы (noData=true): если у OpenDota транзиентный
   // 503, мы не должны 30с подряд возвращать пустоту всем клиентам.
   const payload = await withCache('matches:live', 30_000, async () => {
     const results: { source: string; data: unknown; error?: string }[] = [];
@@ -549,12 +549,13 @@ router.get('/live', async (req, res) => {
     const hasData = results.some(r => !r.error && Array.isArray(r.data) && (r.data as unknown[]).length > 0);
     return {
       sources: results,
-      // mockData больше НЕ возвращаем: лучше пустой список, чем фейковые
-      // «International 2025» команды, которые путали пользователей.
-      isMock: !hasData,
+      // Никаких заглушечных данных: если у нас нет реальных матчей — отдаём
+      // пустой список с флагом noData, чтобы клиент мог показать корректное
+      // пустое состояние.
+      noData: !hasData,
       pandascoreRunning: psMatches.length,
     };
-  }, (v) => !(v as { isMock?: boolean }).isMock);
+  }, (v) => !(v as { noData?: boolean }).noData);
   res.json(payload);
 });
 
@@ -563,9 +564,9 @@ router.get('/upcoming', async (req, res) => {
   const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
   if (!pandascoreKey) {
     res.json({
-      isMock: true,
+      noData: true,
       error: 'PANDASCORE_API_KEY не настроен. Получить: https://pandascore.co',
-      data: getMockUpcomingMatches(),
+      data: [],
     });
     return;
   }
@@ -581,10 +582,10 @@ router.get('/upcoming', async (req, res) => {
       const raw = await resp.json() as unknown;
       return await enrichWithLeagueNames(raw).catch(() => raw);
     });
-    res.json({ isMock: false, data });
+    res.json({ noData: false, data });
   } catch (err) {
     req.log.error({ err }, 'PandaScore upcoming error');
-    res.json({ isMock: true, error: String(err), data: getMockUpcomingMatches() });
+    res.json({ noData: true, error: String(err), data: [] });
   }
 });
 
@@ -596,10 +597,10 @@ router.get('/heroes', async (req, res) => {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return await resp.json() as unknown;
     });
-    res.json({ isMock: false, data });
+    res.json({ noData: false, data });
   } catch (err) {
     req.log.error({ err }, 'Heroes fetch error');
-    res.json({ isMock: true, data: [] });
+    res.json({ noData: true, data: [] });
   }
 });
 
@@ -608,64 +609,11 @@ router.get('/hero-stats', async (req, res) => {
     const resp = await apiFetch(`${OPENDOTA_BASE}/heroStats`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json() as unknown;
-    res.json({ isMock: false, data });
+    res.json({ noData: false, data });
   } catch (err) {
     req.log.error({ err }, 'Hero stats fetch error');
-    res.json({ isMock: true, data: [] });
+    res.json({ noData: true, data: [] });
   }
 });
-
-function getMockLiveMatches() {
-  return [
-    {
-      match_id: 999001,
-      team_name_radiant: 'Team Liquid',
-      team_name_dire: 'Team Falcons',
-      radiant_lead: 8200,
-      radiant_score: 14,
-      dire_score: 18,
-      duration: 2100,
-      spectators: 12400,
-      game_mode: 2,
-      source: 'mock',
-    },
-    {
-      match_id: 999002,
-      team_name_radiant: 'Team Spirit',
-      team_name_dire: 'BetBoom Team',
-      radiant_lead: 1400,
-      radiant_score: 11,
-      dire_score: 9,
-      duration: 1350,
-      spectators: 8200,
-      game_mode: 2,
-      source: 'mock',
-    },
-  ];
-}
-
-function getMockUpcomingMatches() {
-  const now = Date.now();
-  return [
-    {
-      id: 'mock_m3',
-      team1: 'Gaimin Gladiators',
-      team2: 'Tundra Esports',
-      tournament: 'BetBoom Dacha 2025',
-      format: 'bo1',
-      begin_at: new Date(now + 45 * 60 * 1000).toISOString(),
-      source: 'mock',
-    },
-    {
-      id: 'mock_m4',
-      team1: 'Nigma Galaxy',
-      team2: 'PSG Quest',
-      tournament: 'ESL One 2025',
-      format: 'bo3',
-      begin_at: new Date(now + 3 * 3600 * 1000).toISOString(),
-      source: 'mock',
-    },
-  ];
-}
 
 export default router;

@@ -1,22 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, ActivityIndicator, Modal, Pressable,
+  Platform, Modal, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import {
-  MOCK_MATCHES, buildMockMarkets, MOCK_TIMELINE,
-} from '@/services/mock/mockData';
-import {
   getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker,
 } from '@/services/LiveDataService';
 import { MarketCard } from '@/components/MarketCard';
 import { TotalsLadder } from '@/components/TotalsLadder';
 import { ProbabilityBar } from '@/components/ProbabilityBar';
-import { ProbabilityTimeline } from '@/components/ProbabilityTimeline';
 import { FreshnessIndicator } from '@/components/FreshnessIndicator';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { Match, Market } from '@/types';
@@ -188,11 +184,10 @@ export default function MatchDetailScreen() {
   // Предыдущая вероятность Radiant — для расчёта live-дельты «было X% → стало Y%».
   const [prevProbR, setPrevProbR] = useState<number | null>(null);
 
-  // Ищем матч сначала в живом кэше, затем в mock
+  // Ищем матч в живом кэше — никаких заглушек, если не нашли = реальная ошибка.
   const cached = id ? getCachedMatch(id) : undefined;
-  const match: Match | undefined = cached?.match ?? MOCK_MATCHES.find(m => m.id === id);
-  const baseMarkets: Market[] = cached?.markets
-    ?? buildMockMarkets().filter(mkt => mkt.matchId === id);
+  const match: Match | undefined = cached?.match;
+  const baseMarkets: Market[] = cached?.markets ?? getCachedMarkets(id ?? '');
 
   // ── Пикер букмекера ────────────────────────────────────────────────────────
   // Если у матча есть несколько букмекеров — даём пользователю выбрать,
@@ -445,17 +440,6 @@ export default function MatchDetailScreen() {
               </View>
             )}
 
-            {isLive && (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <SectionTitle title="Динамика вероятностей" colors={colors} />
-                <ProbabilityTimeline
-                  data={MOCK_TIMELINE}
-                  team1Name={match.team1.shortName}
-                  team2Name={match.team2.shortName}
-                />
-              </View>
-            )}
-
             {/* T006: гуманизированный обзор. Заменил собой сухой dump explanationJson. */}
             {explain && (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -669,9 +653,6 @@ export default function MatchDetailScreen() {
                     </Text>
                     <Text style={[styles.bookmakerPickerName, { color: colors.foreground }]}>
                       {selectedBookmaker.bookmakerName}
-                      {selectedBookmaker.isMock && (
-                        <Text style={{ color: colors.warning }}>  · демо</Text>
-                      )}
                     </Text>
                   </View>
                 </View>
@@ -687,8 +668,7 @@ export default function MatchDetailScreen() {
             {sortedMarkets.length > 0 ? (
               sortedMarkets.map(mkt => {
                 // Тоталы рендерим лестницей ТБ/ТМ (как у буков), а не П1/П2.
-                // Нужны числовые team_id (OpenDota) — у mock-матчей их нет, поэтому
-                // показываем ladder только когда есть оба ID.
+                // Нужны числовые team_id (OpenDota); если их нет — фолбэк на обычный MarketCard.
                 if (mkt.type === 'total_kills' || mkt.type === 'total_duration') {
                   const t1Id = Number(match.team1.id);
                   const t2Id = Number(match.team2.id);
@@ -791,11 +771,6 @@ export default function MatchDetailScreen() {
                         <Text style={[pickerStyles.bkName, { color: colors.foreground }]}>
                           {bk.bookmakerName}
                         </Text>
-                        {bk.isMock && (
-                          <Text style={[pickerStyles.mockTag, { color: colors.warning }]}>
-                            демо-данные
-                          </Text>
-                        )}
                       </View>
                     </View>
                     <View style={pickerStyles.rowRight}>
@@ -865,7 +840,6 @@ const pickerStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   bkName: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  mockTag: { fontFamily: 'Inter_500Medium', fontSize: 10, marginTop: 2 },
   rowRight: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   oddVal: { fontFamily: 'Inter_700Bold', fontSize: 14 },
   oddSep: { fontFamily: 'Inter_400Regular', fontSize: 14 },
@@ -1047,13 +1021,6 @@ const styles = StyleSheet.create({
   factorDesc: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
   factorImpact: { borderRadius: 6, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, minWidth: 64 },
   factorImpactText: { fontFamily: 'Cinzel_700Bold', fontSize: 14, letterSpacing: 0.3 },
-  factorMicroLabel: {
-    fontFamily: 'Cinzel_700Bold',
-    fontSize: 8,
-    letterSpacing: 0.8,
-    opacity: 0.85,
-    marginBottom: 1,
-  },
   sectionHint: {
     fontFamily: 'Inter_400Regular',
     fontSize: 12,

@@ -12,7 +12,6 @@ const DEFAULT_SETTINGS: UserSettings = {
   selectedBookmakerIds: ['fonbet', 'liga_stavok', 'betfair', 'betboom', 'pari'],
   showOnlyPositiveEV: false,
   hideStaleData: false,
-  hideMockMarkets: false,
   analyticsConsent: false,
   pushConsent: false,
   role: 'user',
@@ -29,7 +28,6 @@ const DEFAULT_FILTERS: Filters = {
   mode: 'all',
   onlyPositiveEV: false,
   hideStaleData: false,
-  hideMockMarkets: false,
 };
 
 interface AppContextValue {

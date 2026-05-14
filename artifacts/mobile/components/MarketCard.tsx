@@ -152,16 +152,6 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
               <Feather name="chevron-right" size={13} color={colors.primary} />
             </TouchableOpacity>
           )}
-
-          {/* Mock-предупреждение */}
-          {odds.isMock && (
-            <View style={[styles.mockNote, { backgroundColor: colors.warning + '15', borderColor: colors.warning + '40' }]}>
-              <Feather name="alert-circle" size={10} color={colors.warning} />
-              <Text style={[styles.mockNoteText, { color: colors.warning }]}>
-                Demo-коэффициенты. Настройте API-ключи в переменных окружения.
-              </Text>
-            </View>
-          )}
         </View>
       )}
     </View>
@@ -220,16 +210,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 14,
   },
-  posBadge: {
-    borderRadius: 5,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  posBadgeText: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 10,
-  },
   tilesRow: {
     paddingHorizontal: 14,
     paddingBottom: 12,
@@ -284,19 +264,5 @@ const styles = StyleSheet.create({
   compareText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
-  },
-  mockNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 8,
-  },
-  mockNoteText: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 10,
-    flex: 1,
-    lineHeight: 14,
   },
 });

@@ -14,7 +14,6 @@ import { AegisLogo } from '@/components/AegisLogo';
 // TODO(bookmakers): см. ниже — компонент скрыт до подключения платных кэфов.
 // import { BookmakerDropdown } from '@/components/BookmakerDropdown';
 import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
-import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { notificationService, notifyFavoriteTeamMatchStart } from '@/services/notifications/NotificationService';
 import type { Match, Market } from '@/types';
@@ -29,7 +28,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [enrichedLive, setEnrichedLive] = useState<EnrichedMatch[]>([]);
   const [enrichedPrematch, setEnrichedPrematch] = useState<EnrichedMatch[]>([]);
-  const [isMock, setIsMock] = useState(false);
+  const [noData, setNoData] = useState(false);
   const [dataSources, setDataSources] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [unseenAlerts, setUnseenAlerts] = useState(0);
@@ -61,7 +60,7 @@ export default function HomeScreen() {
           if (!isCurrent()) return;
           setEnrichedLive(partial.liveMatches);
           setEnrichedPrematch(partial.prematchMatches);
-          setIsMock(partial.isMock);
+          setNoData(partial.noData);
           setDataSources(partial.sources);
           setLastUpdated(new Date(partial.fetchedAt));
         },
@@ -72,10 +71,10 @@ export default function HomeScreen() {
       });
       if (!isCurrent()) return;
       // Финальный snapshot — гарантированно показывает обогащённые matches
-      // (на случай если onShellsReady не успел отработать для mock-режима).
+      // (на случай если onShellsReady не успел отработать для пустого ответа).
       setEnrichedLive(result.liveMatches);
       setEnrichedPrematch(result.prematchMatches);
-      setIsMock(result.isMock);
+      setNoData(result.noData);
       setDataSources(result.sources);
       setLastUpdated(new Date(result.fetchedAt));
       // Проверяем алерты по всем обогащённым матчам
@@ -87,7 +86,7 @@ export default function HomeScreen() {
       );
       setUnseenAlerts(notificationService.getUnseenCount());
     } catch {
-      // Fallback на mock данные
+      // Сетевая ошибка — оставляем последний успешный snapshot
     } finally {
       if (isCurrent()) setLoading(false);
     }
@@ -126,13 +125,6 @@ export default function HomeScreen() {
   const marketsMap: Map<string, Market[]> = new Map();
   [...enrichedLive, ...enrichedPrematch].forEach(e => {
     marketsMap.set(e.match.id, e.markets);
-  });
-
-  const mockMarkets = buildMockMarkets();
-  MOCK_MATCHES.forEach(m => {
-    if (!marketsMap.has(m.id)) {
-      marketsMap.set(m.id, mockMarkets.filter(mk => mk.matchId === m.id));
-    }
   });
 
   function getBestMarket(matchId: string): Market | undefined {
@@ -264,7 +256,7 @@ export default function HomeScreen() {
           if (item.type === 'source_bar') {
             return (
               <DataSourceBar
-                isMock={isMock}
+                noData={noData}
                 sources={dataSources}
                 lastUpdated={lastUpdated}
                 colors={colors}
@@ -328,9 +320,9 @@ export default function HomeScreen() {
 }
 
 function DataSourceBar({
-  isMock, sources, lastUpdated, colors,
+  noData, sources, lastUpdated, colors,
 }: {
-  isMock: boolean;
+  noData: boolean;
   sources: string[];
   lastUpdated: Date | null;
   colors: ReturnType<typeof import('@/hooks/useColors').useColors>;
@@ -341,10 +333,10 @@ function DataSourceBar({
 
   return (
     <View style={[barStyles.bar, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-      <View style={[barStyles.dot, { backgroundColor: isMock ? colors.warning : colors.positive }]} />
+      <View style={[barStyles.dot, { backgroundColor: noData ? colors.warning : colors.positive }]} />
       <Text style={[barStyles.text, { color: colors.mutedForeground }]}>
-        {isMock
-          ? 'Demo-данные'
+        {noData
+          ? 'Нет данных от апстрима'
           : `${sources.join(' · ')}`}
       </Text>
       <Text style={[barStyles.time, { color: colors.mutedForeground }]}>{timeStr}</Text>
@@ -425,8 +417,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 1,
   },
-  realBadge: { borderRadius: 2, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 },
-  realBadgeText: { fontFamily: 'Cinzel_700Bold', fontSize: 10, letterSpacing: 0.6 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontFamily: 'Forum_400Regular', fontSize: 15, letterSpacing: 0.5 },
 });

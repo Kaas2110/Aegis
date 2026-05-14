@@ -9,7 +9,7 @@
  * Эндпоинт: https://guest.api.arcadia.pinnacle.com/0.1/sports/{sportId}/markets/straight
  *   Dota 2 sport ID: 12 (esports group)
  *
- * Если Pinnacle вернёт 403/401/429 — возвращаем пустой массив, апи отдаёт isMock=true.
+ * Если Pinnacle вернёт 403/401/429 — возвращаем пустой массив, апи отдаёт noData=true.
  */
 
 import { logger } from '../lib/logger';

@@ -18,23 +18,22 @@ export class OpenDotaAdapter {
     }
   }
 
-  async fetchLiveMatches(): Promise<{ isMock: boolean; data: RealLiveMatchData[] }> {
+  async fetchLiveMatches(): Promise<{ noData: boolean; data: RealLiveMatchData[] }> {
     const resp = await fetch(`${API_BASE}/live`);
     const result = (await resp.json()) as {
-      isMock: boolean;
-      mockData?: RealLiveMatchData[];
+      noData: boolean;
       sources: Array<{ source: string; data: unknown; error?: string }>;
     };
 
-    if (result.isMock) {
-      return { isMock: true, data: result.mockData ?? [] };
+    if (result.noData) {
+      return { noData: true, data: [] };
     }
 
     const src = result.sources?.find(s => s.source === 'opendota');
     const rawData = src?.data;
 
     if (!Array.isArray(rawData) || rawData.length === 0) {
-      return { isMock: true, data: result.mockData ?? [] };
+      return { noData: true, data: [] };
     }
 
     // Real OpenDota /api/live fields (no scoreboard — flat structure)
@@ -61,15 +60,15 @@ export class OpenDotaAdapter {
       source: this.id,
     }));
 
-    return { isMock: false, data: normalized };
+    return { noData: false, data: normalized };
   }
 
-  async fetchUpcomingMatches(): Promise<{ isMock: boolean; data: RealUpcomingMatchData[] }> {
+  async fetchUpcomingMatches(): Promise<{ noData: boolean; data: RealUpcomingMatchData[] }> {
     const resp = await fetch(`${API_BASE}/upcoming`);
     const result = (await resp.json()) as {
-      isMock: boolean;
+      noData: boolean;
       data: RealUpcomingMatchData[];
     };
-    return { isMock: result.isMock, data: result.data ?? [] };
+    return { noData: result.noData, data: result.data ?? [] };
   }
 }

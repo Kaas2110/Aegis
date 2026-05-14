@@ -29,7 +29,7 @@ const MAX_ENTRIES = 256;
 
 /**
  * @param shouldCache опциональный предикат — вернуть `false`, чтобы не кэшировать
- *   результат (например, если ответ содержит ошибки upstream или isMock=true).
+ *   результат (например, если ответ содержит ошибки upstream или noData=true).
  *   По умолчанию кэшируется любой успешный результат.
  */
 export async function withCache<T>(

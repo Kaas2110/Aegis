@@ -13,7 +13,7 @@ router.get('/pinnacle/dota2', async (req, res) => {
   // Кеш на минуту чтобы не спамить Pinnacle
   if (Date.now() - pinnacleCache.fetchedAt < PINNACLE_CACHE_MS && pinnacleCache.data.length > 0) {
     res.json({
-      isMock: false,
+      noData: false,
       source: 'pinnacle',
       cached: true,
       data: pinnacleCache.data,
@@ -45,14 +45,14 @@ router.get('/pinnacle/dota2', async (req, res) => {
     }
 
     res.json({
-      isMock: odds.length === 0,
+      noData: odds.length === 0,
       source: 'pinnacle',
       warning: 'Парсер Pinnacle — best-effort, может не работать. На продакшене нужен платный поставщик.',
       data: odds,
     });
   } catch (err) {
     req.log.error({ err }, 'Pinnacle scraper error');
-    res.status(503).json({ error: 'Pinnacle недоступен', isMock: true, data: [] });
+    res.status(503).json({ error: 'Pinnacle недоступен', noData: true, data: [] });
   }
 });
 
@@ -88,8 +88,8 @@ router.get('/dota2', async (req, res) => {
     res.status(503).json({
       error: 'ODDS_API_KEY не настроен',
       hint: 'Добавьте ODDS_API_KEY в переменные окружения. Получить ключ: https://the-odds-api.com',
-      isMock: true,
-      data: getMockOdds(),
+      noData: true,
+      data: [],
     });
     return;
   }
@@ -113,7 +113,7 @@ router.get('/dota2', async (req, res) => {
     const used = resp.headers.get('x-requests-used');
 
     res.json({
-      isMock: false,
+      noData: false,
       data: data.map(transformOddsApiEvent),
       meta: { requestsRemaining: remaining, requestsUsed: used },
     });
@@ -121,8 +121,8 @@ router.get('/dota2', async (req, res) => {
     req.log.error({ err }, 'The Odds API error');
     res.status(503).json({
       error: 'Ошибка получения коэффициентов',
-      isMock: true,
-      data: getMockOdds(),
+      noData: true,
+      data: [],
     });
   }
 });
@@ -202,23 +202,6 @@ function transformOddsApiEvent(ev: OddsApiResponse): NormalizedOdds {
         })
     ),
   };
-}
-
-function getMockOdds(): NormalizedOdds[] {
-  return [
-    {
-      eventId: 'mock_m1',
-      sportKey: 'esports_dota2',
-      team1: 'Team Liquid',
-      team2: 'Team Falcons',
-      commenceTime: new Date().toISOString(),
-      bookmakers: [
-        { bookmakerId: 'fonbet', bookmakerName: 'Fonbet', team1Odds: 2.15, team2Odds: 1.72, lastUpdate: new Date().toISOString() },
-        { bookmakerId: 'betfair', bookmakerName: 'Betfair', team1Odds: 2.20, team2Odds: 1.68, lastUpdate: new Date().toISOString() },
-        { bookmakerId: 'betboom', bookmakerName: 'BetBoom', team1Odds: 2.08, team2Odds: 1.78, lastUpdate: new Date().toISOString() },
-      ],
-    },
-  ];
 }
 
 export default router;

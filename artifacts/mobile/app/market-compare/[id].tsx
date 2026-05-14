@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { MOCK_MATCHES, buildMockMarkets } from '@/services/mock/mockData';
 import { getCachedMatch, getCachedMarkets } from '@/services/LiveDataService';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { Market, BookmakerOdds } from '@/types';
@@ -20,12 +19,10 @@ export default function MarketCompareScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   const cached = id ? getCachedMatch(id) : undefined;
-  const match = cached?.match ?? MOCK_MATCHES.find(m => m.id === id);
-  const markets = (cached?.markets.length
+  const match = cached?.match;
+  const markets = cached?.markets.length
     ? cached.markets
-    : getCachedMarkets(id ?? '').length
-      ? getCachedMarkets(id ?? '')
-      : buildMockMarkets().filter(mkt => mkt.matchId === id));
+    : getCachedMarkets(id ?? '');
 
   useEffect(() => {
     logProductEvent('bookmaker_compare_opened', 'market_compare', { matchId: id });
@@ -175,9 +172,6 @@ export default function MarketCompareScreen() {
             return (
               <View key={bk.bookmakerId} style={[styles.tableRow, { borderBottomColor: colors.border, backgroundColor: isBest ? colors.positive + '0A' : 'transparent' }]}>
                 <View style={[styles.td, { flex: 1.5 }]}>
-                  {bk.isMock && (
-                    <View style={[styles.mockDot, { backgroundColor: colors.warning }]} />
-                  )}
                   <Text style={[styles.bkName, { color: colors.foreground }]}>{bk.bookmakerName}</Text>
                   {isBest && <Feather name="star" size={10} color={colors.positive} />}
                 </View>
@@ -193,7 +187,7 @@ export default function MarketCompareScreen() {
         <View style={[styles.noteCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
           <Feather name="info" size={12} color={colors.mutedForeground} />
           <Text style={[styles.noteText, { color: colors.mutedForeground }]}>
-            Коэффициенты — демо-данные. Рыночная вероятность очищена от маржи. Перевес = модель − рынок. Ценность (EV) = модель × (коэф − 1) − (1 − модель).
+            Рыночная вероятность очищена от маржи. Перевес = модель − рынок. Ценность (EV) = модель × (коэф − 1) − (1 − модель).
           </Text>
         </View>
       </ScrollView>
@@ -230,7 +224,6 @@ const styles = StyleSheet.create({
   td: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   tdText: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 12, textAlign: 'center' },
   bkName: { fontFamily: 'Inter_500Medium', fontSize: 12 },
-  mockDot: { width: 5, height: 5, borderRadius: 2.5 },
   noteCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderRadius: 10, borderWidth: 1, padding: 12 },
   noteText: { fontFamily: 'Inter_400Regular', fontSize: 11, flex: 1, lineHeight: 16 },
 });

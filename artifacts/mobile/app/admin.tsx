@@ -4,9 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { MOCK_SOURCE_HEALTH } from '@/services/mock/mockData';
 import { getStoredProductEvents, getStoredTechnicalLogs, getStoredAuditLogs } from '@/services/logging/EventLogger';
-import type { SourceHealth } from '@/types';
 import { AdminSettingsTab } from '@/components/AdminSettingsTab';
 import { AdminMetricsTab } from '@/components/AdminMetricsTab';
 
@@ -34,15 +32,6 @@ export default function AdminScreen() {
     setTechLogCount(tech.length);
     setAuditLogCount(audit.length);
     setRecentEvents(events.slice(-10).reverse());
-  }
-
-  function formatSourceTime(d: Date): string {
-    const dt = new Date(d);
-    if (dt.getTime() === new Date(0).getTime()) return 'Never';
-    const diff = Date.now() - dt.getTime();
-    const s = Math.floor(diff / 1000);
-    if (s < 60) return `${s}с назад`;
-    return `${Math.floor(s / 60)}м назад`;
   }
 
   return (
@@ -96,30 +85,12 @@ export default function AdminScreen() {
         {activeSection === 'sources' && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Адаптеры источников данных</Text>
-            {MOCK_SOURCE_HEALTH.map((src: SourceHealth) => (
-              <View key={src.sourceId} style={[styles.sourceCard, { backgroundColor: colors.card, borderColor: src.isHealthy ? colors.positive + '55' : colors.border }]}>
-                <View style={styles.sourceHeader}>
-                  <View style={[styles.sourceDot, { backgroundColor: src.isHealthy ? colors.positive : colors.destructive }]} />
-                  <Text style={[styles.sourceName, { color: colors.foreground }]}>{src.sourceName}</Text>
-                  {src.isMock && (
-                    <View style={[styles.mockBadge, { backgroundColor: colors.muted }]}>
-                      <Text style={[styles.mockBadgeText, { color: colors.mutedForeground }]}>Mock</Text>
-                    </View>
-                  )}
-                  {!src.isHealthy && !src.isMock && (
-                    <View style={[styles.mockBadge, { backgroundColor: colors.destructive + '22' }]}>
-                      <Text style={[styles.mockBadgeText, { color: colors.destructive }]}>No API key</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.sourceMeta}>
-                  <MetaItem label="Тип" value={src.sourceType} colors={colors} />
-                  <MetaItem label="Последний синк" value={formatSourceTime(src.lastSuccessfulSync)} colors={colors} />
-                  <MetaItem label="Ошибки" value={String(src.errorCount)} colors={colors} negative={src.errorCount > 0} />
-                  <MetaItem label="Задержка" value={src.avgLatencyMs > 0 ? `${src.avgLatencyMs}мс` : '—'} colors={colors} />
-                </View>
-              </View>
-            ))}
+            <View style={[styles.sourceCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                Здоровье источников будет подгружаться через серверный admin-эндпоинт.
+                Текущие активные источники: OpenDota, PandaScore, The Odds API, Stratz.
+              </Text>
+            </View>
           </View>
         )}
 
@@ -185,15 +156,12 @@ export default function AdminScreen() {
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.foreground }]}>Интерфейсы адаптеров</Text>
               {[
-                'MockDataAdapter ✓',
-                'BookmakerMockAdapter ✓',
-                'OpenDotaAdapter (stub)',
-                'DotaScoreAdapter (stub)',
-                'PandaScoreAdapter (stub)',
-                'GRIDAdapter (stub)',
-                'AbiosAdapter (stub)',
-                'BetfairAdapter (stub)',
-                'ManualCsvAdapter (stub)',
+                'OpenDotaAdapter ✓',
+                'PandaScoreAdapter ✓',
+                'TheOddsApiAdapter ✓',
+                'StratzAdapter ✓',
+                'PinnacleScraper (best-effort)',
+                'BookmakerScrapers (Fonbet/LigaStavok/PARI/BetBoom/1xStavka/Olimp)',
               ].map(a => (
                 <View key={a} style={[styles.interfaceRow, { borderBottomColor: colors.border }]}>
                   <View style={[styles.adapterDot, { backgroundColor: a.includes('✓') ? colors.positive : colors.muted }]} />
@@ -252,12 +220,6 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   sourceCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 8 },
-  sourceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sourceDot: { width: 8, height: 8, borderRadius: 4 },
-  sourceName: { fontFamily: 'Inter_600SemiBold', fontSize: 14, flex: 1 },
-  mockBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  mockBadgeText: { fontFamily: 'Inter_500Medium', fontSize: 10 },
-  sourceMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   logStats: { flexDirection: 'row', gap: 8 },
   logRow: { borderRadius: 10, borderWidth: 1, padding: 10, gap: 4 },
   logEvent: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },

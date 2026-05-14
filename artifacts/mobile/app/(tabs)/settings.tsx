@@ -213,17 +213,6 @@ export default function SettingsScreen() {
             />
           }
         />
-        <Row
-          label="Скрывать mock коэффициенты"
-          right={
-            <Switch
-              value={settings.hideMockMarkets}
-              onValueChange={v => updateSettings({ hideMockMarkets: v })}
-              trackColor={{ false: colors.muted, true: colors.primary + '88' }}
-              thumbColor={settings.hideMockMarkets ? colors.primary : colors.mutedForeground}
-            />
-          }
-        />
         <Row label="Экспортировать мои данные" onPress={handleExportData} />
       </View>
 

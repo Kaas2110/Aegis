@@ -9,22 +9,22 @@ export class TheOddsApiAdapter {
   async isAvailable(): Promise<boolean> {
     try {
       const resp = await fetch(`${API_BASE}/dota2`);
-      const data = (await resp.json()) as { isMock?: boolean; error?: string };
-      return !data.isMock;
+      const data = (await resp.json()) as { noData?: boolean; error?: string };
+      return !data.noData;
     } catch {
       return false;
     }
   }
 
   async fetchOdds(eventId?: string): Promise<{
-    isMock: boolean;
+    noData: boolean;
     data: RealBookmakerOdds[];
     meta?: { requestsRemaining?: string; requestsUsed?: string };
     error?: string;
   }> {
     const resp = await fetch(`${API_BASE}/dota2`);
     const result = (await resp.json()) as {
-      isMock: boolean;
+      noData: boolean;
       data: Array<{
         eventId: string;
         team1: string;
@@ -62,6 +62,6 @@ export class TheOddsApiAdapter {
       }))
     );
 
-    return { isMock: result.isMock, data: normalized, meta: result.meta, error: result.error };
+    return { noData: result.noData, data: normalized, meta: result.meta, error: result.error };
   }
 }

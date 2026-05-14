@@ -127,7 +127,6 @@ function buildBookmakers(): BookmakerOdds[] {
     return {
       bookmakerId: bk.id,
       bookmakerName: bk.name,
-      isMock: false,
       oddsTeam1: o1,
       oddsTeam2: o2,
       impliedProbTeam1: 1 / o1,
@@ -266,6 +265,5 @@ export async function buildFeaturedMatch(): Promise<EnrichedMatch | null> {
       generatedAt: new Date().toISOString(),
     },
     availableBookmakers: bookmakers,
-    dataSource: 'real',
   };
 }

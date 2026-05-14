@@ -11,7 +11,6 @@ export interface UserSettings {
   selectedBookmakerIds: string[];
   showOnlyPositiveEV: boolean;
   hideStaleData: boolean;
-  hideMockMarkets: boolean;
   analyticsConsent: boolean;
   pushConsent: boolean;
   role: UserRole;
@@ -152,7 +151,6 @@ export type MarketType =
 export interface BookmakerOdds {
   bookmakerId: string;
   bookmakerName: string;
-  isMock: boolean;
   oddsTeam1: number;
   oddsTeam2: number;
   impliedProbTeam1: number;
@@ -287,7 +285,6 @@ export interface SourceHealth {
   lastSuccessfulSync: Date;
   errorCount: number;
   avgLatencyMs: number;
-  isMock: boolean;
 }
 
 export interface ProductEvent {
@@ -313,7 +310,7 @@ export interface ProductEvent {
   properties?: Record<string, unknown>;
 }
 
-export type FilterBookmaker = 'all' | 'fonbet' | 'liga_stavok' | 'pari' | 'betboom' | 'x1stavka' | 'olimp' | 'betfair' | 'mock';
+export type FilterBookmaker = 'all' | 'fonbet' | 'liga_stavok' | 'pari' | 'betboom' | 'x1stavka' | 'olimp' | 'betfair';
 export type FilterMinOdds = 1.2 | 1.5 | 2.0 | 3.0 | number;
 export type FilterMode = 'prematch' | 'live' | 'finished' | 'all';
 export type FilterEventType = 'all' | 'winner' | 'map_winner' | 'match_winner' | 'total_kills' | 'total_duration';
@@ -327,5 +324,4 @@ export interface Filters {
   mode: FilterMode;
   onlyPositiveEV: boolean;
   hideStaleData: boolean;
-  hideMockMarkets: boolean;
 }

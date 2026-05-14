@@ -10,7 +10,6 @@ const BOOKMAKER_OPTIONS = [
   { label: 'Betfair', value: 'betfair' },
   { label: 'BetBoom', value: 'betboom' },
   { label: 'Pari', value: 'pari' },
-  { label: 'Mock', value: 'mock' },
 ] as const;
 
 const ODDS_OPTIONS = [

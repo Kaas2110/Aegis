@@ -74,7 +74,7 @@ export interface UnifiedBookmakerEvent {
 
 interface SourceResponse {
   source: string;
-  isMock: boolean;
+  noData: boolean;
   events: UnifiedBookmakerEvent[];
   fetchedAt: string;
   error?: string;
@@ -193,7 +193,7 @@ async function adapterFonbet(): Promise<SourceResponse> {
       updatedAt: new Date().toISOString(),
     }))
     .filter((e) => e.team1 && e.team2);
-  return { source: 'fonbet', isMock: false, events, fetchedAt: new Date().toISOString() };
+  return { source: 'fonbet', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 async function adapterLigaStavok(): Promise<SourceResponse> {
@@ -220,7 +220,7 @@ async function adapterLigaStavok(): Promise<SourceResponse> {
       updatedAt: new Date().toISOString(),
     }))
     .filter((e) => e.team1 && e.team2);
-  return { source: 'liga_stavok', isMock: false, events, fetchedAt: new Date().toISOString() };
+  return { source: 'liga_stavok', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 async function adapterPari(): Promise<SourceResponse> {
@@ -252,7 +252,7 @@ async function adapterPari(): Promise<SourceResponse> {
       };
     })
     .filter((e) => e.team1 && e.team2);
-  return { source: 'pari', isMock: false, events, fetchedAt: new Date().toISOString() };
+  return { source: 'pari', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 async function adapterBetBoom(): Promise<SourceResponse> {
@@ -283,7 +283,7 @@ async function adapterBetBoom(): Promise<SourceResponse> {
       };
     })
     .filter((e) => e.team1 && e.team2);
-  return { source: 'betboom', isMock: false, events, fetchedAt: new Date().toISOString() };
+  return { source: 'betboom', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 async function adapter1xStavka(): Promise<SourceResponse> {
@@ -314,7 +314,7 @@ async function adapter1xStavka(): Promise<SourceResponse> {
       };
     })
     .filter((e) => e.team1 && e.team2);
-  return { source: 'x1stavka', isMock: false, events, fetchedAt: new Date().toISOString() };
+  return { source: 'x1stavka', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 async function adapterOlimp(): Promise<SourceResponse> {
@@ -344,7 +344,7 @@ async function adapterOlimp(): Promise<SourceResponse> {
       };
     })
     .filter((e) => e.team1 && e.team2);
-  return { source: 'olimp', isMock: false, events, fetchedAt: new Date().toISOString() };
+  return { source: 'olimp', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 // URL-ы держим в отдельной таблице, чтобы probe-эндпоинт мог дёргать ровно тот
@@ -406,7 +406,7 @@ export function getSourceName(id: string): string {
 function disabledResponse(source: string): SourceResponse {
   return {
     source,
-    isMock: true,
+    noData: true,
     events: [],
     fetchedAt: new Date().toISOString(),
     error: 'BOOKMAKERS_ENABLED=false',
@@ -423,7 +423,7 @@ async function fetchSource(source: string): Promise<SourceResponse> {
   if (rateLimit(source)) {
     return cached ?? {
       source,
-      isMock: true,
+      noData: true,
       events: [],
       fetchedAt: new Date().toISOString(),
       error: 'rate_limited',
@@ -435,7 +435,7 @@ async function fetchSource(source: string): Promise<SourceResponse> {
   if (!adapter) {
     return {
       source,
-      isMock: true,
+      noData: true,
       events: [],
       fetchedAt: new Date().toISOString(),
       error: `unknown_source:${source}`,
@@ -449,7 +449,7 @@ async function fetchSource(source: string): Promise<SourceResponse> {
   } catch (err) {
     const fail: SourceResponse = {
       source,
-      isMock: true,
+      noData: true,
       events: [],
       fetchedAt: new Date().toISOString(),
       error: err instanceof Error ? err.message : String(err),
