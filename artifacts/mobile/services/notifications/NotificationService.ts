@@ -6,8 +6,21 @@
  */
 
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import type { EnrichedMatch } from '@/services/LiveDataService';
 import type { Alert as UserAlertRule, MarketType } from '@/types';
+
+/**
+ * Возвращает true, если нативные push-уведомления доступны.
+ * В Expo Go на Android FCM не настроен → пропускаем, иначе появляется
+ * предупреждение "Android Push notifications require a Firebase project".
+ */
+function nativePushAvailable(): boolean {
+  if (Platform.OS === 'web') return false;
+  // appOwnership === 'expo' — запущено в Expo Go (не standalone-сборка)
+  if (Constants.appOwnership === 'expo') return false;
+  return true;
+}
 
 export interface EvAlert {
   id: string;
@@ -53,7 +66,8 @@ class NotificationService {
   }
 
   async requestPermissions(): Promise<boolean> {
-    if (Platform.OS === 'web') {
+    if (!nativePushAvailable()) {
+      // Веб или Expo Go без FCM — in-app алерты работают, системные push нет
       this.permissionGranted = true;
       return true;
     }
@@ -167,7 +181,7 @@ class NotificationService {
     const body = `${teamName} — ${betTypeRu(alert.betType)}: уверенность ${confPct}% · справедливый коэф ${alert.odds.toFixed(2)}`;
     const title = alert.ruleLabel ? `🔥 ${alert.ruleLabel}` : `🔥 Высокая уверенность модели`;
 
-    if (Platform.OS === 'web') {
+    if (!nativePushAvailable()) {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         try {
           const perm = await Notification.requestPermission();
@@ -286,7 +300,7 @@ export async function notifyFavoriteTeamMatchStart(
     const title = '⭐ Матч любимой команды начался';
     const body = `${t1} vs ${t2} — сейчас в эфире`;
 
-    if (Platform.OS === 'web') {
+    if (!nativePushAvailable()) {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         try {
           const perm = await Notification.requestPermission();
