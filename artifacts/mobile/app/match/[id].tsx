@@ -181,7 +181,7 @@ export default function MatchDetailScreen() {
       summary: string;
       factors: Array<{ label: string; impact: number; direction: 'radiant' | 'dire' | 'neutral'; description: string }>;
     };
-    totals: { kills: { expected: number; low: number; high: number }; duration: { expectedMin: number; low: number; high: number } };
+    totals: { kills: { expected: number; low: number; high: number }; duration: { expectedMin: number; low: number; high: number }; usedMlModel?: boolean };
     teams: { radiant: { id: number; name: string }; dire: { id: number; name: string } };
   };
   const [explain, setExplain] = useState<ExplainResp | null>(null);
@@ -533,7 +533,9 @@ export default function MatchDetailScreen() {
                   />
                 </ScrollView>
                 <Text style={[styles.sectionHint, { color: colors.mutedForeground, marginTop: 8 }]}>
-                  Грубые ориентиры по силе команд. Точная модель тоталов — в разработке.
+                  {explain.totals.usedMlModel
+                    ? 'Прогноз LightGBM-модели · 80% доверительный интервал'
+                    : 'Ориентир по рейтингам команд · модель загружается'}
                 </Text>
               </View>
             )}

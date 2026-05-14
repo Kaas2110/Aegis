@@ -636,10 +636,43 @@ router.get('/explain', async (req, res) => {
   factors.sort((a, b) => b.impact - a.impact);
   const top = factors.slice(0, 4);
 
-  // Тотал убийств / длительность — пока без отдельной модели в инференсе:
-  // используем грубое приближение чтобы UI мог показать ориентир
-  const expectedKills = 50 + (rR + rD - 3000) * 0.005; // более сильные = меньше кб (быстрее закрывают)
-  const expectedDurationMin = 36 - Math.abs(probR - 0.5) * 6; // равные команды дольше играют
+  // Тотал убийств / длительность — LightGBM market-модели (Wave 4/5).
+  // Если модели не загружены или ml-service недоступен — фолбэк на грубую эвристику.
+  const { predictMarketsFor } = await import('../services/MarketLgbm');
+  const mkt = await predictMarketsFor(radiantId, direId).catch(() => null);
+
+  // log-normal (mean=μ, std=σ): медиана = exp(μ), 90% CI = exp(μ ± 1.645σ)
+  let expectedKills: number;
+  let killsLow: number;
+  let killsHigh: number;
+  if (mkt?.totalKillsLogN) {
+    const { mean: mu, std: sigma } = mkt.totalKillsLogN;
+    expectedKills = Math.exp(mu);
+    killsLow = Math.exp(mu - 1.28 * sigma);
+    killsHigh = Math.exp(mu + 1.28 * sigma);
+  } else {
+    expectedKills = 50 + (rR + rD - 3000) * 0.005;
+    killsLow = expectedKills - 8;
+    killsHigh = expectedKills + 8;
+  }
+
+  let expectedDurationSec: number;
+  let durLow: number;
+  let durHigh: number;
+  if (mkt?.totalDurationLogN) {
+    const { mean: mu, std: sigma } = mkt.totalDurationLogN;
+    expectedDurationSec = Math.exp(mu);
+    durLow = Math.exp(mu - 1.28 * sigma);
+    durHigh = Math.exp(mu + 1.28 * sigma);
+  } else {
+    const fallbackMin = 36 - Math.abs(probR - 0.5) * 6;
+    expectedDurationSec = fallbackMin * 60;
+    durLow = (fallbackMin - 5) * 60;
+    durHigh = (fallbackMin + 8) * 60;
+  }
+
+  const expectedDurationMin = expectedDurationSec / 60;
+  const usedMlTotals = !!(mkt?.totalKillsLogN && mkt?.totalDurationLogN);
 
   const oneLiner =
     favProb >= 0.65 ? `${favName} — уверенный фаворит (${Math.round(favProb * 100)}%)` :
@@ -656,8 +689,9 @@ router.get('/explain', async (req, res) => {
       factors: top,
     },
     totals: {
-      kills: { expected: Math.round(expectedKills), low: Math.round(expectedKills - 8), high: Math.round(expectedKills + 8) },
-      duration: { expectedMin: Math.round(expectedDurationMin), low: Math.round(expectedDurationMin - 5), high: Math.round(expectedDurationMin + 8) },
+      kills: { expected: Math.round(expectedKills), low: Math.round(killsLow), high: Math.round(killsHigh) },
+      duration: { expectedMin: Math.round(expectedDurationMin), low: Math.round(durLow / 60), high: Math.round(durHigh / 60) },
+      usedMlModel: usedMlTotals,
     },
     teams: {
       radiant: { id: radiantId, name: nameR, rating: rR },
