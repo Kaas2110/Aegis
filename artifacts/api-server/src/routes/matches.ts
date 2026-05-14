@@ -3,7 +3,7 @@ import { db, teamsTable, leaguesTable, heroStatsTable } from '@workspace/db';
 import { inArray } from 'drizzle-orm';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
-import { getApiKey } from '../services/ApiKeysService';
+import { getApiKey, getStratzToken } from '../services/ApiKeysService';
 
 const router: IRouter = Router();
 
@@ -498,7 +498,7 @@ router.get('/live', async (req, res) => {
           .catch(() => [] as PsRunningMatch[])
       : Promise.resolve([] as PsRunningMatch[]);
 
-    const stratzToken = getApiKey('STRATZ_TOKEN');
+    const stratzToken = getStratzToken();
     const stratzPromise = stratzToken
       ? apiFetch(`${STRATZ_BASE}/League/live`, { headers: { Authorization: `Bearer ${stratzToken}` } })
           .then(async r => {

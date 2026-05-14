@@ -45,8 +45,15 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 `PROXY_URL` (РФ-прокси для букмекеров с не-РФ IP), `AUTO_DB_PUSH=false`.
 
 **STRATZ_TOKEN** — бесплатный JWT с stratz.com/api (вход через Steam). 250 req/min /
-20 000 req/day. На Replit Node fetch блокируется Cloudflare (TLS JA3); клиент
+20 000 req/day **на токен**. На Replit Node fetch блокируется Cloudflare (TLS JA3); клиент
 автоматически падает на curl-fallback. Тест: `pnpm --filter @workspace/scripts run test:stratz`.
+
+**Multi-token pool:** `STRATZ_TOKEN=tok1,tok2,tok3` (через запятую) — клиент
+(`scripts/src/lib/stratz.ts`) выбирает LRU доступный токен и при 429 уходит в
+65s cooldown на конкретный токен, переключаясь на следующий. Лимиты на токен
+суммируются (×N throughput). api-server использует round-robin (`getStratzToken()`
+в `ApiKeysService`) для лёгкого `/League/live` каждые 60s. Серая зона ToS Stratz
+(каждый токен — реальный Steam-аккаунт), но Stratz не атрибутирует пользователя.
 
 ## Product
 

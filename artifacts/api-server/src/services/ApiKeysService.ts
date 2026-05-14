@@ -33,9 +33,9 @@ export const KNOWN_INTEGRATIONS: IntegrationDescriptor[] = [
   {
     envName: 'STRATZ_TOKEN',
     label: 'Stratz API',
-    description: 'Основной источник picks/bans, account_ids и hero-stats (Captains Mode). 250 req/min / 20k req/day. Бесплатно.',
+    description: 'Основной источник picks/bans, account_ids и hero-stats (Captains Mode). 250 req/min / 20k req/day на токен. Поддерживается пул через запятую: tok1,tok2,tok3 — лимиты на токен суммируются (×N throughput).',
     docUrl: 'https://stratz.com/api',
-    howToGet: 'Войдите через Steam на stratz.com → раздел API → «Generate Token». Токен выдаётся мгновенно, бесплатно.',
+    howToGet: 'Войдите через Steam на stratz.com → раздел API → «Generate Token». Токен выдаётся мгновенно, бесплатно. Для пула: зарегистрируйте дополнительные Steam-аккаунты и получите по токену с каждого — впишите через запятую.',
     category: 'data-source',
     sensitive: true,
   },
@@ -173,6 +173,30 @@ export function getApiKey(envName: string): string {
   const override = cache?.get(envName)?.value;
   if (override && override.length > 0) return override;
   return process.env[envName] ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// Stratz multi-token pool
+// ---------------------------------------------------------------------------
+// `STRATZ_TOKEN` поддерживает comma-separated пул (см. scripts/src/lib/stratz.ts).
+// В api-server используется для одного «лёгкого» вызова `/League/live` раз в 60s,
+// поэтому здесь достаточно простого round-robin без cooldown-логики — если
+// один токен сорвался, на следующем тике возьмём следующий, а ingest-скрипты
+// (где основная нагрузка) сами разруливают 429 через свой пул.
+
+let stratzRrIndex = 0;
+
+/**
+ * Возвращает один токен Stratz из пула (round-robin между вызовами).
+ * Если пул пуст — возвращает пустую строку (caller проверяет).
+ */
+export function getStratzToken(): string {
+  const raw = getApiKey('STRATZ_TOKEN');
+  const tokens = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  if (tokens.length === 0) return '';
+  const token = tokens[stratzRrIndex % tokens.length]!;
+  stratzRrIndex = (stratzRrIndex + 1) % tokens.length;
+  return token;
 }
 
 /** Прогревает кеш на старте api-server. Не fatal при ошибке. */

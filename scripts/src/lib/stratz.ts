@@ -2,22 +2,33 @@
  * Stratz GraphQL client для scripts/.
  *
  * Stratz API: https://api.stratz.com/graphql
- * Auth: Bearer {STRATZ_TOKEN} в заголовке Authorization.
+ * Auth: Bearer {token} в заголовке Authorization.
  * Rate-limits (Individual token, бесплатный):
  *   20 req/s · 250 req/min · 4 000 req/h · 20 000 req/day
  *
- * Скрипты читают STRATZ_TOKEN из process.env (не из ApiKeysService/DB —
- * скрипты запускаются как отдельные процессы и не имеют доступа к БД-оверрайду).
- * Добавьте токен в Replit Secrets: STRATZ_TOKEN=<ваш токен с stratz.com/api>.
+ * MULTI-TOKEN POOL (2026-05-14)
+ * ─────────────────────────────
+ * `STRATZ_TOKEN` поддерживает comma-separated пул:
+ *   STRATZ_TOKEN=tok1,tok2,tok3
+ * Лимиты Stratz применяются на токен (через JWT), не на IP — поэтому пул
+ * из N токенов даёт ×N throughput. Это полу-серая зона ToS Stratz: каждый
+ * токен привязан к реальному Steam-аккаунту, и на множественные аккаунты
+ * у одного пользователя они не привязывают сущность, но формально это
+ * обход single-user лимита. Пользователь предупреждён.
  *
- * Если токен не задан — все функции бросают StratzUnavailableError, которую
- * вызывающий код должен перехватить и откатиться на OpenDota.
+ * Стратегия выбора:
+ *   - LRU среди доступных (cooldownUntil <= now): берём токен, который
+ *     дольше всех не использовался → равномерная нагрузка на токены.
+ *   - При 429 от любого токена → cooldown 65s (запас над window 60s).
+ *   - Если все токены в cooldown → ждём ближайшего, либо бросаем
+ *     StratzUnavailableError если ждать > 30s.
+ *   - Каждый токен соблюдает PER_TOKEN_GAP_MS (260ms) между запросами,
+ *     чтобы никогда не пробить 250/min.
  *
- * TRANSPORT NOTE: Stratz's Cloudflare CDN blocks Node.js fetch (TLS JA3 fingerprint
- * differs from browser). curl passes because libcurl has a different TLS fingerprint
- * that Cloudflare doesn't flag. We therefore route all GraphQL calls through curl
- * via child_process.execFile. Overhead ~30ms/spawn, well within the 260ms rate-limit
- * sleep we already enforce.
+ * TRANSPORT NOTE: Stratz's Cloudflare CDN blocks Node.js fetch (TLS JA3
+ * fingerprint differs from browser). curl passes because libcurl has a
+ * different TLS fingerprint. We therefore route all GraphQL calls through
+ * fetch first (быстрее, ~0ms overhead) и фолбэчим на curl при CF challenge.
  */
 
 import { execFile } from 'node:child_process';
@@ -33,13 +44,130 @@ export class StratzUnavailableError extends Error {
 }
 
 const STRATZ_GQL = 'https://api.stratz.com/graphql';
-const SLEEP_MS = 260; // ~230 req/min — безопасный запас под 250/min лимит
-export const stratzSleep = () => new Promise<void>(r => setTimeout(r, SLEEP_MS));
+const PER_TOKEN_GAP_MS = 260;        // ~230 req/min на токен — запас под 250/min
+const COOLDOWN_429_MS = 65_000;      // 65s > 60s rate-window
+const MAX_WAIT_FOR_TOKEN_MS = 30_000;
 
-function getToken(): string {
-  const t = process.env['STRATZ_TOKEN'];
-  if (!t) throw new StratzUnavailableError('STRATZ_TOKEN не задан в env');
-  return t;
+/**
+ * stratzSleep раньше делал глобальную паузу 260ms между запросами.
+ * С пулом токенов пейсинг встроен внутрь acquireToken() (per-token), поэтому
+ * внешний sleep больше не нужен. Оставляем no-op для обратной совместимости
+ * с уже существующими ingest-скриптами — удалять `await stratzSleep()`
+ * вызовы не обязательно, они просто ничего не делают.
+ */
+export const stratzSleep = async (): Promise<void> => {};
+
+interface TokenState {
+  token: string;
+  /** Маскированный «хвост» для логов (последние 4 символа). */
+  tail: string;
+  lastUsedAt: number;
+  cooldownUntil: number;
+}
+
+let pool: TokenState[] | null = null;
+
+function loadPool(): TokenState[] {
+  const raw = process.env['STRATZ_TOKEN'] ?? '';
+  // Дедупликация: дубликат не даёт прироста capacity (один JWT — одни лимиты),
+  // но создал бы иллюзию двух слотов и путал бы LRU. Сохраняем порядок появления.
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const tok of raw.split(',').map((s) => s.trim())) {
+    if (tok.length === 0 || seen.has(tok)) continue;
+    seen.add(tok);
+    unique.push(tok);
+  }
+  return unique.map((token) => ({
+    token,
+    tail: token.length >= 4 ? token.slice(-4) : '????',
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+  }));
+}
+
+function getPool(): TokenState[] {
+  if (!pool) pool = loadPool();
+  return pool;
+}
+
+/** Сколько уникальных токенов в пуле. Полезно для логов в ingest-скриптах. */
+export function getStratzPoolSize(): number {
+  return getPool().length;
+}
+
+/**
+ * Промис-цепочка для сериализации критической секции выбора+резервирования
+ * токена. Без неё две параллельные `gql()` вызова могут прочитать один и тот
+ * же `lastUsedAt`, выбрать один и тот же токен и обе сразу его дёрнуть —
+ * нарушая PER_TOKEN_GAP_MS и провоцируя 429.
+ *
+ * Внутри критической секции мы сразу «бронируем» токен: двигаем его
+ * `lastUsedAt` вперёд (до now + per-token-gap), чтобы следующий ждущий
+ * увидел его как «уже занят» и взял другой / запланировал на позже.
+ * Само ожидание (sleep до waitUntil) происходит ВНЕ мьютекса — иначе
+ * одна медленная заявка тормозила бы всех.
+ */
+let acquireMutex: Promise<unknown> = Promise.resolve();
+
+function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const next = acquireMutex.then(fn, fn);
+  acquireMutex = next.catch(() => {}); // не ломаем цепочку при ошибке
+  return next;
+}
+
+interface Reservation {
+  state: TokenState;
+  /** Абсолютное время, до которого вызывающему нужно поспать перед запросом. */
+  waitUntil: number;
+}
+
+async function acquireToken(): Promise<TokenState> {
+  const reservation = await runExclusive(async (): Promise<Reservation> => {
+    const p = getPool();
+    if (p.length === 0) {
+      throw new StratzUnavailableError('STRATZ_TOKEN не задан в env');
+    }
+    while (true) {
+      const now = Date.now();
+      const available = p.filter((t) => t.cooldownUntil <= now);
+      if (available.length > 0) {
+        // LRU: берём токен с наименьшим lastUsedAt
+        available.sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+        const chosen = available[0]!;
+        // Бронирование: двигаем lastUsedAt в будущее, чтобы конкурентные
+        // запросы увидели токен как «свежо использованный» и не выбрали его.
+        const waitUntil = Math.max(now, chosen.lastUsedAt + PER_TOKEN_GAP_MS);
+        chosen.lastUsedAt = waitUntil;
+        return { state: chosen, waitUntil };
+      }
+      // Все токены в cooldown — ждём ближайшего, но не дольше MAX_WAIT.
+      // Спим ВНУТРИ мьютекса намеренно: пока ни один токен недоступен,
+      // нет смысла пускать вторую заявку — она всё равно встанет в очередь.
+      const soonest = Math.min(...p.map((t) => t.cooldownUntil));
+      const wait = soonest - now;
+      if (wait > MAX_WAIT_FOR_TOKEN_MS) {
+        throw new StratzUnavailableError(
+          `все ${p.length} Stratz-токен(ов) в cooldown; следующий доступен через ${Math.round(wait / 1000)}s`,
+        );
+      }
+      await sleep(Math.max(wait, 100));
+    }
+  });
+  // Спим до зарезервированного времени ВНЕ мьютекса — другие заявки уже
+  // могут взять другие токены (или встать в очередь к этому же на более
+  // позднее время).
+  const wait = reservation.waitUntil - Date.now();
+  if (wait > 0) await sleep(wait);
+  return reservation.state;
+}
+
+function markCooldown(tokenState: TokenState, ms = COOLDOWN_429_MS): void {
+  tokenState.cooldownUntil = Date.now() + ms;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 const GQL_HEADERS = (token: string) => ({
@@ -67,7 +195,7 @@ function parseGqlResponse<T>(text: string): T {
   }
   const parsed = JSON.parse(text) as { data?: T; errors?: Array<{ message: string }> };
   if (parsed.errors?.length) {
-    throw new StratzUnavailableError(`Stratz GQL error: ${parsed.errors.map(e => e.message).join('; ')}`);
+    throw new StratzUnavailableError(`Stratz GQL error: ${parsed.errors.map((e) => e.message).join('; ')}`);
   }
   if (!parsed.data) throw new StratzUnavailableError('Stratz returned empty data');
   return parsed.data;
@@ -76,55 +204,92 @@ function parseGqlResponse<T>(text: string): T {
 /**
  * Execute a GraphQL request against Stratz.
  *
- * Transport strategy:
- *   1. Try Node.js fetch — fast, works on Russian production servers where
- *      Cloudflare does not apply TLS/IP-reputation filtering.
- *   2. If CF blocks (HTML response or fetch error) → fall back to curl.
- *      curl uses libcurl's TLS fingerprint which Cloudflare doesn't flag,
- *      making it the reliable path from Replit/non-RU IPs.
+ * Стратегия:
+ *   1. acquireToken() — выбираем LRU доступный токен из пула.
+ *   2. fetch — быстрый путь. Если 429 → cooldown токену, повторяем с другим.
+ *   3. CF challenge (HTML вместо JSON) → curl-fallback с тем же токеном.
+ *   4. curl выводит HTTP_STATUS в трейлере; на 429 → cooldown, retry.
+ *   5. Максимум попыток = размер пула + 1 (запас на CF retry).
  */
 async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const token = getToken();
   const body = JSON.stringify({ query, variables });
-  const headers = GQL_HEADERS(token);
+  const poolSize = getStratzPoolSize();
+  if (poolSize === 0) throw new StratzUnavailableError('STRATZ_TOKEN не задан в env');
+  const maxAttempts = poolSize + 1;
+  let lastErr: unknown = null;
 
-  // --- Attempt 1: Node fetch ---
-  try {
-    const resp = await fetch(STRATZ_GQL, {
-      method: 'POST',
-      headers,
-      body,
-      signal: AbortSignal.timeout(15_000),
-    });
-    const text = await resp.text();
-    if (resp.ok && isJsonResponse(text)) {
-      return parseGqlResponse<T>(text);
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const tokenState = await acquireToken();
+    const token = tokenState.token;
+    const headers = GQL_HEADERS(token);
+
+    // --- Attempt: Node fetch ---
+    let triedCurl = false;
+    try {
+      const resp = await fetch(STRATZ_GQL, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(15_000),
+      });
+      const text = await resp.text();
+      if (resp.status === 429) {
+        markCooldown(tokenState);
+        lastErr = new StratzUnavailableError(`429 rate-limit (token …${tokenState.tail})`);
+        continue;
+      }
+      if (resp.ok && isJsonResponse(text)) {
+        return parseGqlResponse<T>(text);
+      }
+      // CF challenge или non-JSON 200 → fall-through к curl
+    } catch {
+      // Network error → fall-through к curl
     }
-    // CF challenge page or non-JSON 200 — fall through to curl
-  } catch {
-    // Network error — fall through to curl
-  }
 
-  // --- Attempt 2: curl (TLS fingerprint bypass) ---
-  const args = [
-    '--silent', '--max-time', '15',
-    '-X', 'POST',
-    '-H', `Authorization: Bearer ${token}`,
-    '-H', 'Content-Type: application/json',
-    '-H', 'Accept: application/json',
-    '-H', `User-Agent: ${headers['User-Agent']}`,
-    '-H', 'Origin: https://stratz.com',
-    '-H', 'Referer: https://stratz.com/',
-    '--data-raw', body,
-    STRATZ_GQL,
-  ];
-  let stdout: string;
-  try {
-    ({ stdout } = await execFileAsync('curl', args, { maxBuffer: 8 * 1024 * 1024 }));
-  } catch (e) {
-    throw new StratzUnavailableError(`curl exec failed: ${(e as Error).message}`);
+    // --- Fallback: curl (TLS-fingerprint bypass) ---
+    triedCurl = true;
+    const args = [
+      '--silent', '--max-time', '15',
+      '-w', '\nHTTP_STATUS:%{http_code}',
+      '-X', 'POST',
+      '-H', `Authorization: Bearer ${token}`,
+      '-H', 'Content-Type: application/json',
+      '-H', 'Accept: application/json',
+      '-H', `User-Agent: ${headers['User-Agent']}`,
+      '-H', 'Origin: https://stratz.com',
+      '-H', 'Referer: https://stratz.com/',
+      '--data-raw', body,
+      STRATZ_GQL,
+    ];
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync('curl', args, { maxBuffer: 8 * 1024 * 1024 }));
+    } catch (e) {
+      lastErr = new StratzUnavailableError(`curl exec failed: ${(e as Error).message}`);
+      continue;
+    }
+    // Парсим статус из трейлера `\nHTTP_STATUS:NNN`
+    const statusMatch = /\nHTTP_STATUS:(\d+)\s*$/.exec(stdout);
+    const status = statusMatch ? parseInt(statusMatch[1]!, 10) : 200;
+    const cleanText = statusMatch ? stdout.slice(0, statusMatch.index) : stdout;
+    if (status === 429) {
+      markCooldown(tokenState);
+      lastErr = new StratzUnavailableError(`429 rate-limit via curl (token …${tokenState.tail})`);
+      continue;
+    }
+    try {
+      return parseGqlResponse<T>(cleanText);
+    } catch (e) {
+      // Не 429, но parse-ошибка (CF challenge даже через curl, или GQL error).
+      // Не баним токен — пробуем повторить со следующим, чтобы исключить
+      // «токен умер» сценарий. Но если retry даст ту же ошибку — выйдем по maxAttempts.
+      lastErr = e;
+      // Защита от бесконечного цикла когда poolSize=1 и проблема не транзитная:
+      if (poolSize === 1 && triedCurl) throw e;
+      continue;
+    }
   }
-  return parseGqlResponse<T>(stdout);
+  throw lastErr ?? new StratzUnavailableError('Stratz: все попытки исчерпаны');
 }
 
 // ---------------------------------------------------------------------------
@@ -249,12 +414,13 @@ export async function fetchPlayerHeroes(steamAccountId: number): Promise<StratzP
 // Connectivity check (для admin probe или pre-run валидации)
 // ---------------------------------------------------------------------------
 
-export async function checkStratzConnectivity(): Promise<{ ok: boolean; error?: string }> {
+export async function checkStratzConnectivity(): Promise<{ ok: boolean; error?: string; poolSize: number }> {
+  const poolSize = getStratzPoolSize();
   try {
-    getToken();
+    if (poolSize === 0) throw new StratzUnavailableError('STRATZ_TOKEN не задан в env');
     const data = await gql<{ __typename: string }>('{ __typename }');
-    return { ok: !!data.__typename };
+    return { ok: !!data.__typename, poolSize };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: e instanceof Error ? e.message : String(e), poolSize };
   }
 }
