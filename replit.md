@@ -26,7 +26,7 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 | `ingest:matches [pages=20]` | Pro matches (~100/page, 1.1s/req) |
 | `ingest:leagues` | Lague names → `leagues` table |
 | `ingest:hero-stats` | Hero meta winrates / pickrates. Stratz-supplemented если есть `STRATZ_TOKEN` |
-| `ingest:hero-matchups` | Pairwise hero matchup matrix (incremental) |
+| `ingest:hero-matchups` | Hero-vs-hero матрица. Stratz-primary (1 запрос, ~3.5s, ~16k пар, бракет DIVINE_IMMORTAL) с OpenDota fallback (138 запросов, инкрементально). Флаги `--no-stratz` / `--no-fallback`. ⚠️ matchCount шкала ≠ OpenDota — после смены источника требует `train:lightgbm` |
 | `ingest:drafts [limit]` | Picks/bans + radiant/dire account_ids. Stratz-primary с `STRATZ_TOKEN` (4× быстрее) |
 | `ingest:players-heroes` | Per-player per-hero stats (7-day freshness). Stratz-primary с `STRATZ_TOKEN` |
 | `compute:recent-form` | Recompute `team_recent_form` (30/90-day) |

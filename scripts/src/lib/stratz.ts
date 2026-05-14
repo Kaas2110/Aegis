@@ -418,6 +418,70 @@ export async function fetchPlayerHeroes(steamAccountId: number): Promise<StratzP
 }
 
 // ---------------------------------------------------------------------------
+// Hero matchups (top-tier ranked, batched)
+// ---------------------------------------------------------------------------
+//
+// `heroStats.matchUp(heroIds: [...], take: 200)` отдаёт всю матрицу матчапов
+// в одном запросе (~2.4s, ~830KB на 145 героев = ~16k уникальных пар).
+//
+// ВАЖНО ПРО ИСТОЧНИК:
+//   Stratz matchUp работает только по ranked-брекетам (HERALD..DIVINE_IMMORTAL),
+//   фильтра «PROFESSIONAL/CAPTAINS_MODE» нет. Используем DIVINE_IMMORTAL
+//   (топ-ранкед) — наиболее близко к про-уровню.
+//
+// ВАЖНО ПРО `matchCount`:
+//   У Stratz matchCount — это игры в Immortal ranked (тысячи), у OpenDota —
+//   только pro matches (десятки/сотни). Numbers не сопоставимы напрямую.
+//   Фича `matchup_advantage` использует log(games + 1), поэтому переключение
+//   источника даёт distribution-shift и требует переобучения v2/v3 моделей
+//   (`pnpm --filter @workspace/scripts run train:lightgbm`).
+
+export interface StratzHeroMatchup {
+  heroId2: number;
+  matchCount: number;
+  winsAverage: number;  // winrate of heroId vs heroId2 (already calculated)
+}
+
+export interface StratzHeroMatchupRow {
+  heroId: number;
+  vs: StratzHeroMatchup[] | null;
+}
+
+const HERO_MATCHUPS_QUERY = /* graphql */ `
+  query HeroMatchups($heroIds: [Short!]!, $take: Int!) {
+    heroStats {
+      matchUp(heroIds: $heroIds, bracketBasicIds: [DIVINE_IMMORTAL], matchLimit: 1, take: $take) {
+        heroId
+        vs {
+          heroId2
+          matchCount
+          winsAverage
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Fetch full hero-vs-hero matchup matrix for the given hero list.
+ * Single GraphQL request, top-ranked bracket (DIVINE_IMMORTAL).
+ *
+ * @param heroIds - все hero IDs (обычно 145+ актуальных героев)
+ * @param take - сколько vs-записей на героя (200 = практический максимум)
+ */
+export async function fetchHeroMatchupsRanked(
+  heroIds: number[],
+  take = 200,
+): Promise<StratzHeroMatchupRow[]> {
+  if (heroIds.length === 0) return [];
+  const data = await gql<{ heroStats: { matchUp: StratzHeroMatchupRow[] } }>(
+    HERO_MATCHUPS_QUERY,
+    { heroIds, take },
+  );
+  return data.heroStats.matchUp ?? [];
+}
+
+// ---------------------------------------------------------------------------
 // Connectivity check (для admin probe или pre-run валидации)
 // ---------------------------------------------------------------------------
 
