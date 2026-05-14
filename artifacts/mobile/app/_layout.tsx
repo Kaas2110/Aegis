@@ -10,6 +10,7 @@ import {
 // Эта пара даёт «дотовский» вайб без необходимости лицензировать Reaver.
 import { Cinzel_500Medium, Cinzel_700Bold } from "@expo-google-fonts/cinzel";
 import { Forum_400Regular } from "@expo-google-fonts/forum";
+import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -48,6 +49,11 @@ export default function RootLayout() {
     Cinzel_500Medium,
     Cinzel_700Bold,
     Forum_400Regular,
+    // Иконочные шрифты — без явной регистрации Feather/Ionicons показываются
+    // как пустые квадраты на вебе и могут не подгрузиться на старте на нативе.
+    ...Feather.font,
+    ...MaterialCommunityIcons.font,
+    ...Ionicons.font,
   });
 
   useEffect(() => {
