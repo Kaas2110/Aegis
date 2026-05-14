@@ -88,6 +88,18 @@ export async function withCache<T>(
   return p;
 }
 
+/**
+ * Прочитать значение из кэша БЕЗ запуска fetcher'а.
+ * Возвращает `undefined` если ключа нет или значение протухло.
+ * Используется фоновыми воркерами, которые не должны триггерить upstream-fetch.
+ */
+export function peekCache<T>(key: string): T | undefined {
+  const hit = cache.get(key) as CacheEntry<T> | undefined;
+  if (!hit) return undefined;
+  if (hit.expiresAt <= Date.now()) return undefined;
+  return hit.value;
+}
+
 /** Только для тестов / админа: сбросить весь кэш. */
 export function clearResponseCache(): void {
   const sizeBefore = cache.size;

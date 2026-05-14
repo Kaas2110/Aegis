@@ -4,6 +4,7 @@ import { ensureSchema } from "./lib/ensureSchema";
 import { startLiveWorker } from "./services/LiveWorker";
 import { startScheduler } from "./services/SchedulerWorker";
 import { startOutcomeTracker } from "./services/OutcomeTracker";
+import { startBookmakerWorker } from "./services/BookmakerWorker";
 import { loadActiveLiveModel } from "./services/LiveWinnerModel";
 import { loadActiveMarketModels } from "./services/MarketLgbm";
 import { primeApiKeysCache } from "./services/ApiKeysService";
@@ -68,4 +69,9 @@ app.listen(port, async (err) => {
   } else {
     logger.warn("OutcomeTracker disabled via DISABLE_OUTCOME_TRACKER=true");
   }
+
+  // BookmakerWorker: адаптивный поллер букмекеров. 3 мин если есть live-матчи,
+  // 60 мин если их нет. Прогревает кэш `routes/bookmakers.ts`, эндпоинты
+  // /api/bookmakers/* читают из него.
+  startBookmakerWorker();
 });

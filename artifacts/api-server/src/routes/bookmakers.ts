@@ -42,7 +42,10 @@ const BOOKMAKERS_ENABLED = process.env['BOOKMAKERS_ENABLED'] !== 'false';
 // PROXY_URL резолвится динамически через `getApiKey('PROXY_URL')` (см. ниже).
 
 const REQUEST_DELAY_MS = 1500;
-const CACHE_TTL_MS = 60_000;
+// TTL покрывает максимальный интервал BookmakerWorker (idle = 60 мин) + grace.
+// Воркер сам пишет в кэш каждые 3 мин (live) / 60 мин (idle), эндпоинты читают.
+// Если воркер мёртв — on-demand fetch отрабатывает после истечения TTL.
+const CACHE_TTL_MS = 65 * 60_000;
 const FETCH_TIMEOUT_MS = 12_000;
 
 // ---------- Unified shape ----------
@@ -557,6 +560,8 @@ const SOURCE_NAMES: Record<string, string> = {
 };
 
 export const KNOWN_SOURCE_IDS = Object.keys(ADAPTERS);
+export function getAllSourceIds(): string[] { return Object.keys(ADAPTERS); }
+export function isBookmakersEnabled(): boolean { return BOOKMAKERS_ENABLED; }
 export function getSourceName(id: string): string {
   return SOURCE_NAMES[id] ?? id;
 }
@@ -574,11 +579,11 @@ function disabledResponse(source: string): SourceResponse {
   };
 }
 
-async function fetchSource(source: string): Promise<SourceResponse> {
+export async function fetchSource(source: string, opts?: { force?: boolean }): Promise<SourceResponse> {
   if (!BOOKMAKERS_ENABLED) return disabledResponse(source);
 
   const cached = getCached(source);
-  if (cached) return cached;
+  if (cached && !opts?.force) return cached;
 
   if (rateLimit(source)) {
     return cached ?? {
@@ -634,7 +639,7 @@ async function fetchSource(source: string): Promise<SourceResponse> {
 
 // ---------- Routes ----------
 
-router.get('/status', (_req, res) => {
+router.get('/status', async (_req, res) => {
   const sources: Record<
     string,
     {
@@ -657,14 +662,84 @@ router.get('/status', (_req, res) => {
       ...(cached?.error ? { lastError: cached.error } : {}),
     };
   }
+  const { getBookmakerWorkerStats } = await import('../services/BookmakerWorker');
   res.json({
     enabled: BOOKMAKERS_ENABLED,
     proxyConfigured: !!getApiKey('PROXY_URL'),
     cacheTtlMs: CACHE_TTL_MS,
     sources,
+    worker: getBookmakerWorkerStats(),
     note: BOOKMAKERS_ENABLED
       ? 'Букмекерские источники активны. На non-RU IP может потребоваться PROXY_URL.'
       : 'Букмекерский функционал выключен. Установите BOOKMAKERS_ENABLED=true в ENV.',
+  });
+});
+
+// ---------- Per-match lookup ----------
+// GET /api/bookmakers/for-match?team1=Name1&team2=Name2[&team1Id=X&team2Id=Y]
+// Возвращает агрегированные кэфы по конкретной паре команд из кэша воркера.
+// Skip silently: если ни один источник не имеет события для этой пары — { found:false, sources:[] }.
+// Используется мобилкой для отображаемых матчей: один lookup на матч (или
+// несколько в параллель, всё из in-memory кэша — без апстрим-нагрузки).
+router.get('/for-match', async (req, res) => {
+  if (!BOOKMAKERS_ENABLED) {
+    res.status(503).json({ enabled: false, error: 'BOOKMAKERS_ENABLED=false' });
+    return;
+  }
+  const team1 = String(req.query['team1'] ?? '').trim();
+  const team2 = String(req.query['team2'] ?? '').trim();
+  const team1Id = req.query['team1Id'] ? Number(req.query['team1Id']) : null;
+  const team2Id = req.query['team2Id'] ? Number(req.query['team2Id']) : null;
+  if (!team1 || !team2) {
+    res.status(400).json({ error: 'team1 and team2 query params required' });
+    return;
+  }
+  const wantPair = pairKey(team1, team2);
+  const all = await Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s)));
+  const sources: Array<{
+    source: string;
+    eventId: string;
+    startsAt: string | null;
+    status: UnifiedBookmakerEvent['status'];
+    markets: UnifiedBookmakerEvent['markets'];
+    flipped: boolean;
+  }> = [];
+  for (const src of all) {
+    if (!src.events.length) continue;
+    for (const ev of src.events) {
+      if (pairKey(ev.team1, ev.team2) !== wantPair) continue;
+      // Определяем ориентацию: совпадает ли ev.team1 с запрошенным team1 после нормализации
+      const sameOrder = normalizeTeamName(ev.team1) === normalizeTeamName(team1);
+      const markets: UnifiedBookmakerEvent['markets'] = sameOrder
+        ? ev.markets
+        : {
+            ...(ev.markets.winner
+              ? { winner: { team1: ev.markets.winner.team2, team2: ev.markets.winner.team1 } }
+              : {}),
+            ...(ev.markets.totalKills ? { totalKills: ev.markets.totalKills } : {}),
+            ...(ev.markets.totalDuration ? { totalDuration: ev.markets.totalDuration } : {}),
+            ...(ev.markets.firstBlood ? { firstBlood: ev.markets.firstBlood } : {}),
+          };
+      sources.push({
+        source: ev.source,
+        eventId: ev.eventId,
+        startsAt: ev.startsAt,
+        status: ev.status,
+        markets,
+        flipped: !sameOrder,
+      });
+    }
+  }
+  const sourcesPolled = all.map((s) => ({ source: s.source, events: s.events.length, error: s.error ?? null }));
+  res.json({
+    enabled: true,
+    found: sources.length > 0,
+    team1,
+    team2,
+    team1Id,
+    team2Id,
+    sources,
+    sourcesPolled,
   });
 });
 

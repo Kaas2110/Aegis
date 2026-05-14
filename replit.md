@@ -107,6 +107,27 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 `/running` параллельно (5s timeout), кэш 30с. PandaScore работает как fallback, если
 OpenDota упал. `/api/matches/upcoming` — PandaScore, кэш 60с.
 
+**BookmakerWorker (DONE 2026-05-14):** `services/BookmakerWorker.ts` — фоновый
+поллер букмекеров с **адаптивным интервалом**: 3 минуты если есть live-матчи
+(определяется через `peekCache('matches:live')`), 60 минут если нет. Первый tick
+через 30s после старта (даём `/matches/live` cache прогреться). Воркер пишет
+результаты в общий per-source кэш `routes/bookmakers.ts` (TTL 65 мин), все
+эндпоинты `/api/bookmakers/*` читают из него — апстрим практически не дёргается
+вручную. Per-source ошибки скипаются silently (берём что собрали).
+
+ENV: `DISABLE_BOOKMAKER_WORKER=true` отключает. `BOOKMAKERS_ENABLED=false`
+тоже отключает. Stats: `GET /api/bookmakers/status` возвращает `worker: { startedAt,
+lastTickAt, lastMode, lastIntervalMs, lastDurationMs, lastSources[], ticks, errors }`.
+Лог: `[bookmaker-worker] tick complete` с mode/liveMatches/intervalMs/sources.
+
+**Per-match lookup:** `GET /api/bookmakers/for-match?team1=X&team2=Y[&team1Id=&team2Id=]`
+— один in-memory lookup из кэша воркера для конкретной пары команд, корректно
+обрабатывает flip ориентации (winner / firstBlood). Skip silently: если ни один
+источник не имеет события — `{ found:false, sources:[] }`. Мобилка может дёргать
+параллельно для каждого отображаемого матча — нет апстрим-нагрузки. Когда РФ-IP
+хотя бы один из 6 РФ-источников начнёт отвечать — данные автоматически
+подтянутся для всех отображаемых пар без правок кода.
+
 **Live-воркер dedup (DONE 2026-05-14):** `LiveWorker.pollOnce` хеширует
 game_time + scores + radiant_lead + building_state + draft (sorted heroes/accounts)
 и пропускает матчи, у которых хеш не изменился с прошлого poll'а — снапшот не
@@ -145,6 +166,7 @@ game_time + scores + radiant_lead + building_state + draft (sorted heroes/accoun
 |---|---|---|
 | `req`/`res` | `pino-http` middleware | method, url, statusCode, responseTime |
 | `bookmaker` | `routes/bookmakers.ts::fetchSource` | source, events, durationMs, err |
+| `bookmaker-worker` | `services/BookmakerWorker.ts::tick` | mode, liveMatches, intervalMs, durationMs, totalEvents, sources[] |
 | `matched` | `GET /api/bookmakers/matched/dota2` | groups, eventsTotal, matchedToTeams, teamsLoaded, sourcesPolled |
 | `cache` | `lib/responseCache.ts::withCache` | key, ttlMs, durationMs, hit/miss/coalesced/filled/cleared |
 | `predict` | `services/PredictionModel.ts` | reason, radiantTeamId, direTeamId (для skip) |
