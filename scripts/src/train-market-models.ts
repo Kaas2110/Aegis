@@ -283,7 +283,8 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
       testSampleSize: r.test_metrics_calibrated.n,
       metadata: {
         market,
-        taskType,
+        task_type: taskType,
+        taskType, // legacy alias — оставляем для обратной совместимости старых читателей
         engine: 'lightgbm',
         residualStd: r.residual_std,
         testRaw: r.test_metrics_raw,

@@ -38,17 +38,23 @@ const CIRCUIT_BACKOFF_MS = 60_000;
 export type MarketKind =
   | 'market_first_blood'
   | 'market_total_kills'
-  | 'market_total_duration';
+  | 'market_total_duration'
+  | 'market_total_duration_q25'
+  | 'market_total_duration_q75';
 
 const ALL_MARKET_KINDS: MarketKind[] = [
   'market_first_blood',
   'market_total_kills',
   'market_total_duration',
+  'market_total_duration_q25',
+  'market_total_duration_q75',
 ];
+
+type TaskType = 'classification' | 'regression' | 'quantile';
 
 interface LoadedMarket {
   kind: MarketKind;
-  taskType: 'classification' | 'regression';
+  taskType: TaskType;
   blobB64: string;
   loadedAt: number;
 }
@@ -59,7 +65,7 @@ interface ClassificationResp {
   calibrated_prob: number;
 }
 interface RegressionResp {
-  task_type: 'regression';
+  task_type: 'regression' | 'quantile';
   mean: number;
   std: number;
 }
@@ -123,9 +129,12 @@ export async function loadActiveMarketModels(): Promise<number> {
       const blob = r.binaryBlob as Buffer | Uint8Array | null;
       if (!blob) continue;
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
-      const tt = meta['task_type'];
-      const taskType: 'classification' | 'regression' =
-        tt === 'regression' ? 'regression' : 'classification';
+      // Поддерживаем оба ключа: канонический task_type и legacy taskType.
+      const tt = meta['task_type'] ?? meta['taskType'];
+      const taskType: TaskType =
+        tt === 'regression' ? 'regression'
+          : tt === 'quantile' ? 'quantile'
+            : 'classification';
       next.set(kind, {
         kind,
         taskType,
@@ -211,11 +220,11 @@ async function callMlPredict(blobB64: string, features: number[]): Promise<Predi
       mean?: number;
       std?: number;
     };
-    if (data.task_type === 'regression') {
+    if (data.task_type === 'regression' || data.task_type === 'quantile') {
       if (typeof data.mean !== 'number' || typeof data.std !== 'number') {
-        tripCircuit('ml-service bad regression payload'); return null;
+        tripCircuit('ml-service bad regression/quantile payload'); return null;
       }
-      return { task_type: 'regression', mean: data.mean, std: data.std };
+      return { task_type: data.task_type, mean: data.mean, std: data.std };
     }
     if (typeof data.calibrated_prob !== 'number') {
       tripCircuit('ml-service bad classification payload'); return null;
@@ -241,6 +250,11 @@ interface CachedPrediction {
   firstBloodP: number | null;     // P(radiant wins fb-proxy)
   totalKillsLogN: { mean: number; std: number } | null;
   totalDurationLogN: { mean: number; std: number } | null;
+  // Квантильные оценки log(duration_sec) — α=0.25 / α=0.75. Используются
+  // для непараметрического 50% interval (без допущения о log-нормали)
+  // в totals-ladder. Если модели нет в БД — null.
+  totalDurationLogQ25: number | null;
+  totalDurationLogQ75: number | null;
 }
 const predictCache: Map<string, CachedPrediction> = new Map();
 
@@ -264,6 +278,8 @@ export async function predictMarketsFor(
     firstBloodP: null,
     totalKillsLogN: null,
     totalDurationLogN: null,
+    totalDurationLogQ25: null,
+    totalDurationLogQ75: null,
   };
   if (cached.size === 0) return empty;
 
@@ -281,11 +297,15 @@ export async function predictMarketsFor(
   const fb = cached.get('market_first_blood');
   const tk = cached.get('market_total_kills');
   const td = cached.get('market_total_duration');
+  const tdQ25 = cached.get('market_total_duration_q25');
+  const tdQ75 = cached.get('market_total_duration_q75');
 
-  const [fbR, tkR, tdR] = await Promise.all([
+  const [fbR, tkR, tdR, tdQ25R, tdQ75R] = await Promise.all([
     fb ? callMlPredict(fb.blobB64, features) : Promise.resolve(null),
     tk ? callMlPredict(tk.blobB64, features) : Promise.resolve(null),
     td ? callMlPredict(td.blobB64, features) : Promise.resolve(null),
+    tdQ25 ? callMlPredict(tdQ25.blobB64, features) : Promise.resolve(null),
+    tdQ75 ? callMlPredict(tdQ75.blobB64, features) : Promise.resolve(null),
   ]);
 
   const out: CachedPrediction = {
@@ -297,6 +317,8 @@ export async function predictMarketsFor(
     totalDurationLogN: tdR && tdR.task_type === 'regression'
       ? { mean: tdR.mean, std: Math.max(1e-3, tdR.std) }
       : null,
+    totalDurationLogQ25: tdQ25R && tdQ25R.task_type === 'quantile' ? tdQ25R.mean : null,
+    totalDurationLogQ75: tdQ75R && tdQ75R.task_type === 'quantile' ? tdQ75R.mean : null,
   };
   predictCache.set(key, out);
   return out;

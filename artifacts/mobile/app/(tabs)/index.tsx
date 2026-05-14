@@ -34,13 +34,45 @@ export default function HomeScreen() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [unseenAlerts, setUnseenAlerts] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Контроллер для отмены предыдущего загрузочного цикла, когда стартует новый
+  // (interval + pull-to-refresh могут пересекаться). Без этого старые колбэки
+  // могли бы перезаписать свежие данные — см. code review 2026-05-14.
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const loadGenRef = useRef(0);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   async function loadData(silent = false) {
+    // Отменяем предыдущий цикл и инкрементируем поколение
+    loadAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    loadAbortRef.current = ctrl;
+    const myGen = ++loadGenRef.current;
+    const isCurrent = () => myGen === loadGenRef.current;
+
     if (!silent) setLoading(true);
     try {
-      const result = await fetchLiveData();
+      // Прогрессивная загрузка: сначала показываем матчи без markets
+      // (карточки появляются мгновенно), затем ML-предсказания подгружаются
+      // последовательно — первый матч списка обогащается первым.
+      const result = await fetchLiveData({
+        signal: ctrl.signal,
+        onShellsReady: (partial) => {
+          if (!isCurrent()) return;
+          setEnrichedLive(partial.liveMatches);
+          setEnrichedPrematch(partial.prematchMatches);
+          setIsMock(partial.isMock);
+          setDataSources(partial.sources);
+          setLastUpdated(new Date(partial.fetchedAt));
+        },
+        onMatchEnriched: (em) => {
+          if (!isCurrent()) return;
+          setEnrichedLive(prev => prev.map(p => p.match.id === em.match.id ? em : p));
+        },
+      });
+      if (!isCurrent()) return;
+      // Финальный snapshot — гарантированно показывает обогащённые matches
+      // (на случай если onShellsReady не успел отработать для mock-режима).
       setEnrichedLive(result.liveMatches);
       setEnrichedPrematch(result.prematchMatches);
       setIsMock(result.isMock);
@@ -57,7 +89,7 @@ export default function HomeScreen() {
     } catch {
       // Fallback на mock данные
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
 

@@ -199,7 +199,15 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
   };
 }
 
-async function fetchAnalytics(match: Match, odds?: OddsData): Promise<EnrichedMatch['analyticsResult']> {
+async function fetchAnalytics(match: Match, odds?: OddsData, signal?: AbortSignal): Promise<EnrichedMatch['analyticsResult']> {
+  // Локальный таймаут 5s + поддержка внешнего AbortSignal — чтобы один зависший
+  // /predict не блокировал последовательный enrichment остальных карточек.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  }
   try {
     const snap = match.liveSnapshot;
     const body = {
@@ -233,6 +241,7 @@ async function fetchAnalytics(match: Match, odds?: OddsData): Promise<EnrichedMa
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: ctrl.signal,
     });
 
     if (!resp.ok) return undefined;
@@ -244,6 +253,8 @@ async function fetchAnalytics(match: Match, odds?: OddsData): Promise<EnrichedMa
     return result;
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -394,7 +405,19 @@ export function rebuildMarketsForBookmaker(
 
 // ── Глобальный кэш матчей (matchId → EnrichedMatch) ──────────────────────
 // Позволяет экрану деталей матча найти реальные данные без повторного запроса.
+// Bounded LRU: 100 матчей × ~10 KB ≈ 1 MB макс. Map сохраняет порядок вставки;
+// при переполнении выкидываем самые старые.
+const MATCH_CACHE_MAX = 100;
 const matchCache = new Map<string, EnrichedMatch>();
+
+function cachePut(em: EnrichedMatch): void {
+  if (matchCache.has(em.match.id)) matchCache.delete(em.match.id);
+  matchCache.set(em.match.id, em);
+  if (matchCache.size > MATCH_CACHE_MAX) {
+    const oldest = matchCache.keys().next().value;
+    if (oldest !== undefined) matchCache.delete(oldest);
+  }
+}
 
 export function getCachedMatch(id: string): EnrichedMatch | undefined {
   return matchCache.get(id);
@@ -405,7 +428,7 @@ export function getCachedMarkets(matchId: string): Market[] {
 }
 
 function cacheEnriched(list: EnrichedMatch[]): void {
-  list.forEach(e => matchCache.set(e.match.id, e));
+  list.forEach(cachePut);
 }
 
 export interface LiveDataResult {
@@ -414,6 +437,26 @@ export interface LiveDataResult {
   isMock: boolean;
   sources: string[];
   fetchedAt: string;
+}
+
+/**
+ * Колбэки для прогрессивной отрисовки на экране списка:
+ * — onShellsReady получает «скелеты» матчей (без markets) сразу после
+ *   /api/matches/live + /api/matches/upcoming, чтобы UI показал карточки
+ *   мгновенно без ожидания ML;
+ * — onMatchEnriched дёргается по одному per-match в порядке списка
+ *   (первый матч — первым). Гарантия: вызывается только если есть реальные
+ *   live-данные (для mock — не дёргается, всё уже в onShellsReady).
+ */
+export interface FetchLiveDataCallbacks {
+  onShellsReady?: (partial: Omit<LiveDataResult, 'fetchedAt'> & { fetchedAt: string }) => void;
+  onMatchEnriched?: (em: EnrichedMatch, index: number) => void;
+  /**
+   * Внешний сигнал отмены — если экран запустил новый loadData раньше, чем
+   * старый успел дообогатить все матчи, передаёт сюда AbortSignal от нового
+   * вызова, чтобы старый цикл не звал onMatchEnriched поверх свежих данных.
+   */
+  signal?: AbortSignal;
 }
 
 // PandaScore upcoming-объект (нужны только поля для маппинга в Match).
@@ -486,7 +529,7 @@ function upcomingToMatch(raw: UpcomingRaw): Match | null {
   };
 }
 
-export async function fetchLiveData(): Promise<LiveDataResult> {
+export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveDataResult> {
   const fetchedAt = new Date().toISOString();
   // Featured-матч запрашиваем параллельно — используется только как fallback
   // когда OpenDota /api/live вернул пустой массив (нет реальных live-матчей).
@@ -545,30 +588,6 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
       .slice(0, 10) // Show max 10 live matches
       .map(openDotaToMatch);
 
-    // 3. Run analytics for each match
-    const enriched: EnrichedMatch[] = await Promise.all(
-      matches.map(async (match): Promise<EnrichedMatch> => {
-        // Find matching odds by team names (approximate match)
-        const matchingOdds = oddsData?.data?.find(o =>
-          o.team1.toLowerCase().includes(match.team1.name.toLowerCase().split(' ')[1] ?? '') ||
-          o.team2.toLowerCase().includes(match.team2.name.toLowerCase().split(' ')[1] ?? '')
-        );
-
-        const analyticsResult = await fetchAnalytics(match, matchingOdds);
-        const markets = analyticsResult
-          ? analyticsToMarkets(match, analyticsResult, matchingOdds)
-          : [];
-        const availableBookmakers = buildBookmakerOptions(matchingOdds);
-
-        return { match, markets, analyticsResult, availableBookmakers, dataSource: 'real' };
-      })
-    );
-
-    // Featured match is shown ONLY when OpenDota returned no real matches.
-    // When real live data is available we don't prepend the hardcoded fixture —
-    // it would show stale/frozen game state alongside real live data.
-    const finalLive = enriched;
-
     // Маппим upcoming PandaScore → Match. Без analytics (для prematch обычно
     // нет live-снапшота); markets пустые до старта матча. Этого достаточно для
     // карточки в списке: имя турнира, время старта, формат.
@@ -576,22 +595,63 @@ export async function fetchLiveData(): Promise<LiveDataResult> {
     const prematchMatches: Match[] = upcomingRaws
       .map(upcomingToMatch)
       .filter((m): m is Match => m !== null)
-      .filter(m => !finalLive.some(em => em.match.team1.id === m.team1.id && em.match.team2.id === m.team2.id))
+      .filter(m => !matches.some(lm => lm.team1.id === m.team1.id && lm.team2.id === m.team2.id))
       .slice(0, 30);
+
+    // Сначала отдаём «скелеты» в UI: пользователь видит реальные карточки
+    // матчей мгновенно (без ожидания /api/analytics/predict). ML-предсказания
+    // подгружаются ниже последовательно и обновляют конкретные карточки
+    // через onMatchEnriched.
+    const liveShells: EnrichedMatch[] = matches.map(match => ({
+      match, markets: [], availableBookmakers: [], dataSource: 'real' as const,
+    }));
     const prematchEnriched: EnrichedMatch[] = prematchMatches.map(match => ({
       match, markets: [], availableBookmakers: [], dataSource: 'real' as const,
     }));
-
-    cacheEnriched([...finalLive, ...prematchEnriched]);
-    return {
-      liveMatches: finalLive,
+    const sources = [
+      'opendota',
+      ...(upcomingData && !upcomingData.isMock ? ['pandascore'] : []),
+      ...(oddsData?.isMock === false ? ['the_odds_api'] : []),
+    ];
+    cacheEnriched([...liveShells, ...prematchEnriched]);
+    cbs?.onShellsReady?.({
+      liveMatches: liveShells,
       prematchMatches: prematchEnriched,
       isMock: false,
-      sources: [
-        'opendota',
-        ...(upcomingData && !upcomingData.isMock ? ['pandascore'] : []),
-        ...(oddsData?.isMock === false ? ['the_odds_api'] : []),
-      ],
+      sources,
+      fetchedAt,
+    });
+
+    // 3. Run analytics SEQUENTIALLY in display order — первый матч в списке
+    // обогащается первым, что важно при ограниченных лимитах OpenDota
+    // (если что-то падает — мы успели обработать самые важные карточки).
+    const enriched: EnrichedMatch[] = [];
+    for (let i = 0; i < matches.length; i++) {
+      // Если внешний AbortSignal сработал — выходим: новый loadData уже
+      // подгружает свежие данные, старые колбэки больше не нужны.
+      if (cbs?.signal?.aborted) break;
+      const match = matches[i];
+      if (!match) continue;
+      const matchingOdds = oddsData?.data?.find(o =>
+        o.team1.toLowerCase().includes(match.team1.name.toLowerCase().split(' ')[1] ?? '') ||
+        o.team2.toLowerCase().includes(match.team2.name.toLowerCase().split(' ')[1] ?? '')
+      );
+      const analyticsResult = await fetchAnalytics(match, matchingOdds, cbs?.signal);
+      const markets = analyticsResult
+        ? analyticsToMarkets(match, analyticsResult, matchingOdds)
+        : [];
+      const availableBookmakers = buildBookmakerOptions(matchingOdds);
+      const em: EnrichedMatch = { match, markets, analyticsResult, availableBookmakers, dataSource: 'real' };
+      enriched.push(em);
+      cachePut(em);
+      if (!cbs?.signal?.aborted) cbs?.onMatchEnriched?.(em, i);
+    }
+
+    return {
+      liveMatches: enriched,
+      prematchMatches: prematchEnriched,
+      isMock: false,
+      sources,
       fetchedAt,
     };
   } catch {
