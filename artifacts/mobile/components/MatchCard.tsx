@@ -10,6 +10,13 @@ import { HexBadge } from './HexBadge';
 interface Props {
   match: Match;
   bestMarket?: Market;
+  /**
+   * 'pending'     — обогащение ML ещё не закончилось → крутилка «Данные собираются»
+   * 'ready'       — есть прогноз, рендерим OddsTilesPair
+   * 'unavailable' — модель скипнула (нет данных по команде / dim mismatch / ml down)
+   *                 → показываем «Прогноз недоступен», без 50/50 и без бет-кнопок.
+   */
+  predictionStatus?: 'pending' | 'ready' | 'unavailable';
   onPress?: () => void;
 }
 
@@ -29,7 +36,7 @@ function marketTypeRu(type: string): string {
   }
 }
 
-export function MatchCard({ match, bestMarket, onPress }: Props) {
+export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onPress }: Props) {
   const colors = useColors();
   const isLive = match.status === 'live';
   const isPrematch = match.status === 'prematch';
@@ -183,6 +190,14 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
               onPressTeam1={onPress}
               onPressTeam2={onPress}
             />
+          </View>
+        ) : predictionStatus === 'unavailable' ? (
+          /* Модель честно вернула null (нет данных по команде / dim mismatch).
+             НЕ показываем 50/50 — это вводит пользователя в заблуждение. */
+          <View style={[styles.pendingSection, { borderTopColor: colors.borderGold + '33' }]}>
+            <Text style={[styles.pendingText, { color: colors.mutedForeground }]}>
+              Прогноз недоступен
+            </Text>
           </View>
         ) : (
           /* Прогноз ещё не подгружен (см. fetchLiveData в LiveDataService.ts —

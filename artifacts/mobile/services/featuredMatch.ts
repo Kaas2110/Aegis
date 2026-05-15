@@ -245,6 +245,7 @@ export async function buildFeaturedMatch(): Promise<EnrichedMatch | null> {
   return {
     match,
     markets: [matchWinnerMarket, mapWinnerMarket],
+    predictionStatus: 'ready',
     analyticsResult: {
       predictions: [
         {

@@ -75,6 +75,15 @@ interface AnalyticsPrediction {
 export interface EnrichedMatch {
   match: Match;
   markets: Market[];
+  /**
+   * Статус прогноза:
+   *  - 'pending'     — обогащение ещё не запускалось (карточка-скелет)
+   *  - 'ready'       — модель посчитала прогноз, markets[] заполнен
+   *  - 'unavailable' — попытка была, но модель вернула null (нет данных по
+   *                    команде, дим-mismatch, ML-сервис упал и т.д.).
+   *                    UI должен показать «Прогноз недоступен», а НЕ 50/50.
+   */
+  predictionStatus: 'pending' | 'ready' | 'unavailable';
   analyticsResult?: {
     predictions: AnalyticsPrediction[];
     modelVersion: string;
@@ -645,10 +654,10 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
     // Сначала отдаём «скелеты» в UI — пользователь видит реальные карточки
     // мгновенно, без ожидания ML. Прогноз догружается ниже через пул.
     const liveShells: EnrichedMatch[] = matches.map(match => ({
-      match, markets: [], availableBookmakers: [],
+      match, markets: [], predictionStatus: 'pending', availableBookmakers: [],
     }));
     const prematchShells: EnrichedMatch[] = prematchMatches.map(match => ({
-      match, markets: [], availableBookmakers: [],
+      match, markets: [], predictionStatus: 'pending', availableBookmakers: [],
     }));
     const sources = [
       ...(matches.length > 0 ? ['opendota'] : []),
@@ -693,7 +702,12 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
         ? analyticsToMarkets(match, analyticsResult, effectiveOdds)
         : [];
       const availableBookmakers = buildBookmakerOptions(effectiveOdds);
-      const em: EnrichedMatch = { match, markets, analyticsResult, availableBookmakers };
+      // Прогноз считаем ready только если бэк реально вернул predictions[].
+      // null analyticsResult = модель скипнула (нет команд / dim mismatch / ml-service down)
+      // → UI должен показать «Прогноз недоступен», а не подсовывать 50/50.
+      const predictionStatus: EnrichedMatch['predictionStatus'] =
+        analyticsResult && analyticsResult.predictions.length > 0 ? 'ready' : 'unavailable';
+      const em: EnrichedMatch = { match, markets, predictionStatus, analyticsResult, availableBookmakers };
       cachePut(em);
       return em;
     };

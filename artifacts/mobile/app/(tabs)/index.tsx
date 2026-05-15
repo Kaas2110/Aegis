@@ -146,6 +146,15 @@ export default function HomeScreen() {
     return map;
   }, [enrichedLive, enrichedPrematch, filters.bookmaker]);
 
+  // O(1) lookup статуса прогноза в renderItem — без этого FlatList на каждый
+  // ререндер бегал бы O(N) find() по объединённому массиву (= O(N²) total).
+  const statusMap = useMemo(() => {
+    const map = new Map<string, EnrichedMatch['predictionStatus']>();
+    for (const em of enrichedLive) map.set(em.match.id, em.predictionStatus);
+    for (const em of enrichedPrematch) map.set(em.match.id, em.predictionStatus);
+    return map;
+  }, [enrichedLive, enrichedPrematch]);
+
   function getBestMarket(matchId: string): Market | undefined {
     const mkts = marketsMap.get(matchId) ?? [];
     return mkts
@@ -313,6 +322,7 @@ export default function HomeScreen() {
               <MatchCard
                 match={match}
                 bestMarket={bestMarket}
+                predictionStatus={statusMap.get(match.id) ?? 'pending'}
                 onPress={async () => {
                   await logProductEvent('match_detail_opened', 'home', { matchId: match.id });
                   router.push({ pathname: '/match/[id]', params: { id: match.id } });
