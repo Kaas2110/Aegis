@@ -149,7 +149,7 @@ export function TotalsLadder({
             <View style={[styles.errBox, { backgroundColor: colors.muted, borderColor: colors.border }]}>
               <Feather name="info" size={12} color={colors.mutedForeground} />
               <Text style={[styles.errText, { color: colors.mutedForeground }]}>
-                Прогноз ТБ/ТМ недоступен — {data.unavailableReason ?? 'модель ещё не обучена для этой пары команд'}. Math-фолбэк со stub-фичами мы не показываем (это были бы фейковые цифры).
+                Прогноз недоступен.
               </Text>
             </View>
           )}
