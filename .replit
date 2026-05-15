@@ -66,3 +66,8 @@ externalPort = 3002
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+ML_SERVICE_TOKEN = "ag2k_Rupz3kQYk9CpzNp50-WLRudv4YeqZDdXOCSMQo"
