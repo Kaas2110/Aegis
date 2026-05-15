@@ -654,8 +654,55 @@ export async function predictMatchWinner(
     return null;
   }
 
-  const r = await getTeamRating(radiantTeamId);
-  const d = await getTeamRating(direTeamId);
+  let r = await getTeamRating(radiantTeamId);
+  let d = await getTeamRating(direTeamId);
+
+  // Player-strength fallback: если нет рейтинга команды или мало игр, но переданы
+  // account_ids — собираем синтетический TeamRating из среднего Glicko игроков
+  // состава. Glicko-1 (≈1500 baseline) и OpenDota team rating живут в сопоставимой
+  // шкале, поэтому avg(player.glicko) — разумный прокси «силы команды».
+  // Минимум 3 игрока с известным рейтингом на сторону.
+  const needRadiantFallback = !r || (r.wins + r.losses) < 5;
+  const needDireFallback = !d || (d.wins + d.losses) < 5;
+  if ((needRadiantFallback || needDireFallback) && drafts) {
+    await refreshWave3Data();
+    const synthFromGlicko = (
+      accountIds: number[] | null | undefined,
+    ): { rating: number; wins: number; losses: number } | null => {
+      if (!accountIds || accountIds.length === 0) return null;
+      const ratings: number[] = [];
+      for (const acc of accountIds) {
+        const g = playerGlickoCache.get(acc);
+        if (g && g.rating > 0) ratings.push(g.rating);
+      }
+      if (ratings.length < 3) return null;
+      const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+      // wins/losses=10/10 — синтетика, чтобы пройти `rGames<5` гейт; реальная
+      // история бесполезна когда её нет. Winrate 0.5 нейтрален в фичах.
+      return { rating: avg, wins: 10, losses: 10 };
+    };
+    if (needRadiantFallback) {
+      const synth = synthFromGlicko(drafts.radiantAccountIds);
+      if (synth) {
+        logger.info(
+          { tag: 'predict', side: 'radiant', teamId: radiantTeamId, synthRating: Math.round(synth.rating), origRating: r?.rating ?? null, origGames: r ? r.wins + r.losses : 0 },
+          '[predict] using player-glicko fallback for radiant',
+        );
+        r = synth;
+      }
+    }
+    if (needDireFallback) {
+      const synth = synthFromGlicko(drafts.direAccountIds);
+      if (synth) {
+        logger.info(
+          { tag: 'predict', side: 'dire', teamId: direTeamId, synthRating: Math.round(synth.rating), origRating: d?.rating ?? null, origGames: d ? d.wins + d.losses : 0 },
+          '[predict] using player-glicko fallback for dire',
+        );
+        d = synth;
+      }
+    }
+  }
+
   if (!r || !d) {
     logger.debug({ tag: 'predict', reason: 'no_rating', radiantTeamId, direTeamId }, '[predict] skip');
     return null;
