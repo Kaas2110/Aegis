@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, TextInput, Platform, Switch,
@@ -18,6 +18,7 @@ function generateId(): string {
 }
 
 const ALERTS_KEY = '@dea_alerts_v2';
+const ALERT_SETTINGS_KEY = '@dea_alert_settings_v1';
 
 const MARKET_OPTIONS: Array<{ id: MarketType; label: string }> = [
   { id: 'match_winner',   label: 'Победитель матча' },
@@ -28,7 +29,7 @@ const MARKET_OPTIONS: Array<{ id: MarketType; label: string }> = [
   { id: 'map_handicap',   label: 'Гандикап карт' },
   { id: 'correct_score',  label: 'Точный счёт' },
 ];
-const CONFIDENCE_OPTIONS = [50, 60, 70, 80] as const;
+const CONFIDENCE_OPTIONS = [60, 65, 70, 75, 80, 85, 90] as const;
 
 export default function AlertsScreen() {
   const colors = useColors();
@@ -46,25 +47,61 @@ export default function AlertsScreen() {
   const [newOnlyFavs, setNewOnlyFavs] = useState(false);
   const [activeTab, setActiveTab] = useState<'triggered' | 'rules'>('triggered');
 
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [defaultMinConf, setDefaultMinConf] = useState(70);
+
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   useEffect(() => {
     logProductEvent('match_list_viewed', 'alerts');
     loadUserAlerts();
+    loadAlertSettings();
     notificationService.markAllSeen();
     notificationService.setFavoriteTeamIds(settings.favoriteTeamIds ?? []);
     const unsub = notificationService.subscribe(alerts => setEvAlerts([...alerts]));
     return unsub;
   }, [settings.favoriteTeamIds]);
 
+  async function loadAlertSettings() {
+    try {
+      const raw = await AsyncStorage.getItem(ALERT_SETTINGS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { enabled?: boolean; defaultMinConf?: number };
+        const enabled = parsed.enabled ?? true;
+        const conf = parsed.defaultMinConf ?? 70;
+        setAlertsEnabled(enabled);
+        setDefaultMinConf(conf);
+        notificationService.setEnabled(enabled);
+        notificationService.setDefaultMinConfidence(conf / 100);
+      }
+    } catch {}
+  }
+
+  async function saveAlertSettings(enabled: boolean, conf: number) {
+    try {
+      await AsyncStorage.setItem(ALERT_SETTINGS_KEY, JSON.stringify({ enabled, defaultMinConf: conf }));
+    } catch {}
+  }
+
+  async function handleToggleAlertsEnabled() {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const next = !alertsEnabled;
+    setAlertsEnabled(next);
+    notificationService.setEnabled(next);
+    await saveAlertSettings(next, defaultMinConf);
+    await logProductEvent('alerts_toggled', 'alerts', { enabled: next });
+  }
+
+  async function handleDefaultConfChange(val: number) {
+    await Haptics.selectionAsync();
+    setDefaultMinConf(val);
+    notificationService.setDefaultMinConfidence(val / 100);
+    await saveAlertSettings(alertsEnabled, val);
+  }
+
   async function loadUserAlerts() {
     try {
-      // Best-effort миграция: формат v1 (@dea_alerts) был несовместим
-      // (одиночный marketType + minOdds/minEdge), поэтому просто чистим
-      // легаси-ключ чтобы он не висел вечно. Подробное сообщение пользователь
-      // получает естественным образом — список правил будет пустой.
       await AsyncStorage.removeItem('@dea_alerts').catch(() => {});
-
       const raw = await AsyncStorage.getItem(ALERTS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Alert[];
@@ -127,14 +164,85 @@ export default function AlertsScreen() {
     return MARKET_OPTIONS.find(o => o.id === type)?.label ?? type;
   }
 
+  const settingsCard = (
+    <View style={[styles.settingsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.settingsRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.settingsTitle, { color: colors.foreground }]}>Алерты</Text>
+          <Text style={[styles.settingsHint, { color: colors.mutedForeground }]}>
+            {alertsEnabled ? 'Уведомления включены' : 'Уведомления выключены — ничего не сработает'}
+          </Text>
+        </View>
+        <Switch
+          value={alertsEnabled}
+          onValueChange={handleToggleAlertsEnabled}
+          trackColor={{ false: colors.border, true: colors.primary + '88' }}
+          thumbColor={alertsEnabled ? colors.primary : colors.mutedForeground}
+        />
+      </View>
+
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+      <Text style={[styles.settingsLabel, { color: colors.mutedForeground }]}>
+        Дефолтный порог уверенности{userAlerts.filter(a => a.isActive).length > 0 ? ' (без активных правил не используется)' : ''}
+      </Text>
+      <View style={[styles.confRow, { opacity: alertsEnabled ? 1 : 0.4 }]}>
+        {CONFIDENCE_OPTIONS.map(v => (
+          <TouchableOpacity
+            key={v}
+            disabled={!alertsEnabled}
+            onPress={() => handleDefaultConfChange(v)}
+            style={[
+              styles.confChip,
+              {
+                backgroundColor: defaultMinConf === v ? colors.primary : colors.muted,
+                borderColor: defaultMinConf === v ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.confChipText, { color: defaultMinConf === v ? colors.primaryForeground : colors.mutedForeground }]}>
+              {v}%
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {userAlerts.filter(a => a.isActive).length === 0 && alertsEnabled && (
+        <Text style={[styles.settingsHint, { color: colors.mutedForeground, marginTop: 6 }]}>
+          Сейчас сработает при уверенности ≥ {defaultMinConf}% по любому рынку любого матча
+        </Text>
+      )}
+    </View>
+  );
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.title, { color: colors.foreground }]}>Алерты</Text>
-          <TouchableOpacity onPress={() => setShowModal(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
-            <Feather name="plus" size={18} color={colors.primaryForeground} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={handleToggleAlertsEnabled}
+              style={[
+                styles.toggleBtn,
+                {
+                  backgroundColor: alertsEnabled ? colors.primary + '22' : colors.muted,
+                  borderColor: alertsEnabled ? colors.primary + '55' : colors.border,
+                },
+              ]}
+            >
+              <Feather
+                name={alertsEnabled ? 'bell' : 'bell-off'}
+                size={14}
+                color={alertsEnabled ? colors.primary : colors.mutedForeground}
+              />
+              <Text style={[styles.toggleBtnText, { color: alertsEnabled ? colors.primary : colors.mutedForeground }]}>
+                {alertsEnabled ? 'ВКЛ' : 'ВЫКЛ'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowModal(true)} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
+              <Feather name="plus" size={18} color={colors.primaryForeground} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={[styles.tabs, { backgroundColor: colors.muted }]}>
@@ -190,10 +298,14 @@ export default function AlertsScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="bell" size={36} color={colors.mutedForeground} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Нет сработавших алертов</Text>
+              <Feather name={alertsEnabled ? 'bell' : 'bell-off'} size={36} color={colors.mutedForeground} />
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                {alertsEnabled ? 'Нет сработавших алертов' : 'Алерты отключены'}
+              </Text>
               <Text style={[styles.emptySubtext, { color: colors.mutedForeground }]}>
-                Алерты приходят когда уверенность модели в исходе ≥ настроенного порога
+                {alertsEnabled
+                  ? `Алерт придёт когда уверенность модели ≥ ${defaultMinConf}%`
+                  : 'Включите алерты кнопкой ВКЛ/ВЫКЛ в правом углу'}
               </Text>
             </View>
           }
@@ -204,14 +316,20 @@ export default function AlertsScreen() {
         <FlatList
           data={userAlerts}
           keyExtractor={item => item.id}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90 }]}
+          ListHeaderComponent={<View style={{ paddingHorizontal: 14, paddingTop: 14 }}>{settingsCard}</View>}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90, paddingTop: 0 }]}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           renderItem={({ item }) => (
-            <View style={[styles.ruleCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.ruleCard, { backgroundColor: colors.card, borderColor: colors.border, opacity: item.isActive ? 1 : 0.55 }]}>
               <View style={styles.ruleHeader}>
                 <Text style={[styles.ruleLabel, { color: colors.foreground }]}>{item.label}</Text>
-                <Switch value={item.isActive} onValueChange={() => handleToggle(item.id)} />
+                <Switch
+                  value={item.isActive}
+                  onValueChange={() => handleToggle(item.id)}
+                  trackColor={{ false: colors.border, true: colors.primary + '88' }}
+                  thumbColor={item.isActive ? colors.primary : colors.mutedForeground}
+                />
                 <TouchableOpacity onPress={() => handleDelete(item.id)} style={[styles.deleteBtn, { backgroundColor: colors.destructive + '1A' }]}>
                   <Feather name="trash-2" size={15} color={colors.destructive} />
                 </TouchableOpacity>
@@ -242,7 +360,7 @@ export default function AlertsScreen() {
               <Feather name="bell-off" size={36} color={colors.mutedForeground} />
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Нет правил</Text>
               <Text style={[styles.emptySubtext, { color: colors.mutedForeground }]}>
-                Без правил используется дефолтный порог уверенности 70%. Нажмите + чтобы создать своё.
+                Без правил используется дефолтный порог {defaultMinConf}%. Нажмите + чтобы создать своё.
               </Text>
             </View>
           }
@@ -272,9 +390,9 @@ export default function AlertsScreen() {
           </View>
 
           <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Минимальная уверенность модели</Text>
-          <View style={styles.chipRow}>
+          <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
             {CONFIDENCE_OPTIONS.map(v => (
-              <ChipBtn key={v} label={`${v}%`} active={newMinConf === v} onPress={() => setNewMinConf(v)} colors={colors} />
+              <ChipBtn key={v} label={`${v}%`} active={newMinConf === v} onPress={() => setNewMinConf(v)} colors={colors} small />
             ))}
           </View>
 
@@ -347,11 +465,33 @@ const styles = StyleSheet.create({
   header: { borderBottomWidth: 1, paddingHorizontal: 14, paddingBottom: 10 },
   headerTop: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 20, flex: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  toggleBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 9, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  toggleBtnText: { fontFamily: 'Inter_700Bold', fontSize: 11 },
   addBtn: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   tabs: { flexDirection: 'row', borderRadius: 10, padding: 3 },
   tab: { flex: 1, borderRadius: 8, paddingVertical: 7, alignItems: 'center' },
   tabText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   list: { padding: 14 },
+  settingsCard: {
+    borderRadius: 14, borderWidth: 1, padding: 14, gap: 10, marginBottom: 14,
+  },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingsTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  settingsHint: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 2 },
+  settingsLabel: { fontFamily: 'Inter_400Regular', fontSize: 11 },
+  divider: { height: 1 },
+  confRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  confChip: {
+    borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 6,
+    alignItems: 'center',
+  },
+  confChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   evCard: { borderRadius: 14, borderWidth: 1, padding: 13, gap: 8 },
   evHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   evBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
@@ -368,7 +508,7 @@ const styles = StyleSheet.create({
   ruleTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metaPill: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
   metaPillText: { fontFamily: 'Inter_500Medium', fontSize: 10 },
-  empty: { alignItems: 'center', paddingTop: 70, gap: 8, paddingHorizontal: 30 },
+  empty: { alignItems: 'center', paddingTop: 50, gap: 8, paddingHorizontal: 30 },
   emptyText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   emptySubtext: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },

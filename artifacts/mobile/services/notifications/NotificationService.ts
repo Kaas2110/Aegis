@@ -40,9 +40,9 @@ export interface EvAlert {
 
 /**
  * Правила алертов теперь приходят снаружи (из AsyncStorage в alerts.tsx).
- * Пока правил нет — используем дефолт «уверенность ≥ 70%» как baseline.
+ * Пока правил нет — используем дефолт «уверенность ≥ defaultMinConfidence» как baseline.
  */
-const DEFAULT_MIN_CONFIDENCE = 0.70;
+const FALLBACK_MIN_CONFIDENCE = 0.70;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 
 class NotificationService {
@@ -52,6 +52,8 @@ class NotificationService {
   private permissionGranted = false;
   private rules: UserAlertRule[] = [];
   private favoriteTeamIds: number[] = [];
+  private enabled = true;
+  private defaultMinConf = FALLBACK_MIN_CONFIDENCE;
 
   /**
    * Передаётся из AppContext — алерты фильтруются по правилам пользователя
@@ -63,6 +65,20 @@ class NotificationService {
   }
   setFavoriteTeamIds(ids: number[]): void {
     this.favoriteTeamIds = ids;
+  }
+  /** Глобальный вкл/выкл. При false — checkAndNotify ничего не срабатывает. */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+  /** Порог уверенности по умолчанию (0..1), используется когда нет активных правил. */
+  setDefaultMinConfidence(conf: number): void {
+    this.defaultMinConf = Math.max(0.5, Math.min(0.99, conf));
+  }
+  getDefaultMinConfidence(): number {
+    return this.defaultMinConf;
   }
 
   async requestPermissions(): Promise<boolean> {
@@ -100,6 +116,7 @@ class NotificationService {
    * Если правил нет совсем — fallback по DEFAULT_MIN_CONFIDENCE.
    */
   async checkAndNotify(enrichedMatches: EnrichedMatch[]): Promise<EvAlert[]> {
+    if (!this.enabled) return [];
     const newAlerts: EvAlert[] = [];
     const favs = new Set(this.favoriteTeamIds.map(Number));
     const activeRules = this.rules;
@@ -121,7 +138,7 @@ class NotificationService {
         const matchedRules: Match[] = [];
 
         if (activeRules.length === 0) {
-          matchedRules.push({ minConf: DEFAULT_MIN_CONFIDENCE });
+          matchedRules.push({ minConf: this.defaultMinConf });
         } else {
           for (const r of activeRules) {
             // Mode (live/prematch/any)
