@@ -182,7 +182,9 @@ function ActiveModelsPanel() {
                   <th className="px-3 py-2">Engine</th>
                   <th className="px-3 py-2">FV</th>
                   <th className="px-3 py-2">Версия</th>
+                  <th className="px-3 py-2 text-right">Test Acc</th>
                   <th className="px-3 py-2 text-right">Brier</th>
+                  <th className="px-3 py-2 text-right" title="Точность на «сложных» матчах: близкий ELO команд (|Δ|<100). Проверяет, угадывает ли модель там, где fav-логика не работает.">Hard Acc</th>
                   <th className="px-3 py-2 text-right">Train n</th>
                   <th className="px-3 py-2"></th>
                 </tr>
@@ -201,7 +203,15 @@ function ActiveModelsPanel() {
                       </td>
                       <td className="px-3 py-2">v{m.featuresVersion}</td>
                       <td className="px-3 py-2 text-muted-foreground truncate max-w-[140px]">{m.version}</td>
+                      <td className={`px-3 py-2 text-right ${m.testAccuracy != null && m.testAccuracy >= 0.6 ? "text-radiant" : m.testAccuracy != null && m.testAccuracy < 0.5 ? "text-dire" : "text-foreground"}`}>
+                        {m.testAccuracy != null ? (m.testAccuracy * 100).toFixed(1) + "%" : "—"}
+                      </td>
                       <td className="px-3 py-2 text-right">{m.brierScore != null ? m.brierScore.toFixed(4) : "—"}</td>
+                      <td className="px-3 py-2 text-right" title={(m as { hardMatchCount?: number | null }).hardMatchCount != null ? `n=${(m as { hardMatchCount?: number | null }).hardMatchCount}` : ""}>
+                        {(m as { hardMatchAccuracy?: number | null }).hardMatchAccuracy != null
+                          ? ((m as { hardMatchAccuracy?: number | null }).hardMatchAccuracy! * 100).toFixed(1) + "%"
+                          : "—"}
+                      </td>
                       <td className="px-3 py-2 text-right">{m.trainSampleSize ?? "—"}</td>
                       <td className="px-3 py-2 text-right">
                         <Button

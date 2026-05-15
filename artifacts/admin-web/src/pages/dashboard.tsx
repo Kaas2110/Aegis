@@ -58,13 +58,28 @@ export default function Dashboard() {
           Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-none bg-card" />)
         ) : (
           <>
-            <StatusCard 
-              title="Статус планировщика" 
-              value={(schedulerState?.currentStep as string | undefined) || "ОЖИДАНИЕ"} 
-              status={schedulerState?.lastError ? "error" : "success"}
-              subtitle={schedulerState?.['lastError'] ? "Ошибка в последнем цикле" : "Работает в штатном режиме"}
-              icon={schedulerState?.['lastError'] ? XCircle : CheckCircle2}
-            />
+            {(() => {
+              const notes = (schedulerState as { notes?: { failedAt?: string } } | undefined)?.notes;
+              const failedAt = notes?.failedAt ? new Date(notes.failedAt).getTime() : 0;
+              const errorIsRecent = failedAt > 0 && Date.now() - failedAt < 24 * 60 * 60 * 1000;
+              const currentStep = schedulerState?.currentStep as string | undefined;
+              const showError = errorIsRecent && !!schedulerState?.lastError;
+              const statusValue = currentStep || (showError ? "ОШИБКА" : "ОК");
+              const statusSubtitle = currentStep
+                ? "Идёт обработка"
+                : showError
+                  ? "Ошибка в последнем цикле"
+                  : "Работает в штатном режиме";
+              return (
+                <StatusCard
+                  title="Статус планировщика"
+                  value={statusValue}
+                  status={showError ? "error" : "success"}
+                  subtitle={statusSubtitle}
+                  icon={showError ? XCircle : CheckCircle2}
+                />
+              );
+            })()}
             <StatusCard 
               title="Последний ингест" 
               value={formatDate(schedulerState?.lastIngestAt as string)} 

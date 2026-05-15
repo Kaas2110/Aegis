@@ -15,7 +15,97 @@ import {
 } from '../services/SchedulerWorker';
 import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable } from '@workspace/db';
 import { requireAdminSession } from './adminAuth';
-import { eq, desc, sql, and, gte, isNotNull, inArray } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, isNotNull, inArray, or, ilike } from 'drizzle-orm';
+
+type TeamResolveEntry = { teamId: number; rating: number | null } | null;
+const TEAM_RESOLVE_TTL_MS = 30 * 60 * 1000;
+const TEAM_RESOLVE_MAX_ENTRIES = 2000;
+const teamResolveCache = new Map<string, { value: TeamResolveEntry; exp: number }>();
+
+function cacheGet(key: string): { hit: boolean; value: TeamResolveEntry } {
+  const e = teamResolveCache.get(key);
+  if (!e) return { hit: false, value: null };
+  if (Date.now() > e.exp) {
+    teamResolveCache.delete(key);
+    return { hit: false, value: null };
+  }
+  teamResolveCache.delete(key);
+  teamResolveCache.set(key, e);
+  return { hit: true, value: e.value };
+}
+
+function cacheSet(key: string, value: TeamResolveEntry) {
+  if (teamResolveCache.size >= TEAM_RESOLVE_MAX_ENTRIES) {
+    const oldest = teamResolveCache.keys().next().value;
+    if (oldest !== undefined) teamResolveCache.delete(oldest);
+  }
+  teamResolveCache.set(key, { value, exp: Date.now() + TEAM_RESOLVE_TTL_MS });
+}
+
+function normalizeTeamName(s: string): string {
+  return s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+async function resolveOpenDotaTeam(name: string, providedId?: number): Promise<TeamResolveEntry> {
+  if (typeof name !== 'string') return null;
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 80) return null;
+  const norm = normalizeTeamName(trimmed);
+  if (!norm) return null;
+  const cacheKey = `${providedId ?? 0}|${norm}`;
+  const c = cacheGet(cacheKey);
+  if (c.hit) return c.value;
+  let row: TeamResolveEntry = null;
+  if (providedId && Number.isFinite(providedId) && providedId > 0 && providedId < 1e10) {
+    const r = await db
+      .select({ teamId: teamsTable.teamId, rating: teamsTable.rating })
+      .from(teamsTable)
+      .where(eq(teamsTable.teamId, providedId))
+      .limit(1);
+    if (r[0]) row = { teamId: r[0].teamId, rating: r[0].rating };
+  }
+  if (!row) {
+    const wildcard = `%${trimmed.toLowerCase()}%`;
+    const r = await db
+      .select({ teamId: teamsTable.teamId, rating: teamsTable.rating, name: teamsTable.name, tag: teamsTable.tag })
+      .from(teamsTable)
+      .where(or(ilike(teamsTable.name, wildcard), ilike(teamsTable.tag, trimmed.toLowerCase())))
+      .orderBy(desc(teamsTable.rating))
+      .limit(20);
+    let best: typeof r[number] | null = null;
+    for (const cand of r) {
+      const cn = normalizeTeamName(cand.name ?? '');
+      const ct = normalizeTeamName(cand.tag ?? '');
+      if (cn === norm || ct === norm) { best = cand; break; }
+      if (!best && (cn.includes(norm) || norm.includes(cn))) best = cand;
+    }
+    if (best) row = { teamId: best.teamId, rating: best.rating };
+  }
+  cacheSet(cacheKey, row);
+  return row;
+}
+
+async function enrichInputWithRealTeams(input: MatchInput): Promise<MatchInput> {
+  if (!input.team1?.name || !input.team2?.name) return input;
+  const [t1, t2] = await Promise.all([
+    resolveOpenDotaTeam(input.team1.name, input.team1.teamId),
+    resolveOpenDotaTeam(input.team2.name, input.team2.teamId),
+  ]);
+  if (!t1 && !t2) return input;
+  return {
+    ...input,
+    team1: {
+      ...input.team1,
+      teamId: t1?.teamId ?? input.team1.teamId,
+      elo: input.team1.elo ?? (t1?.rating ?? undefined),
+    },
+    team2: {
+      ...input.team2,
+      teamId: t2?.teamId ?? input.team2.teamId,
+      elo: input.team2.elo ?? (t2?.rating ?? undefined),
+    },
+  };
+}
 
 const router: IRouter = Router();
 
@@ -237,20 +327,22 @@ async function applyMlMatchWinner(
 
 router.post('/predict', async (req, res) => {
   try {
-    const input = req.body as MatchInput & {
+    const rawInput = req.body as MatchInput & {
       bookmakerOdds?: { odds1: number; odds2: number };
     };
 
-    if (!input.matchId || !input.team1 || !input.team2 || !input.format) {
+    if (!rawInput.matchId || !rawInput.team1 || !rawInput.team2 || !rawInput.format) {
       res.status(400).json({
         error: 'Требуются поля: matchId, team1, team2, format',
       });
       return;
     }
 
-    // Если liveSnapshot есть — это live-матч, состояние меняется каждую минуту,
-    // НЕ кэшируем. Иначе (прематч) кэшируем по matchId на 4 часа: ELO/h2h
-    // меняются редко, нет смысла гонять модель на каждый refresh клиента.
+    const input = await enrichInputWithRealTeams(rawInput) as MatchInput & {
+      bookmakerOdds?: { odds1: number; odds2: number };
+    };
+    input.bookmakerOdds = rawInput.bookmakerOdds;
+
     const isLive = !!input.liveSnapshot;
     if (isLive) {
       // ВАЖНО: для live НЕ вызываем applyMlMatchWinner — он подменил бы

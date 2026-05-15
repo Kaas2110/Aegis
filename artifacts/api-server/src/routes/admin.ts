@@ -271,6 +271,9 @@ router.get('/models', async (_req, res) => {
       brierScore: modelVersionsTable.brierScore,
       trainSampleSize: modelVersionsTable.trainSampleSize,
       testSampleSize: modelVersionsTable.testSampleSize,
+      hardMatchAccuracy: modelVersionsTable.hardMatchAccuracy,
+      hardMatchBrier: modelVersionsTable.hardMatchBrier,
+      hardMatchCount: modelVersionsTable.hardMatchCount,
       createdAt: modelVersionsTable.createdAt,
     })
     .from(modelVersionsTable)

@@ -151,6 +151,12 @@ export interface AdminModelRow {
   trainSampleSize?: number | null;
   /** @nullable */
   testSampleSize?: number | null;
+  /** @nullable */
+  hardMatchAccuracy?: number | null;
+  /** @nullable */
+  hardMatchBrier?: number | null;
+  /** @nullable */
+  hardMatchCount?: number | null;
   createdAt: string;
 }
 

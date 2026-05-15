@@ -484,6 +484,12 @@ components:
           type: ["integer", "null"]
         testSampleSize:
           type: ["integer", "null"]
+        hardMatchAccuracy:
+          type: ["number", "null"]
+        hardMatchBrier:
+          type: ["number", "null"]
+        hardMatchCount:
+          type: ["integer", "null"]
         createdAt:
           type: string
     AdminModelsResponse:
