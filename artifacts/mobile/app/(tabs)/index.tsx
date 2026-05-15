@@ -163,29 +163,30 @@ export default function HomeScreen() {
 
   function getBestMarket(matchId: string): Market | undefined {
     const mkts = marketsMap.get(matchId) ?? [];
-    // Порядок приоритета: match_winner → map_winner → остальные.
-    // Тотал-рынки (total_kills / total_duration) намеренно показываем в карточке
-    // ТОЛЬКО если нет ни match_winner, ни map_winner — иначе EV тотала считается
-    // против winner-коэфов букмекера (Bovada winner 7.00/1.09 ≠ тотал-коэфы),
-    // что даёт ложный +EV и путает пользователя: 52% модели по «ТБ» читается
-    // как «REK выиграет с вероятностью 52%».
-    const WINNER_TYPES = ['match_winner', 'map_winner'];
-    const TOTAL_TYPES  = ['total_kills', 'total_duration'];
-    const winnerMarkets = mkts.filter(m => WINNER_TYPES.includes(m.type));
-    const totalMarkets  = mkts.filter(m => TOTAL_TYPES.includes(m.type));
-    const otherMarkets  = mkts.filter(m => !WINNER_TYPES.includes(m.type) && !TOTAL_TYPES.includes(m.type));
+    if (mkts.length === 0) return undefined;
 
-    // Из winner-рынков берём тот, у кого выше EV (при наличии реального бука),
-    // или просто первый. Тоталы выступают fallback'ом.
-    function pickBest(pool: Market[]): Market | undefined {
-      const withEv = pool.filter(m => m.bestOdds.oddsTeam1 > 0 && m.prediction.ev > 0);
-      return (withEv.sort((a, b) => b.prediction.ev - a.prediction.ev)[0]) ?? pool[0];
+    // Жёсткий приоритет: match_winner ВСЕГДА первым.
+    // Map_winner, тоталы и прочие — только если match_winner недоступен.
+    //
+    // Почему НЕ используем EV-сортировку внутри winner-типов:
+    // EV = modelProb(team1) × (odds1-1) − (1−modelProb(team1)).
+    // При stub-модели (50/50) map_winner.ev > match_winner.ev потому что у
+    // match_winner реальный прогноз (33% для REK × 6.50) даёт ev≈1.1,
+    // а у map_winner заглушка 50% × 6.50 даёт ev≈2.25 → алгоритм выбирает
+    // карту с ложным EV, а не матч-виннер с честным прогнозом.
+    const TYPE_PRIORITY = [
+      'match_winner',
+      'map_winner',
+      'first_blood',
+      'total_kills',
+      'total_duration',
+    ];
+
+    for (const type of TYPE_PRIORITY) {
+      const m = mkts.find(mkt => mkt.type === type);
+      if (m) return m;
     }
-
-    return pickBest(winnerMarkets)
-      ?? pickBest(otherMarkets)
-      ?? pickBest(totalMarkets)
-      ?? mkts[0];
+    return mkts[0];
   }
 
   type SectionItem =
