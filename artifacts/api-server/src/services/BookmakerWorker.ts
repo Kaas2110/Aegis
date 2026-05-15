@@ -1,36 +1,55 @@
 /**
  * BookmakerWorker — адаптивный фоновый поллер букмекерских источников.
  *
- * Интервал зависит от наличия live-матчей:
- *   - есть live (хотя бы 1 в /api/matches/live) → 3 минуты
- *   - нет live                                  → 60 минут
+ * Три режима, выбираются динамически на каждом tick'е:
+ *   - **live**           : есть хотя бы 1 live pro-матч → tick через 3 минуты
+ *   - **wake_for_start** : live=0, но ближайший upcoming стартует в течение 60 мин →
+ *                         tick на (start + 30s буфер на индексацию live API)
+ *   - **idle**           : live=0 и нет upcoming в обозримом окне → tick через 60 минут
  *
- * Воркер пишет результаты в общий кэш `routes/bookmakers.ts` (TTL 65 мин),
- * эндпоинты `/api/bookmakers/*` читают из этого кэша. Per-source ошибки
- * скипаются silently — берём то что собрали.
+ * Воркер **полностью автономен** — не зависит от трафика мобильного клиента.
+ * Чтобы определить live count и ближайший upcoming, делает loopback HTTP-запрос
+ * к собственному серверу (`/api/matches/live`, `/api/matches/upcoming`). Эти
+ * эндпоинты идут через withCache, так что воркер сам прогревает общий кэш —
+ * следующие запросы клиентов получают данные мгновенно.
+ *
+ * Воркер пишет результаты в общий per-source кэш `routes/bookmakers.ts` (TTL
+ * 65 мин), эндпоинты `/api/bookmakers/*` читают из этого кэша. Per-source
+ * ошибки скипаются silently — берём то что собрали.
  *
  * Disable: `DISABLE_BOOKMAKER_WORKER=true`. Также не стартует если
  * `BOOKMAKERS_ENABLED=false`.
  */
 import { logger } from '../lib/logger';
 import { fetchSource, getAllSourceIds, isBookmakersEnabled } from '../routes/bookmakers';
-import { peekCache } from '../lib/responseCache';
 
 const POLL_INTERVAL_LIVE_MS = 3 * 60_000;
 const POLL_INTERVAL_IDLE_MS = 60 * 60_000;
-// Первый tick задержан, чтобы кэш `matches:live` успел прогреться (мобилка
-// или админка обычно стучатся в первые 5-10s после старта). Иначе peekCache
-// вернёт undefined → mode всегда idle на cold start.
-const STARTUP_DELAY_MS = 30_000;
+const MIN_DELAY_MS = 60_000;
+// Если loopback fetch к /matches/live или /matches/upcoming упал (внутренний 5xx,
+// timeout, IPv4/v6 mismatch и т.п.), не уходим в idle на час — возвращаемся
+// через 3 минуты. Иначе транзиентный сбой создаёт «слепое окно» в 60 мин.
+const POLL_INTERVAL_LOOPBACK_FAIL_MS = 3 * 60_000;
+const WAKE_BUFFER_MS = 30_000; // ждём 30s после begin_at — даём live API проиндексировать матч
+// Первый tick задержан, чтобы Express успел поднять listen и роуты были доступны.
+const STARTUP_DELAY_MS = 5_000;
+const LOOPBACK_TIMEOUT_MS = 10_000;
+// Loopback hosts перебираем по очереди — IPv4 (127.0.0.1) → "localhost" (v4 или v6
+// в зависимости от ОС) → IPv6 ([::1]). Удачный кешируется до следующего сбоя.
+const LOOPBACK_HOSTS = ['127.0.0.1', 'localhost', '[::1]'] as const;
+let cachedLoopbackHost: string | null = null;
 
+type WorkerMode = 'live' | 'wake_for_start' | 'idle';
 type SourceStat = { source: string; events: number; error: string | null; durationMs: number };
 type WorkerStats = {
   startedAt: string | null;
   lastTickAt: string | null;
-  lastMode: 'live' | 'idle' | null;
+  lastMode: WorkerMode | null;
   lastIntervalMs: number | null;
   lastDurationMs: number | null;
   lastSources: SourceStat[];
+  lastLiveCount: number | null;
+  lastNextStartAt: string | null;
   ticks: number;
   errors: number;
 };
@@ -42,6 +61,8 @@ const stats: WorkerStats = {
   lastIntervalMs: null,
   lastDurationMs: null,
   lastSources: [],
+  lastLiveCount: null,
+  lastNextStartAt: null,
   ticks: 0,
   errors: 0,
 };
@@ -49,17 +70,53 @@ const stats: WorkerStats = {
 let timer: NodeJS.Timeout | null = null;
 let stopped = false;
 
-function liveMatchCount(): number {
-  // Peek-only: НЕ дёргаем апстрим и НЕ заполняем кэш. Если кэш ещё пустой
-  // (никто не запрашивал /matches/live), считаем что live=0 → idle режим;
-  // следующий tick подтянет когда кэш прогреется.
-  // Реальная форма /matches/live: { sources: [{source,data:[]|null,error?}], pandascoreRunning: number, noData: bool }.
-  // Берём максимум среди источников — не суммируем (один и тот же матч есть и в opendota, и в pandascore).
-  const payload = peekCache<{
+/**
+ * Loopback fetch с автоматическим перебором IPv4/v6 хостов. Возвращает
+ * `{ data: T }` при успехе или `{ error: string }` при сбое — caller'у важно
+ * различать «всё ок, данных нет» и «loopback сломался» (для адаптивного backoff).
+ */
+async function loopbackFetch<T>(path: string): Promise<{ data: T } | { error: string }> {
+  const port = process.env['PORT'] ?? '8080';
+  const hosts = cachedLoopbackHost
+    ? [cachedLoopbackHost, ...LOOPBACK_HOSTS.filter((h) => h !== cachedLoopbackHost)]
+    : [...LOOPBACK_HOSTS];
+  let lastErr = 'unknown';
+  for (const host of hosts) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), LOOPBACK_TIMEOUT_MS);
+    try {
+      const resp = await fetch(`http://${host}:${port}${path}`, { signal: ctrl.signal });
+      if (!resp.ok) {
+        lastErr = `HTTP ${resp.status}`;
+        continue;
+      }
+      cachedLoopbackHost = host;
+      return { data: (await resp.json()) as T };
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+    } finally {
+      clearTimeout(to);
+    }
+  }
+  logger.warn({ path, lastErr, tag: 'bookmaker-worker' }, '[bookmaker-worker] loopback fetch failed on all hosts');
+  return { error: lastErr };
+}
+
+/**
+ * Считает количество live pro-матчей через loopback к /matches/live (withCache 30s).
+ * Возвращает `null` при сбое loopback — caller использует это для короткого backoff.
+ *
+ * Форма /matches/live: { sources: [{source,data:[]|null,error?}], pandascoreRunning, noData }.
+ * Берём максимум среди источников — не суммируем (один и тот же матч есть и в
+ * opendota, и в pandascore).
+ */
+async function fetchLiveCount(): Promise<number | null> {
+  const r = await loopbackFetch<{
     sources?: Array<{ source: string; data: unknown }>;
     pandascoreRunning?: number;
-  }>('matches:live');
-  if (!payload) return 0;
+  }>('/api/matches/live');
+  if ('error' in r) return null;
+  const payload = r.data;
   let maxN = 0;
   for (const s of payload.sources ?? []) {
     if (Array.isArray(s.data) && s.data.length > maxN) maxN = s.data.length;
@@ -70,13 +127,86 @@ function liveMatchCount(): number {
   return maxN;
 }
 
+/**
+ * Находит ближайший upcoming матч с begin_at > now через loopback (withCache 60s).
+ * Возвращает `{ ms: number | null }` если loopback ок (ms=null если матчей нет),
+ * либо `{ error: string }` если loopback сломался — caller использует для backoff.
+ */
+async function fetchNextUpcomingStartMs(): Promise<{ ms: number | null } | { error: string }> {
+  const r = await loopbackFetch<{
+    noData?: boolean;
+    data?: Array<{ begin_at?: string | null; scheduled_at?: string | null }>;
+  }>('/api/matches/upcoming');
+  if ('error' in r) return { error: r.error };
+  const payload = r.data;
+  if (payload.noData) return { ms: null };
+  const items = Array.isArray(payload.data) ? payload.data : [];
+  const now = Date.now();
+  let nearest: number | null = null;
+  for (const m of items) {
+    const iso = m.begin_at ?? m.scheduled_at;
+    if (!iso) continue;
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t) || t <= now) continue;
+    if (nearest === null || t < nearest) nearest = t;
+  }
+  return { ms: nearest };
+}
+
+/**
+ * Вычисляет задержку до следующего tick'а.
+ *
+ * Семантика clamp'а:
+ *   live           → ровно POLL_INTERVAL_LIVE_MS (3 мин).
+ *   wake_for_start → max(MIN_DELAY_MS=60s, min(POLL_INTERVAL_IDLE_MS=60min, start+30s)).
+ *                    Если start уже произошёл / в ближайшие <30s, поднимаем минимум
+ *                    до 60s чтобы не флудить апстрим. Верхний клемп 60min нужен
+ *                    как страховка (caller выбирает wake_for_start только если
+ *                    msToStart<60min, так что обычно не сработает).
+ *   idle           → POLL_INTERVAL_IDLE_MS (60 мин).
+ */
+function computeNextDelay(mode: WorkerMode, nextStartMs: number | null): number {
+  if (mode === 'live') return POLL_INTERVAL_LIVE_MS;
+  if (mode === 'wake_for_start' && nextStartMs !== null) {
+    const delay = nextStartMs - Date.now() + WAKE_BUFFER_MS;
+    return Math.max(MIN_DELAY_MS, Math.min(POLL_INTERVAL_IDLE_MS, delay));
+  }
+  return POLL_INTERVAL_IDLE_MS;
+}
+
 async function tick(): Promise<void> {
   if (stopped) return;
   const t0 = Date.now();
-  const liveN = liveMatchCount();
-  const mode: 'live' | 'idle' = liveN > 0 ? 'live' : 'idle';
-  const interval = mode === 'live' ? POLL_INTERVAL_LIVE_MS : POLL_INTERVAL_IDLE_MS;
 
+  // 1. Определяем режим: сначала live count, при необходимости — upcoming.
+  // Если loopback fetch упал — выходим в специальный backoff (3 мин), не зависая
+  // на 60-минутном idle при транзиентных сбоях /matches/* эндпоинтов.
+  const liveN = await fetchLiveCount();
+  let mode: WorkerMode;
+  let nextStartMs: number | null = null;
+  let loopbackFailed = false;
+
+  if (liveN === null) {
+    loopbackFailed = true;
+    mode = 'idle';
+  } else if (liveN > 0) {
+    mode = 'live';
+  } else {
+    const upcomingResult = await fetchNextUpcomingStartMs();
+    if ('error' in upcomingResult) {
+      loopbackFailed = true;
+      mode = 'idle';
+    } else {
+      nextStartMs = upcomingResult.ms;
+      if (nextStartMs !== null && nextStartMs - Date.now() < POLL_INTERVAL_IDLE_MS) {
+        mode = 'wake_for_start';
+      } else {
+        mode = 'idle';
+      }
+    }
+  }
+
+  // 2. Опрашиваем все источники букмекеров параллельно.
   const sources = getAllSourceIds();
   const results = await Promise.all(
     sources.map(async (s) => {
@@ -90,7 +220,6 @@ async function tick(): Promise<void> {
           durationMs: Date.now() - ts,
         } as SourceStat;
       } catch (err) {
-        // fetchSource уже не должен бросать (заворачивает в SourceResponse), но на всякий
         const msg = err instanceof Error ? err.message : String(err);
         return { source: s, events: 0, error: msg, durationMs: Date.now() - ts } as SourceStat;
       }
@@ -100,12 +229,17 @@ async function tick(): Promise<void> {
   const totalEvents = results.reduce((a, r) => a + r.events, 0);
   const failed = results.filter((r) => r.error).length;
   const durationMs = Date.now() - t0;
+  const interval = loopbackFailed
+    ? POLL_INTERVAL_LOOPBACK_FAIL_MS
+    : computeNextDelay(mode, nextStartMs);
 
   stats.lastTickAt = new Date().toISOString();
   stats.lastMode = mode;
   stats.lastIntervalMs = interval;
   stats.lastDurationMs = durationMs;
   stats.lastSources = results;
+  stats.lastLiveCount = liveN;
+  stats.lastNextStartAt = nextStartMs !== null ? new Date(nextStartMs).toISOString() : null;
   stats.ticks += 1;
   if (failed > 0) stats.errors += failed;
 
@@ -113,7 +247,10 @@ async function tick(): Promise<void> {
     {
       tag: 'bookmaker-worker',
       mode,
+      loopbackFailed,
       liveMatches: liveN,
+      nextStartAt: stats.lastNextStartAt,
+      msToNextStart: nextStartMs !== null ? nextStartMs - Date.now() : null,
       intervalMs: interval,
       durationMs,
       totalEvents,
@@ -133,8 +270,8 @@ function scheduleNext(ms: number): void {
   timer = setTimeout(() => {
     tick().catch((err) => {
       stats.errors += 1;
-      logger.error({ err }, '[bookmaker-worker] tick error');
-      // даже при ошибке планируем следующий tick (idle interval, чтобы не долбить)
+      logger.error({ err, tag: 'bookmaker-worker' }, '[bookmaker-worker] tick error');
+      // Даже при ошибке планируем следующий tick (idle interval, чтобы не флудить).
       scheduleNext(POLL_INTERVAL_IDLE_MS);
     });
   }, ms);
@@ -155,11 +292,12 @@ export function startBookmakerWorker(): void {
     {
       liveIntervalMs: POLL_INTERVAL_LIVE_MS,
       idleIntervalMs: POLL_INTERVAL_IDLE_MS,
+      wakeBufferMs: WAKE_BUFFER_MS,
       startupDelayMs: STARTUP_DELAY_MS,
     },
     '[bookmaker-worker] starting',
   );
-  // Первый tick через STARTUP_DELAY_MS — даём кэшу matches:live прогреться.
+  // Первый tick через STARTUP_DELAY_MS — даём Express подняться и принимать loopback.
   scheduleNext(STARTUP_DELAY_MS);
 }
 

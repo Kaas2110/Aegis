@@ -107,13 +107,19 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 `/running` параллельно (5s timeout), кэш 30с. PandaScore работает как fallback, если
 OpenDota упал. `/api/matches/upcoming` — PandaScore, кэш 60с.
 
-**BookmakerWorker (DONE 2026-05-14):** `services/BookmakerWorker.ts` — фоновый
-поллер букмекеров с **адаптивным интервалом**: 3 минуты если есть live-матчи
-(определяется через `peekCache('matches:live')`), 60 минут если нет. Первый tick
-через 30s после старта (даём `/matches/live` cache прогреться). Воркер пишет
-результаты в общий per-source кэш `routes/bookmakers.ts` (TTL 65 мин), все
-эндпоинты `/api/bookmakers/*` читают из него — апстрим практически не дёргается
-вручную. Per-source ошибки скипаются silently (берём что собрали).
+**BookmakerWorker (DONE 2026-05-14, smart wake-up 2026-05-15):**
+`services/BookmakerWorker.ts` — фоновый поллер букмекеров с тремя режимами,
+выбираются на каждом tick'е:
+- **live** — есть ≥1 live pro-матч → next tick через 3 мин
+- **wake_for_start** — live=0, ближайший upcoming стартует <60 мин → next tick на
+  `(begin_at + 30s)` (30s буфер на индексацию live API)
+- **idle** — live=0 и нет upcoming в окне 60 мин → next tick через 60 мин
+
+Воркер **полностью автономен** — не зависит от трафика клиентов. Делает loopback
+`fetch` к `/api/matches/live` и `/api/matches/upcoming` (через withCache, так что
+сам прогревает общий кэш для будущих запросов клиентов; никакой дублирующей
+upstream-нагрузки). Первый tick через 5s после старта (Express должен подняться).
+Per-source ошибки букмекеров скипаются silently (берём что собрали).
 
 ENV: `DISABLE_BOOKMAKER_WORKER=true` отключает. `BOOKMAKERS_ENABLED=false`
 тоже отключает. Stats: `GET /api/bookmakers/status` возвращает `worker: { startedAt,
