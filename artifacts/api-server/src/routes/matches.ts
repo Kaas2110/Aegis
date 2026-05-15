@@ -104,16 +104,136 @@ const PANDASCORE_BASE = 'https://api.pandascore.co';
 
 // ── PandaScore running-enrichment ─────────────────────────────────────────
 
-/** Нормализует имя команды: убирает «Team », приводит к нижнему регистру. */
+/** Нормализует имя команды: убирает «Team »/«ex-» префиксы, приводит к нижнему регистру. */
 function normTeamName(name: unknown): string {
   if (typeof name !== 'string') return '';
-  return name.toLowerCase().replace(/^team\s+/i, '').replace(/\s+/g, ' ').trim();
+  return name
+    .toLowerCase()
+    .replace(/^team\s+/i, '')
+    // ex-HEROIC, ex_TSM, ex.NaVi → heroic / tsm / navi (бывшие составы)
+    .replace(/^ex[-_.\s]+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Достаточно ли похожи два нормализованных имени (одно содержит другое). */
 function namesMatch(a: string, b: string): boolean {
   if (!a || !b || a.length < 2 || b.length < 2) return false;
   return a === b || a.includes(b) || b.includes(a);
+}
+
+// ── Фильтр матчей по min team rating ──────────────────────────────────────
+//
+// Цель: не показывать в мобильном приложении матчи, в которых обе команды
+// слабее заданного порога (по дефолту топ-300 OpenDota = рейтинг ≥1158).
+// Если хотя бы одна команда дотягивает до порога — матч остаётся.
+// Если обе команды нам неизвестны (нет в `teams`) — тоже скрываем: ML-предикт
+// для них всё равно вернёт null, мобилка покажет «Данные собираются...» вечно.
+//
+// Конфигурируется через env `MIN_TEAM_RATING`. Установите `0`, чтобы выключить
+// фильтр (показывать все матчи).
+
+const MIN_TEAM_RATING_DEFAULT = 1158;
+
+function getMinTeamRating(): number {
+  const raw = process.env.MIN_TEAM_RATING;
+  if (raw === undefined || raw === '') return MIN_TEAM_RATING_DEFAULT;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : MIN_TEAM_RATING_DEFAULT;
+}
+
+interface TeamRatingMaps {
+  byId: Map<number, number>;
+  byNorm: Map<string, number>;
+}
+
+async function loadTeamRatings(input: {
+  ids: number[];
+  names: string[];
+}): Promise<TeamRatingMaps> {
+  const byId = new Map<number, number>();
+  const byNorm = new Map<string, number>();
+  const uniqIds = Array.from(new Set(input.ids.filter(n => n > 0)));
+  const uniqNamesNorm = Array.from(new Set(input.names.map(normTeamName).filter(Boolean)));
+  if (uniqIds.length === 0 && uniqNamesNorm.length === 0) return { byId, byNorm };
+
+  // Тянем по id отдельным запросом (точный матч); по имени — ниже через
+  // загрузку всех ratable-команд (taблица ~1000 строк, дешевле чем строить
+  // CASE-WHEN по нормализованному имени).
+  const rows = await db
+    .select({
+      teamId: teamsTable.teamId,
+      name: teamsTable.name,
+      tag: teamsTable.tag,
+      rating: teamsTable.rating,
+    })
+    .from(teamsTable);
+  for (const r of rows) {
+    if (r.rating == null) continue;
+    byId.set(r.teamId, r.rating);
+    if (r.name) byNorm.set(normTeamName(r.name), r.rating);
+    if (r.tag) byNorm.set(normTeamName(r.tag), r.rating);
+  }
+  return { byId, byNorm };
+}
+
+function bestRating(
+  maps: TeamRatingMaps,
+  teamId: unknown,
+  teamName: unknown,
+): number {
+  let best = -Infinity;
+  if (typeof teamId === 'number' && teamId > 0) {
+    const r = maps.byId.get(teamId);
+    if (r != null && r > best) best = r;
+  }
+  if (typeof teamName === 'string' && teamName.trim()) {
+    const norm = normTeamName(teamName);
+    const exact = maps.byNorm.get(norm);
+    if (exact != null && exact > best) best = exact;
+    // Substring-fallback для PS-имён, не совпадающих по точному ключу
+    // (sponsor-префиксы вроде «Aurora Gaming» vs «Aurora», roster-trade
+    // переименования и т.п.). Минимальная длина 5 чтобы не словить ложные
+    // совпадения по коротким токенам ('ig', 'og', 'tsm').
+    if (best === -Infinity && norm.length >= 5) {
+      for (const [k, v] of maps.byNorm) {
+        if (k.length < 3) continue;
+        if (k.includes(norm) || norm.includes(k)) {
+          if (v > best) best = v;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Фильтрует массив live-матчей (OpenDota / PandaScore-shape) по min team
+ * rating. Для каждого матча: если хотя бы одна команда имеет рейтинг ≥
+ * threshold — оставляем. Иначе скипаем.
+ */
+async function filterMatchesByMinRating<T>(
+  matches: T[],
+  extract: (m: T) => { idR: unknown; idD: unknown; nameR: unknown; nameD: unknown },
+): Promise<T[]> {
+  const min = getMinTeamRating();
+  if (min <= 0 || matches.length === 0) return matches;
+  const ids: number[] = [];
+  const names: string[] = [];
+  for (const m of matches) {
+    const e = extract(m);
+    if (typeof e.idR === 'number') ids.push(e.idR);
+    if (typeof e.idD === 'number') ids.push(e.idD);
+    if (typeof e.nameR === 'string') names.push(e.nameR);
+    if (typeof e.nameD === 'string') names.push(e.nameD);
+  }
+  const maps = await loadTeamRatings({ ids, names });
+  return matches.filter(m => {
+    const e = extract(m);
+    const rR = bestRating(maps, e.idR, e.nameR);
+    const rD = bestRating(maps, e.idD, e.nameD);
+    return Math.max(rR, rD) >= min;
+  });
 }
 
 interface PsGame {
@@ -532,7 +652,31 @@ router.get('/live', async (req, res) => {
         req.log.warn({ err }, 'live draft enrichment failed, returning without drafts');
         return psEnriched;
       });
-      results.push({ ...openDota.value, data: withDrafts });
+      // Фильтр по min team rating: матчи где обе команды слабее порога
+      // (по дефолту топ-300 = ≥1158) скрываем — для них всё равно нет ML.
+      const filtered = Array.isArray(withDrafts)
+        ? await filterMatchesByMinRating(
+            withDrafts as Record<string, unknown>[],
+            m => ({
+              idR: m['team_id_radiant'],
+              idD: m['team_id_dire'],
+              nameR: m['team_name_radiant'],
+              nameD: m['team_name_dire'],
+            }),
+          ).catch(err => {
+            req.log.warn({ err }, 'rating filter failed, returning unfiltered');
+            return withDrafts as Record<string, unknown>[];
+          })
+        : withDrafts;
+      const beforeN = Array.isArray(withDrafts) ? withDrafts.length : 0;
+      const afterN = Array.isArray(filtered) ? filtered.length : 0;
+      if (beforeN > afterN) {
+        req.log.info(
+          { tag: 'rating-filter', source: 'opendota', kept: afterN, dropped: beforeN - afterN, minRating: getMinTeamRating() },
+          '[matches/live] filtered low-tier matches',
+        );
+      }
+      results.push({ ...openDota.value, data: filtered });
     }
     if (stratz.status === 'fulfilled') results.push(stratz.value);
 
@@ -543,7 +687,18 @@ router.get('/live', async (req, res) => {
     // нули, но пара команд и название турнира — реальные.
     if (odCount === 0 && psMatches.length > 0) {
       const psShaped = await enrichWithLeagueNames(psRunningToLiveShape(psMatches)).catch(() => psRunningToLiveShape(psMatches));
-      results.push({ source: 'pandascore', data: psShaped });
+      const psFiltered = Array.isArray(psShaped)
+        ? await filterMatchesByMinRating(
+            psShaped as Record<string, unknown>[],
+            m => ({
+              idR: m['team_id_radiant'],
+              idD: m['team_id_dire'],
+              nameR: m['team_name_radiant'],
+              nameD: m['team_name_dire'],
+            }),
+          ).catch(() => psShaped as Record<string, unknown>[])
+        : psShaped;
+      results.push({ source: 'pandascore', data: psFiltered });
     }
 
     const hasData = results.some(r => !r.error && Array.isArray(r.data) && (r.data as unknown[]).length > 0);
@@ -580,7 +735,23 @@ router.get('/upcoming', async (req, res) => {
       const resp = await apiFetch(url.toString());
       if (!resp.ok) throw new Error(`PandaScore: HTTP ${resp.status}`);
       const raw = await resp.json() as unknown;
-      return await enrichWithLeagueNames(raw).catch(() => raw);
+      const enriched = await enrichWithLeagueNames(raw).catch(() => raw);
+      // Фильтр по min team rating: PS upcoming имеет shape
+      // [{opponents:[{opponent:{id,name}}]}] — извлекаем имена и сравниваем
+      // с нашей таблицей `teams`.
+      if (!Array.isArray(enriched)) return enriched;
+      return await filterMatchesByMinRating(
+        enriched as Record<string, unknown>[],
+        m => {
+          const opps = (m['opponents'] as Array<{ opponent?: { id?: number; name?: string } }> | undefined) ?? [];
+          return {
+            idR: undefined,
+            idD: undefined,
+            nameR: opps[0]?.opponent?.name,
+            nameD: opps[1]?.opponent?.name,
+          };
+        },
+      ).catch(() => enriched);
     });
     res.json({ noData: false, data });
   } catch (err) {
