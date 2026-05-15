@@ -163,9 +163,28 @@ export default function HomeScreen() {
 
   function getBestMarket(matchId: string): Market | undefined {
     const mkts = marketsMap.get(matchId) ?? [];
-    return mkts
-      .filter(mkt => mkt.prediction.ev > 0)
-      .sort((a, b) => b.prediction.ev - a.prediction.ev)[0]
+    // Порядок приоритета: match_winner → map_winner → остальные.
+    // Тотал-рынки (total_kills / total_duration) намеренно показываем в карточке
+    // ТОЛЬКО если нет ни match_winner, ни map_winner — иначе EV тотала считается
+    // против winner-коэфов букмекера (Bovada winner 7.00/1.09 ≠ тотал-коэфы),
+    // что даёт ложный +EV и путает пользователя: 52% модели по «ТБ» читается
+    // как «REK выиграет с вероятностью 52%».
+    const WINNER_TYPES = ['match_winner', 'map_winner'];
+    const TOTAL_TYPES  = ['total_kills', 'total_duration'];
+    const winnerMarkets = mkts.filter(m => WINNER_TYPES.includes(m.type));
+    const totalMarkets  = mkts.filter(m => TOTAL_TYPES.includes(m.type));
+    const otherMarkets  = mkts.filter(m => !WINNER_TYPES.includes(m.type) && !TOTAL_TYPES.includes(m.type));
+
+    // Из winner-рынков берём тот, у кого выше EV (при наличии реального бука),
+    // или просто первый. Тоталы выступают fallback'ом.
+    function pickBest(pool: Market[]): Market | undefined {
+      const withEv = pool.filter(m => m.bestOdds.oddsTeam1 > 0 && m.prediction.ev > 0);
+      return (withEv.sort((a, b) => b.prediction.ev - a.prediction.ev)[0]) ?? pool[0];
+    }
+
+    return pickBest(winnerMarkets)
+      ?? pickBest(otherMarkets)
+      ?? pickBest(totalMarkets)
       ?? mkts[0];
   }
 

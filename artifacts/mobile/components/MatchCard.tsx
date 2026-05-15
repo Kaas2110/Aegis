@@ -193,20 +193,37 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
               )}
             </View>
 
-            <OddsTilesPair
-              team1Label={match.team1.shortName}
-              team2Label={match.team2.shortName}
-              modelProbTeam1={bestMarket.prediction.modelProbability}
-              fairProbTeam1={bestMarket.bestOdds.fairProbTeam1}
-              oddsTeam1={bestMarket.bestOdds.oddsTeam1}
-              oddsTeam2={bestMarket.bestOdds.oddsTeam2}
-              bookmakerName={bestMarket.bestOdds.bookmakerName}
-              edgeTeam1={bestMarket.prediction.edge}
-              evTeam1={bestMarket.prediction.ev}
-              confidence={bestMarket.prediction.confidence}
-              onPressTeam1={onPress}
-              onPressTeam2={onPress}
-            />
+            {(() => {
+              // Для тотал-рынков метки — «ТБ» / «ТМ», а не имена команд.
+              // Иначе пользователь читает 52% «ТБ 52.5» как вероятность победы
+              // одной из команд, что вводит в заблуждение.
+              const isTotal = bestMarket.type === 'total_kills' || bestMarket.type === 'total_duration';
+              const t1Label = isTotal ? 'ТБ' : match.team1.shortName;
+              const t2Label = isTotal ? 'ТМ' : match.team2.shortName;
+              // Для тоталов букмекерские коэфы — winner-коэфы, не тотал-коэфы.
+              // Сравнивать их с total_kills-вероятностью некорректно → обнуляем.
+              const oddsT1 = isTotal ? 0 : bestMarket.bestOdds.oddsTeam1;
+              const oddsT2 = isTotal ? 0 : bestMarket.bestOdds.oddsTeam2;
+              const fair1  = isTotal ? 0 : bestMarket.bestOdds.fairProbTeam1;
+              const edge   = isTotal ? 0 : bestMarket.prediction.edge;
+              const ev     = isTotal ? 0 : bestMarket.prediction.ev;
+              return (
+                <OddsTilesPair
+                  team1Label={t1Label}
+                  team2Label={t2Label}
+                  modelProbTeam1={bestMarket.prediction.modelProbability}
+                  fairProbTeam1={fair1}
+                  oddsTeam1={oddsT1}
+                  oddsTeam2={oddsT2}
+                  bookmakerName={isTotal ? '' : bestMarket.bestOdds.bookmakerName}
+                  edgeTeam1={edge}
+                  evTeam1={ev}
+                  confidence={bestMarket.prediction.confidence}
+                  onPressTeam1={onPress}
+                  onPressTeam2={onPress}
+                />
+              );
+            })()}
           </View>
         ) : predictionStatus === 'unavailable' ? (
           /* Модель честно вернула null (нет данных по команде / dim mismatch).
