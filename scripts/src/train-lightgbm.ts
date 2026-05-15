@@ -92,15 +92,16 @@ function mlServiceToken(): string | null {
 }
 const TRAIN_TIMEOUT_MS = 120_000;  // тренировка может быть долгой
 
-// Wave 5: 12 base + 6 extended = 18.
+// Wave 6: удалили elo_diff_norm (командный рейтинг OD) — теперь сила команды
+// задаётся player_glicko_diff (EXTRA_FEATURE_NAMES, только v3) + form + h2h.
+// 11 base + 6 extended = 17.
 const TEAM_FEATURE_NAMES = [
-  'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
+  'bias', 'winrate_diff', 'experience_diff', 'is_high_tier',
   'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
   'tier_t1', 'tier_t2', 'tier_t3',
   ...EXTENDED_TEAM_FEATURE_NAMES,
 ] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 18
-const ELO_DIFF_NORM_IDX = 1;
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 17
 const HARD_MATCH_THRESHOLD = 0.4;
 
 interface Sample { features: number[]; label: number; }
@@ -149,7 +150,6 @@ function buildTeamFeatures(
   const ext = buildExtendedTeamFeatures(rExt, dExt);
   return [
     1,
-    (r.rating - d.rating) / 200,
     r.wins / rG - d.wins / dG,
     Math.log(rG + 1) - Math.log(dG + 1),
     rG >= 50 && dG >= 50 ? 1 : 0,
@@ -190,10 +190,6 @@ async function trainBucket(
       headers: { 'content-type': 'application/json', 'x-ml-token': token },
       body: JSON.stringify({
         label, feature_names: featureNames, train, calib, test,
-        // Wave 5: hard-match eval. elo_diff_norm — фича index 1 во всех v1/v2/v3
-        // (после bias). Threshold 0.4 ≈ 80 ELO разница между командами.
-        hard_feature_index: ELO_DIFF_NORM_IDX,
-        hard_threshold: HARD_MATCH_THRESHOLD,
       }),
       signal: ctrl.signal,
     });

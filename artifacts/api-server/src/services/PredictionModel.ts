@@ -55,15 +55,16 @@ import {
   type TeamExtendedSnapshot,
 } from '../lib/team-extended';
 
-// Wave 5: team фичи расширены 12 → 18 (12 base + 6 extended).
+// Wave 6: убрали elo_diff_norm (командный рейтинг OD) → 11 base + 6 extended = 17.
+// Сила команды — player_glicko_diff (EXTRA, v3) + form + h2h.
 // Имена и порядок ОБЯЗАНЫ совпадать с scripts/src/train-{model,lightgbm}.ts.
 const TEAM_FEATURE_NAMES = [
-  'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
+  'bias', 'winrate_diff', 'experience_diff', 'is_high_tier',
   'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
   'tier_t1', 'tier_t2', 'tier_t3',
   ...EXTENDED_TEAM_FEATURE_NAMES,
 ] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 18
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 17
 /** Inference-time constant: logit(0.52) ≈ radiant historical side advantage in pro matches. */
 const RADIANT_SIDE_LOGIT = 0.08;
 
@@ -549,7 +550,6 @@ function buildTeamFeatures(
   const ext = buildExtendedTeamFeatures(rExt, dExt);
   return [
     1,
-    (r.rating - d.rating) / 200,
     r.wins / rGames - d.wins / dGames,
     Math.log(rGames + 1) - Math.log(dGames + 1),
     rGames >= 50 && dGames >= 50 ? 1 : 0,

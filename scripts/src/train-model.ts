@@ -86,14 +86,12 @@ const MIN_AVG_GLICKO = 1200;  // отсекаем T3 — рейтинги шум
 // Wave 5: 12 base + 6 extended = 18. Имена и порядок ОБЯЗАНЫ совпадать с
 // PredictionModel.ts и train-lightgbm.ts.
 const TEAM_FEATURE_NAMES = [
-  'bias', 'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
+  'bias', 'winrate_diff', 'experience_diff', 'is_high_tier',
   'radiant_side_logit', 'recency_days_norm', 'series_type_norm', 'map_no_norm',
   'tier_t1', 'tier_t2', 'tier_t3',
   ...EXTENDED_TEAM_FEATURE_NAMES,
 ] as const;
-const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 18
-// Index фичи `elo_diff_norm` для hard-match subset eval (после bias).
-const ELO_DIFF_NORM_IDX = 1;
+const TEAM_FEATURE_DIM = TEAM_FEATURE_NAMES.length; // 17
 const HARD_MATCH_THRESHOLD = 0.4;
 
 interface Sample {
@@ -147,7 +145,6 @@ function buildTeamFeatures(
   const dGames = d.wins + d.losses;
   if (rGames < 5 || dGames < 5) return null;
 
-  const eloDiff = (r.rating - d.rating) / 200;
   const rWR = r.wins / rGames;
   const dWR = d.wins / dGames;
   const wrDiff = rWR - dWR;
@@ -160,7 +157,7 @@ function buildTeamFeatures(
 
   const ext = buildExtendedTeamFeatures(rExt, dExt);
   return [
-    1, eloDiff, wrDiff, expDiff, isHighTier,
+    1, wrDiff, expDiff, isHighTier,
     ctx.radiantSideLogit, recencyDaysNorm, seriesTypeNorm, mapNoNorm,
     ctx.tier === 't1' ? 1 : 0, ctx.tier === 't2' ? 1 : 0, ctx.tier === 't3' ? 1 : 0,
     ...ext,
@@ -205,11 +202,11 @@ interface HardMetrics {
   count: number;
 }
 
-/** Wave 5: метрика на «близких» матчах — subset тестовой выборки где
- *  |elo_diff_norm| < HARD_MATCH_THRESHOLD. Главный показатель полезности
- *  модели когда фаворит неочевиден. */
+/** Метрика на «близких» матчах — subset тестовой выборки где
+ *  |winrate_diff| < HARD_MATCH_THRESHOLD (индекс 1 после bias). */
 function evaluateHard(samples: Sample[], w: number[], calib: CalibrationModel | null): HardMetrics {
-  const hard = samples.filter(s => Math.abs(s.features[ELO_DIFF_NORM_IDX] ?? 0) < HARD_MATCH_THRESHOLD);
+  const WINRATE_DIFF_IDX = 1;
+  const hard = samples.filter(s => Math.abs(s.features[WINRATE_DIFF_IDX] ?? 0) < HARD_MATCH_THRESHOLD);
   if (hard.length === 0) return { acc: 0, brier: 0, count: 0 };
   let correct = 0, brier = 0;
   for (const s of hard) {
