@@ -394,9 +394,17 @@ router.post('/predict', async (req, res) => {
     // переиспользует matchId при ростер-замене или смене формата (BO3↔BO5).
     // teamId в ключе нужен потому что ML-вывод зависит от teamId, а не только
     // от имени; без него можно отдать stale-предикт после изменения id.
+    // ВАЖНО: ключ включает seriesContext (счёт серии + номер карты), иначе
+    // после смены карты в BO3/BO5 кэш на 4ч вернёт labelRu «карты 1» и
+    // вероятность с устаревшим momentum. Без этого fix labelRu (mapNumber)
+    // фактически не работает на cached path'е.
+    const s1 = input.seriesContext?.seriesScore1 ?? 0;
+    const s2 = input.seriesContext?.seriesScore2 ?? 0;
+    const mapN = input.seriesContext?.currentMapNumber ?? (s1 + s2 + 1);
     const cacheKey =
       `predict:prematch:${input.matchId}:${input.team1.name}:${input.team2.name}` +
-      `:${input.format}:${input.team1.teamId ?? 0}:${input.team2.teamId ?? 0}`;
+      `:${input.format}:${input.team1.teamId ?? 0}:${input.team2.teamId ?? 0}` +
+      `:s${s1}-${s2}:m${mapN}`;
     const result = await withCache(
       cacheKey,
       PREMATCH_PREDICT_TTL_MS,

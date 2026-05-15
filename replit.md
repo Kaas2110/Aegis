@@ -83,6 +83,64 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   для будущей калибровки ladder без допущения о log-нормали. Метаданные пишутся
   под каноническим ключом `task_type` (legacy `taskType` оставлен как алиас).
 
+### Перерыв между картами + честные прогнозы (DONE 2026-05-15)
+
+Серия BO3/BO5 после конца карты висит в "перерыве" 1–5 мин до старта следующей.
+В это окно OD и PandaScore рассинхронизированы: OD ещё помнит прошлую карту
+(может вернуть `game_time>0` и старый draft), PandaScore уже показывает новую
+(`begin_at` будущее). Раньше UI видел "ЛАЙВ N:NN" со старыми героями и 50/50
+прогнозом — пользователь не понимал, что происходит.
+
+**Server (`routes/matches.ts`):**
+- `enrichWithPandaScoreRunning` сравнивает OD live + PS running с tolerance 60s.
+  Если PS считает матч начавшимся, а OD ещё показывает старую карту — ставим
+  `between_maps: true` на OD-объекте.
+- `psRunningToLiveShape` (PS-only fallback) тоже проставляет `between_maps`
+  если `begin_at > now`.
+- `enrichLiveMatchesWithDrafts` пропускает `between_maps:true` матчи (OD-драфт
+  принадлежит прошлой карте, не новой — лучше показать пусто).
+
+**Mobile:**
+- `MatchStatus = 'live' | 'between_maps' | ...` (новый статус).
+- `MatchCard` рисует пилюлю «ПЕРЕРЫВ» вместо «ЛАЙВ N:NN», скрывает counter.
+- Detail header показывает «ПЕРЕРЫВ» + score по картам (не по убийствам).
+- Detail tab «Прогнозы» показывает «Прогноз недоступен — перерыв».
+- HomeScreen фильтр «Live» включает `between_maps` (UX: пользователь идентифицирует
+  «идущую серию», не отдельную карту).
+- `NotificationService.isLiveLike` тоже включает `between_maps` для алертов.
+
+### Map_winner labelRu + честный draft (DONE 2026-05-15)
+
+Три связанных бага: (1) на 3-й карте серии 1-1 рынок назывался «Победитель карты 1»
+(сервер хардкодил mapNumber=1); (2) match_winner регулярно был 50/50 даже когда
+ELO команд явно разный; (3) Draft Score block был полностью скрыт, что
+дезориентировало пользователя.
+
+**Root cause 50/50:** `openDotaToMatch` в LiveDataService строил `draftFromOd` со
+**stub-значениями 0.5/0.5** для synergy/counter/scaling/early (реальные эти
+метрики на бэке не считаются — нужна hero_matchups агрегация которой нет).
+Мобилка слала их в `/api/analytics/predict` как `draft.synergy1=0.5,...`, и
+`BetTypeModels.predictMatchWinner` тянул вероятность к 50/50 через дрэфт-фактор.
+
+**Fixes:**
+- `AnalyticsEngine.MatchInput.seriesContext` теперь принимает `currentMapNumber`.
+  `runAnalytics` передаёт его в `predictMapWinner(fv, mapNumber)`. Дефолт —
+  `s1+s2+1` (вычисляется из счёта серии).
+- Мобилка (`fetchAnalytics` в `LiveDataService.ts`) шлёт `seriesContext`
+  с `seriesScore1/2 + currentMapNumber` из `match.team{1,2}MapsWon` и
+  `match.currentMapNumber`.
+- Мобилка **НЕ шлёт stub-draft**: если все 8 значений === 0.5, поле `draft`
+  опускается → сервер падает на чистый ELO + form + h2h, отдаёт честные 47/53
+  вместо тянутых-к-50% значений.
+- Detail screen: блок Draft Score больше не скрывается на stub'е, а показывает
+  ActivityIndicator + честный текст «Синергия и контрпики считаются по таблице
+  героев на бэкенде — для этого матча данные ещё не готовы». Пользователь видит,
+  что фича существует и почему пусто.
+
+**TODO (future):** реальные synergy/counter/scaling/early считать на бэке из
+`hero_matchups` + `hero_stats` + draft picks (есть в схеме, не используется в
+`/predict`). Тогда блок будет наполняться реальными цифрами автоматически.
+
 ### UX поведение списка (DONE 2026-05-14, v2)
 
 `fetchLiveData(cbs)` поддерживает прогрессивную отрисовку с параллельным

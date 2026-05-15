@@ -47,6 +47,11 @@ export interface MatchInput {
   seriesContext?: {
     seriesScore1: number;
     seriesScore2: number;
+    // Номер текущей карты в серии (1, 2, 3 для BO3; 1..5 для BO5).
+    // Если не передан — выводится как s1+s2+1. Используется в labelRu
+    // map_winner («Победитель карты N»), чтобы для серии 1-1 на карте 3
+    // не показывался хардкод «карты 1».
+    currentMapNumber?: number;
   };
 }
 
@@ -180,9 +185,13 @@ export function runAnalytics(
   const fv = buildFeatureVector(input);
   const now = new Date().toISOString();
 
+  const s1 = input.seriesContext?.seriesScore1 ?? 0;
+  const s2 = input.seriesContext?.seriesScore2 ?? 0;
+  const mapNumber = input.seriesContext?.currentMapNumber ?? (s1 + s2 + 1);
+
   const rawPredictions: BetPrediction[] = [
     predictMatchWinner(fv),
-    predictMapWinner(fv, 1),
+    predictMapWinner(fv, mapNumber),
     predictFirstBlood(fv),
     predictFirstTower(fv),
     predictFirstRoshan(fv),

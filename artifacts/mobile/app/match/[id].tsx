@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Modal, Pressable,
+  Platform, Modal, Pressable, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -625,25 +625,32 @@ export default function MatchDetailScreen() {
 
                 {(() => {
                   // LiveDataService подсовывает 0.5/0.5 как заглушки когда реальные
-                  // synergy/counter/scaling/early не посчитаны бэком (бывает почти всегда —
-                  // эти метрики считаются отдельно в /api/analytics/explain). Показывать
-                  // 4 строки с «50%» бессмысленно и дезинформирует пользователя — скрываем
-                  // блок целиком пока бэк не начнёт отдавать настоящие значения.
+                  // synergy/counter/scaling/early не посчитаны бэком. Раньше блок
+                  // целиком скрывали — пользователь жаловался, что не понимает,
+                  // что происходит. Теперь честно показываем «расчёт идёт».
                   const isStub =
                     draft.radiantSynergy === 0.5 && draft.direSynergy === 0.5 &&
                     draft.radiantCounter === 0.5 && draft.direCounter === 0.5 &&
                     draft.radiantScalingScore === 0.5 && draft.direScalingScore === 0.5 &&
                     draft.radiantEarlyGameScore === 0.5 && draft.direEarlyGameScore === 0.5;
-                  if (isStub) return null;
                   return (
                     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                       <SectionTitle title="Draft Score" colors={colors} />
-                      <View style={styles.draftScores}>
-                        <DraftScore label="Синергия" radiant={draft.radiantSynergy} dire={draft.direSynergy} colors={colors} />
-                        <DraftScore label="Контрпики" radiant={draft.radiantCounter} dire={draft.direCounter} colors={colors} />
-                        <DraftScore label="Лейт-гейм" radiant={draft.radiantScalingScore} dire={draft.direScalingScore} colors={colors} />
-                        <DraftScore label="Ранняя игра" radiant={draft.radiantEarlyGameScore} dire={draft.direEarlyGameScore} colors={colors} />
-                      </View>
+                      {isStub ? (
+                        <View style={styles.emptyCard}>
+                          <ActivityIndicator size="small" color={colors.primary} />
+                          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+                            Синергия и контрпики считаются по таблице героев на бэкенде — для этого матча данные ещё не готовы.
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.draftScores}>
+                          <DraftScore label="Синергия" radiant={draft.radiantSynergy} dire={draft.direSynergy} colors={colors} />
+                          <DraftScore label="Контрпики" radiant={draft.radiantCounter} dire={draft.direCounter} colors={colors} />
+                          <DraftScore label="Лейт-гейм" radiant={draft.radiantScalingScore} dire={draft.direScalingScore} colors={colors} />
+                          <DraftScore label="Ранняя игра" radiant={draft.radiantEarlyGameScore} dire={draft.direEarlyGameScore} colors={colors} />
+                        </View>
+                      )}
                     </View>
                   );
                 })()}

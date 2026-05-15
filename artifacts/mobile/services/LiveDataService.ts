@@ -290,12 +290,34 @@ async function fetchAnalytics(match: Match, odds?: OddsData, signal?: AbortSigna
       },
       format: match.format,
       tournamentTier: match.tournamentTier,
-      draft: match.draft ? {
-        synergy1: match.draft.radiantSynergy, synergy2: match.draft.direSynergy,
-        counter1: match.draft.radiantCounter, counter2: match.draft.direCounter,
-        scaling1: match.draft.radiantScalingScore, scaling2: match.draft.direScalingScore,
-        early1: match.draft.radiantEarlyGameScore, early2: match.draft.direEarlyGameScore,
-      } : undefined,
+      // Контекст серии — счёт по картам и номер текущей карты. Без этого сервер
+      // хардкодит «Победитель карты 1» даже на 3-й карте серии 1-1.
+      seriesContext: {
+        seriesScore1: match.team1MapsWon ?? 0,
+        seriesScore2: match.team2MapsWon ?? 0,
+        currentMapNumber: match.currentMapNumber ?? 1,
+      },
+      // ВАЖНО: stub-draft (все 8 значений = 0.5) НЕ шлём. Раньше openDotaToMatch
+      // строил draftFromOd с заглушками 0.5/0.5 для synergy/counter/scaling/early —
+      // и сервер, видя «есть драфт», тянул match_winner к 50/50 вместо чистого
+      // elo-расчёта. Реальные эти метрики мобилка не считает (нужна hero_matchups
+      // таблица на бэке), так что шлём draft только если кто-то проставил != 0.5.
+      draft: (() => {
+        const d = match.draft;
+        if (!d) return undefined;
+        const allStub =
+          d.radiantSynergy === 0.5 && d.direSynergy === 0.5 &&
+          d.radiantCounter === 0.5 && d.direCounter === 0.5 &&
+          d.radiantScalingScore === 0.5 && d.direScalingScore === 0.5 &&
+          d.radiantEarlyGameScore === 0.5 && d.direEarlyGameScore === 0.5;
+        if (allStub) return undefined;
+        return {
+          synergy1: d.radiantSynergy, synergy2: d.direSynergy,
+          counter1: d.radiantCounter, counter2: d.direCounter,
+          scaling1: d.radiantScalingScore, scaling2: d.direScalingScore,
+          early1: d.radiantEarlyGameScore, early2: d.direEarlyGameScore,
+        };
+      })(),
       liveSnapshot: snap ? {
         netWorthLead: snap.netWorthRadiant - snap.netWorthDire,
         killsLead: snap.radiantKills - snap.direKills,
