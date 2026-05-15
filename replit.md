@@ -199,6 +199,8 @@ grep '"\\[cache\\] miss"' logs.json | jq '.key' | sort | uniq -c
 
 ## Pointers
 
+- **`docs/system-map.md`** — ⭐ системная карта связей: все источники → таблицы → фичи
+  → модели → рантайм. **Агент обязан читать перед любой архитектурной правкой.**
 - **`docs/architecture.md`** — полная архитектура: где что лежит, все API-эндпоинты,
   admin & settings, Bookmakers roadmap, performance, architecture decisions, gotchas.
 - **`docs/changelog.md`** — историческая хронология крупных изменений (Wave 3/4/5,
