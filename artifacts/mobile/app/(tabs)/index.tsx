@@ -116,7 +116,13 @@ export default function HomeScreen() {
 
   function applyFilters(arr: Match[]): Match[] {
     return arr.filter(m => {
-      if (filters.mode !== 'all' && m.status !== filters.mode) return false;
+      if (filters.mode !== 'all') {
+        // 'between_maps' матчи относим к 'live' — пользователь думает о них как
+        // о текущей серии (счёт меняется, продолжается). В фильтре 'live' их
+        // показываем, в фильтре 'prematch' — нет.
+        const effectiveStatus = m.status === 'between_maps' ? 'live' : m.status;
+        if (effectiveStatus !== filters.mode) return false;
+      }
       return true;
     });
   }

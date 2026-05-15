@@ -40,6 +40,7 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
   const colors = useColors();
   const isLive = match.status === 'live';
   const isPrematch = match.status === 'prematch';
+  const isBetweenMaps = match.status === 'between_maps';
   const snap = match.liveSnapshot;
   const hasPositiveEV = bestMarket && bestMarket.prediction.ev > 0.08;
 
@@ -93,6 +94,11 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
                 <Text style={[styles.liveText, { color: colors.destructive }]}>ЛАЙВ</Text>
               </View>
             )}
+            {isBetweenMaps && (
+              <View style={[styles.livePill, { borderColor: colors.warning + '88' }]}>
+                <Text style={[styles.liveText, { color: colors.warning }]}>ПЕРЕРЫВ</Text>
+              </View>
+            )}
             {isPrematch && timeUntil && (
               <Text style={[styles.prematchText, { color: colors.warning }]}>{timeUntil}</Text>
             )}
@@ -116,7 +122,7 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
                 {match.team1.name}
               </Text>
             </View>
-            {isLive && match.team1MapsWon !== undefined && (
+            {(isLive || isBetweenMaps) && match.team1MapsWon !== undefined && (
               <Text style={[styles.mapScore, { color: colors.radiant }]}>{match.team1MapsWon}</Text>
             )}
           </View>
@@ -134,6 +140,17 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
                   {formatGameTime(snap.gameTimeSeconds)}
                 </Text>
               </>
+            ) : isBetweenMaps ? (
+              <>
+                <Text style={[styles.liveScore, { color: colors.foreground }]}>
+                  {match.team1MapsWon ?? 0}
+                  <Text style={{ color: colors.mutedForeground }}> · </Text>
+                  {match.team2MapsWon ?? 0}
+                </Text>
+                <Text style={[styles.gameTime, { color: colors.mutedForeground }]}>
+                  карта {match.currentMapNumber}
+                </Text>
+              </>
             ) : (
               <Text style={[styles.vsText, { color: colors.primary }]}>VS</Text>
             )}
@@ -142,7 +159,7 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
           {/* Team 2 — Dire side. Аналогично: красный цвет + hex-бэйдж = Dire,
               лейбл фракции убран, осталось только имя команды. */}
           <View style={[styles.teamSide, { justifyContent: 'flex-end' }]}>
-            {isLive && match.team2MapsWon !== undefined && (
+            {(isLive || isBetweenMaps) && match.team2MapsWon !== undefined && (
               <Text style={[styles.mapScore, { color: colors.dire }]}>{match.team2MapsWon}</Text>
             )}
             <View style={[styles.teamCol, { alignItems: 'flex-end' }]}>

@@ -273,6 +273,7 @@ export default function MatchDetailScreen() {
   const snap = match.liveSnapshot;
   const draft = match.draft;
   const isLive = match.status === 'live';
+  const isBetweenMaps = match.status === 'between_maps';
 
   // T005: канонический порядок блоков во вкладке «Прогнозы».
   // Сначала исход серии (match_winner), затем текущая карта, тоталы,
@@ -312,7 +313,11 @@ export default function MatchDetailScreen() {
               {match.team1.shortName}
             </Text>
             <Text style={[styles.headerVs, { color: colors.mutedForeground }]}>
-              {isLive && snap ? `${snap.radiantKills}—${snap.direKills}` : 'vs'}
+              {isLive && snap
+                ? `${snap.radiantKills}—${snap.direKills}`
+                : isBetweenMaps
+                  ? `${match.team1MapsWon} — ${match.team2MapsWon}`
+                  : 'vs'}
             </Text>
             <Text style={[styles.headerTeam, { color: colors.dire }]}>
               {match.team2.shortName}
@@ -326,6 +331,15 @@ export default function MatchDetailScreen() {
                 {formatGameTime(snap.gameTimeSeconds)}
               </Text>
               <FreshnessIndicator ageSeconds={snap.snapshotAge} />
+            </View>
+          )}
+          {isBetweenMaps && (
+            <View style={styles.headerLive}>
+              <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+              <Text style={[styles.liveLabel, { color: colors.primary }]}>ПЕРЕРЫВ</Text>
+              <Text style={[styles.gameTimeTxt, { color: colors.mutedForeground }]}>
+                карта {match.currentMapNumber}
+              </Text>
             </View>
           )}
         </View>
@@ -721,9 +735,11 @@ export default function MatchDetailScreen() {
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.emptyCard}>
-                  <Feather name="trending-up" size={28} color={colors.mutedForeground} />
+                  <Feather name={isBetweenMaps ? 'pause-circle' : 'trending-up'} size={28} color={colors.mutedForeground} />
                   <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
-                    Аналитика по рынкам загружается
+                    {isBetweenMaps
+                      ? 'Прогноз недоступен — перерыв между картами. Появится после старта новой карты.'
+                      : 'Аналитика по рынкам загружается'}
                   </Text>
                 </View>
               </View>

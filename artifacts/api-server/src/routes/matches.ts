@@ -238,8 +238,10 @@ async function filterMatchesByMinRating<T>(
 
 interface PsGame {
   status: string;
+  position?: number;
   winner?: { id?: number | null; name?: string };
   begin_at?: string | null;
+  end_at?: string | null;
 }
 
 interface PsRunningMatch {
@@ -286,6 +288,15 @@ function psRunningToLiveShape(ps: PsRunningMatch[]): Record<string, unknown>[] {
       r1 = a; r2 = b;
     }
     const leagueId = m.league?.id ?? m.league_id ?? 0;
+    // Между картами и без OD-источника: серия идёт, но текущая карта в драфте
+    // (есть finished, но running ещё не начался — или running начался <60s
+    // назад и реальной игры пока нет). UI покажет «ПЕРЕРЫВ» вместо стейл-live.
+    const runningGame = games.find(g => g.status === 'running');
+    const nowSec = Math.floor(Date.now() / 1000);
+    const runningStartedRecently = runningGame?.begin_at
+      ? Math.floor(new Date(runningGame.begin_at).getTime() / 1000) > nowSec - 60
+      : false;
+    const betweenMaps = finished.length > 0 && (!runningGame || runningStartedRecently);
     return {
       // Используем синтетический match_id (отрицательный, не пересекается с OD).
       match_id: -m.id,
@@ -305,6 +316,7 @@ function psRunningToLiveShape(ps: PsRunningMatch[]): Record<string, unknown>[] {
       dire_series_wins:    r2,
       current_map: finished.length + 1,
       number_of_games: m.number_of_games ?? 3,
+      between_maps: betweenMaps,
       source: 'pandascore',
       // Поле для дедупликации с OD — порядковый номер на случай одинаковых пар.
       _ps_idx: idx,
@@ -390,6 +402,53 @@ function enrichWithPandaScoreRunning(
 
     const currentMap = finishedGames.length + 1;
 
+    // ── Детект "между картами / в драфте" ─────────────────────────────────
+    // OpenDota /api/live кеширует данные предыдущей карты ещё долго после её
+    // конца (activate_time старый, game_time продолжает «тикать», score 32:43
+    // от Map 1). PandaScore же даёт честную картину: какая игра position=N
+    // сейчас status='running' и её begin_at. Если begin_at running-игры
+    // позже OD activate_time на >60s → OD показывает устаревшие данные
+    // прошлой карты. UI должен показать «Серия 1-0, готовимся к карте N»
+    // вместо фейкового live-снапшота.
+    const runningGame = games.find(g => g.status === 'running');
+    const odActivateTime = typeof m['activate_time'] === 'number' ? m['activate_time'] as number : 0;
+    let betweenMaps = false;
+    if (finishedGames.length > 0) {
+      if (!runningGame) {
+        // Нет ни одной running-игры в PS, но серия идёт → пауза между картами.
+        betweenMaps = true;
+      } else if (runningGame.begin_at && odActivateTime > 0) {
+        const psStartSec = Math.floor(new Date(runningGame.begin_at).getTime() / 1000);
+        // OD activate_time старее PS running game.begin_at на минуту+ → OD показывает
+        // прошлую карту, реальная новая ещё в драфте/loading screen.
+        if (psStartSec > odActivateTime + 60) {
+          betweenMaps = true;
+        }
+      }
+    }
+
+    if (betweenMaps) {
+      // Чистим live-снапшот: ML на устаревших данных предыдущей карты считать
+      // нельзя, и пользователю не показываем фейковый «65:07 32:43».
+      // Сохраняем счёт серии и команды — это и есть полезная инфа на этот момент.
+      return {
+        ...m,
+        team_name_radiant: odR.trim() || psRadiantName,
+        team_name_dire:    odD.trim() || psDireName,
+        radiant_series_wins: radiantWins,
+        dire_series_wins:    direWins,
+        current_map: currentMap,
+        ps_match_id: ps.id,
+        between_maps: true,
+        // Зануляем устаревшие OD-поля чтобы UI не показывал стейл
+        game_time: 0,
+        radiant_score: 0,
+        dire_score: 0,
+        radiant_lead: 0,
+        draft: undefined,
+      };
+    }
+
     return {
       ...m,
       // Имена: оставляем OD если есть, иначе PS-официальные
@@ -400,6 +459,7 @@ function enrichWithPandaScoreRunning(
       dire_series_wins:    direWins,
       current_map: currentMap,
       ps_match_id: ps.id,
+      between_maps: false,
     };
   });
 }
@@ -523,7 +583,11 @@ async function enrichLiveMatchesWithDrafts(matches: unknown): Promise<unknown> {
   // OD (60/min). Fetch занимает ~300-800ms, total <2s даже для 10 матчей.
   const idSet = new Set<number>();
   for (const raw of matches) {
-    const id = Number((raw as Record<string, unknown>)['match_id'] ?? 0);
+    const r = raw as Record<string, unknown>;
+    // Между картами драфта актуальной карты ещё нет — не тащим OD-драфт
+    // (он отдаст пики предыдущей карты, которые мы только что зачистили).
+    if (r['between_maps'] === true) continue;
+    const id = Number(r['match_id'] ?? 0);
     if (id > 0) idSet.add(id);
   }
   const ids = Array.from(idSet);
@@ -536,6 +600,7 @@ async function enrichLiveMatchesWithDrafts(matches: unknown): Promise<unknown> {
   }
   return matches.map(raw => {
     const m = raw as Record<string, unknown>;
+    if (m['between_maps'] === true) return m;
     const id = Number(m['match_id'] ?? 0);
     const draft = id > 0 ? drafts.get(id) : null;
     return draft ? { ...m, draft } : m;

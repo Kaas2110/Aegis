@@ -125,7 +125,10 @@ class NotificationService {
         } else {
           for (const r of activeRules) {
             // Mode (live/prematch/any)
-            if (r.mode === 'live' && em.match.status !== 'live') continue;
+            // 'between_maps' семантически live (серия идёт) — алерт-режим 'live'
+            // его пропускает, 'prematch' исключает. Согласовано с HomeScreen.
+            const isLiveLike = em.match.status === 'live' || em.match.status === 'between_maps';
+            if (r.mode === 'live' && !isLiveLike) continue;
             if (r.mode === 'prematch' && em.match.status !== 'prematch') continue;
             // Тип рынка
             if (r.marketTypes.length > 0 && !r.marketTypes.includes(mkt.type as MarketType)) continue;

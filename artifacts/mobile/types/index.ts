@@ -18,7 +18,7 @@ export interface UserSettings {
   isPremium: boolean;
 }
 
-export type MatchStatus = 'prematch' | 'live' | 'finished';
+export type MatchStatus = 'prematch' | 'live' | 'between_maps' | 'finished';
 export type BOFormat = 'BO1' | 'BO3' | 'BO5';
 export type MapSide = 'radiant' | 'dire';
 

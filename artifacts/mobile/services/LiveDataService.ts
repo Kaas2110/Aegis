@@ -17,6 +17,11 @@ interface OpenDotaLiveMatch {
   series_type?: number;
   radiant_series_wins?: number;
   dire_series_wins?: number;
+  // Подмешивается на бэке (routes/matches.ts → enrichWithPandaScoreRunning):
+  // true = OD держит устаревший снапшот предыдущей карты (Map уже закончилась
+  // в PS, новая в драфте). UI показывает «Серия N-M, готовимся к карте X»
+  // вместо фейкового live-снапшота со старыми kill'ами и таймером.
+  between_maps?: boolean;
   // Плоские поля (не вложенный scoreboard)
   radiant_score?: number;      // убийства Radiant
   dire_score?: number;         // убийства Dire
@@ -170,7 +175,7 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
       : raw.league_id ? `Лига #${raw.league_id}` : 'Pro Match',
     tournamentTier: raw.league_tier === 'premium' ? 1 : raw.league_tier === 'professional' ? 2 : 2,
     format: formatBOFormat(raw.series_type),
-    status: 'live',
+    status: raw.between_maps ? 'between_maps' : 'live',
     currentMapNumber: raw.current_map ?? 1,
     team1MapsWon: raw.radiant_series_wins ?? 0,
     team2MapsWon: raw.dire_series_wins ?? 0,
@@ -689,6 +694,17 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
     );
 
     const enrichOne = async (match: Match): Promise<EnrichedMatch> => {
+      // Между картами драфта нет, OD-снапшот устарел — модели нечего считать.
+      // Сразу возвращаем «unavailable» без обращения к /predict, чтобы не жечь
+      // ML и не ловить мусорные 50/50 на стейл-данных.
+      if (match.status === 'between_maps') {
+        const em: EnrichedMatch = {
+          match, markets: [], predictionStatus: 'unavailable',
+          availableBookmakers: buildBookmakerOptions(undefined),
+        };
+        cachePut(em);
+        return em;
+      }
       // Запрашиваем The Odds API и Bovada параллельно — BookmakerWorker отдаёт
       // из in-memory кэша (<5ms), поэтому параллельный fetch не добавляет latency.
       const [matchingOdds, bookmakerOdds] = await Promise.all([
