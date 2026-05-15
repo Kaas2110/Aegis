@@ -311,22 +311,38 @@ const PREMATCH_PREDICT_TTL_MS = 4 * 60 * 60 * 1000;
  * (для них пока нет ML). Если ML не вернул прогноз (модель не загружена,
  * мало матчей у команды и т.д.) — оставляем математику без изменений.
  */
+function pruneWinnerMarkets(result: ReturnType<typeof runAnalytics>): void {
+  // Удаляем match_winner+map_winner из predictions. Используется когда нет ML
+  // или нет реальных фич — лучше отдать пустоту (UI: «прогноз недоступен»),
+  // чем math-результат с дефолтным ELO 1700/1720 = 50/50.
+  result.predictions = result.predictions.filter(
+    p => p.betType !== 'match_winner' && p.betType !== 'map_winner',
+  );
+}
+
 async function applyMlMatchWinner(
   result: ReturnType<typeof runAnalytics>,
   input: MatchInput,
 ): Promise<ReturnType<typeof runAnalytics>> {
   const t1 = input.team1.teamId;
   const t2 = input.team2.teamId;
-  if (!t1 || !t2 || t1 === t2) return result;
+  if (!t1 || !t2 || t1 === t2) {
+    // Без teamId ML не вызвать → режем math winner вместо подсовывания 50/50.
+    pruneWinnerMarkets(result);
+    return result;
+  }
 
   let ml;
   try {
     ml = await mlPredictMatchWinner(t1, t2);
   } catch (err) {
-    // ML-провал не должен сваливать весь предикт. Логируем и отдаём math.
+    pruneWinnerMarkets(result);
     return result;
   }
-  if (!ml) return result;
+  if (!ml) {
+    pruneWinnerMarkets(result);
+    return result;
+  }
 
   const idx = result.predictions.findIndex(p => p.betType === 'match_winner');
   if (idx === -1) return result;
@@ -351,6 +367,7 @@ async function applyMlMatchWinner(
     confidence: Math.max(probTeam1, probTeam2),
     edge,
     ev,
+    modelVersion: ml.modelVersion,
   };
 
   // Деривируем map_winner из ML-вероятности match_winner.
@@ -377,6 +394,7 @@ async function applyMlMatchWinner(
       probTeam1: mapProb1,
       probTeam2: 1 - mapProb1,
       confidence: Math.max(mapProb1, 1 - mapProb1),
+      modelVersion: `${ml.modelVersion}+derived`,
     };
   }
 
@@ -405,15 +423,23 @@ router.post('/predict', async (req, res) => {
 
     const isLive = !!input.liveSnapshot;
     if (isLive) {
-      // ВАЖНО: для live НЕ вызываем applyMlMatchWinner — он подменил бы
-      // live-aware математический выход (учитывающий netWorthLead/killsLead/
-      // tower/aegis из liveSnapshot) статичным прематч-предсказанием ML, что
-      // де-факто откатывает прогноз к состоянию на старт матча. Динамическая
-      // live-winner ML-модель (LiveWinnerModel) работает отдельно: LiveWorker
-      // считает её на каждый снапшот и пишет в predictionsTable, а UI читает
-      // через /api/matches/live → predictions. Здесь оставляем чистую
-      // математику с live-features.
+      // Live-aware math по-прежнему считается (учитывает netWorthLead/
+      // killsLead/tower/aegis из liveSnapshot), НО match_winner/map_winner
+      // режем если у нас нет реального ELO команд — иначе мобилка с
+      // hardcode eloRating=1720 для обеих сторон получит честное math 50/50,
+      // что хуже, чем явное «прогноз недоступен». Live-winner ML-модель
+      // считает LiveWorker отдельно и пишет в predictionsTable; мобилка
+      // читает её через /api/matches/live → predictions.
       const result = runAnalytics(input, input.bookmakerOdds);
+      // Режем winner-рынки если у нас нет реального ELO хотя бы одной команды.
+      // Равные ELO у двух команд (e1===e2) — валидный кейс (реально равные пары),
+      // НЕ режем. Мобилка теперь не шлёт 1720-stub, поэтому undefined elo
+      // означает «нет данных в DB», а не «мобилка соврала».
+      const e1 = input.team1.elo;
+      const e2 = input.team2.elo;
+      if (!e1 || !e2) {
+        pruneWinnerMarkets(result);
+      }
       res.json(result);
       return;
     }
@@ -777,7 +803,12 @@ router.post('/batch', (req, res) => {
       res.status(400).json({ error: 'Максимум 20 матчей за раз' });
       return;
     }
-    const results = matches.map(m => runAnalytics(m));
+    const results = matches.map(m => {
+      const r = runAnalytics(m);
+      // Тот же policy что и /predict: без реального ELO режем winner-рынки.
+      if (!m.team1.elo || !m.team2.elo) pruneWinnerMarkets(r);
+      return r;
+    });
     res.json({ results, count: results.length });
   } catch (err) {
     req.log.error({ err }, 'Analytics batch error');

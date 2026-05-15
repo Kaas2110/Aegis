@@ -278,20 +278,26 @@ async function fetchAnalytics(match: Match, odds?: OddsData, signal?: AbortSigna
   }
   try {
     const snap = match.liveSnapshot;
+    // ВАЖНО: НЕ шлём 1720-stub ELO. buildTeam ставит eloRating=1720 как заглушку
+    // когда у нас нет реального рейтинга. Если послать его на сервер — math-модель
+    // получит elo1==elo2 и выдаст 50/50. Шлём undefined → сервер резолвит реальный
+    // рейтинг из DB по teamId, либо честно отдаёт «прогноз недоступен».
+    const realElo1 = match.team1.eloRating === 1720 ? undefined : match.team1.eloRating;
+    const realElo2 = match.team2.eloRating === 1720 ? undefined : match.team2.eloRating;
     const body = {
       matchId: match.id,
       team1: {
         name: match.team1.name,
-        elo: match.team1.eloRating,
+        elo: realElo1,
         form: match.team1.recentForm,
         // teamId — числовой OpenDota id; нужен для вызова ML-модели
-        // (LightGBM v3 prematch_winner). Если id отсутствует/анонимный —
-        // сервер откатывается на математическую модель.
+        // (LightGBM v3 prematch_winner). Если id отсутствует — сервер не сможет
+        // ML-предсказать и явно отдаст «прогноз недоступен» вместо math 50/50.
         teamId: /^\d+$/.test(match.team1.id) ? Number(match.team1.id) : undefined,
       },
       team2: {
         name: match.team2.name,
-        elo: match.team2.eloRating,
+        elo: realElo2,
         form: match.team2.recentForm,
         teamId: /^\d+$/.test(match.team2.id) ? Number(match.team2.id) : undefined,
       },

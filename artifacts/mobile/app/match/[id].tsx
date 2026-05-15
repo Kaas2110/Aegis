@@ -293,12 +293,13 @@ export default function MatchDetailScreen() {
     const ob = MARKET_ORDER[b.type] ?? 99;
     return oa - ob;
   });
-  // «Вероятность победы» в Обзоре — берём match_winner (вся серия), не карту.
-  // map_winner даёт stub 50/50 на prematch когда ML не деривировал его от
-  // ML-результата match_winner; match_winner — честный прогноз на серию.
+  // «Вероятность победы» в Обзоре — берём ТОЛЬКО match_winner или map_winner.
+  // Других рынков (totals, first_blood) сюда НЕ подсовываем — их вероятность
+  // не относится к победе команды. Если ML не вернул winner — отдельная
+  // карточка «Прогноз победителя недоступен» (см. ниже).
   const bestMarket = sortedMarkets.find(m => m.type === 'match_winner')
     ?? sortedMarkets.find(m => m.type === 'map_winner')
-    ?? sortedMarkets[0];
+    ?? null;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -397,7 +398,7 @@ export default function MatchDetailScreen() {
         {activeTab === 'overview' && (
           <View style={styles.section}>
             {/* ПЕРВЫМ блоком — вероятности событий (по требованию пользователя). */}
-            {bestMarket && (
+            {bestMarket ? (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '55' }]}>
                 <SectionTitle title="Вероятность победы" colors={colors} />
                 <ProbabilityBar
@@ -406,6 +407,13 @@ export default function MatchDetailScreen() {
                   modelProb={bestMarket.prediction.modelProbability}
                   marketProb={bestMarket.bestOdds.fairProbTeam1}
                 />
+              </View>
+            ) : (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <SectionTitle title="Вероятность победы" colors={colors} />
+                <Text style={{ color: colors.mutedForeground, fontSize: 13, lineHeight: 18 }}>
+                  Прогноз победителя недоступен — у одной из команд нет истории матчей в нашей базе для ML-модели. Никаких math-моделей с дефолтным рейтингом мы не показываем (это были бы фейковые 50/50).
+                </Text>
               </View>
             )}
 
