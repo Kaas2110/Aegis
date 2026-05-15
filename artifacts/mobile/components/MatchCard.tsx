@@ -159,8 +159,14 @@ export function MatchCard({ match, bestMarket, onPress }: Props) {
               <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
                 {marketTypeRu(bestMarket.type).toUpperCase()}
               </Text>
-              {/* TODO(bookmakers): бейдж «ПЕРЕВЕС» считался от букмекерских кэфов.
-                  Без них значение шумит — возвращаем вместе с букмекерским UI. */}
+              {/* Бейдж «ПЕРЕВЕС»: показываем только когда есть реальный кэф от БК */}
+              {bestMarket.bestOdds.oddsTeam1 > 0 && bestMarket.prediction.ev > 0 && (
+                <View style={[styles.evBadge, { backgroundColor: colors.radiant + '22', borderColor: colors.radiant + '55' }]}>
+                  <Text style={[styles.evBadgeText, { color: colors.radiant }]}>
+                    +ОЦ {(bestMarket.prediction.ev * 100).toFixed(0)}%
+                  </Text>
+                </View>
+              )}
             </View>
 
             <OddsTilesPair
@@ -280,4 +286,11 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   edgeBadgeText: { fontFamily: 'Cinzel_700Bold', fontSize: 10, letterSpacing: 0.8 },
+  evBadge: {
+    borderRadius: 2,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  evBadgeText: { fontFamily: 'Cinzel_700Bold', fontSize: 10, letterSpacing: 0.8 },
 });

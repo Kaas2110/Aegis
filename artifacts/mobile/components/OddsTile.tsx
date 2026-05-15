@@ -1,11 +1,17 @@
 /**
  * OddsTile — лаконичная плитка коэффициента в стиле букмекерского приложения.
  *
- * Простой режим:
+ * Режим без БК (odds=0):
  *   ┌──────────────┐
  *   │ П1  Team R.  │
- *   │ 67%    2.00  │
+ *   │    [  67%  ] │
  *   └──────────────┘
+ *
+ * Режим с БК (odds>0):
+ *   ┌─────────────────────┐
+ *   │ П1  Team R.         │
+ *   │ [ 67% ] │ [1.87 BK] │
+ *   └─────────────────────┘
  *
  * Подробный режим: + строка с ОЦ и БК
  */
@@ -31,14 +37,16 @@ interface OddsTileProps {
 
 export function OddsTile({
   shortLabel, outcomeLabel, modelProbability,
+  odds, bookmakerName, ev,
   onPress,
 }: OddsTileProps) {
   const colors = useColors();
-  // TODO(bookmakers): по запросу пользователя оставлена только вероятность модели.
-  // Кэф, EV/ОЦ и название букмекера скрыты до подключения реальных кэфов.
   const modelPct = Math.round(modelProbability * 100);
+  const hasOdds = odds > 0;
   // «Уверенный» прогноз (≥60%) выделяем сильнее золотом — Dota inventory vibe.
   const isStrong = modelPct >= 60;
+  // Положительный EV при наличии кэфа: зелёная подсветка коэффициента
+  const isPositiveEV = hasOdds && ev > 0;
 
   return (
     <TouchableOpacity
@@ -66,24 +74,61 @@ export function OddsTile({
       </View>
 
       <View style={styles.mainRow}>
+        {/* Вероятность модели — всегда */}
         <LinearGradient
           colors={isStrong
             ? [colors.goldHi, colors.primary, colors.goldLo]
             : [colors.goldDeep, colors.goldDeep + 'AA']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
-          style={styles.probBadge}
+          style={[styles.probBadge, hasOdds && styles.probBadgeNarrow]}
         >
           <Text
             style={[
               styles.probability,
               { color: isStrong ? colors.primaryForeground : colors.primary },
+              hasOdds && styles.probabilityNarrow,
             ]}
             numberOfLines={1}
           >
             {modelPct}%
           </Text>
         </LinearGradient>
+
+        {/* Кэф букмекера — только когда есть реальные данные */}
+        {hasOdds && (
+          <View
+            style={[
+              styles.oddsBadge,
+              {
+                backgroundColor: isPositiveEV
+                  ? colors.radiant + '22'
+                  : colors.muted,
+                borderColor: isPositiveEV
+                  ? colors.radiant + '66'
+                  : colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.oddsValue,
+                { color: isPositiveEV ? colors.radiant : colors.foreground },
+              ]}
+              numberOfLines={1}
+            >
+              {odds.toFixed(2)}
+            </Text>
+            {bookmakerName && bookmakerName !== 'Нет данных' && (
+              <Text
+                style={[styles.oddsSource, { color: colors.mutedForeground }]}
+                numberOfLines={1}
+              >
+                {bookmakerName}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -155,7 +200,7 @@ export function OddsTilesPair({
 
 const styles = StyleSheet.create({
   root: {
-    borderRadius: 3, // угловатый Dota-стиль
+    borderRadius: 3,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -185,7 +230,7 @@ const styles = StyleSheet.create({
   mainRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    justifyContent: 'center',
+    gap: 6,
   },
   probBadge: {
     flex: 1,
@@ -194,10 +239,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  probBadgeNarrow: {
+    flex: 0,
+    minWidth: 60,
+    paddingHorizontal: 10,
+  },
   probability: {
     fontFamily: 'Cinzel_700Bold',
     fontSize: 26,
     letterSpacing: -0.4,
+  },
+  probabilityNarrow: {
+    fontSize: 20,
+  },
+  oddsBadge: {
+    flex: 1,
+    borderRadius: 3,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  oddsValue: {
+    fontFamily: 'Cinzel_700Bold',
+    fontSize: 20,
+    letterSpacing: -0.3,
+  },
+  oddsSource: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 9,
+    letterSpacing: 0.3,
   },
 });
 

@@ -13,8 +13,14 @@ interface Option {
 }
 
 const BOOKMAKER_OPTIONS: Option[] = [
-  { label: 'Без БК', value: 'none' },
-  { label: 'Bovada', value: 'bovada' },
+  { label: 'Без БК',      value: 'none' },
+  { label: 'Bovada',      value: 'bovada' },
+  { label: 'Fonbet',      value: 'fonbet' },
+  { label: 'Лига Ставок', value: 'liga_stavok' },
+  { label: 'PARI',        value: 'pari' },
+  { label: 'BetBoom',     value: 'betboom' },
+  { label: '1xСтавка',    value: 'x1stavka' },
+  { label: 'Олимп',       value: 'olimp' },
 ];
 
 /**
@@ -24,6 +30,9 @@ const BOOKMAKER_OPTIONS: Option[] = [
  *
  * Координаты якорения берём через measureInWindow триггера в момент
  * открытия — это даёт корректное позиционирование и на iOS, и на web.
+ *
+ * Все БК показываются всегда. Если данных от источника нет — карточки
+ * матчей просто не показывают кэфы (не скрываются сам матч).
  */
 export function BookmakerDropdown() {
   const colors = useColors();
@@ -46,11 +55,8 @@ export function BookmakerDropdown() {
     setOpen(false);
   };
 
-  // Фиксированная ширина дропдауна, чтобы помещались длинные названия типа "Лига Ставок".
   const PANEL_WIDTH = 160;
 
-  // Если триггер ближе к правому краю — выравниваем панель по правому краю триггера,
-  // чтобы не вылезала за границу экрана.
   const panelLeft = anchor
     ? Math.max(8, anchor.x + anchor.w - PANEL_WIDTH)
     : 0;
@@ -81,7 +87,6 @@ export function BookmakerDropdown() {
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
-        {/* Прозрачный backdrop — клик закрывает */}
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           {anchor && (
             <View
@@ -92,7 +97,6 @@ export function BookmakerDropdown() {
                 backgroundColor: colors.card,
                 borderColor: colors.borderGold,
               }]}
-              // Останавливаем всплытие, чтобы клик по самому списку не закрывал его.
               onStartShouldSetResponder={() => true}
             >
               {BOOKMAKER_OPTIONS.map((opt, idx) => {
@@ -151,12 +155,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 6,
     overflow: 'hidden',
-    // iOS shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
-    // Android shadow
     elevation: 12,
   },
   item: {

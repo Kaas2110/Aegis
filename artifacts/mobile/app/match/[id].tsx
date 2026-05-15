@@ -635,11 +635,7 @@ export default function MatchDetailScreen() {
         {/* РЫНКИ */}
         {activeTab === 'markets' && (
           <View style={styles.section}>
-            {/* TODO(bookmakers): пикер букмекера скрыт до появления реальных
-                платных кэфов. Бэкенд-логика (availableBookmakers, selectedBookmakerId,
-                pickerOpen state, модалка ниже) оставлена нетронутой — при включении
-                достаточно раскомментировать этот блок. См. replit.md → «Bookmakers roadmap». */}
-            {selectedBookmaker && SHOW_BOOKMAKER_PICKER && availableBookmakers.length >= 2 && (
+            {selectedBookmaker && SHOW_BOOKMAKER_PICKER && availableBookmakers.length >= 1 && (
               <TouchableOpacity
                 onPress={() => setPickerOpen(true)}
                 style={[styles.bookmakerPicker, { backgroundColor: colors.card, borderColor: colors.border }]}
