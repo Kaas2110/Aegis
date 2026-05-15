@@ -181,7 +181,7 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
           <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
             <View style={styles.marketHeader}>
               <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
-                {marketTypeRu(bestMarket.type).toUpperCase()}
+                {(bestMarket.label || marketTypeRu(bestMarket.type)).toUpperCase()}
               </Text>
               {/* Бейдж «ПЕРЕВЕС»: показываем только когда есть реальный кэф от БК */}
               {bestMarket.bestOdds.oddsTeam1 > 0 && bestMarket.prediction.ev > 0 && (
