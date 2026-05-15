@@ -133,7 +133,7 @@ function namesMatch(a: string, b: string): boolean {
 // Конфигурируется через env `MIN_TEAM_RATING`. Установите `0`, чтобы выключить
 // фильтр (показывать все матчи).
 
-const MIN_TEAM_RATING_DEFAULT = 1158;
+const MIN_TEAM_RATING_DEFAULT = 0;
 
 function getMinTeamRating(): number {
   const raw = process.env.MIN_TEAM_RATING;
