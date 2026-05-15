@@ -352,6 +352,34 @@ async function applyMlMatchWinner(
     edge,
     ev,
   };
+
+  // Деривируем map_winner из ML-вероятности match_winner.
+  // Без этого map_winner остаётся на математической модели с ELO 1720/1720
+  // (мобилка hardcode-ит eloRating=1720 для всех) → 50/50 даже когда
+  // match_winner честно говорит 76/24. predictMapWinner вызывает
+  // predictMatchWinner внутри — нам нужно заменить его базу на ml.probRadiantWin.
+  const mapIdx = result.predictions.findIndex(p => p.betType === 'map_winner');
+  if (mapIdx !== -1) {
+    const oldMap = result.predictions[mapIdx];
+    // Небольшая корректировка на сторону radiant и стадию серии (аналог
+    // predictMapWinner в BetTypeModels.ts, но база теперь ML, а не math).
+    const fv = result.featureVector;
+    const radiantBonus = fv.matchFormat !== 'BO1' ? 0.025 : 0.02;
+    const earlyAdj = radiantBonus * ((fv.earlyScore1 ?? 0.5) - 0.5);
+    const s1 = fv.seriesScore1 ?? 0;
+    const s2 = fv.seriesScore2 ?? 0;
+    const momentumAdj = s1 > s2 ? 0.025 : s2 > s1 ? -0.025 : 0;
+    const rawP = probTeam1 + earlyAdj + momentumAdj;
+    const clamp = (v: number) => Math.max(0.05, Math.min(0.95, v));
+    const mapProb1 = clamp(rawP);
+    result.predictions[mapIdx] = {
+      ...oldMap,
+      probTeam1: mapProb1,
+      probTeam2: 1 - mapProb1,
+      confidence: Math.max(mapProb1, 1 - mapProb1),
+    };
+  }
+
   // Помечаем что match_winner посчитан ML-моделью; остальные рынки — math.
   result.modelVersion = `${ml.modelVersion}+math_v1.0.0`;
   return result;

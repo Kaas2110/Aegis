@@ -292,7 +292,12 @@ export default function MatchDetailScreen() {
     const ob = MARKET_ORDER[b.type] ?? 99;
     return oa - ob;
   });
-  const bestMarket = sortedMarkets.find(m => m.type === 'map_winner') ?? sortedMarkets[0];
+  // «Вероятность победы» в Обзоре — берём match_winner (вся серия), не карту.
+  // map_winner даёт stub 50/50 на prematch когда ML не деривировал его от
+  // ML-результата match_winner; match_winner — честный прогноз на серию.
+  const bestMarket = sortedMarkets.find(m => m.type === 'match_winner')
+    ?? sortedMarkets.find(m => m.type === 'map_winner')
+    ?? sortedMarkets[0];
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
