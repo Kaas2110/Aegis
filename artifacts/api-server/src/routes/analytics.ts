@@ -58,11 +58,18 @@ async function resolveOpenDotaTeam(name: string, providedId?: number): Promise<T
   let row: TeamResolveEntry = null;
   if (providedId && Number.isFinite(providedId) && providedId > 0 && providedId < 1e10) {
     const r = await db
-      .select({ teamId: teamsTable.teamId, rating: teamsTable.rating })
+      .select({ teamId: teamsTable.teamId, rating: teamsTable.rating, name: teamsTable.name, tag: teamsTable.tag })
       .from(teamsTable)
       .where(eq(teamsTable.teamId, providedId))
       .limit(1);
-    if (r[0]) row = { teamId: r[0].teamId, rating: r[0].rating };
+    if (r[0]) {
+      const cn = normalizeTeamName(r[0].name ?? '');
+      const ct = normalizeTeamName(r[0].tag ?? '');
+      const idNameOk =
+        cn === norm || ct === norm ||
+        (norm.length >= 5 && (cn.includes(norm) || (cn.length >= 5 && norm.includes(cn))));
+      if (idNameOk) row = { teamId: r[0].teamId, rating: r[0].rating };
+    }
   }
   if (!row) {
     const wildcard = `%${trimmed.toLowerCase()}%`;
@@ -72,12 +79,20 @@ async function resolveOpenDotaTeam(name: string, providedId?: number): Promise<T
       .where(or(ilike(teamsTable.name, wildcard), ilike(teamsTable.tag, trimmed.toLowerCase())))
       .orderBy(desc(teamsTable.rating))
       .limit(20);
+    const exactMatches = r.filter(c => {
+      const cn = normalizeTeamName(c.name ?? '');
+      const ct = normalizeTeamName(c.tag ?? '');
+      return cn === norm || ct === norm;
+    });
     let best: typeof r[number] | null = null;
-    for (const cand of r) {
-      const cn = normalizeTeamName(cand.name ?? '');
-      const ct = normalizeTeamName(cand.tag ?? '');
-      if (cn === norm || ct === norm) { best = cand; break; }
-      if (!best && (cn.includes(norm) || norm.includes(cn))) best = cand;
+    if (exactMatches.length > 0) {
+      best = exactMatches[0] ?? null;
+    } else if (norm.length >= 5) {
+      for (const cand of r) {
+        const cn = normalizeTeamName(cand.name ?? '');
+        if (!cn) continue;
+        if (cn.includes(norm) || (cn.length >= 5 && norm.includes(cn))) { best = cand; break; }
+      }
     }
     if (best) row = { teamId: best.teamId, rating: best.rating };
   }
@@ -85,12 +100,29 @@ async function resolveOpenDotaTeam(name: string, providedId?: number): Promise<T
   return row;
 }
 
-async function enrichInputWithRealTeams(input: MatchInput): Promise<MatchInput> {
+async function enrichInputWithRealTeams(input: MatchInput, log?: { warn: (o: object, m?: string) => void }): Promise<MatchInput> {
   if (!input.team1?.name || !input.team2?.name) return input;
-  const [t1, t2] = await Promise.all([
+  const [t1raw, t2raw] = await Promise.all([
     resolveOpenDotaTeam(input.team1.name, input.team1.teamId),
     resolveOpenDotaTeam(input.team2.name, input.team2.teamId),
   ]);
+  let t1 = t1raw;
+  let t2 = t2raw;
+  if (t1 && t2 && t1.teamId === t2.teamId) {
+    const n1 = normalizeTeamName(input.team1.name);
+    const n2 = normalizeTeamName(input.team2.name);
+    if (n1 !== n2) {
+      log?.warn?.({
+        tag: 'predict',
+        reason: 'team_resolve_collision',
+        team1Name: input.team1.name,
+        team2Name: input.team2.name,
+        resolvedTeamId: t1.teamId,
+      }, 'both teams resolved to same teamId; dropping resolutions');
+      t1 = null;
+      t2 = null;
+    }
+  }
   if (!t1 && !t2) return input;
   return {
     ...input,
@@ -338,7 +370,7 @@ router.post('/predict', async (req, res) => {
       return;
     }
 
-    const input = await enrichInputWithRealTeams(rawInput) as MatchInput & {
+    const input = await enrichInputWithRealTeams(rawInput, req.log) as MatchInput & {
       bookmakerOdds?: { odds1: number; odds2: number };
     };
     input.bookmakerOdds = rawInput.bookmakerOdds;
