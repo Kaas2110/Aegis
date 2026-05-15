@@ -257,6 +257,10 @@ grep '"\\[cache\\] miss"' logs.json | jq '.key' | sort | uniq -c
 
 ## Pointers
 
+- **`docs/business.md`** — ⭐ бизнес-описание (что это, для кого, как работает) на
+  понятном языке для не-инженеров.
+- **`docs/technical-overview.md`** — ⭐ краткий технический обзор для новых инженеров
+  (стек, эндпоинты, auth, кэш, воркеры).
 - **`docs/system-map.md`** — ⭐ системная карта связей: все источники → таблицы → фичи
   → модели → рантайм. **Агент обязан читать перед любой архитектурной правкой.**
 - **`docs/architecture.md`** — полная архитектура: где что лежит, все API-эндпоинты,
@@ -265,6 +269,36 @@ grep '"\\[cache\\] miss"' logs.json | jq '.key' | sort | uniq -c
   миграция, automation, admin-web и т.д.).
 - **`threat_model.md`** — модель угроз для security-сканов.
 - См. skill `pnpm-workspace` — структура монорепо, TypeScript, project references.
+
+## Email-аутентификация (DONE 2026-05-15)
+
+Добавлен User-auth (email + password) для мобильного клиента — Apple/Google
+Sign-In появятся только после публикации в App Store / Play.
+
+**Server (`routes/userAuth.ts`):**
+- `POST /api/auth/register` { email, password } → 201 `{ token, user }`
+- `POST /api/auth/login` { email, password } → 200 `{ token, user }`
+- `POST /api/auth/logout` → 200 `{ ok: true }` (stateless, для логирования)
+- `GET /api/auth/me` `Authorization: Bearer <token>` → `{ user }`
+
+Пароли: `scrypt(N=16384, keylen=64)` из `node:crypto`, хранение `${salt}$${hash}`.
+Токен: `${userId}.${expiresAtMs}.${hmacSha256(SESSION_SECRET)}` — stateless,
+TTL 30 дней. Login защищён от timing side-channel (всегда тратим время на verify).
+Per-IP throttle 20 попыток / 15 мин.
+
+**DB (`lib/db/src/schema/users.ts`):** таблица `app_users` (id, email,
+password_hash, created_at, last_login_at). Уникальный индекс по `lower(email)`.
+
+**Mobile:**
+- `services/AuthService.ts` — обёртка над AsyncStorage + fetch.
+- `context/AuthContext.tsx` — provider + hook `useAuth()`. На старте
+  гидратирует токен из AsyncStorage, в фоне дёргает `/me` чтобы проверить.
+- `app/auth.tsx` — экран логина / регистрации с переключателем mode.
+- `app/index.tsx` — роутинг: `onboarding → auth → (tabs)` (если не залогинен).
+- `app/(tabs)/settings.tsx` — карточка «Аккаунт» с email и кнопкой «Выйти».
+  Logout → `router.replace('/auth')`.
+
+ENV: `SESSION_SECRET` обязателен (используется и для admin-сессий).
 
 ## Roadmap (active)
 

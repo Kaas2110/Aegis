@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/context/AuthContext';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
 
@@ -99,6 +100,25 @@ export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { settings, updateSettings, setOnboarded, setAgeConfirmed, isAdmin } = useApp();
+  const { user, logout } = useAuth();
+
+  async function handleLogout() {
+    Alert.alert(
+      'Выйти из аккаунта',
+      'Чтобы войти снова, потребуется ввести email и пароль.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Выйти',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/auth');
+          },
+        },
+      ]
+    );
+  }
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   function Row({ label, value, onPress, danger, right }: { label: string; value?: string; onPress?: () => void; danger?: boolean; right?: React.ReactNode }) {
@@ -239,6 +259,12 @@ export default function SettingsScreen() {
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="АККАУНТ" />
+        {user && (
+          <Row label="Email" value={user.email} />
+        )}
+        {user && (
+          <Row label="Выйти из аккаунта" onPress={handleLogout} />
+        )}
         <Row label="Удалить аккаунт и данные" onPress={handleDeleteAccount} danger />
       </View>
 

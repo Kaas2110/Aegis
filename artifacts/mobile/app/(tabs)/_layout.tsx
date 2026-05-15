@@ -6,8 +6,10 @@ import { SymbolView } from 'expo-symbols';
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Platform, StyleSheet, View, useColorScheme } from 'react-native';
+import { Redirect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/context/AuthContext';
 
 function NativeTabLayout({ isAdmin }: { isAdmin: boolean }) {
   return (
@@ -117,6 +119,13 @@ function ClassicTabLayout({ isAdmin }: { isAdmin: boolean }) {
 
 export default function TabLayout() {
   const { isAdmin } = useApp();
+  const { isAuthenticated, isHydrating } = useAuth();
+
+  // Защитный guard: если состояние auth изменилось во время сессии (logout
+  // на другой вкладке, инвалидация токена) — выкидываем на /auth.
+  // Пока гидратируем — ничего не рендерим (избегаем mount tabs без auth).
+  if (isHydrating) return null;
+  if (!isAuthenticated) return <Redirect href="/auth" />;
 
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout isAdmin={isAdmin} />;
