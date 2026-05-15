@@ -413,10 +413,12 @@ async function adapterBovada(): Promise<SourceResponse> {
       const winner: UnifiedMarketWinner | undefined = (() => {
         for (const grp of e.displayGroups ?? []) {
           for (const m of grp.markets ?? []) {
-            if (
-              (m.description ?? '').toLowerCase() === 'moneyline' &&
-              (m.period?.description ?? '').toLowerCase() === 'game'
-            ) {
+            const mDesc = (m.description ?? '').toLowerCase();
+            const pDesc = (m.period?.description ?? '').toLowerCase();
+            // Period names: "Game" (prematch), "Live Game" (live), "Full Game", etc.
+            // Exclude per-map periods like "Map 1", "Live Map 2".
+            const isGameLevel = pDesc.includes('game') && !pDesc.includes('map');
+            if (mDesc === 'moneyline' && isGameLevel) {
               const o1 = num(m.outcomes?.[0]?.price?.decimal);
               const o2 = num(m.outcomes?.[1]?.price?.decimal);
               if (o1 && o2) return { team1: o1, team2: o2 };
@@ -979,16 +981,33 @@ router.get('/all/dota2', async (_req, res) => {
   });
 });
 
-// ---------- Matched: bookmaker events ↔ teams in our DB ----------
-// Цель — вернуть массив букмекерских событий, у которых имена обеих команд
-// удалось матчить с teamsTable (по нормализованным именам). Это даёт мобилке
-// прямой ключ team1_id / team2_id, который она уже использует в карточках
-// /api/matches/live и /api/matches/upcoming. Группировку «наш матч → букмекеры»
-// делаем на клиенте (он у себя имеет полный контекст match.id).
-//
-// Маркеты: возвращаем UnifiedBookmakerEvent.markets как есть (winner / totalKills
-// / totalMaps / mapWinners / correctScore / firstBlood / totalDuration), чтобы
-// UI мог по своему усмотрению выводить кэф рядом с любым нашим прогнозом.
+// ---------- Matched: bookmaker events ↔ our live/upcoming matches ----------
+// Сопоставляет букмекерские события с нашими live/upcoming матчами по именам
+// команд (fuzzy) + времени начала (±2 ч). Возвращает массив групп с matchId.
+// Bookmaker events без матча в нашей базе попадают в unmatched (только для
+// admin/diagnostic — mobile их не показывает).
+
+/** Loopback GET к нашему серверу с минимальным timeout 5s. */
+async function loopbackGet<T>(path: string): Promise<T | null> {
+  const port = process.env['PORT'] ?? '8080';
+  for (const host of ['127.0.0.1', 'localhost']) {
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 5000);
+      try {
+        const r = await fetch(`http://${host}:${port}${path}`, { signal: ctrl.signal });
+        if (!r.ok) continue;
+        return (await r.json()) as T;
+      } finally {
+        clearTimeout(tid);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 router.get('/matched/dota2', async (req, res) => {
   const t0 = Date.now();
   if (!BOOKMAKERS_ENABLED) {
@@ -999,104 +1018,87 @@ router.get('/matched/dota2', async (req, res) => {
     });
     return;
   }
-  // Тянем все источники параллельно, любые ошибки уже инкапсулированы
-  // в SourceResponse.error и фильтруются по noData.
-  const all = await Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s)));
 
-  // Команды из БД — нормализуем имя для fuzzy-матча.
-  const { db, teamsTable } = await import('@workspace/db');
-  const teams = await db.select({ teamId: teamsTable.teamId, name: teamsTable.name, tag: teamsTable.tag }).from(teamsTable);
-  const byNorm = new Map<string, { teamId: number; name: string }>();
-  for (const t of teams) {
-    const norm = normalizeTeamName(t.name ?? '');
-    if (norm) byNorm.set(norm, { teamId: t.teamId, name: t.name ?? '' });
-    if (t.tag) {
-      const tagNorm = normalizeTeamName(t.tag);
-      // Tag матч слабее чем по имени, но даёт покрытие для коротких имён ('OG', 'BB').
-      if (tagNorm && !byNorm.has(tagNorm)) byNorm.set(tagNorm, { teamId: t.teamId, name: t.name ?? '' });
+  const { matchBookmakerEvents } = await import('../services/BookmakerMatcher');
+  type OurMatch = import('../services/BookmakerMatcher').OurMatch;
+
+  // Тянем все источники + наши матчи параллельно
+  const [all, liveData, upcomingData] = await Promise.all([
+    Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s))),
+    loopbackGet<unknown>('/api/matches/live'),
+    loopbackGet<unknown>('/api/matches/upcoming'),
+  ]);
+
+  // /api/matches/live и /api/matches/upcoming могут возвращать [] или { matches: [] }
+  function toArray(v: unknown): unknown[] {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'object') {
+      const obj = v as Record<string, unknown>;
+      if (Array.isArray(obj['matches'])) return obj['matches'] as unknown[];
+      if (Array.isArray(obj['data'])) return obj['data'] as unknown[];
     }
+    return [];
   }
+  const liveRaw = toArray(liveData);
+  const upcomingRaw = toArray(upcomingData);
 
-  type MatchedEvent = UnifiedBookmakerEvent & {
-    matched: boolean;
-    team1Id: number | null;
-    team2Id: number | null;
-    team1Canonical: string | null;
-    team2Canonical: string | null;
-  };
-  const enriched: MatchedEvent[] = [];
-  // Строим массив [norm, entry] для fuzzy-lookup (используется ниже)
-  const teamsList = Array.from(byNorm.entries());
-
-  function fuzzyLookup(name: string): { teamId: number; name: string } | undefined {
-    // 1. Точный нормализованный матч
-    const exact = byNorm.get(normalizeTeamName(name));
-    if (exact) return exact;
-    // 2. Fuzzy через teamTokens
-    for (const [, val] of teamsList) {
-      if (fuzzyTeamMatch(name, val.name)) return val;
-    }
-    return undefined;
-  }
-
+  // Объединяем все букмекерские события в один плоский массив
+  const bookmakerEvents: UnifiedBookmakerEvent[] = [];
   for (const src of all) {
-    if (!src.events.length) continue;
-    for (const ev of src.events) {
-      const t1 = fuzzyLookup(ev.team1);
-      const t2 = fuzzyLookup(ev.team2);
-      enriched.push({
-        ...ev,
-        matched: !!(t1 && t2),
-        team1Id: t1?.teamId ?? null,
-        team2Id: t2?.teamId ?? null,
-        team1Canonical: t1?.name ?? null,
-        team2Canonical: t2?.name ?? null,
-      });
-    }
+    bookmakerEvents.push(...src.events);
   }
 
-  // Группируем по упорядоченной паре team_id — чтобы UI получил единый ключ
-  // на разные источники для одного и того же матча.
-  type Group = {
-    pairKey: string;
-    team1Id: number | null;
-    team2Id: number | null;
-    team1: string;
-    team2: string;
-    startsAt: string | null;
-    sources: MatchedEvent[];
-  };
-  const groups = new Map<string, Group>();
-  for (const ev of enriched) {
-    const key = ev.matched && ev.team1Id && ev.team2Id
-      ? (ev.team1Id < ev.team2Id ? `${ev.team1Id}|${ev.team2Id}` : `${ev.team2Id}|${ev.team1Id}`)
-      : `name:${pairKey(ev.team1, ev.team2)}`;
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        pairKey: key,
-        team1Id: ev.team1Id,
-        team2Id: ev.team2Id,
-        team1: ev.team1Canonical ?? ev.team1,
-        team2: ev.team2Canonical ?? ev.team2,
-        startsAt: ev.startsAt,
-        sources: [],
-      };
-      groups.set(key, g);
-    }
-    g.sources.push(ev);
+  // Конвертируем PandaScore-формат матчей в OurMatch
+  function psToOurMatch(m: Record<string, unknown>, isLive: boolean): OurMatch | null {
+    const id = m['id'];
+    if (!id) return null;
+    const opps = (m['opponents'] as Array<{ opponent?: { id?: number; name?: string } }> | undefined) ?? [];
+    const o1 = opps[0]?.opponent;
+    const o2 = opps[1]?.opponent;
+    if (!o1?.name || !o2?.name) return null;
+    const startsAt = (m['begin_at'] ?? m['scheduled_at']) as string | null | undefined;
+    return {
+      matchId: String(id),
+      psMatchId: typeof id === 'number' ? id : undefined,
+      team1Name: o1.name,
+      team2Name: o2.name,
+      team1Id: o1.id,
+      team2Id: o2.id,
+      startsAt: startsAt ?? null,
+      isLive,
+    };
   }
+
+  const ourMatches: OurMatch[] = [];
+  for (const m of liveRaw ?? []) {
+    const converted = psToOurMatch(m as Record<string, unknown>, true);
+    if (converted) ourMatches.push(converted);
+  }
+  for (const m of upcomingRaw ?? []) {
+    const converted = psToOurMatch(m as Record<string, unknown>, false);
+    if (converted) ourMatches.push(converted);
+  }
+
+  const matched = matchBookmakerEvents(ourMatches, bookmakerEvents);
+
+  // Неприматченные букмекерские события (нет в нашей БД матчей)
+  const matchedEventIds = new Set(
+    matched.flatMap(g => g.bookmakerSources.map(s => s.eventId)),
+  );
+  const unmatched = bookmakerEvents.filter(ev => !matchedEventIds.has(ev.eventId));
 
   const sourcesPolled = all.map((s) => ({ source: s.source, events: s.events.length, error: s.error ?? null }));
-  const matchedCount = enriched.filter((e) => e.matched).length;
+
   req.log.info(
     {
       tag: 'matched',
       durationMs: Date.now() - t0,
-      groups: groups.size,
-      eventsTotal: enriched.length,
-      matchedToTeams: matchedCount,
-      teamsLoaded: byNorm.size,
+      groups: matched.length,
+      eventsTotal: bookmakerEvents.length,
+      matchedToOurMatches: matched.length,
+      unmatchedEvents: unmatched.length,
+      ourMatchesCount: ourMatches.length,
       sourcesPolled,
     },
     '[bookmaker] /matched/dota2 done',
@@ -1105,8 +1107,9 @@ router.get('/matched/dota2', async (req, res) => {
     enabled: true,
     fetchedAt: new Date().toISOString(),
     sourcesPolled,
-    count: groups.size,
-    matched: Array.from(groups.values()),
+    count: matched.length,
+    matched,
+    unmatched,
   });
 });
 

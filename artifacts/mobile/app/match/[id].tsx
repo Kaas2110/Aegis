@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Modal, Pressable, ActivityIndicator,
+  Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { useApp } from '@/context/AppContext';
 import {
   getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker,
 } from '@/services/LiveDataService';
@@ -17,9 +18,6 @@ import { FreshnessIndicator } from '@/components/FreshnessIndicator';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import type { Match, Market } from '@/types';
 
-// TODO(bookmakers): см. replit.md → «Bookmakers roadmap». Включить когда
-// подключим платный источник кэфов (The Odds API Pro / OddsJam).
-const SHOW_BOOKMAKER_PICKER: boolean = true;
 
 function formatGameTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -189,32 +187,22 @@ export default function MatchDetailScreen() {
   const match: Match | undefined = cached?.match;
   const baseMarkets: Market[] = cached?.markets ?? getCachedMarkets(id ?? '');
 
-  // ── Пикер букмекера ────────────────────────────────────────────────────────
-  // Если у матча есть несколько букмекеров — даём пользователю выбрать,
-  // чьи коэффициенты использовать. Edge/EV/справ. вероятность пересчитываются
-  // на лету без повторного запроса на сервер.
   const availableBookmakers = cached?.availableBookmakers
     ?? baseMarkets[0]?.allBookmakerOdds
     ?? [];
-  const [selectedBookmakerId, setSelectedBookmakerId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
-  // Сбрасываем выбор при смене матча или если выбранный букмекер пропал из обновлённого списка.
-  useEffect(() => {
-    if (selectedBookmakerId &&
-        !availableBookmakers.some(b => b.bookmakerId === selectedBookmakerId)) {
-      setSelectedBookmakerId(null);
-    }
-  }, [match?.id, availableBookmakers, selectedBookmakerId]);
+  // Используем глобально выбранный букмекер (из главного экрана)
+  const { filters } = useApp();
+  const effectiveBookmakerId = filters.bookmaker !== 'none' ? filters.bookmaker : null;
+  const selectedBookmaker = effectiveBookmakerId
+    ? availableBookmakers.find(b => b.bookmakerId === effectiveBookmakerId) ?? null
+    : null;
 
-  const effectiveBookmakerId = selectedBookmakerId ?? availableBookmakers[0]?.bookmakerId ?? null;
-  const selectedBookmaker = availableBookmakers.find(b => b.bookmakerId === effectiveBookmakerId);
-
-  // Пересобираем markets с выбранным букмекером (только если у нас есть кэш + больше одного букмекера)
+  // Пересобираем markets с выбранным букмекером
   const markets: Market[] = useMemo(() => {
-    if (!cached || !selectedBookmakerId || availableBookmakers.length <= 1) return baseMarkets;
-    return rebuildMarketsForBookmaker(cached, selectedBookmakerId);
-  }, [cached, selectedBookmakerId, baseMarkets, availableBookmakers.length]);
+    if (!cached || !effectiveBookmakerId) return baseMarkets;
+    return rebuildMarketsForBookmaker(cached, effectiveBookmakerId);
+  }, [cached, effectiveBookmakerId, baseMarkets]);
 
   useEffect(() => {
     if (match) logProductEvent('match_detail_opened', 'match_detail', { matchId: match.id });
@@ -565,8 +553,8 @@ export default function MatchDetailScreen() {
                 </ScrollView>
                 <Text style={[styles.sectionHint, { color: colors.mutedForeground, marginTop: 8 }]}>
                   {explain.totals.usedMlModel
-                    ? 'Прогноз LightGBM-модели · 80% доверительный интервал'
-                    : 'Ориентир по рейтингам команд · модель загружается'}
+                    ? 'На основе статистики прошлых матчей этих команд'
+                    : 'Данные загружаются'}
                 </Text>
               </View>
             )}
@@ -704,31 +692,6 @@ export default function MatchDetailScreen() {
         {/* РЫНКИ */}
         {activeTab === 'markets' && (
           <View style={styles.section}>
-            {selectedBookmaker && SHOW_BOOKMAKER_PICKER && availableBookmakers.length >= 1 && (
-              <TouchableOpacity
-                onPress={() => setPickerOpen(true)}
-                style={[styles.bookmakerPicker, { backgroundColor: colors.card, borderColor: colors.border }]}
-                activeOpacity={0.7}
-              >
-                <View style={styles.bookmakerPickerLeft}>
-                  <Feather name="briefcase" size={14} color={colors.primary} />
-                  <View>
-                    <Text style={[styles.bookmakerPickerLabel, { color: colors.mutedForeground }]}>
-                      Букмекер
-                    </Text>
-                    <Text style={[styles.bookmakerPickerName, { color: colors.foreground }]}>
-                      {selectedBookmaker.bookmakerName}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.bookmakerPickerRight}>
-                  <Text style={[styles.bookmakerPickerOdds, { color: colors.primary }]}>
-                    {selectedBookmaker.oddsTeam1.toFixed(2)} / {selectedBookmaker.oddsTeam2.toFixed(2)}
-                  </Text>
-                  <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
-                </View>
-              </TouchableOpacity>
-            )}
 
             {sortedMarkets.length > 0 ? (
               sortedMarkets.map(mkt => {
@@ -790,136 +753,10 @@ export default function MatchDetailScreen() {
         )}
       </ScrollView>
 
-      {/* ── Попап выбора букмекера ─────────────────────────────────────────── */}
-      <Modal
-        visible={pickerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerOpen(false)}
-      >
-        <Pressable
-          style={pickerStyles.overlay}
-          onPress={() => setPickerOpen(false)}
-        >
-          <Pressable
-            style={[pickerStyles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={e => e.stopPropagation()}
-          >
-            <View style={[pickerStyles.header, { borderBottomColor: colors.border }]}>
-              <Text style={[pickerStyles.title, { color: colors.foreground }]}>
-                Выберите букмекера
-              </Text>
-              <Text style={[pickerStyles.subtitle, { color: colors.mutedForeground }]}>
-                Котировки и оценка ценности пересчитаются по выбранной конторе
-              </Text>
-            </View>
-            <ScrollView style={pickerStyles.list}>
-              {availableBookmakers.map(bk => {
-                const isActive = bk.bookmakerId === effectiveBookmakerId;
-                return (
-                  <TouchableOpacity
-                    key={bk.bookmakerId}
-                    onPress={() => {
-                      setSelectedBookmakerId(bk.bookmakerId);
-                      setPickerOpen(false);
-                    }}
-                    style={[
-                      pickerStyles.row,
-                      { borderBottomColor: colors.border },
-                      isActive && { backgroundColor: colors.primary + '14' },
-                    ]}
-                  >
-                    <View style={pickerStyles.rowLeft}>
-                      <View style={[pickerStyles.radio, {
-                        borderColor: isActive ? colors.primary : colors.border,
-                        backgroundColor: isActive ? colors.primary : 'transparent',
-                      }]}>
-                        {isActive && <Feather name="check" size={11} color={colors.primaryForeground} />}
-                      </View>
-                      <View>
-                        <Text style={[pickerStyles.bkName, { color: colors.foreground }]}>
-                          {bk.bookmakerName}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={pickerStyles.rowRight}>
-                      <Text style={[pickerStyles.oddVal, { color: colors.radiant }]}>
-                        {bk.oddsTeam1.toFixed(2)}
-                      </Text>
-                      <Text style={[pickerStyles.oddSep, { color: colors.mutedForeground }]}>·</Text>
-                      <Text style={[pickerStyles.oddVal, { color: colors.dire }]}>
-                        {bk.oddsTeam2.toFixed(2)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity
-              onPress={() => setPickerOpen(false)}
-              style={[pickerStyles.closeBtn, { backgroundColor: colors.muted }]}
-            >
-              <Text style={[pickerStyles.closeBtnText, { color: colors.foreground }]}>
-                Закрыть
-              </Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
 
-const pickerStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  sheet: {
-    width: '100%',
-    maxWidth: 420,
-    maxHeight: '80%',
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  header: {
-    padding: 16,
-    borderBottomWidth: 1,
-    gap: 4,
-  },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 16 },
-  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 16 },
-  list: { maxHeight: 400 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  radio: {
-    width: 18, height: 18, borderRadius: 9,
-    borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  bkName: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  rowRight: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  oddVal: { fontFamily: 'Inter_700Bold', fontSize: 14 },
-  oddSep: { fontFamily: 'Inter_400Regular', fontSize: 14 },
-  closeBtn: {
-    margin: 12,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  closeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-});
 
 // ── Вспомогательные компоненты ──────────────────────────────────────────────
 
@@ -1048,25 +885,6 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 14, gap: 12 },
   section: { gap: 12 },
   card: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 10 },
-  bookmakerPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  bookmakerPickerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  bookmakerPickerLabel: {
-    fontFamily: 'Cinzel_700Bold',
-    fontSize: 9,
-    letterSpacing: 0.8,
-    marginBottom: 1,
-  },
-  bookmakerPickerName: { fontFamily: 'Inter_700Bold', fontSize: 14 },
-  bookmakerPickerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  bookmakerPickerOdds: { fontFamily: 'Inter_700Bold', fontSize: 13 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   eventAlert: {
     flexDirection: 'row',

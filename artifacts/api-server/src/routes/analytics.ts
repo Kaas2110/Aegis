@@ -880,11 +880,21 @@ router.get('/explain', async (req, res) => {
       label: 'Рейтинг команд',
       impact: Math.abs(v),
       direction: v > 0.05 ? 'radiant' : v < -0.05 ? 'dire' : 'neutral',
-      description: `Glicko ${Math.round(rR)} против ${Math.round(rD)} — ${
-        v > 0.05 ? `${nameR} в среднем сильнее` :
-        v < -0.05 ? `${nameD} в среднем сильнее` : 'команды равны'
-      }`,
+      description: v > 0.05 ? `${nameR} сильнее по рейтингу` :
+                   v < -0.05 ? `${nameD} сильнее по рейтингу` : 'рейтинг команд примерно равен',
     });
+  }
+  if (typeof f['player_glicko_diff'] === 'number') {
+    const v = f['player_glicko_diff'];
+    if (Math.abs(v) > 0.1) {
+      factors.push({
+        label: 'Уровень игроков',
+        impact: Math.abs(v),
+        direction: v > 0.1 ? 'radiant' : v < -0.1 ? 'dire' : 'neutral',
+        description: v > 0.1 ? `Состав ${nameR} сильнее в среднем по игрокам` :
+                     `Состав ${nameD} сильнее в среднем по игрокам`,
+      });
+    }
   }
   if (typeof f['recent_form_diff'] === 'number') {
     const v = f['recent_form_diff'];
