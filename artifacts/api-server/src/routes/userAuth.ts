@@ -39,7 +39,7 @@ function parseCreds(body: unknown): { ok: true; data: ValidCreds } | { ok: false
   return { ok: true, data: { email, password } };
 }
 
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней (мобилка хранит локально)
+const TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 дней (мобилка хранит локально)
 const SCRYPT_KEYLEN = 64;
 const SCRYPT_N = 16384; // дефолт scrypt — норм для серверного hash'а
 
