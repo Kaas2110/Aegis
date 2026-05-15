@@ -710,9 +710,9 @@ router.get('/for-match', async (req, res) => {
   for (const src of all) {
     if (!src.events.length) continue;
     for (const ev of src.events) {
-      if (pairKey(ev.team1, ev.team2) !== wantPair) continue;
-      // Определяем ориентацию: совпадает ли ev.team1 с запрошенным team1 после нормализации
-      const sameOrder = normalizeTeamName(ev.team1) === normalizeTeamName(team1);
+      if (!fuzzyPairMatch(ev.team1, ev.team2, team1, team2)) continue;
+      // Определяем ориентацию: совпадает ли ev.team1 с запрошенным team1 (fuzzy)
+      const sameOrder = fuzzyTeamMatch(ev.team1, team1);
       const markets: UnifiedBookmakerEvent['markets'] = sameOrder
         ? ev.markets
         : {
@@ -762,6 +762,46 @@ function pairKey(team1: string, team2: string): string {
   const a = normalizeTeamName(team1);
   const b = normalizeTeamName(team2);
   return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+/**
+ * Токены имени команды без служебных org-слов.
+ * "Xtreme Gaming" → ["xtreme"], "Team Spirit" → ["spirit"],
+ * "Ex-Heroic" → ["heroic"],    "Natus Vincere" → ["natus","vincere"]
+ */
+const ORG_STOP = new Set([
+  'team','gaming','esport','esports','club','fc','ex','former','the','gg',
+]);
+function teamTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-zа-яё0-9]+/i)
+    .map(t => t.trim())
+    .filter(t => t.length >= 2 && !ORG_STOP.has(t));
+}
+
+/**
+ * Fuzzy-сравнение двух названий команд:
+ *  1. Точный нормализованный матч (быстрый путь).
+ *  2. Token-overlap после отброса org-слов:
+ *     "Xtreme" ↔ "Xtreme Gaming", "Ex-Heroic" ↔ "Heroic",
+ *     "Team AURORA" ↔ "Aurora Gaming".
+ */
+function fuzzyTeamMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (normalizeTeamName(a) === normalizeTeamName(b)) return true;
+  const tokA = teamTokens(a);
+  const tokB = teamTokens(b);
+  if (!tokA.length || !tokB.length) return false;
+  const shorter = tokA.length <= tokB.length ? tokA : tokB;
+  const longer  = tokA.length <= tokB.length ? tokB : tokA;
+  return shorter.every(t => longer.includes(t));
+}
+
+/** Fuzzy-матч двух пар команд (с учётом возможной смены ориентации). */
+function fuzzyPairMatch(a1: string, a2: string, b1: string, b2: string): boolean {
+  return (fuzzyTeamMatch(a1, b1) && fuzzyTeamMatch(a2, b2))
+      || (fuzzyTeamMatch(a1, b2) && fuzzyTeamMatch(a2, b1));
 }
 
 interface MergedEvent {
@@ -985,11 +1025,25 @@ router.get('/matched/dota2', async (req, res) => {
     team2Canonical: string | null;
   };
   const enriched: MatchedEvent[] = [];
+  // Строим массив [norm, entry] для fuzzy-lookup (используется ниже)
+  const teamsList = Array.from(byNorm.entries());
+
+  function fuzzyLookup(name: string): { teamId: number; name: string } | undefined {
+    // 1. Точный нормализованный матч
+    const exact = byNorm.get(normalizeTeamName(name));
+    if (exact) return exact;
+    // 2. Fuzzy через teamTokens
+    for (const [, val] of teamsList) {
+      if (fuzzyTeamMatch(name, val.name)) return val;
+    }
+    return undefined;
+  }
+
   for (const src of all) {
     if (!src.events.length) continue;
     for (const ev of src.events) {
-      const t1 = byNorm.get(normalizeTeamName(ev.team1));
-      const t2 = byNorm.get(normalizeTeamName(ev.team2));
+      const t1 = fuzzyLookup(ev.team1);
+      const t2 = fuzzyLookup(ev.team2);
       enriched.push({
         ...ev,
         matched: !!(t1 && t2),

@@ -41,6 +41,7 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
   const isLive = match.status === 'live';
   const isPrematch = match.status === 'prematch';
   const isBetweenMaps = match.status === 'between_maps';
+  const isFinished = match.status === 'finished';
   const snap = match.liveSnapshot;
   const hasPositiveEV = bestMarket && bestMarket.prediction.ev > 0.08;
 
@@ -97,6 +98,11 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
             {isBetweenMaps && (
               <View style={[styles.livePill, { borderColor: colors.warning + '88' }]}>
                 <Text style={[styles.liveText, { color: colors.warning }]}>ПЕРЕРЫВ</Text>
+              </View>
+            )}
+            {isFinished && (
+              <View style={[styles.livePill, { borderColor: colors.mutedForeground + '66' }]}>
+                <Text style={[styles.liveText, { color: colors.mutedForeground }]}>ЗАВЕРШЁН</Text>
               </View>
             )}
             {isPrematch && timeUntil && (

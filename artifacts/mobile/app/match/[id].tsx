@@ -274,6 +274,7 @@ export default function MatchDetailScreen() {
   const draft = match.draft;
   const isLive = match.status === 'live';
   const isBetweenMaps = match.status === 'between_maps';
+  const isFinished = match.status === 'finished';
 
   // T005: канонический порядок блоков во вкладке «Прогнозы».
   // Сначала исход серии (match_winner), затем текущая карта, тоталы,
@@ -347,6 +348,11 @@ export default function MatchDetailScreen() {
               </Text>
             </View>
           )}
+          {isFinished && (
+            <View style={styles.headerLive}>
+              <Text style={[styles.liveLabel, { color: colors.mutedForeground }]}>МАТЧ ЗАВЕРШЁН</Text>
+            </View>
+          )}
         </View>
 
         <TouchableOpacity
@@ -403,28 +409,42 @@ export default function MatchDetailScreen() {
               </View>
             )}
 
-            {/* Популярные рынки — только вероятность модели. Справ. коэффициент,
-                edge и прочая букмекерская математика спрятаны до подключения
-                реальных кэфов (TODO(bookmakers)). */}
             {markets.length > 1 && (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <SectionTitle title="Популярные ставки" colors={colors} />
                 {markets.slice(1, 5).map(mkt => {
                   const pct = Math.round(mkt.prediction.modelProbability * 100);
+                  const hasOdds = mkt.bestOdds.oddsTeam1 > 0;
+                  const edge = mkt.prediction.edge;
+                  const isValue = edge > 0.04;
                   return (
                     <View key={mkt.id} style={[styles.factorRow, { borderBottomColor: colors.border }]}>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.factorName, { color: colors.foreground }]}>{mkt.label}</Text>
+                        {hasOdds && (
+                          <Text style={[styles.factorName, { color: colors.mutedForeground, fontSize: 11, marginTop: 1 }]}>
+                            {mkt.bestOdds.oddsTeam1.toFixed(2)} / {mkt.bestOdds.oddsTeam2.toFixed(2)}
+                          </Text>
+                        )}
                       </View>
-                      <View style={[styles.factorImpact, {
-                        backgroundColor: colors.muted,
-                        borderColor: colors.border,
-                        alignItems: 'center',
-                        minWidth: 56,
-                      }]}>
-                        <Text style={[styles.factorImpactText, { color: colors.foreground }]}>
-                          {pct}%
-                        </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {isValue && (
+                          <View style={[styles.factorImpact, { backgroundColor: colors.primary + '25', borderColor: colors.primary + '66' }]}>
+                            <Text style={[styles.factorImpactText, { color: colors.primary, fontSize: 10 }]}>
+                              +{Math.round(edge * 100)}%
+                            </Text>
+                          </View>
+                        )}
+                        <View style={[styles.factorImpact, {
+                          backgroundColor: colors.muted,
+                          borderColor: colors.border,
+                          alignItems: 'center',
+                          minWidth: 56,
+                        }]}>
+                          <Text style={[styles.factorImpactText, { color: colors.foreground }]}>
+                            {pct}%
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   );
@@ -747,11 +767,13 @@ export default function MatchDetailScreen() {
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.emptyCard}>
-                  <Feather name={isBetweenMaps ? 'pause-circle' : 'trending-up'} size={28} color={colors.mutedForeground} />
+                  <Feather name={isFinished ? 'check-circle' : isBetweenMaps ? 'pause-circle' : 'trending-up'} size={28} color={colors.mutedForeground} />
                   <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
-                    {isBetweenMaps
-                      ? 'Прогноз недоступен — перерыв между картами. Появится после старта новой карты.'
-                      : 'Аналитика по рынкам загружается'}
+                    {isFinished
+                      ? 'Матч завершён. Прогнозы больше не обновляются.'
+                      : isBetweenMaps
+                        ? 'Прогноз недоступен — перерыв между картами. Появится после старта новой карты.'
+                        : 'Аналитика по рынкам загружается'}
                   </Text>
                 </View>
               </View>

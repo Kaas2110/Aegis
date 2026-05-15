@@ -22,6 +22,8 @@ interface OpenDotaLiveMatch {
   // в PS, новая в драфте). UI показывает «Серия N-M, готовимся к карте X»
   // вместо фейкового live-снапшота со старыми kill'ами и таймером.
   between_maps?: boolean;
+  /** Unix-timestamp (сек) окончания матча. Если установлен — матч завершён. */
+  deactivate_time?: number;
   // Плоские поля (не вложенный scoreboard)
   radiant_score?: number;      // убийства Radiant
   dire_score?: number;         // убийства Dire
@@ -175,7 +177,12 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
       : raw.league_id ? `Лига #${raw.league_id}` : 'Pro Match',
     tournamentTier: raw.league_tier === 'premium' ? 1 : raw.league_tier === 'professional' ? 2 : 2,
     format: formatBOFormat(raw.series_type),
-    status: raw.between_maps ? 'between_maps' : 'live',
+    status: raw.deactivate_time && raw.deactivate_time * 1000 < Date.now()
+      ? 'finished'
+      : raw.between_maps ? 'between_maps' : 'live',
+    finishedAt: raw.deactivate_time && raw.deactivate_time * 1000 < Date.now()
+      ? new Date(raw.deactivate_time * 1000)
+      : undefined,
     currentMapNumber: raw.current_map ?? 1,
     team1MapsWon: raw.radiant_series_wins ?? 0,
     team2MapsWon: raw.dire_series_wins ?? 0,
@@ -651,8 +658,15 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
     const hasRealData = !liveData?.noData && Array.isArray(rawMatches) && rawMatches.length > 0;
 
     // 2. Convert OpenDota live data to our Match format (если есть).
+    // Завершённые матчи (deactivate_time > 1ч назад) скрываем полностью.
+    const ONE_HOUR_MS = 60 * 60 * 1000;
     const matches = hasRealData
-      ? (rawMatches as OpenDotaLiveMatch[]).slice(0, 10).map(openDotaToMatch)
+      ? (rawMatches as OpenDotaLiveMatch[]).slice(0, 10)
+          .map(openDotaToMatch)
+          .filter(m => {
+            if (m.status !== 'finished') return true;
+            return m.finishedAt ? Date.now() - m.finishedAt.getTime() < ONE_HOUR_MS : true;
+          })
       : [];
 
     // Маппим upcoming PandaScore → Match. Дедуп по парам команд против live.

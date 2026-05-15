@@ -112,6 +112,8 @@ export interface Match {
   team1MapsWon: number;
   team2MapsWon: number;
   startTime: Date;
+  /** Время окончания матча (из deactivate_time OpenDota). Присутствует только для status='finished'. */
+  finishedAt?: Date;
   currentMap?: MapState;
   liveSnapshot?: LiveSnapshot;
   draft?: Draft;
