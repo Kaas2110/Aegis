@@ -25,6 +25,8 @@ interface LadderResponse {
   interval: null | { q25: number; q75: number };
   confidence: number;
   modelVersion: string;
+  unavailable?: boolean;
+  unavailableReason?: string;
   generatedAt: string;
 }
 
@@ -143,7 +145,16 @@ export function TotalsLadder({
             </View>
           )}
 
-          {!loading && !error && data && data.lines.map((row) => {
+          {!loading && !error && data && (data.unavailable || data.lines.length === 0) && (
+            <View style={[styles.errBox, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Feather name="info" size={12} color={colors.mutedForeground} />
+              <Text style={[styles.errText, { color: colors.mutedForeground }]}>
+                Прогноз ТБ/ТМ недоступен — {data.unavailableReason ?? 'модель ещё не обучена для этой пары команд'}. Math-фолбэк со stub-фичами мы не показываем (это были бы фейковые цифры).
+              </Text>
+            </View>
+          )}
+
+          {!loading && !error && data && !data.unavailable && data.lines.length > 0 && data.lines.map((row) => {
             const overBest = row.pOver >= row.pUnder;
             return (
               <View
@@ -174,7 +185,7 @@ export function TotalsLadder({
             );
           })}
 
-          {!loading && !error && data && (
+          {!loading && !error && data && !data.unavailable && data.lines.length > 0 && (
             <View style={styles.footer}>
               <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
                 Уверенность модели: {Math.round(data.confidence * 100)}%

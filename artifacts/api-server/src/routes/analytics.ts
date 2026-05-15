@@ -742,7 +742,10 @@ router.get('/totals-ladder', async (req, res) => {
     lineValues.push(snappedCenter + (startOffset + i) * step);
   }
 
-  // Wave 4: пытаемся LGB market-модель; на отсутствие/ошибку — heuristic.
+  // Wave 4: ТОЛЬКО LightGBM market-модель. Math-heuristic со stub-фичами 0.5
+  // (form/synergy/scaling/early/h2h всё по 0.5) выдавал бы детерминированную
+  // log-normal распределение вокруг базового μ — это фейк, не зависящий от
+  // реальных команд. Если LGB не обучен для пары — возвращаем unavailable.
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
   const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
   const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
@@ -750,25 +753,33 @@ router.get('/totals-ladder', async (req, res) => {
   const lgbQ75 = type === 'duration' ? lgb?.totalDurationLogQ75 ?? null : null;
   const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
 
+  if (!lgbLogN) {
+    res.json({
+      type,
+      expectedValue: Number(center.toFixed(2)),
+      isLive,
+      projection,
+      lines: [],
+      interval: null,
+      confidence: 0,
+      modelVersion: 'unavailable',
+      unavailable: true,
+      unavailableReason: type === 'kills'
+        ? 'LightGBM total_kills модель не обучена для этой пары команд'
+        : 'LightGBM total_duration модель не обучена для этой пары команд',
+      generatedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
   const lines = lineValues.map(line => {
-    let pOver: number;
-    if (lgbLogN) {
-      pOver = probLogNormalOver(line * linesScale, lgbLogN.mean, lgbLogN.std);
-    } else {
-      const pred = type === 'kills' ? predictTotalKills(fv, line) : predictTotalDuration(fv, line);
-      pOver = pred.probTeam1;
-    }
+    const pOver = probLogNormalOver(line * linesScale, lgbLogN.mean, lgbLogN.std);
     return {
       line: Number(line.toFixed(1)),
       pOver: Number(pOver.toFixed(4)),
       pUnder: Number((1 - pOver).toFixed(4)),
     };
   });
-
-  // Confidence у моделей фиксированный (0.62/0.64) — берём из первой строки
-  const sample = type === 'kills' ? predictTotalKills(fv, lineValues[0]) : predictTotalDuration(fv, lineValues[0]);
-  const confidence = lgbLogN ? 0.72 : sample.confidence;
-  const modelVersion = lgbLogN ? 'lightgbm-market' : sample.modelVersion;
 
   res.json({
     type,
@@ -782,8 +793,8 @@ router.get('/totals-ladder', async (req, res) => {
           q75: Number(Math.exp(lgbQ75).toFixed(2)),
         }
       : null,
-    confidence,
-    modelVersion,
+    confidence: 0.72,
+    modelVersion: 'lightgbm-market',
     generatedAt: new Date().toISOString(),
   });
 });
