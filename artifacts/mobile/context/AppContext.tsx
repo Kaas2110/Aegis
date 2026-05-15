@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   minEdge: 0.03,
   minConfidence: 60,
   favoriteTeamIds: [],
-  selectedBookmakerIds: ['fonbet', 'liga_stavok', 'betfair', 'betboom', 'pari'],
+  selectedBookmakerIds: ['bovada'],
   showOnlyPositiveEV: false,
   hideStaleData: false,
   analyticsConsent: false,
@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 const DEFAULT_FILTERS: Filters = {
-  bookmaker: 'all',
+  bookmaker: 'none',
   minOdds: 1.5,
   minEdge: 0.03,
   minConfidence: 60,
@@ -81,7 +81,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           setSettings({ ...DEFAULT_SETTINGS, ...parsed });
         }
-        if (fRaw) setFilters({ ...DEFAULT_FILTERS, ...JSON.parse(fRaw) });
+        if (fRaw) {
+          const parsed = JSON.parse(fRaw) as Partial<Filters>;
+          // Миграция: 'all' → 'none' (старое значение до ввода Bovada)
+          if ((parsed.bookmaker as string) === 'all') parsed.bookmaker = 'none';
+          setFilters({ ...DEFAULT_FILTERS, ...parsed });
+        }
       } catch {
         // use defaults
       }

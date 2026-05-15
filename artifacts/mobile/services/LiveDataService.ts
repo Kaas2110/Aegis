@@ -197,6 +197,55 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
   };
 }
 
+/**
+ * Метки букмекеров для отображения (source id → русское/бренд-название).
+ * Дублирует SOURCE_LABELS в routes/bookmakers.ts — держим синхронизированными.
+ */
+const BOOKMAKER_LABELS: Record<string, string> = {
+  bovada: 'Bovada',
+  fonbet: 'Fonbet',
+  liga_stavok: 'Лига Ставок',
+  pari: 'PARI',
+  betboom: 'BetBoom',
+  x1stavka: '1xStavka',
+  olimp: 'Olimp.bet',
+};
+
+/**
+ * Запрашивает кэф пары команд из BookmakerWorker in-memory кэша (без апстрим-нагрузки).
+ * Возвращает OddsData-совместимый объект с winner-кэфами от всех букмекеров, у
+ * которых есть данные по этой паре, или undefined если для пары ничего нет.
+ */
+async function fetchBookmakerForMatch(match: Match): Promise<OddsData | undefined> {
+  try {
+    const t1 = encodeURIComponent(match.team1.name);
+    const t2 = encodeURIComponent(match.team2.name);
+    const resp = await fetch(`${API_BASE}/bookmakers/for-match?team1=${t1}&team2=${t2}`);
+    if (!resp.ok) return undefined;
+    const data = await resp.json() as {
+      found: boolean;
+      sources: Array<{
+        source: string;
+        markets: { winner?: { team1: number; team2: number } };
+      }>;
+    };
+    if (!data.found || !data.sources.length) return undefined;
+    const bookmakers = data.sources
+      .filter(s => s.markets.winner?.team1 && s.markets.winner?.team2)
+      .map(s => ({
+        bookmakerId: s.source,
+        bookmakerName: BOOKMAKER_LABELS[s.source] ?? s.source,
+        team1Odds: s.markets.winner!.team1,
+        team2Odds: s.markets.winner!.team2,
+        lastUpdate: '',
+      }));
+    if (!bookmakers.length) return undefined;
+    return { eventId: match.id, team1: match.team1.name, team2: match.team2.name, commenceTime: '', bookmakers };
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchAnalytics(match: Match, odds?: OddsData, signal?: AbortSignal): Promise<EnrichedMatch['analyticsResult']> {
   // Локальный таймаут 5s + поддержка внешнего AbortSignal — чтобы один зависший
   // /predict не блокировал последовательный enrichment остальных карточек.
@@ -631,12 +680,19 @@ export async function fetchLiveData(cbs?: FetchLiveDataCallbacks): Promise<LiveD
     );
 
     const enrichOne = async (match: Match): Promise<EnrichedMatch> => {
-      const matchingOdds = findOdds(match);
-      const analyticsResult = await fetchAnalytics(match, matchingOdds, cbs?.signal);
+      // Запрашиваем The Odds API и Bovada параллельно — BookmakerWorker отдаёт
+      // из in-memory кэша (<5ms), поэтому параллельный fetch не добавляет latency.
+      const [matchingOdds, bookmakerOdds] = await Promise.all([
+        Promise.resolve(findOdds(match)),
+        fetchBookmakerForMatch(match),
+      ]);
+      // Предпочитаем Bovada (реально работает с Replit IP); The Odds API — fallback.
+      const effectiveOdds = bookmakerOdds ?? matchingOdds;
+      const analyticsResult = await fetchAnalytics(match, effectiveOdds, cbs?.signal);
       const markets = analyticsResult
-        ? analyticsToMarkets(match, analyticsResult, matchingOdds)
+        ? analyticsToMarkets(match, analyticsResult, effectiveOdds)
         : [];
-      const availableBookmakers = buildBookmakerOptions(matchingOdds);
+      const availableBookmakers = buildBookmakerOptions(effectiveOdds);
       const em: EnrichedMatch = { match, markets, analyticsResult, availableBookmakers };
       cachePut(em);
       return em;

@@ -30,7 +30,7 @@ import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/Outcome
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
-import { KNOWN_SOURCE_IDS, probeSource, type SourceProbeResult } from './bookmakers';
+import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, type SourceProbeResult } from './bookmakers';
 import { clearResponseCache } from '../lib/responseCache';
 import { db, modelVersionsTable } from '@workspace/db';
 import { desc, eq } from 'drizzle-orm';
@@ -107,12 +107,12 @@ router.post('/retrain', async (_req, res) => {
  * с upstream без ожидания TTL.
  */
 router.post('/refresh-all', (req, res) => {
-  // 1. Глобальный withCache (matches:live, matches:upcoming, matches:heroes...)
   clearResponseCache();
+  clearBookmakerCache();
   req.log.info({ tag: 'admin', action: 'refresh-all' }, '[admin] all caches cleared');
   res.json({
     ok: true,
-    cleared: ['responseCache (matches:*)', 'bookmakers (auto via TTL ≤60s)'],
+    cleared: ['responseCache (matches:*)', 'bookmakerCache (all sources)'],
     hint: 'Следующий запрос из мобилки подтянет свежие данные с upstream.',
     at: new Date().toISOString(),
   });

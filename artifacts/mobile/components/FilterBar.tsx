@@ -4,12 +4,8 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 
 const BOOKMAKER_OPTIONS = [
-  { label: 'Все', value: 'all' },
-  { label: 'Fonbet', value: 'fonbet' },
-  { label: 'Лига Ставок', value: 'liga_stavok' },
-  { label: 'Betfair', value: 'betfair' },
-  { label: 'BetBoom', value: 'betboom' },
-  { label: 'Pari', value: 'pari' },
+  { label: 'Без БК', value: 'none' },
+  { label: 'Bovada', value: 'bovada' },
 ] as const;
 
 const ODDS_OPTIONS = [

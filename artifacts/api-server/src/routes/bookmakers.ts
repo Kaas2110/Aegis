@@ -415,7 +415,7 @@ async function adapterBovada(): Promise<SourceResponse> {
           for (const m of grp.markets ?? []) {
             if (
               (m.description ?? '').toLowerCase() === 'moneyline' &&
-              (m.period?.description ?? '').toLowerCase() === 'live game'
+              (m.period?.description ?? '').toLowerCase() === 'game'
             ) {
               const o1 = num(m.outcomes?.[0]?.price?.decimal);
               const o2 = num(m.outcomes?.[1]?.price?.decimal);
@@ -437,16 +437,16 @@ async function adapterBovada(): Promise<SourceResponse> {
           const period = (m.period?.description ?? '').toLowerCase();
           const outcomes = m.outcomes ?? [];
 
-          // Map-level winner: "Moneyline" @ "Live Map N"
-          const mapMatch = period.match(/live map (\d+)/);
+          // Map-level winner: "Moneyline" @ "Map N"
+          const mapMatch = period.match(/^map (\d+)$/);
           if (mapMatch && desc === 'moneyline' && outcomes.length >= 2) {
             const o1 = num(outcomes[0]?.price?.decimal);
             const o2 = num(outcomes[1]?.price?.decimal);
             if (o1 && o2) mapWinners.push({ map: Number(mapMatch[1]), team1: o1, team2: o2 });
           }
 
-          // Total maps in series: "Total" @ "Live Game"
-          if (desc === 'total' && period === 'live game') {
+          // Total maps in series: "Total" @ "Game"
+          if (desc === 'total' && period === 'game') {
             for (let i = 0; i < outcomes.length; i += 2) {
               const over = outcomes[i];
               const under = outcomes[i + 1];
@@ -457,7 +457,7 @@ async function adapterBovada(): Promise<SourceResponse> {
             }
           }
 
-          // Per-map kills total: "Under/Over Kills" @ "Live Map N"
+          // Per-map kills total: "Under/Over Kills" @ "Map N"
           if (mapMatch && desc === 'under/over kills') {
             for (let i = 0; i < outcomes.length; i += 2) {
               const over = outcomes[i];
@@ -469,8 +469,8 @@ async function adapterBovada(): Promise<SourceResponse> {
             }
           }
 
-          // Correct score for series
-          if (desc === 'correct score' && period === 'live game') {
+          // Correct score for series: "Correct Score" @ "Game"
+          if (desc === 'correct score' && period === 'game') {
             for (const oc of outcomes) {
               const score = (oc.description ?? '').replace(/\s+/g, '');
               const price = num(oc.price?.decimal);
@@ -564,6 +564,9 @@ export function getAllSourceIds(): string[] { return Object.keys(ADAPTERS); }
 export function isBookmakersEnabled(): boolean { return BOOKMAKERS_ENABLED; }
 export function getSourceName(id: string): string {
   return SOURCE_NAMES[id] ?? id;
+}
+export function clearBookmakerCache(): void {
+  for (const key of Object.keys(cache)) delete cache[key];
 }
 
 // ---------- Helpers used by routes ----------

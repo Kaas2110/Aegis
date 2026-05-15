@@ -310,7 +310,7 @@ export interface ProductEvent {
   properties?: Record<string, unknown>;
 }
 
-export type FilterBookmaker = 'all' | 'fonbet' | 'liga_stavok' | 'pari' | 'betboom' | 'x1stavka' | 'olimp' | 'betfair';
+export type FilterBookmaker = 'none' | 'bovada' | 'fonbet' | 'liga_stavok' | 'pari' | 'betboom' | 'x1stavka' | 'olimp' | 'betfair';
 export type FilterMinOdds = 1.2 | 1.5 | 2.0 | 3.0 | number;
 export type FilterMode = 'prematch' | 'live' | 'finished' | 'all';
 export type FilterEventType = 'all' | 'winner' | 'map_winner' | 'match_winner' | 'total_kills' | 'total_duration';

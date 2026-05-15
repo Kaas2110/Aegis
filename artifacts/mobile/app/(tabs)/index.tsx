@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, Platform, ActivityIndicator,
@@ -12,7 +12,7 @@ import { MatchCard } from '@/components/MatchCard';
 import { FilterBar } from '@/components/FilterBar';
 import { AegisLogo } from '@/components/AegisLogo';
 import { BookmakerDropdown } from '@/components/BookmakerDropdown';
-import { fetchLiveData, type EnrichedMatch } from '@/services/LiveDataService';
+import { fetchLiveData, rebuildMarketsForBookmaker, type EnrichedMatch } from '@/services/LiveDataService';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { notificationService, notifyFavoriteTeamMatchStart } from '@/services/notifications/NotificationService';
 import type { Match, Market } from '@/types';
@@ -124,10 +124,27 @@ export default function HomeScreen() {
   const liveMatches = applyFilters(allLive);
   const prematchMatches = applyFilters(allPrematch);
 
-  const marketsMap: Map<string, Market[]> = new Map();
-  [...enrichedLive, ...enrichedPrematch].forEach(e => {
-    marketsMap.set(e.match.id, e.markets);
-  });
+  /**
+   * Реактивная карта markets: пересчитывается при изменении данных или выбора бука.
+   * — 'none': показываем markets без кэфов (edge/EV=0, только прогнозы модели)
+   * — 'bovada' / другой id: перебираем availableBookmakers матча и если совпадение
+   *   есть — пересобираем markets под выбранного бука; иначе используем как есть.
+   */
+  const marketsMap = useMemo(() => {
+    const map = new Map<string, Market[]>();
+    for (const em of [...enrichedLive, ...enrichedPrematch]) {
+      if (filters.bookmaker === 'none') {
+        // Режим «Без БК»: явно очищаем availableBookmakers чтобы edge/EV = 0
+        map.set(em.match.id, rebuildMarketsForBookmaker({ ...em, availableBookmakers: [] }, 'no_bookmaker'));
+      } else {
+        const hasBk = em.availableBookmakers.some(b => b.bookmakerId === filters.bookmaker);
+        map.set(em.match.id, hasBk
+          ? rebuildMarketsForBookmaker(em, filters.bookmaker)
+          : em.markets);
+      }
+    }
+    return map;
+  }, [enrichedLive, enrichedPrematch, filters.bookmaker]);
 
   function getBestMarket(matchId: string): Market | undefined {
     const mkts = marketsMap.get(matchId) ?? [];
@@ -212,6 +229,7 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.headerActions}>
+            <BookmakerDropdown />
             {loading && !refreshing && (
               <ActivityIndicator size="small" color={colors.primary} />
             )}
@@ -284,7 +302,6 @@ export default function HomeScreen() {
                 </View>
                 <View style={[styles.sectionDiamond, { borderColor: accentColor, backgroundColor: accentColor + '22' }]} />
                 <View style={[styles.sectionLine, { backgroundColor: colors.borderGold }]} />
-                {item.isLive && <BookmakerDropdown />}
               </View>
             );
           }
