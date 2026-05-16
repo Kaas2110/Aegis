@@ -18,7 +18,8 @@ interface OpenDotaTeam {
 
 async function main() {
   console.log('[ingest-teams] Fetching from OpenDota /api/teams …');
-  const resp = await fetch('https://api.opendota.com/api/teams');
+  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
+  const resp = await fetch(withOpenDotaKey('https://api.opendota.com/api/teams'));
   if (!resp.ok) {
     throw new Error(`OpenDota /api/teams: HTTP ${resp.status}`);
   }

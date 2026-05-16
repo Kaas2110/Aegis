@@ -4,6 +4,7 @@ import { inArray } from 'drizzle-orm';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
 import { getApiKey, getStratzToken } from '../services/ApiKeysService';
+import { withOpenDotaKey } from '../lib/openDotaUrl';
 
 const router: IRouter = Router();
 
@@ -540,7 +541,7 @@ async function fetchOpenDotaDraft(matchId: number): Promise<LiveDraftPayload | n
   const cached = draftCache.get(matchId);
   if (cached && (Date.now() - cached.at) < DRAFT_CACHE_TTL_MS) return cached.payload;
   try {
-    const resp = await apiFetch(`${OPENDOTA_BASE}/matches/${matchId}`, { timeout: 4000 });
+    const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/matches/${matchId}`), { timeout: 4000 });
     if (!resp.ok) {
       setDraftCache(matchId, null);
       return null;
@@ -644,7 +645,7 @@ router.get('/live', async (req, res) => {
     // Запрашиваем OpenDota live, PandaScore running и Stratz параллельно.
     // PandaScore /running даёт официальные имена команд, счёт серии и номер
     // текущей карты. OpenDota даёт реальный game state (kills, gold, time).
-    const openDotaPromise = apiFetch(`${OPENDOTA_BASE}/live`, { timeout: 20_000 })
+    const openDotaPromise = apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/live`), { timeout: 20_000 })
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const raw = await r.json() as unknown;
@@ -829,7 +830,7 @@ router.get('/upcoming', async (req, res) => {
 router.get('/heroes', async (req, res) => {
   try {
     const data = await withCache('matches:heroes', 3_600_000, async () => {
-      const resp = await apiFetch(`${OPENDOTA_BASE}/heroes`);
+      const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/heroes`));
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return await resp.json() as unknown;
     });
@@ -842,7 +843,7 @@ router.get('/heroes', async (req, res) => {
 
 router.get('/hero-stats', async (req, res) => {
   try {
-    const resp = await apiFetch(`${OPENDOTA_BASE}/heroStats`);
+    const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/heroStats`));
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json() as unknown;
     res.json({ noData: false, data });

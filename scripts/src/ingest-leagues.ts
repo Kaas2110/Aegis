@@ -15,7 +15,8 @@ interface OpenDotaLeague {
 
 async function main() {
   console.log('[ingest-leagues] Fetching from OpenDota /api/leagues …');
-  const resp = await fetch('https://api.opendota.com/api/leagues');
+  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
+  const resp = await fetch(withOpenDotaKey('https://api.opendota.com/api/leagues'));
   if (!resp.ok) throw new Error(`OpenDota /api/leagues: HTTP ${resp.status}`);
   const leagues = (await resp.json()) as OpenDotaLeague[];
   console.log(`[ingest-leagues] Got ${leagues.length} leagues`);

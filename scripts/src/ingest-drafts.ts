@@ -59,7 +59,8 @@ const OD_SLEEP_MS = 1100;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function fetchMatchOpenDota(matchId: number): Promise<OpenDotaMatch> {
-  const resp = await fetch(`https://api.opendota.com/api/matches/${matchId}`, {
+  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
+  const resp = await fetch(withOpenDotaKey(`https://api.opendota.com/api/matches/${matchId}`), {
     signal: AbortSignal.timeout(15_000),
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for match ${matchId}`);

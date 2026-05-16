@@ -60,7 +60,8 @@ interface OpenDotaHeroStat {
 }
 
 async function fetchOpenDotaHeroStats(): Promise<OpenDotaHeroStat[]> {
-  const resp = await fetch('https://api.opendota.com/api/heroStats', {
+  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
+  const resp = await fetch(withOpenDotaKey('https://api.opendota.com/api/heroStats'), {
     signal: AbortSignal.timeout(15_000),
   });
   if (!resp.ok) throw new Error(`OpenDota /api/heroStats: HTTP ${resp.status}`);
@@ -69,7 +70,8 @@ async function fetchOpenDotaHeroStats(): Promise<OpenDotaHeroStat[]> {
 
 async function fetchCurrentPatch(): Promise<string | null> {
   try {
-    const resp = await fetch('https://api.opendota.com/api/constants/patch', {
+    const { withOpenDotaKey } = await import('./lib/openDotaUrl');
+    const resp = await fetch(withOpenDotaKey('https://api.opendota.com/api/constants/patch'), {
       signal: AbortSignal.timeout(10_000),
     });
     if (!resp.ok) return null;

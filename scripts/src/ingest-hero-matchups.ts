@@ -51,7 +51,8 @@ const OD_SLEEP_MS = 1100;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function fetchMatchupsOD(heroId: number): Promise<OpenDotaMatchup[]> {
-  const url = `https://api.opendota.com/api/heroes/${heroId}/matchups`;
+  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
+  const url = withOpenDotaKey(`https://api.opendota.com/api/heroes/${heroId}/matchups`);
   const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for hero ${heroId}`);
   return (await resp.json()) as OpenDotaMatchup[];

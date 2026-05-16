@@ -18,6 +18,7 @@
 import { db, prematchOutcomesTable } from '@workspace/db';
 import { eq, isNull, and, lt, sql, isNotNull } from 'drizzle-orm';
 import { logger } from '../lib/logger';
+import { withOpenDotaKey } from '../lib/openDotaUrl';
 
 // Раз в час, чтобы успевать за live-воркером. При 6 одновременных матчах
 // LiveWorker видит ~6 новых рядов в час; resolver обрабатывает до 100 за тик
@@ -70,7 +71,7 @@ interface OpenDotaMatchSummary {
 
 async function fetchMatchSummary(matchId: number): Promise<OpenDotaMatchSummary | null> {
   try {
-    const resp = await fetch(`${OPENDOTA_MATCH_URL}/${matchId}`, {
+    const resp = await fetch(withOpenDotaKey(`${OPENDOTA_MATCH_URL}/${matchId}`), {
       headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' },
     });
     if (!resp.ok) return null;

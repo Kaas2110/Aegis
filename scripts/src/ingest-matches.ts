@@ -33,9 +33,10 @@ interface OpenDotaProMatch {
 }
 
 async function fetchPage(lessThan?: number): Promise<OpenDotaProMatch[]> {
+  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
   const url = lessThan
-    ? `https://api.opendota.com/api/proMatches?less_than_match_id=${lessThan}`
-    : 'https://api.opendota.com/api/proMatches';
+    ? withOpenDotaKey(`https://api.opendota.com/api/proMatches?less_than_match_id=${lessThan}`)
+    : withOpenDotaKey('https://api.opendota.com/api/proMatches');
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`OpenDota: HTTP ${resp.status}`);
   return (await resp.json()) as OpenDotaProMatch[];

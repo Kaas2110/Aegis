@@ -18,6 +18,7 @@
 
 import { db, liveSnapshotsTable, proMatchesTable, prematchOutcomesTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
+import { withOpenDotaKey } from './lib/openDotaUrl';
 
 const OPENDOTA_BASE = 'https://api.opendota.com/api';
 const RATE_LIMIT_MS = 1200; // ~0.83 req/sec — OpenDota бесплатный: 60/min
@@ -51,7 +52,7 @@ async function sleep(ms: number): Promise<void> {
 
 async function fetchMatchDetail(matchId: number): Promise<OpenDotaMatchDetail | null> {
   try {
-    const resp = await fetch(`${OPENDOTA_BASE}/matches/${matchId}`, {
+    const resp = await fetch(withOpenDotaKey(`${OPENDOTA_BASE}/matches/${matchId}`), {
       headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0 backfill' },
     });
     if (resp.status === 404) {

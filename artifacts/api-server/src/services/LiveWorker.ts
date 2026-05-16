@@ -12,6 +12,7 @@ import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './Li
 import { recordPrematchPrediction } from './OutcomeTracker';
 import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
 import { predictLiveTotalsFor } from './MarketLgbm';
+import { withOpenDotaKey } from '../lib/openDotaUrl';
 
 const POLL_INTERVAL_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
@@ -143,7 +144,7 @@ async function pollOnce(): Promise<void> {
 
   let matches: LiveMatch[] = [];
   try {
-    const resp = await fetch(OPENDOTA_LIVE_URL, {
+    const resp = await fetch(withOpenDotaKey(OPENDOTA_LIVE_URL), {
       headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' },
     });
     if (!resp.ok) {

@@ -21,6 +21,7 @@
  *   pnpm --filter @workspace/scripts run ingest:players-heroes --no-stratz
  */
 
+import { withOpenDotaKey } from './lib/openDotaUrl';
 import { db, matchDraftsTable, playersTable, playerHeroStatsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
 import {
@@ -50,7 +51,7 @@ interface OpenDotaPlayerProfile {
 }
 
 async function fetchOdPlayerHeroes(accountId: number): Promise<OpenDotaPlayerHero[]> {
-  const r = await fetch(`https://api.opendota.com/api/players/${accountId}/heroes`, {
+  const r = await fetch(withOpenDotaKey(`https://api.opendota.com/api/players/${accountId}/heroes`), {
     signal: AbortSignal.timeout(15_000),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status} for /players/${accountId}/heroes`);
@@ -58,7 +59,7 @@ async function fetchOdPlayerHeroes(accountId: number): Promise<OpenDotaPlayerHer
 }
 
 async function fetchPlayerProfile(accountId: number): Promise<OpenDotaPlayerProfile> {
-  const r = await fetch(`https://api.opendota.com/api/players/${accountId}`, {
+  const r = await fetch(withOpenDotaKey(`https://api.opendota.com/api/players/${accountId}`), {
     signal: AbortSignal.timeout(15_000),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status} for /players/${accountId}`);
