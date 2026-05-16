@@ -242,20 +242,27 @@ permanent     | (скрыто)   (никакой плашки, никакого 
 
 1. **`_field_meta` ещё не реализован в API** — сейчас mobile получает
    `null` и не знает, временно или permanent. Нужна правка
-   `routes/matches.ts` и `routes/predict.ts`.
-2. **`match_state` ещё не сериализуется явно** — есть `between_maps`, но
-   нет `pre_match | live | archived` enum. Сейчас mobile вычисляет
-   эвристикой. Унифицировать после T0.5.
-3. **`getFieldState()` хелпер ещё не написан** на mobile — поля
-   распарсиваются ad-hoc в компонентах.
-4. **Порог 25 мин для likely-ended** не зашит в server constant — нужен
-   `LIVE_STALE_HARD_MS = 25*60*1000` в общей либе и использовать в
-   prune-job и в mobile.
+   `routes/matches.ts` и `routes/predict.ts`. Реализуется вместе с T0.5
+   (Stratz live), когда появятся реальные поля с per-field meta.
+2. ✅ **`match_state` enum** — сериализуется как `match.status:
+   'prematch' | 'live' | 'between_maps' | 'finished'`, mobile типизирован
+   в `artifacts/mobile/types/index.ts::MatchStatus`. Переименование на
+   `match_state` не требуется (breaking change без выгоды).
+3. ✅ **`getFieldState()` хелпер** — реализован в
+   `artifacts/mobile/lib/availability.ts`. Компоненты постепенно мигрируют
+   на него (TotalsLadder, MatchCard, match/[id].tsx — следующие кандидаты).
+4. ✅ **Порог 25 мин для likely-ended** — `LIVE_STALE_HARD_MS = 25*60*1000`
+   зафиксирован в `artifacts/api-server/src/lib/availability.ts` и
+   `artifacts/mobile/lib/availability.ts` (зеркала). prune-job и LiveWorker
+   должны использовать константу вместо magic number'ов.
 5. **Stratz live (T0.5)** уберёт permanent_unavailable для xp/buyback/
    aegis/roshan — тогда таблица §4 обновится.
-6. **between_maps duration timeout** — если `between_maps:true` держится
-   >20 мин, скорее всего серия закончилась без обновления PS. Логика
-   таймаута должна перевести в `archived`.
+6. **between_maps duration timeout** — константа `BETWEEN_MAPS_TIMEOUT_MS =
+   20*60*1000` зафиксирована в `artifacts/api-server/src/lib/availability.ts`,
+   но **поведение ещё не подключено** в `routes/matches.ts`. Сейчас матч
+   с `between_maps:true` старше 20 мин остаётся в live-листинге. Нужна
+   правка `enrichWithPandaScoreRunning` или новый фильтр в `/api/matches/live`
+   handler'е. Подключать вместе с правкой T0.5, чтобы не делать N мелких CL'ей.
 
 Изменения в этом документе **обязаны** проходить через CL вместе с
 правками `routes/matches.ts` и mobile-хелперов.
