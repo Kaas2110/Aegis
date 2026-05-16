@@ -148,6 +148,7 @@ async function main() {
   const args = process.argv.slice(2);
   const backfill = args.includes('--backfill-accounts');
   const forceOpenDota = args.includes('--no-stratz');
+  const all365d = args.includes('--all-365d');
   const limitArg = args.find(a => /^\d+$/.test(a));
   const limit = limitArg ? Number(limitArg) : null;
 
@@ -171,6 +172,21 @@ async function main() {
         ),
       )
       .orderBy(sql`${matchDraftsTable.matchId} DESC`);
+    todo = limit !== null ? await q.limit(limit) : await q;
+  } else if (all365d) {
+    console.log('[ingest-drafts] ALL-365d: ALL pro_matches without drafts in last 365 days (no glicko filter) …');
+    const cutoff = Math.floor(Date.now() / 1000) - 365 * 24 * 3600;
+    const q = db
+      .select({ matchId: proMatchesTable.matchId })
+      .from(proMatchesTable)
+      .leftJoin(matchDraftsTable, sql`${matchDraftsTable.matchId} = ${proMatchesTable.matchId}`)
+      .where(
+        and(
+          isNull(matchDraftsTable.matchId),
+          sql`${proMatchesTable.startTime} >= ${cutoff}`,
+        ),
+      )
+      .orderBy(sql`${proMatchesTable.startTime} DESC`);
     todo = limit !== null ? await q.limit(limit) : await q;
   } else {
     console.log('[ingest-drafts] Selecting v2-eligible matches without drafts …');
