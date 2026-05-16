@@ -18,3 +18,9 @@ id = "CfvEuSCSLOCu7gcGces8p"
 uri = "file://docs/self-hosting-guide.md"
 type = "text"
 title = "Aegis — Полная шпаргалка (развёртывание + RuStore)"
+
+[[outputs]]
+id = "vDCVasUBzsIUyA_U3r1ZS"
+uri = "file://docs/model-improvements-research.md"
+type = "text"
+title = "Идеи по улучшению модели (research)"
