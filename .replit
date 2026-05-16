@@ -24,6 +24,14 @@ args = "artifacts/ml-service: ML Service"
 task = "workflow.run"
 args = "Data Enrichment"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Drafts Backfill 365d"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Replay Parse Loop"
+
 [[workflows.workflow]]
 name = "artifacts/ml-service: ML Service"
 author = "agent"
@@ -43,6 +51,28 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-enrichment-pipeline.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Drafts Backfill 365d"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-drafts-backfill.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Replay Parse Loop"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-replay-parse-loop.sh"
 
 [workflows.workflow.metadata]
 outputType = "console"
