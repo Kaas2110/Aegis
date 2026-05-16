@@ -218,6 +218,31 @@ async function trainBucket(
         `  [${label}] HARD     acc=${(hm.accuracy * 100).toFixed(1)}% brier=${hm.brier.toFixed(4)} n=${hm.n} (|elo_diff_norm|<${HARD_MATCH_THRESHOLD})`,
       );
     }
+    // T0 mini-fix v2 audit: распечатать top feature importances и
+    // train↔test mean-shift по каждой фиче (data drift detector).
+    const imp = Object.entries(data.feature_importance ?? {})
+      .sort((a, b) => b[1] - a[1]);
+    const top = imp.slice(0, 15)
+      .map(([n, v]) => `${n}=${v.toFixed(0)}`).join(' ');
+    console.log(`  [${label}] IMPORTANCE top15: ${top}`);
+    const trainMean = featureNames.map((_, i) =>
+      train.reduce((s, x) => s + x.features[i], 0) / train.length);
+    const testMean = featureNames.map((_, i) =>
+      test.reduce((s, x) => s + x.features[i], 0) / test.length);
+    const drifts = featureNames.map((n, i) => {
+      const tr = trainMean[i], te = testMean[i];
+      const denom = Math.max(Math.abs(tr), 1e-3);
+      return { n, tr, te, rel: (te - tr) / denom };
+    }).filter(d => Math.abs(d.rel) > 0.10)
+      .sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel))
+      .slice(0, 8);
+    if (drifts.length > 0) {
+      console.log(`  [${label}] DRIFT (|Δrel|>10%): ` + drifts.map(d =>
+        `${d.n}: train=${d.tr.toFixed(3)} test=${d.te.toFixed(3)} (${(d.rel * 100).toFixed(0)}%)`).join(', '));
+    }
+    const trainPos = train.reduce((s, x) => s + x.label, 0) / train.length;
+    const testPos = test.reduce((s, x) => s + x.label, 0) / test.length;
+    console.log(`  [${label}] LABEL radiantWR train=${(trainPos * 100).toFixed(1)}% test=${(testPos * 100).toFixed(1)}%`);
     return data;
   } catch (e) {
     console.error(`  [${label}] training failed: ${(e as Error).message}`);
