@@ -69,7 +69,12 @@ export class BaselineModel implements ModelProvider {
       towersLost: Math.max(0, Math.min(11, 11 - snap.towersDire)),
       roshanControl: snap.aegisHolder === 'radiant' ? 1 : snap.aegisHolder === 'dire' ? -1 : 0,
       buybackAdvantage: (snap.buybacksAvailableRadiant ?? 0) - (snap.buybacksAvailableDire ?? 0),
-      netWorthSwingLast5: 8200,
+      // T0 mini-fix (2026-05-16): убран хардкод 8200 (унаследован из старой
+      // 7-башенной эры). У нас нет истории netWorthDiff в одном snapshot'е —
+      // нужно либо хранить rolling 5 minutes на клиенте, либо тянуть с сервера.
+      // Пока — 0 (нет данных). TODO: считать на сервере из последних 5
+      // live_snapshots и слать как `snap.netWorthSwingLast5` (см. ml-feature-audit.md).
+      netWorthSwingLast5: 0,
     };
   }
 

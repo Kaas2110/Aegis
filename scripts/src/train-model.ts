@@ -30,6 +30,7 @@ import {
   matchDraftsTable,
   heroStatsTable,
   heroMatchupsTable,
+  heroSynergyTable,
   playerHeroStatsTable,
   playerRatingsTable,
   teamRecentFormTable,
@@ -47,6 +48,7 @@ import {
   EXTRA_FEATURE_DIM,
   type HeroStatsMap,
   type HeroMatchupsMap,
+  type HeroSynergyMap,
   type PlayerHeroStatsMap,
   type RecentFormMap,
   type H2HMap,
@@ -377,11 +379,18 @@ async function main() {
       heroId: heroStatsTable.heroId,
       proWinRate: heroStatsTable.proWinRate,
       proPickRate: heroStatsTable.proPickRate,
+      earlyGameScore: heroStatsTable.earlyGameScore,
+      lateGameScore: heroStatsTable.lateGameScore,
     })
     .from(heroStatsTable);
   const heroStats: HeroStatsMap = new Map();
   for (const h of heroStatsRows) {
-    heroStats.set(h.heroId, { proWinRate: h.proWinRate, proPickRate: h.proPickRate });
+    heroStats.set(h.heroId, {
+      proWinRate: h.proWinRate,
+      proPickRate: h.proPickRate,
+      earlyGameScore: h.earlyGameScore,
+      lateGameScore: h.lateGameScore,
+    });
   }
 
   const matchupsRows = await db
@@ -401,8 +410,24 @@ async function main() {
     }
     inner.set(m.vsHeroId, { games: m.games, winRate: m.winRate });
   }
+  // T0 mini-fix: загрузка hero_synergy для новой фичи synergy_diff.
+  const synergyRows = await db
+    .select({
+      heroId: heroSynergyTable.heroId,
+      withHeroId: heroSynergyTable.withHeroId,
+      games: heroSynergyTable.games,
+      winRate: heroSynergyTable.winRate,
+    })
+    .from(heroSynergyTable);
+  const heroSynergy: HeroSynergyMap = new Map();
+  for (const s of synergyRows) {
+    let inner = heroSynergy.get(s.heroId);
+    if (!inner) { inner = new Map(); heroSynergy.set(s.heroId, inner); }
+    inner.set(s.withHeroId, { games: s.games, winRate: s.winRate });
+  }
+
   console.log(
-    `[train-model] drafts=${drafts.size}, heroStats=${heroStats.size}, matchupPairs=${matchupsRows.length}`,
+    `[train-model] drafts=${drafts.size}, heroStats=${heroStats.size}, matchupPairs=${matchupsRows.length}, synergyPairs=${synergyRows.length}`,
   );
 
   // ── Wave 3: player-hero stats, recent form, h2h ───────────────────────
@@ -576,6 +601,7 @@ async function main() {
       draft.direBans,
       heroStats,
       matchups,
+      heroSynergy,
     );
     if (!heroFeats) {
       v2DroppedUnknownHero++;

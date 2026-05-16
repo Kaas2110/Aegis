@@ -27,6 +27,7 @@ import {
   teamsTable,
   heroStatsTable,
   heroMatchupsTable,
+  heroSynergyTable,
   playerHeroStatsTable,
   playerRatingsTable,
   teamRecentFormTable,
@@ -44,6 +45,7 @@ import {
   EXTRA_FEATURE_NAMES,
   type HeroStatsMap,
   type HeroMatchupsMap,
+  type HeroSynergyMap,
   type PlayerHeroStatsMap,
   type PlayerGlickoMap,
   type RecentFormMap,
@@ -159,6 +161,7 @@ const HERO_CACHE_TTL_MS = 60 * 60 * 1000;
 
 let heroStatsCache: HeroStatsMap = new Map();
 let heroMatchupsCache: HeroMatchupsMap = new Map();
+let heroSynergyCache: HeroSynergyMap = new Map();
 let lastHeroLoad = 0;
 
 // Wave 3 caches (загружаются лениво при первом v3-запросе).
@@ -474,12 +477,14 @@ async function refreshWave3Data(): Promise<void> {
 async function refreshHeroData(): Promise<void> {
   if (Date.now() - lastHeroLoad < HERO_CACHE_TTL_MS && heroStatsCache.size > 0) return;
   try {
-    const [statRows, matchRows] = await Promise.all([
+    const [statRows, matchRows, synRows] = await Promise.all([
       db
         .select({
           heroId: heroStatsTable.heroId,
           proWinRate: heroStatsTable.proWinRate,
           proPickRate: heroStatsTable.proPickRate,
+          earlyGameScore: heroStatsTable.earlyGameScore,
+          lateGameScore: heroStatsTable.lateGameScore,
         })
         .from(heroStatsTable),
       db
@@ -490,10 +495,24 @@ async function refreshHeroData(): Promise<void> {
           winRate: heroMatchupsTable.winRate,
         })
         .from(heroMatchupsTable),
+      // T0 mini-fix: synergy для нового synergy_diff feature.
+      db
+        .select({
+          heroId: heroSynergyTable.heroId,
+          withHeroId: heroSynergyTable.withHeroId,
+          games: heroSynergyTable.games,
+          winRate: heroSynergyTable.winRate,
+        })
+        .from(heroSynergyTable),
     ]);
     const stats: HeroStatsMap = new Map();
     for (const h of statRows) {
-      stats.set(h.heroId, { proWinRate: h.proWinRate, proPickRate: h.proPickRate });
+      stats.set(h.heroId, {
+        proWinRate: h.proWinRate,
+        proPickRate: h.proPickRate,
+        earlyGameScore: h.earlyGameScore,
+        lateGameScore: h.lateGameScore,
+      });
     }
     const matchups: HeroMatchupsMap = new Map();
     for (const m of matchRows) {
@@ -504,11 +523,18 @@ async function refreshHeroData(): Promise<void> {
       }
       inner.set(m.vsHeroId, { games: m.games, winRate: m.winRate });
     }
+    const synergy: HeroSynergyMap = new Map();
+    for (const s of synRows) {
+      let inner = synergy.get(s.heroId);
+      if (!inner) { inner = new Map(); synergy.set(s.heroId, inner); }
+      inner.set(s.withHeroId, { games: s.games, winRate: s.winRate });
+    }
     heroStatsCache = stats;
     heroMatchupsCache = matchups;
+    heroSynergyCache = synergy;
     lastHeroLoad = Date.now();
     logger.info(
-      { heroes: stats.size, matchupPairs: matchRows.length },
+      { heroes: stats.size, matchupPairs: matchRows.length, synergyPairs: synRows.length },
       '[PredictionModel] Hero data refreshed',
     );
   } catch (err) {
@@ -742,6 +768,7 @@ export async function predictMatchWinner(
         drafts.direBans,
         heroStatsCache,
         heroMatchupsCache,
+        heroSynergyCache,
       );
     }
   }

@@ -170,9 +170,44 @@ h2h_score, player_glicko_diff, player_glicko_uncertainty_diff
 
 Эти правки безопасны и не зависят от новых данных:
 
-- [ ] **A.** Добавить `hero_synergy` в `buildHeroFeatures` как новую фичу `synergy_stratz_diff`. Перетренировать `train:model` (LR) и `train:lightgbm` для всех bucket'ов.
-- [ ] **B.** Добавить `team_early_score_diff` и `team_late_score_diff` в `buildHeroFeatures` (агрегат early/late_game_score по героям сторон). Туда же.
-- [ ] **C.** Убрать хардкод `netWorthSwingLast5 = 8200` в BaselineModel — посчитать из live_snapshots или поставить null.
+- [x] **A.** Добавить `hero_synergy` в `buildHeroFeatures` как новую фичу `synergy_diff`. Перетренировать `train:model` (LR) и `train:lightgbm` для всех bucket'ов. **CODE DONE 2026-05-16, retrain pending.**
+- [x] **B.** Добавить `early_game_score_diff` и `late_game_score_diff` в `buildHeroFeatures` (агрегат early/late_game_score по героям сторон). Туда же. **CODE DONE 2026-05-16, retrain pending.**
+- [x] **C.** Убрать хардкод `netWorthSwingLast5 = 8200` в BaselineModel. **DONE 2026-05-16** — поставлен `0` (нет данных) с TODO считать на сервере из rolling window последних 5 live_snapshots и слать как `snap.netWorthSwingLast5`.
+
+### T0 mini-fix — детали (2026-05-16)
+
+**Что сделано в коде** (typecheck ✅ во всех 6 пакетах):
+
+1. `scripts/src/lib/hero-features.ts` + `artifacts/api-server/src/lib/hero-features.ts` (зеркала):
+   - `HeroStat` расширен опциональными `earlyGameScore` / `lateGameScore` (default 0.5 если null).
+   - Новый тип `HeroSynergyMap = Map<heroId, Map<withHeroId, {games, winRate}>>` с симметричным lookup (a→b ИЛИ b→a).
+   - `HERO_FEATURE_NAMES`: **+3 в КОНЕЦ** (порядок старых 7 фичей не меняется). Новый `HERO_FEATURE_DIM = 10`:
+     - `synergy_diff` — Σ по 10 уникальным парам (i<j) внутри команды; `(winRate-0.5)·log(games+1)`; radiant - dire.
+     - `early_game_score_diff` — Σ по 5 героям radiant minus dire.
+     - `late_game_score_diff` — то же.
+   - `buildHeroFeatures` принимает новый optional `synergy?: HeroSynergyMap`. Если не передан — `synergy_diff = 0` (нейтрально, BC-safe).
+2. `scripts/src/train-model.ts` (LR) и `scripts/src/train-lightgbm.ts` (LightGBM):
+   - Загружают `heroSynergyTable` целиком в `Map`.
+   - Расширили SELECT по `heroStatsTable` чтобы тянуть `earlyGameScore`/`lateGameScore`.
+   - Передают `heroSynergy` в `buildHeroFeatures` для v2/v3 bucket'ов.
+3. `artifacts/api-server/src/services/PredictionModel.ts`:
+   - Новый кэш `heroSynergyCache` с тем же TTL что `heroStatsCache` (60 мин).
+   - `refreshHeroData` параллелит 3-й SELECT (synergy) и обогащает heroStats полями early/late.
+   - `buildHeroFeatures` вызывается с `heroSynergyCache`.
+4. `artifacts/mobile/services/model/BaselineModel.ts:72`: убран хардкод 8200 → 0 + комментарий + TODO для server-side rolling window.
+
+**Что НЕ сделано (требует ресурсов / явного согласия пользователя):**
+
+- ⚠️ **Retrain LR (`train:model`) и LightGBM (`train:lightgbm`)** — ОБЯЗАТЕЛЕН до того как новые фичи начнут работать. До retrain активные модели в БД имеют featureDim=7 (старая HERO_FEATURE_DIM), а инференс будет вычислять 10 — `featureDim` mismatch гарантирует **fallback на v1 (только team-фичи)** для всех матчей с draft. То есть: до retrain система временно работает на team-only ELO+form+h2h, без draft-вклада. Это **временная просадка качества** (-3..-5 п.п. accuracy для матчей с draft) пока модели не переобучены.
+- ⚠️ Тренировка требует `ML Service` workflow (для LightGBM) + `DATABASE_URL` доступа. Workflows сейчас остановлены — поднимаем когда пользователь даст «старт retrain».
+- Для retrain команды (после старта workflow `ML Service`):
+  ```bash
+  pnpm --filter @workspace/scripts run train:model
+  pnpm --filter @workspace/scripts run train:lightgbm
+  ```
+
+**Регресс-инвариант (важно для будущих правок hero-features):**
+Если меняешь `HERO_FEATURE_NAMES` — обязан в одной CL'е выполнить retrain ВСЕХ активных моделей и убедиться что `featureDim` в БД и в коде совпадают, иначе PredictionModel молча упадёт на нижестоящий fallback и качество просядет без видимой ошибки.
 
 Это **2-3 часа работы**, +1-2 п.п. accuracy сразу, и **закрывает 3 уже существующих gap'а** до того как наслаивать новые большие фазы.
 

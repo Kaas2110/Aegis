@@ -6,6 +6,9 @@
 export interface HeroStat {
   proWinRate: number;
   proPickRate: number;
+  /** T0 mini-fix: добавлено для early/late game score фичей. Default 0.5 если null. */
+  earlyGameScore?: number;
+  lateGameScore?: number;
 }
 
 export interface HeroMatchup {
@@ -16,6 +19,10 @@ export interface HeroMatchup {
 export type HeroStatsMap = Map<number, HeroStat>;
 export type HeroMatchupsMap = Map<number, Map<number, HeroMatchup>>;
 
+/** T0 mini-fix: synergy (две героя в ОДНОЙ команде). */
+export interface HeroSynergyEntry { games: number; winRate: number; }
+export type HeroSynergyMap = Map<number, Map<number, HeroSynergyEntry>>;
+
 export const HERO_FEATURE_NAMES = [
   'radiant_pick_strength',
   'dire_pick_strength',
@@ -24,6 +31,9 @@ export const HERO_FEATURE_NAMES = [
   'radiant_meta_score',
   'dire_meta_score',
   'ban_priority_diff',
+  'synergy_diff',
+  'early_game_score_diff',
+  'late_game_score_diff',
 ] as const;
 
 export const HERO_FEATURE_DIM = HERO_FEATURE_NAMES.length;
@@ -35,6 +45,7 @@ export function buildHeroFeatures(
   direBans: number[],
   heroStats: HeroStatsMap,
   matchups: HeroMatchupsMap,
+  synergy?: HeroSynergyMap | null,
 ): number[] | null {
   if (radiantPicks.length !== 5 || direPicks.length !== 5) return null;
 
@@ -42,18 +53,26 @@ export function buildHeroFeatures(
   let dirPickStr = 0;
   let radMeta = 0;
   let dirMeta = 0;
+  let radEarly = 0;
+  let dirEarly = 0;
+  let radLate = 0;
+  let dirLate = 0;
 
   for (const h of radiantPicks) {
     const s = heroStats.get(h);
     if (!s) return null;
     radPickStr += s.proWinRate;
     radMeta += s.proPickRate;
+    radEarly += s.earlyGameScore ?? 0.5;
+    radLate += s.lateGameScore ?? 0.5;
   }
   for (const h of direPicks) {
     const s = heroStats.get(h);
     if (!s) return null;
     dirPickStr += s.proWinRate;
     dirMeta += s.proPickRate;
+    dirEarly += s.earlyGameScore ?? 0.5;
+    dirLate += s.lateGameScore ?? 0.5;
   }
 
   // Симметричный fallback на обратную пару — см. scripts/src/lib/hero-features.ts.
@@ -84,6 +103,27 @@ export function buildHeroFeatures(
     if (s) dirBanPrio += s.proPickRate;
   }
 
+  // T0 mini-fix: synergy_diff. 10 уникальных пар внутри команды (i<j).
+  let radSyn = 0;
+  let dirSyn = 0;
+  if (synergy) {
+    const pairScore = (a: number, b: number): number => {
+      const e = synergy.get(a)?.get(b) ?? synergy.get(b)?.get(a);
+      if (!e || e.games <= 0) return 0;
+      return (e.winRate - 0.5) * Math.log(e.games + 1);
+    };
+    for (let i = 0; i < radiantPicks.length; i++) {
+      for (let j = i + 1; j < radiantPicks.length; j++) {
+        radSyn += pairScore(radiantPicks[i], radiantPicks[j]);
+      }
+    }
+    for (let i = 0; i < direPicks.length; i++) {
+      for (let j = i + 1; j < direPicks.length; j++) {
+        dirSyn += pairScore(direPicks[i], direPicks[j]);
+      }
+    }
+  }
+
   return [
     radPickStr,
     dirPickStr,
@@ -92,6 +132,9 @@ export function buildHeroFeatures(
     radMeta,
     dirMeta,
     radBanPrio - dirBanPrio,
+    radSyn - dirSyn,
+    radEarly - dirEarly,
+    radLate - dirLate,
   ];
 }
 

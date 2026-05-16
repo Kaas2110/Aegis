@@ -15,11 +15,24 @@
  *   h4 = radiant_meta_score         Σ pro_pick_rate (насколько драфт «в мете»)
  *   h5 = dire_meta_score
  *   h6 = ban_priority_diff          Σ pro_pick_rate банов радианта − дайра
+ *   ── T0 mini-fix (2026-05-16) ──────────────────────────────────────────
+ *   h7 = synergy_diff               Σ_{r∈team5} (synergyWR(ri,rj)-0.5)·log(g+1)
+ *                                    radiant - dire, по 10 уникальным парам внутри
+ *                                    каждой команды. Источник: `hero_synergy`
+ *                                    (Stratz DIVINE_IMMORTAL bracket). Если
+ *                                    synergyMap === undefined → 0 (BC).
+ *   h8 = early_game_score_diff      Σ heroStats.earlyGameScore (radiant) - dire.
+ *                                    Источник: `hero_stats.early_game_score`
+ *                                    (default 0.5 если не заполнено).
+ *   h9 = late_game_score_diff       аналогично late_game_score.
  */
 
 export interface HeroStat {
   proWinRate: number;
   proPickRate: number;
+  /** T0 mini-fix: добавлено для early/late game score фичей. Default 0.5 если null. */
+  earlyGameScore?: number;
+  lateGameScore?: number;
 }
 
 export interface HeroMatchup {
@@ -31,6 +44,12 @@ export type HeroStatsMap = Map<number, HeroStat>;
 /** Outer key: heroId. Inner key: vsHeroId. winRate = P(outer wins vs inner). */
 export type HeroMatchupsMap = Map<number, Map<number, HeroMatchup>>;
 
+/** Синергия (две героя в ОДНОЙ команде).
+ *  Outer key: heroId. Inner key: withHeroId. winRate = P(team wins | both picked).
+ *  Симметричный лукап: пробуем (a,b), потом (b,a) с тем же winRate. */
+export interface HeroSynergyEntry { games: number; winRate: number; }
+export type HeroSynergyMap = Map<number, Map<number, HeroSynergyEntry>>;
+
 export const HERO_FEATURE_NAMES = [
   'radiant_pick_strength',
   'dire_pick_strength',
@@ -39,6 +58,9 @@ export const HERO_FEATURE_NAMES = [
   'radiant_meta_score',
   'dire_meta_score',
   'ban_priority_diff',
+  'synergy_diff',
+  'early_game_score_diff',
+  'late_game_score_diff',
 ] as const;
 
 export const HERO_FEATURE_DIM = HERO_FEATURE_NAMES.length;
@@ -57,6 +79,8 @@ export function buildHeroFeatures(
   direBans: number[],
   heroStats: HeroStatsMap,
   matchups: HeroMatchupsMap,
+  /** T0 mini-fix: optional. Если не передан — synergy_diff = 0 (нейтрально). */
+  synergy?: HeroSynergyMap | null,
 ): number[] | null {
   if (radiantPicks.length !== 5 || direPicks.length !== 5) return null;
 
@@ -64,18 +88,26 @@ export function buildHeroFeatures(
   let dirPickStr = 0;
   let radMeta = 0;
   let dirMeta = 0;
+  let radEarly = 0;
+  let dirEarly = 0;
+  let radLate = 0;
+  let dirLate = 0;
 
   for (const h of radiantPicks) {
     const s = heroStats.get(h);
     if (!s) return null;
     radPickStr += s.proWinRate;
     radMeta += s.proPickRate;
+    radEarly += s.earlyGameScore ?? 0.5;
+    radLate += s.lateGameScore ?? 0.5;
   }
   for (const h of direPicks) {
     const s = heroStats.get(h);
     if (!s) return null;
     dirPickStr += s.proWinRate;
     dirMeta += s.proPickRate;
+    dirEarly += s.earlyGameScore ?? 0.5;
+    dirLate += s.lateGameScore ?? 0.5;
   }
 
   // Σ по 25 парам (radiantHero × direHero) winRate сглаженный по log(games+1).
@@ -109,6 +141,29 @@ export function buildHeroFeatures(
     if (s) dirBanPrio += s.proPickRate;
   }
 
+  // T0 mini-fix: synergy_diff. Перебираем 10 уникальных пар внутри каждой
+  // команды (i<j). Симметричный лукап (a→b или b→a с тем же winRate).
+  // Если synergy не передан или пара не найдена — вклад 0 (нейтрально).
+  let radSyn = 0;
+  let dirSyn = 0;
+  if (synergy) {
+    const pairScore = (a: number, b: number): number => {
+      const e = synergy.get(a)?.get(b) ?? synergy.get(b)?.get(a);
+      if (!e || e.games <= 0) return 0;
+      return (e.winRate - 0.5) * Math.log(e.games + 1);
+    };
+    for (let i = 0; i < radiantPicks.length; i++) {
+      for (let j = i + 1; j < radiantPicks.length; j++) {
+        radSyn += pairScore(radiantPicks[i], radiantPicks[j]);
+      }
+    }
+    for (let i = 0; i < direPicks.length; i++) {
+      for (let j = i + 1; j < direPicks.length; j++) {
+        dirSyn += pairScore(direPicks[i], direPicks[j]);
+      }
+    }
+  }
+
   return [
     radPickStr,
     dirPickStr,
@@ -117,6 +172,9 @@ export function buildHeroFeatures(
     radMeta,
     dirMeta,
     radBanPrio - dirBanPrio,
+    radSyn - dirSyn,
+    radEarly - dirEarly,
+    radLate - dirLate,
   ];
 }
 

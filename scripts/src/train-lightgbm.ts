@@ -28,6 +28,7 @@ import {
   matchDraftsTable,
   heroStatsTable,
   heroMatchupsTable,
+  heroSynergyTable,
   playerHeroStatsTable,
   playerRatingsTable,
   teamRecentFormTable,
@@ -45,6 +46,7 @@ import {
   EXTRA_FEATURE_DIM,
   type HeroStatsMap,
   type HeroMatchupsMap,
+  type HeroSynergyMap,
   type PlayerHeroStatsMap,
   type RecentFormMap,
   type H2HMap,
@@ -280,9 +282,30 @@ async function main() {
     heroId: heroStatsTable.heroId,
     proWinRate: heroStatsTable.proWinRate,
     proPickRate: heroStatsTable.proPickRate,
+    earlyGameScore: heroStatsTable.earlyGameScore,
+    lateGameScore: heroStatsTable.lateGameScore,
   }).from(heroStatsTable);
   const heroStats: HeroStatsMap = new Map();
-  for (const h of heroStatsRows) heroStats.set(h.heroId, { proWinRate: h.proWinRate, proPickRate: h.proPickRate });
+  for (const h of heroStatsRows) heroStats.set(h.heroId, {
+    proWinRate: h.proWinRate,
+    proPickRate: h.proPickRate,
+    earlyGameScore: h.earlyGameScore,
+    lateGameScore: h.lateGameScore,
+  });
+
+  // T0 mini-fix: hero_synergy загружаем для нового synergy_diff feature.
+  const synergyRows = await db.select({
+    heroId: heroSynergyTable.heroId,
+    withHeroId: heroSynergyTable.withHeroId,
+    games: heroSynergyTable.games,
+    winRate: heroSynergyTable.winRate,
+  }).from(heroSynergyTable);
+  const heroSynergy: HeroSynergyMap = new Map();
+  for (const s of synergyRows) {
+    let inner = heroSynergy.get(s.heroId);
+    if (!inner) { inner = new Map(); heroSynergy.set(s.heroId, inner); }
+    inner.set(s.withHeroId, { games: s.games, winRate: s.winRate });
+  }
 
   const matchupsRows = await db.select({
     heroId: heroMatchupsTable.heroId, vsHeroId: heroMatchupsTable.vsHeroId,
@@ -318,7 +341,7 @@ async function main() {
   for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
 
   console.log(
-    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size}`,
+    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} synergy=${synergyRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size}`,
   );
 
   // ── Предвычисление контекста для расширенных командных фичей ───────────
@@ -409,7 +432,7 @@ async function main() {
     if (!draft) continue;
     const heroFeats = buildHeroFeatures(
       draft.radiantPicks, draft.direPicks, draft.radiantBans, draft.direBans,
-      heroStats, matchups,
+      heroStats, matchups, heroSynergy,
     );
     if (!heroFeats) continue;
     const v2S: Sample = { features: [...teamFeats, ...heroFeats], label };
