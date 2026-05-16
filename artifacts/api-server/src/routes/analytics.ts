@@ -14,6 +14,7 @@ import {
   triggerManualRetrain,
 } from '../services/SchedulerWorker';
 import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable, heroSynergyTable, heroMatchupsTable, heroStatsTable } from '@workspace/db';
+import { getTeamProfile } from '../services/features/teamProfile';
 import { requireAdminSession } from './adminAuth';
 import { eq, desc, sql, and, gte, isNotNull, inArray, or, ilike } from 'drizzle-orm';
 
@@ -1340,6 +1341,185 @@ router.post('/draft-score', async (req, res) => {
   } catch (err) {
     req.log.error({ err }, 'draft-score failed');
     res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+/**
+ * GET /api/analytics/team-profile?teamId=N
+ * T3-T7: series momentum + dynamic form + ELO decomp + styles + entropy.
+ * Возвращает всё сразу одним вызовом, fail-soft по секциям.
+ * Использует только существующие таблицы — никаких ingest'ов на лету.
+ */
+router.get('/team-profile', async (req, res) => {
+  const teamId = Number(req.query.teamId);
+  if (!Number.isFinite(teamId) || teamId <= 0) {
+    res.status(400).json({ error: 'teamId required (positive number)' });
+    return;
+  }
+  try {
+    const profile = await withCache(`team-profile:${teamId}`, 60_000, () => getTeamProfile(teamId));
+    res.json(profile);
+  } catch (err) {
+    req.log.error({ err, teamId }, '[team-profile] failed');
+    res.status(500).json({ error: 'team-profile failed', details: String(err) });
+  }
+});
+
+/**
+ * GET /api/analytics/team-compare?teamAId=N&teamBId=M
+ * T8: A vs B — два TeamProfile параллельно + h2h + дифф-сводка.
+ * Удобно для экрана сравнения в мобилке.
+ */
+router.get('/team-compare', async (req, res) => {
+  const a = Number(req.query.teamAId);
+  const b = Number(req.query.teamBId);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) {
+    res.status(400).json({ error: 'teamAId/teamBId required (distinct positive numbers)' });
+    return;
+  }
+  try {
+    const low = Math.min(a, b);
+    const high = Math.max(a, b);
+    const payload = await withCache(`team-compare:${low}:${high}:${a < b ? 'ab' : 'ba'}`, 60_000, async () => {
+    const [profA, profB, h2hR] = await Promise.all([
+      getTeamProfile(a),
+      getTeamProfile(b),
+      db.execute(sql`
+        SELECT team_low_id, team_high_id, period_days, games, wins_low, computed_at
+        FROM team_h2h
+        WHERE team_low_id = ${low} AND team_high_id = ${high}
+        ORDER BY period_days DESC LIMIT 1
+      `).catch(() => ({ rows: [] as unknown[] })),
+    ]);
+    // Схема: wins_low относится к team_low_id; для A/B пересчитываем.
+    let h2h: { winsA: number; winsB: number; games: number; periodDays: number; computedAt: string | null } | null = null;
+    const row = h2hR.rows[0] as {
+      team_low_id?: number | string; games?: number; wins_low?: number;
+      period_days?: number; computed_at?: string | null;
+    } | undefined;
+    if (row && typeof row.games === 'number' && typeof row.wins_low === 'number') {
+      const aIsLow = Number(row.team_low_id) === a;
+      const winsLow = row.wins_low;
+      const winsHigh = row.games - row.wins_low;
+      h2h = {
+        winsA: aIsLow ? winsLow : winsHigh,
+        winsB: aIsLow ? winsHigh : winsLow,
+        games: row.games,
+        periodDays: row.period_days ?? 0,
+        computedAt: row.computed_at ?? null,
+      };
+    }
+    // Diff-сводка: только бесспорные численные сравнения, остальное даём как есть.
+    const diff = {
+      ratingDelta: (profA.teamRating != null && profB.teamRating != null)
+        ? profA.teamRating - profB.teamRating : null,
+      weightedFormDelta: (profA.dynamicForm?.weightedWinRate != null && profB.dynamicForm?.weightedWinRate != null)
+        ? profA.dynamicForm.weightedWinRate - profB.dynamicForm.weightedWinRate : null,
+      avgPlayerRatingDelta: (profA.eloDecomp?.avgPlayerRating != null && profB.eloDecomp?.avgPlayerRating != null)
+        ? profA.eloDecomp.avgPlayerRating - profB.eloDecomp.avgPlayerRating : null,
+      tierLevelA: profA.eloDecomp?.tierLevel ?? null,
+      tierLevelB: profB.eloDecomp?.tierLevel ?? null,
+    };
+    return { teamA: profA, teamB: profB, h2h, diff };
+    });
+    res.json(payload);
+  } catch (err) {
+    req.log.error({ err, a, b }, '[team-compare] failed');
+    res.status(500).json({ error: 'team-compare failed', details: String(err) });
+  }
+});
+
+/**
+ * GET /api/analytics/match-summary?matchId=N
+ * T9: пост-матч сводка. Достаёт prematch_outcome (если резолвилось) +
+ * последние live_snapshots + все предсказания по матчу.
+ * Возвращает: predicted vs actual, calibration delta, market predictions list.
+ */
+router.get('/match-summary', async (req, res) => {
+  const matchId = Number(req.query.matchId);
+  if (!Number.isFinite(matchId) || matchId <= 0) {
+    res.status(400).json({ error: 'matchId required (positive number)' });
+    return;
+  }
+  try {
+    const payload = await withCache(`match-summary:${matchId}`, 30_000, async () => {
+    const [outcomeR, predsR, snapR] = await Promise.all([
+      db.execute(sql`
+        SELECT model_version, radiant_name, dire_name, league_name,
+               predicted_radiant_win_prob, predicted_confidence,
+               actual_radiant_win, actual_radiant_score, actual_dire_score,
+               actual_duration_sec, predicted_at, resolved_at
+        FROM prematch_outcomes WHERE match_id = ${matchId} LIMIT 1
+      `).catch(() => ({ rows: [] as unknown[] })),
+      db.execute(sql`
+        SELECT market_type, model_version, model_prob_team1, model_prob_team2, predicted_at
+        FROM predictions WHERE match_id = ${matchId}
+        ORDER BY predicted_at DESC LIMIT 200
+      `).catch(() => ({ rows: [] as unknown[] })),
+      db.execute(sql`
+        SELECT MIN(captured_at) first_at, MAX(captured_at) last_at,
+               MAX(game_time_sec) last_game_time, COUNT(*) n
+        FROM live_snapshots WHERE match_id = ${matchId}
+      `).catch(() => ({ rows: [] as unknown[] })),
+    ]);
+    const outcome = outcomeR.rows[0] as {
+      model_version?: string; radiant_name?: string | null; dire_name?: string | null;
+      league_name?: string | null;
+      predicted_radiant_win_prob?: number; predicted_confidence?: number | null;
+      actual_radiant_win?: boolean | null; actual_radiant_score?: number | null;
+      actual_dire_score?: number | null; actual_duration_sec?: number | null;
+      predicted_at?: string; resolved_at?: string | null;
+    } | undefined;
+    let calibration: { hit: boolean; delta: number } | null = null;
+    if (outcome && outcome.actual_radiant_win != null && typeof outcome.predicted_radiant_win_prob === 'number') {
+      const pred = outcome.predicted_radiant_win_prob;
+      const actual = outcome.actual_radiant_win ? 1 : 0;
+      calibration = { hit: (pred > 0.5) === (actual === 1), delta: pred - actual };
+    }
+    // Сворачиваем market predictions: один market_type → последний прогноз.
+    const marketLatest = new Map<string, { modelVersion: string; probTeam1: number | null; probTeam2: number | null; at: string }>();
+    for (const p of predsR.rows as Array<{ market_type?: string; model_version?: string;
+      model_prob_team1?: number | null; model_prob_team2?: number | null; predicted_at?: string }>) {
+      const mt = p.market_type;
+      if (!mt || marketLatest.has(mt)) continue; // строки DESC, первый = последний
+      marketLatest.set(mt, {
+        modelVersion: p.model_version ?? '',
+        probTeam1: p.model_prob_team1 ?? null,
+        probTeam2: p.model_prob_team2 ?? null,
+        at: p.predicted_at ?? '',
+      });
+    }
+    const snap = snapR.rows[0] as { first_at?: string; last_at?: string; last_game_time?: number; n?: number } | undefined;
+    return {
+      matchId,
+      outcome: outcome ? {
+        modelVersion: outcome.model_version ?? null,
+        radiantName: outcome.radiant_name ?? null,
+        direName: outcome.dire_name ?? null,
+        leagueName: outcome.league_name ?? null,
+        predictedRadiantWinProb: outcome.predicted_radiant_win_prob ?? null,
+        predictedConfidence: outcome.predicted_confidence ?? null,
+        actualRadiantWin: outcome.actual_radiant_win ?? null,
+        actualScore: (outcome.actual_radiant_score != null && outcome.actual_dire_score != null)
+          ? { radiant: outcome.actual_radiant_score, dire: outcome.actual_dire_score } : null,
+        actualDurationSec: outcome.actual_duration_sec ?? null,
+        predictedAt: outcome.predicted_at ?? null,
+        resolvedAt: outcome.resolved_at ?? null,
+      } : null,
+      calibration,
+      markets: [...marketLatest.entries()].map(([marketType, v]) => ({ marketType, ...v })),
+      liveSnapshots: snap ? {
+        firstAt: snap.first_at ?? null,
+        lastAt: snap.last_at ?? null,
+        lastGameTimeSec: snap.last_game_time ?? null,
+        count: Number(snap.n ?? 0),
+      } : null,
+    };
+    });
+    res.json(payload);
+  } catch (err) {
+    req.log.error({ err, matchId }, '[match-summary] failed');
+    res.status(500).json({ error: 'match-summary failed', details: String(err) });
   }
 });
 

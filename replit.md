@@ -161,15 +161,19 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   `BookmakerDropdown` подключить к header'у. Полный охват маркетов
   (winner/totals/firstBlood) для всех 6 букмекеров.
 - **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
-- **Большая ML-итерация (план T0→T12, активная сессия):**
-  T0 аудит фичей → T0.5a Stratz live (per-player gold/networth/xpm/items + xp_advantage agg) DONE 2026-05-16 →
-  T0.7 OD replay-parse backfill (buyback/aegis/vision/teamfights — post-mortem only) → T1 docs/ml-contract.md DONE →
-  T2 docs/data-availability-rules.md (90s/3min/25min пороги) DONE →
-  T3 series momentum → T3.5 live total_kills/duration модели DONE 2026-05-16 (v1 OD-only; v2 с Stratz через 7d) →
-  T4 динамическая форма → T5 ELO-decomp → T6 стили команд →
-  T7 entropy + side preference → T8 A vs B сравнение →
-  T9 итоги → T10 букмекеры (параллельный трек) →
-  T11 чистка реплита → T12 (DONE 2026-05-16) trim replit.md.
+- **Большая ML-итерация (план T0→T12):**
+  T0 аудит DONE, T0.5a Stratz live DONE (waiting upstream), T1 ml-contract DONE,
+  T2 data-availability-rules DONE, T3.5 live totals DONE, T12 trim replit.md DONE.
+  T3/T4/T5/T6/T7 feature-services DONE 2026-05-16 как `services/features/teamProfile.ts`
+  + endpoint `/api/analytics/team-profile?teamId=N`. T8 A-vs-B DONE как
+  `/api/analytics/team-compare?teamAId=&teamBId=` (двойной profile + h2h + diff).
+  T9 итоги DONE как `/api/analytics/match-summary?matchId=N` (prematch_outcome +
+  calibration + market predictions + live snapshots). T10 Bovada wiring уже
+  работает в mobile (BookmakerDropdown в header, `filters.bookmaker`).
+  T11 cleanup частично (удалены PinnacleScraper.ts, TheOddsApiAdapter.ts, hello.ts).
+  T0.7 OD replay-parse — отложен, OD 429 на Replit-IP блокирует ingest.
+  **Дальше — audit + UI mobile screens поверх endpoints + тренировка моделей
+  (ТОЛЬКО после явного «да» от пользователя после проверки датасета).**
   **Принципы:** новые фичи не катим в прод сразу — сначала наполняем БД до ~100%,
   потом одна выборка 365d, потом обучение. Никаких фейк-данных. Каждая фаза —
   явный «да» от пользователя.

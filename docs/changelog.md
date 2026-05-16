@@ -3,6 +3,54 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-16 (ночь) — T3–T11 endpoints + cleanup
+
+Завершён массовый scaffolding T3-T11 без новых ML-тренировок (по правилу
+«сначала данные, потом обучение»).
+
+**Новый сервис** `artifacts/api-server/src/services/features/teamProfile.ts` —
+агрегирует T3-T7 фичи команды одним вызовом, fail-soft по секциям, pure SQL:
+- T3 **seriesMomentum** — активная серия из `bo3_series` + winrate последних серий
+- T4 **dynamicForm** — 30d/90d winrate + recency-weighted exp-decay + winStreak
+- T5 **eloDecomp** — `avg(player_ratings)` по составу + tierLevel 1/2/3 от `teams.rating`
+- T6 **styles** — avgDuration/firstBloodRate/kills для pace + aggression label
+- T7 **entropy** — Shannon-нормализованная по picks + radiantBias side-preference
+
+**Новые HTTP endpoints в `routes/analytics.ts`:**
+- `GET /api/analytics/team-profile?teamId=N` — отдаёт TeamProfile целиком
+- `GET /api/analytics/team-compare?teamAId=&teamBId=` (**T8**) — два профиля +
+  `team_h2h` (period_days DESC) + diff-сводка (ratingDelta, weightedFormDelta,
+  avgPlayerRatingDelta, tier A/B)
+- `GET /api/analytics/match-summary?matchId=N` (**T9**) — `prematch_outcome` +
+  calibration (`hit`/`delta`) + последние market predictions свёрнутые по
+  marketType + агрегат live_snapshots (first/last/count/lastGameTime)
+
+Smoke-test реальных данных: PARIVISION (id=9572001) — tier-3, weighted form 71%,
+entropy 0.93, win streak 6, 6 known players. compare PARIVISION vs Team Falcons
+отдаёт оба профиля + diff. match-summary 8813650766 показывает LR-v2 prematch
+prob 0.60 → LightGBM v3 переобновил до 0.65 через минуту live.
+
+**T10 Bovada wiring** — уже работало: `BookmakerDropdown` в header
+`app/(tabs)/index.tsx`, `filters.bookmaker` в `applyFilters` мержит маркеты
+через `rebuildMarketsForBookmaker`. Доделывать нечего пока букмекер один.
+
+**T11 cleanup (частично):**
+- Удалён `artifacts/api-server/src/services/PinnacleScraper.ts` (0 импортов).
+  `/api/odds/pinnacle/dota2` → stub, отдаёт `noData:true`, чтобы старые клиенты
+  не падали на 404.
+- Удалён `artifacts/mobile/services/adapters/TheOddsApiAdapter.ts` (0 импортов).
+- Удалён `scripts/src/hello.ts` (template-заглушка).
+- Inactive lgbm/lr модели в `model_versions` НЕ трогаем — риск регресса.
+
+**T0.7 OD replay-parse** — отложен: OD 429 на Replit-IP блокирует ingest
+запросов на post-mortem replay. Вернёмся когда лимит освободится или будет
+прокси.
+
+**Что отложено до явного «да» от пользователя:** mobile-экраны
+(`app/match/compare/[a]-[b].tsx`, `app/match/[id]/summary.tsx`) поверх новых
+endpoints, и любая ML-тренировка. По правилу из replit.md — сначала аудит
+датасета, потом одна выборка 365d, потом обучение.
+
 ## 2026-05-16 (поздний вечер) — T3.5 live totals LightGBM
 
 До T3.5 показатели «прогноз тоталов на live» были экстраполяцией темпа

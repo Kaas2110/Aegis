@@ -1,59 +1,20 @@
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
-import { fetchPinnacleDotaOdds } from '../services/PinnacleScraper';
 import { getApiKey } from '../services/ApiKeysService';
-import { db, oddsSnapshotsTable } from '@workspace/db';
 
 const router: IRouter = Router();
 
-let pinnacleCache: { data: unknown[]; fetchedAt: number } = { data: [], fetchedAt: 0 };
-const PINNACLE_CACHE_MS = 60_000;
-
-router.get('/pinnacle/dota2', async (req, res) => {
-  // Кеш на минуту чтобы не спамить Pinnacle
-  if (Date.now() - pinnacleCache.fetchedAt < PINNACLE_CACHE_MS && pinnacleCache.data.length > 0) {
-    res.json({
-      noData: false,
-      source: 'pinnacle',
-      cached: true,
-      data: pinnacleCache.data,
-    });
-    return;
-  }
-
-  try {
-    const odds = await fetchPinnacleDotaOdds();
-    pinnacleCache = { data: odds, fetchedAt: Date.now() };
-
-    // Параллельно пишем снапшоты в БД для бэктеста (best-effort, ошибки игнорируем)
-    if (odds.length > 0) {
-      try {
-        await db.insert(oddsSnapshotsTable).values(
-          odds.map(o => ({
-            bookmaker: 'pinnacle',
-            externalEventId: o.externalEventId,
-            team1Name: o.team1Name,
-            team2Name: o.team2Name,
-            marketType: 'match_winner',
-            odds1: o.odds1,
-            odds2: o.odds2,
-          })),
-        );
-      } catch (err) {
-        req.log.warn({ err }, 'pinnacle snapshot insert failed (non-fatal)');
-      }
-    }
-
-    res.json({
-      noData: odds.length === 0,
-      source: 'pinnacle',
-      warning: 'Парсер Pinnacle — best-effort, может не работать. На продакшене нужен платный поставщик.',
-      data: odds,
-    });
-  } catch (err) {
-    req.log.error({ err }, 'Pinnacle scraper error');
-    res.status(503).json({ error: 'Pinnacle недоступен', noData: true, data: [] });
-  }
+// Pinnacle scraper удалён 2026-05-16 (T11 cleanup): на Replit-IP сайт даёт
+// 403 + требует guest API key. Эндпоинт оставлен как stub чтобы старые клиенты
+// не падали на 404; возвращает пустой массив. Если когда-нибудь дойдут руки до
+// PINNACLE_GUEST_API_KEY — вернуть нормальный fetch.
+router.get('/pinnacle/dota2', (_req, res) => {
+  res.json({
+    noData: true,
+    source: 'pinnacle',
+    warning: 'Pinnacle отключён (T11 cleanup, см. docs/changelog.md). Используйте Bovada через /api/bookmakers.',
+    data: [],
+  });
 });
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
