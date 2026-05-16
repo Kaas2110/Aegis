@@ -689,6 +689,7 @@ export default function MatchDetailScreen() {
                         direTeamId={t2Id}
                         type={ladderType}
                         format={fmt}
+                        matchId={typeof match.id === 'string' ? Number(match.id) || null : match.id}
                         liveCurrent={liveCurrent}
                         liveMinute={liveMinute}
                       />

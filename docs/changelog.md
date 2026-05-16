@@ -39,11 +39,17 @@ schema migration). Fail-soft — circuit-breaker MarketLgbm покрывает.
 api-server, формулы обязаны быть байт-в-байт идентичны (та же дисциплина
 ml-contract §3 для LR↔LightGBM). См. doc-comment в обеих копиях.
 
+**Mobile UI интеграция (доделано тем же днём):**
+`GET /api/analytics/totals-ladder` получил опциональный `matchId`. Если матч в
+live + есть строка `predictions[market_type IN
+('live_total_kills','live_total_duration')]` свежее 180с — бэк подменяет
+прематч-LGB `(mean, std)` на эту запись, отдаёт `liveSource: true,
+modelVersion: lgbm-live_total_*-...` и `confidence: 0.78`. `TotalsLadder.tsx`
+теперь передаёт `matchId={match.id}` и при `liveSource` показывает бейдж
+«⚡ live-модель (по текущему счёту/нетворту)». Прематч-режим и матчи без
+свежего снапшота продолжают работать на прематч-LGB как раньше.
+
 **Не сделано в T3.5 (выносится в follow-up):**
-- Mobile UI чтение `live_total_kills`/`live_total_duration` из predictions
-  (сейчас данные пишутся, но компоненты тоталов по-прежнему используют
-  prematch market_total_kills/duration). Добавить в TotalsLadder ветку
-  «live mode → бери последнюю predictions строку с marketType=live_total_*».
 - v2 feature set с Stratz xpAdvantage_kxp / networthAdvantage_kgold после
   накопления `live_snapshots.stratz_match_meta` (~7 дней).
 - 50% interval из quantile моделей (как у `market_total_duration_q25/q75`) —

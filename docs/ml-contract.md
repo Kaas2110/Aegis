@@ -322,6 +322,9 @@ Mobile parses `version` как opaque строку (для отображени�
    `LiveWorker.ts` (пишет 2 строки в `predictions` per snapshot:
    `marketType='live_total_kills'|'live_total_duration'`, `modelProbTeam1=mean`,
    `modelProbTeam2=std` в log-space — переиспользование колонок без миграции).
+   UI-путь: `GET /api/analytics/totals-ladder?matchId=...` в live-режиме
+   подменяет прематч-LGB на эту строку если она ≤180с — бэк отдаёт
+   `liveSource:true`, UI рендерит бейдж «⚡ live-модель».
    Feature view v1 (7 фич, OD-only): `[bias, game_min, kills_so_far,
    kill_rate_per_min, kill_diff_abs, nw_lead_kgold, building_state_norm]`.
    **Parity invariant:** `scripts/src/train-live-totals.ts::buildLiveTotalsFeatures`

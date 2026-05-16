@@ -659,6 +659,14 @@ router.get('/totals-ladder', async (req, res) => {
     res.status(400).json({ error: 'radiantTeamId & direTeamId must be different positive integers' });
     return;
   }
+  // Опциональный matchId — нужен для подмены прематч-LGB на T3.5 live-totals
+  // предсказание из таблицы predictions. Без matchId или для прематч-вкладки
+  // продолжаем отдавать прематч log-normal. Жёсткий safe-integer guard:
+  // OpenDota match_id сейчас ~8·10⁹ (внутри Number.MAX_SAFE_INTEGER=9·10¹⁵),
+  // но защищаемся на будущее от silent precision loss.
+  const matchIdParam = req.query.matchId != null ? Number(req.query.matchId) : null;
+  const matchId = matchIdParam != null && Number.isSafeInteger(matchIdParam) && matchIdParam > 0
+    ? matchIdParam : null;
   const formatRaw = String(req.query.format ?? 'BO3');
   if (formatRaw !== 'BO1' && formatRaw !== 'BO3' && formatRaw !== 'BO5') {
     res.status(400).json({ error: 'format must be BO1, BO3 or BO5' });
@@ -748,10 +756,52 @@ router.get('/totals-ladder', async (req, res) => {
   // реальных команд. Если LGB не обучен для пары — возвращаем unavailable.
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
   const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
-  const lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
+  let lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
   const lgbQ25 = type === 'duration' ? lgb?.totalDurationLogQ25 ?? null : null;
   const lgbQ75 = type === 'duration' ? lgb?.totalDurationLogQ75 ?? null : null;
   const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
+
+  // T3.5 override: для live-вкладки если есть свежее (≤180s) предсказание
+  // `live_total_kills`/`live_total_duration` в таблице predictions — берём его
+  // (mean,std) ВМЕСТО прематч-LGB. modelProbTeam1=mean, modelProbTeam2=std в
+  // log-space (см. LiveWorker T3.5 блок). Запись идёт каждый poll (~60s).
+  let modelVersion = 'lightgbm-market';
+  let confidence = 0.72;
+  let liveSource = false;
+  if (isLive && matchId != null) {
+    try {
+      const marketType = type === 'kills' ? 'live_total_kills' : 'live_total_duration';
+      const rows = await db
+        .select({
+          mean: predictionsTable.modelProbTeam1,
+          std: predictionsTable.modelProbTeam2,
+          version: predictionsTable.modelVersion,
+          predictedAt: predictionsTable.predictedAt,
+        })
+        .from(predictionsTable)
+        .where(and(
+          eq(predictionsTable.matchId, matchId),
+          eq(predictionsTable.marketType, marketType),
+        ))
+        .orderBy(desc(predictionsTable.predictedAt))
+        .limit(1);
+      if (rows.length > 0) {
+        const ageSec = (Date.now() - new Date(rows[0].predictedAt).getTime()) / 1000;
+        // Защита от мусора в БД: применяем override только если mean/std конечны
+        // и std положительный. Иначе тихо падаем на прематч (а не ломаем UI).
+        const meanOk = Number.isFinite(rows[0].mean);
+        const stdOk = Number.isFinite(rows[0].std) && rows[0].std > 0;
+        if (ageSec <= 180 && meanOk && stdOk) {
+          lgbLogN = { mean: rows[0].mean, std: Math.max(1e-3, rows[0].std) };
+          modelVersion = rows[0].version;
+          confidence = 0.78; // live-фичи живут на свежем снапшоте, доверие чуть выше
+          liveSource = true;
+        }
+      }
+    } catch (err) {
+      req.log.warn({ err, matchId, type }, 'totals-ladder: live override lookup failed');
+    }
+  }
 
   if (!lgbLogN) {
     res.json({
@@ -793,8 +843,9 @@ router.get('/totals-ladder', async (req, res) => {
           q75: Number(Math.exp(lgbQ75).toFixed(2)),
         }
       : null,
-    confidence: 0.72,
-    modelVersion: 'lightgbm-market',
+    confidence,
+    modelVersion,
+    liveSource,
     generatedAt: new Date().toISOString(),
   });
 });

@@ -420,6 +420,9 @@ export const predictionsTable = pgTable('predictions', {
 }, (t) => ({
   matchIdx: index('predictions_match_idx').on(t.matchId),
   modelIdx: index('predictions_model_idx').on(t.modelVersion),
+  // Composite для T3.5 live-override lookup в /api/analytics/totals-ladder:
+  // WHERE match_id=? AND market_type=? ORDER BY predicted_at DESC LIMIT 1.
+  matchMarketLatestIdx: index('predictions_match_market_latest_idx').on(t.matchId, t.marketType, t.predictedAt),
 }));
 
 // ── СНАПШОТЫ КОЭФФИЦИЕНТОВ (Pinnacle и др.) ──────────────────────────────

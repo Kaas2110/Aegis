@@ -25,6 +25,7 @@ interface LadderResponse {
   interval: null | { q25: number; q75: number };
   confidence: number;
   modelVersion: string;
+  liveSource?: boolean;
   unavailable?: boolean;
   unavailableReason?: string;
   generatedAt: string;
@@ -35,6 +36,9 @@ interface Props {
   direTeamId: number;
   type: TotalsType;
   format?: 'BO1' | 'BO3' | 'BO5';
+  /** OpenDota match_id текущего матча. Нужен в live-режиме, чтобы бэк подменил
+   * прематч-LGB на свежее T3.5 live-totals предсказание из таблицы predictions. */
+  matchId?: number | null;
   liveCurrent?: number | null;
   liveMinute?: number | null;
   defaultExpanded?: boolean;
@@ -47,7 +51,7 @@ const TYPE_LABEL: Record<TotalsType, { title: string; unit: string }> = {
 
 export function TotalsLadder({
   radiantTeamId, direTeamId, type, format = 'BO3',
-  liveCurrent, liveMinute, defaultExpanded = true,
+  matchId, liveCurrent, liveMinute, defaultExpanded = true,
 }: Props) {
   const colors = useColors();
   const [data, setData] = useState<LadderResponse | null>(null);
@@ -71,6 +75,9 @@ export function TotalsLadder({
       params.set('liveCurrent', String(liveCurrent));
       params.set('liveMinute', String(liveMinute));
     }
+    if (matchId != null && Number.isSafeInteger(matchId) && matchId > 0) {
+      params.set('matchId', String(matchId));
+    }
 
     fetch(`/api/analytics/totals-ladder?${params.toString()}`)
       .then(async r => {
@@ -81,7 +88,7 @@ export function TotalsLadder({
       .catch(e => { if (!cancelled) { setError(String(e?.message ?? e)); setLoading(false); } });
 
     return () => { cancelled = true; };
-  }, [radiantTeamId, direTeamId, type, format, liveCurrent, liveMinute]);
+  }, [radiantTeamId, direTeamId, type, format, matchId, liveCurrent, liveMinute]);
 
   const meta = TYPE_LABEL[type];
 
@@ -100,6 +107,11 @@ export function TotalsLadder({
               ? `${data.lines.length} линий вокруг ${data.expectedValue.toFixed(1)}${meta.unit}`
               : meta.title}
           </Text>
+          {data?.liveSource && (
+            <Text style={[styles.subline, { color: colors.primary }]} numberOfLines={1}>
+              ⚡ live-модель (по текущему счёту/нетворту)
+            </Text>
+          )}
           {data?.projection && (
             <Text style={[styles.subline, { color: colors.mutedForeground }]} numberOfLines={1}>
               {type === 'kills'
