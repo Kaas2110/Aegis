@@ -24,25 +24,29 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 |---|---|
 | `ingest:teams` | OpenDota team ratings (~1000 команд) |
 | `ingest:matches [pages=20]` | Pro matches (~100/page, 1.1s/req) |
-| `ingest:leagues` | Lague names → `leagues` table |
+| `ingest:leagues` | League names → `leagues` table |
 | `ingest:hero-stats` | Hero meta winrates / pickrates. Stratz-supplemented если есть `STRATZ_TOKEN` |
-| `ingest:hero-matchups` | Hero-vs-hero матрица. Stratz-primary (1 запрос, ~3.5s, ~16k пар, бракет DIVINE_IMMORTAL) с OpenDota fallback (138 запросов, инкрементально). Флаги `--no-stratz` / `--no-fallback`. ⚠️ matchCount шкала ≠ OpenDota — после смены источника требует `train:lightgbm` |
+| `ingest:hero-matchups` | Hero-vs-hero матрица. Stratz-primary (1 запрос, ~3.5s, ~16k пар, бракет DIVINE_IMMORTAL) с OpenDota fallback. Флаги `--no-stratz` / `--no-fallback`. ⚠️ matchCount шкала ≠ OpenDota — после смены источника требует `train:lightgbm` |
+| `ingest:hero-synergy` | Hero pair synergy table |
 | `ingest:drafts [limit]` | Picks/bans + radiant/dire account_ids. Stratz-primary с `STRATZ_TOKEN` (4× быстрее) |
 | `ingest:players-heroes` | Per-player per-hero stats (7-day freshness). Stratz-primary с `STRATZ_TOKEN` |
 | `compute:recent-form` | Recompute `team_recent_form` (30/90-day) |
 | `compute:h2h` | Recompute `team_h2h` (365-day) |
 | `compute:player-glicko` | Glicko-1 (c=63, period=30d). Идемпотентно; `--reset` пересоздаёт |
 | `compute:bo3-series [days=180]` | Aggregate `bo3_series` |
+| `compute:team-extended` | Team extended snapshot features |
 | `train:model` | Atomic swap всех v1+v2+v3 prematch LR моделей (fallback baseline) |
-| `train:lightgbm [-- --label v3/t1]` | Wave 4 LightGBM prematch (через ml-service). Атомарный per-bucket swap |
-| `train:market-models [-- --market <name>]` | Wave 4/5 LightGBM derived-market (FB / total_kills / total_duration ± q25/q75). Alias `total_duration_quantiles` обучает оба квантиля |
+| `train:lightgbm [LIGHTGBM_KINDS=v3/fallback,...]` | LightGBM prematch (через ml-service). Атомарный per-bucket swap. Лог печатает `IMPORTANCE top15`, `DRIFT (>10%)`, `LABEL train/test radiantWR` |
+| `train:market-models [-- --market <name>]` | LightGBM derived-market (FB / total_kills / total_duration ± q25/q75) |
 | `train:live-model` | Live-winner из `live_snapshots × prematch_outcomes` |
 | `backfill:live-snapshots [-- --limit N]` | Backfill из OpenDota `/api/matches/{id}` для пустых live-окон |
 
 **Required env:** `DATABASE_URL`. **Optional:** `ODDS_API_KEY`, `STRATZ_TOKEN`,
 `PANDASCORE_API_KEY`, `PINNACLE_GUEST_API_KEY`, `ADMIN_TOKEN`, `DISABLE_LIVE_WORKER`,
-`DISABLE_SCHEDULER`, `DISABLE_AUTO_RETRAIN`, `BOOKMAKERS_ENABLED` (default false),
-`PROXY_URL` (РФ-прокси для букмекеров с не-РФ IP), `AUTO_DB_PUSH=false`.
+`DISABLE_SCHEDULER`, `DISABLE_AUTO_RETRAIN`, `BOOKMAKERS_ENABLED` (default true),
+`PROXY_URL` (РФ-прокси для букмекеров с не-РФ IP), `AUTO_DB_PUSH=false`,
+`SESSION_SECRET` (обязателен для admin + user-auth токенов),
+`ML_SERVICE_URL` (default `http://localhost:8090`), `ML_SERVICE_TOKEN` (иначе ml-service пишет ephemeral в `/tmp/aegis_ml_token`).
 
 **STRATZ_TOKEN** — бесплатный JWT с stratz.com/api (вход через Steam). 250 req/min /
 20 000 req/day **на токен**. На Replit Node fetch блокируется Cloudflare (TLS JA3); клиент
@@ -64,142 +68,31 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 
 - **Live ML predictions** на текущих pro-матчах (обновление каждые 60s).
   Live-винер модель обучена на `live_snapshots × prematch_outcomes`.
-- **Match-winner model** обучен на OpenDota historical pro matches (LightGBM v3 +
-  LR fallback, маршрутизация по tier и наличию draft + account_ids). Текущие
-  метрики (2026-05-14): LightGBM v3 fallback test_acc=79.5% brier=0.160; LR v3
-  fallback acc=78.5% brier=0.162. Live-винер lr-live-v8: acc=70.5% vs прематч
-  baseline 55.2% (Δ=+15.3 п.п.).
+- **Match-winner model** (LightGBM v3 + LR fallback, маршрутизация по tier и
+  наличию draft + account_ids). Историческую метрику и обзор фичей см.
+  `docs/ml-feature-audit.md` и `docs/changelog.md`. ⚠️ Сравнения acc между
+  retrain'ами **некорректны без поправки** на (a) drift test split (по времени),
+  (b) LightGBM run-to-run variance ±2-3 п.п. на маленьких bucket'ах.
 - **15 mathematical models** для derivative markets (FB, total_kills, total_duration
   ± q25/q75 квантили).
-- **Bookmaker odds aggregation** (когда настроено — сейчас скрыто в UI, см.
-  Bookmakers roadmap в `docs/architecture.md`).
+- **Bookmaker odds aggregation** — Bovada работает с Replit-IP; 6 РФ-источников
+  написаны по документации, активируются автоматически с РФ-IP в проде.
 - **Тоталы (kills/duration)** показываются ladder-UI (несколько линий ТБ/ТМ).
   Эндпоинт `/api/analytics/totals-ladder?type=kills|duration&radiantTeamId=&direTeamId=&...`
   отдаёт массив линий с вероятностью модели; на live центрируется вокруг проекции
   текущего темпа. Компонент `components/TotalsLadder.tsx`.
 - **Quantile duration models** (LightGBM α=0.25/0.75) загружаются `MarketLgbm`
   параллельно с regression-моделями и экспонируются как `totalDurationLogQ25`/
-  `totalDurationLogQ75` в `predictMarketsFor()` — непараметрический 50% interval
-  для будущей калибровки ladder без допущения о log-нормали. Метаданные пишутся
-  под каноническим ключом `task_type` (legacy `taskType` оставлен как алиас).
+  `totalDurationLogQ75` в `predictMarketsFor()` — непараметрический 50% interval.
 
-### Перерыв между картами + честные прогнозы (DONE 2026-05-15)
+### API endpoints (контракт)
 
-Серия BO3/BO5 после конца карты висит в "перерыве" 1–5 мин до старта следующей.
-В это окно OD и PandaScore рассинхронизированы: OD ещё помнит прошлую карту
-(может вернуть `game_time>0` и старый draft), PandaScore уже показывает новую
-(`begin_at` будущее). Раньше UI видел "ЛАЙВ N:NN" со старыми героями и 50/50
-прогнозом — пользователь не понимал, что происходит.
-
-**Server (`routes/matches.ts`):**
-- `enrichWithPandaScoreRunning` сравнивает OD live + PS running с tolerance 60s.
-  Если PS считает матч начавшимся, а OD ещё показывает старую карту — ставим
-  `between_maps: true` на OD-объекте.
-- `psRunningToLiveShape` (PS-only fallback) тоже проставляет `between_maps`
-  если `begin_at > now`.
-- `enrichLiveMatchesWithDrafts` пропускает `between_maps:true` матчи (OD-драфт
-  принадлежит прошлой карте, не новой — лучше показать пусто).
-
-**Mobile:**
-- `MatchStatus = 'live' | 'between_maps' | ...` (новый статус).
-- `MatchCard` рисует пилюлю «ПЕРЕРЫВ» вместо «ЛАЙВ N:NN», скрывает counter.
-- Detail header показывает «ПЕРЕРЫВ» + score по картам (не по убийствам).
-- Detail tab «Прогнозы» показывает «Прогноз недоступен — перерыв».
-- HomeScreen фильтр «Live» включает `between_maps` (UX: пользователь идентифицирует
-  «идущую серию», не отдельную карту).
-- `NotificationService.isLiveLike` тоже включает `between_maps` для алертов.
-
-### Map_winner labelRu + честный draft (DONE 2026-05-15)
-
-Три связанных бага: (1) на 3-й карте серии 1-1 рынок назывался «Победитель карты 1»
-(сервер хардкодил mapNumber=1); (2) match_winner регулярно был 50/50 даже когда
-ELO команд явно разный; (3) Draft Score block был полностью скрыт, что
-дезориентировало пользователя.
-
-**Root cause 50/50:** `openDotaToMatch` в LiveDataService строил `draftFromOd` со
-**stub-значениями 0.5/0.5** для synergy/counter/scaling/early (реальные эти
-метрики на бэке не считаются — нужна hero_matchups агрегация которой нет).
-Мобилка слала их в `/api/analytics/predict` как `draft.synergy1=0.5,...`, и
-`BetTypeModels.predictMatchWinner` тянул вероятность к 50/50 через дрэфт-фактор.
-
-**Fixes:**
-- `AnalyticsEngine.MatchInput.seriesContext` теперь принимает `currentMapNumber`.
-  `runAnalytics` передаёт его в `predictMapWinner(fv, mapNumber)`. Дефолт —
-  `s1+s2+1` (вычисляется из счёта серии).
-- Мобилка (`fetchAnalytics` в `LiveDataService.ts`) шлёт `seriesContext`
-  с `seriesScore1/2 + currentMapNumber` из `match.team{1,2}MapsWon` и
-  `match.currentMapNumber`.
-- Мобилка **НЕ шлёт stub-draft**: если все 8 значений === 0.5, поле `draft`
-  опускается → сервер падает на чистый ELO + form + h2h, отдаёт честные 47/53
-  вместо тянутых-к-50% значений.
-- Detail screen: блок Draft Score больше не скрывается на stub'е, а показывает
-  ActivityIndicator + честный текст «Синергия и контрпики считаются по таблице
-  героев на бэкенде — для этого матча данные ещё не готовы». Пользователь видит,
-  что фича существует и почему пусто.
-
-**TODO (future):** реальные synergy/counter/scaling/early считать на бэке из
-`hero_matchups` + `hero_stats` + draft picks (есть в схеме, не используется в
-`/predict`). Тогда блок будет наполняться реальными цифрами автоматически.
-
-### UX поведение списка (DONE 2026-05-14, v2)
-
-`fetchLiveData(cbs)` поддерживает прогрессивную отрисовку с параллельным
-обогащением и ordered emission:
-
-1. **Сразу после `/api/matches/live` + `/api/matches/upcoming`** колбэк `onShellsReady`
-   получает «скелеты» матчей (live + prematch) — карточки появляются в UI мгновенно,
-   без ожидания ML-предсказаний. Под карточками без прогноза `MatchCard.tsx` показывает
-   плейсхолдер «Данные собираются, скоро выдадим прогноз» с ActivityIndicator.
-2. **Bounded parallel pool (concurrency=3)** обогащает одновременно live + prematch.
-   Воркеры берут jobs из общей очереди (live первыми, prematch следом). Прематч-предикты
-   кэшируются на сервере 4 часа (`predict:prematch:${matchId}:${t1}:${t2}:${format}`),
-   поэтому повторные refresh почти бесплатны.
-3. **Ordered emission**: `onMatchEnriched(em, i)` вызывается строго в порядке index
-   (через буфер `results[]` + `nextEmit`). Быстрые прематчи могут завершиться раньше
-   медленного live, но UI обновляется сверху вниз — UX-инвариант «первая карточка
-   обновляется первой» сохраняется.
-4. **AbortSignal**: при новом `loadData` (interval / pull-to-refresh) старый цикл
-   отменяется; внутри fetchAnalytics локальный 5s timeout + поддержка внешнего signal.
-
-Сервер: `/api/matches/live` опрашивает OpenDota + Stratz `/League/live` + PandaScore
-`/running` параллельно (5s timeout), кэш 30с. PandaScore работает как fallback, если
-OpenDota упал. `/api/matches/upcoming` — PandaScore, кэш 60с.
-
-**BookmakerWorker (DONE 2026-05-14, smart wake-up 2026-05-15):**
-`services/BookmakerWorker.ts` — фоновый поллер букмекеров с тремя режимами,
-выбираются на каждом tick'е:
-- **live** — есть ≥1 live pro-матч → next tick через 3 мин
-- **wake_for_start** — live=0, ближайший upcoming стартует <60 мин → next tick на
-  `(begin_at + 30s)` (30s буфер на индексацию live API)
-- **idle** — live=0 и нет upcoming в окне 60 мин → next tick через 60 мин
-
-Воркер **полностью автономен** — не зависит от трафика клиентов. Делает loopback
-`fetch` к `/api/matches/live` и `/api/matches/upcoming` (через withCache, так что
-сам прогревает общий кэш для будущих запросов клиентов; никакой дублирующей
-upstream-нагрузки). Первый tick через 5s после старта (Express должен подняться).
-Per-source ошибки букмекеров скипаются silently (берём что собрали).
-
-ENV: `DISABLE_BOOKMAKER_WORKER=true` отключает. `BOOKMAKERS_ENABLED=false`
-тоже отключает. Stats: `GET /api/bookmakers/status` возвращает `worker: { startedAt,
-lastTickAt, lastMode, lastIntervalMs, lastDurationMs, lastSources[], ticks, errors }`.
-Лог: `[bookmaker-worker] tick complete` с mode/liveMatches/intervalMs/sources.
-
-**Per-match lookup:** `GET /api/bookmakers/for-match?team1=X&team2=Y[&team1Id=&team2Id=]`
-— один in-memory lookup из кэша воркера для конкретной пары команд, корректно
-обрабатывает flip ориентации (winner / firstBlood). Skip silently: если ни один
-источник не имеет события — `{ found:false, sources:[] }`. Мобилка может дёргать
-параллельно для каждого отображаемого матча — нет апстрим-нагрузки. Когда РФ-IP
-хотя бы один из 6 РФ-источников начнёт отвечать — данные автоматически
-подтянутся для всех отображаемых пар без правок кода.
-
-**Live-воркер dedup (DONE 2026-05-14):** `LiveWorker.pollOnce` хеширует
-game_time + scores + radiant_lead + building_state + draft (sorted heroes/accounts)
-и пропускает матчи, у которых хеш не изменился с прошлого poll'а — снапшот не
-пишется, ML не считается (детерминистическая модель → тот же результат). In-memory
-`Map<matchId,hash>` чистится от завершённых матчей каждый тик. Stat
-`skippedUnchanged` в `getWorkerStats()`. Без этого на каждый 60s-tick OpenDota
-со stale-данными (пауза в матче, апстрим лагает) тратили CPU и плодили дубликаты
-в `live_snapshots` / `predictions`.
+- `GET /api/matches/live` (cache 30s) — OpenDota + Stratz `/League/live` + PandaScore `/running` параллельно с 5s timeout. Перерыв между картами помечается `between_maps:true`.
+- `GET /api/matches/upcoming` (cache 60s) — PandaScore.
+- `GET /api/bookmakers/for-match?team1=&team2=[&team1Id=&team2Id=]` — in-memory lookup букмекерского кэша.
+- `POST /api/auth/register|login|logout`, `GET /api/auth/me Authorization: Bearer <token>` — email/password auth, scrypt N=16384, stateless токен с HMAC SESSION_SECRET, TTL 30 дней. Per-IP throttle 20/15min.
+- `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/whoami` — HttpOnly session cookie `aegis_admin_session` против `ADMIN_TOKEN`. Все `/api/admin/*` и `POST /api/analytics/retrain` требуют этой сессии.
+- `POST /api/admin/refresh-all` — сбрасывает все withCache (matches:live/upcoming/heroes), workaround для застрявшего TTL.
 
 ## User preferences
 
@@ -209,96 +102,46 @@ game_time + scores + radiant_lead + building_state + draft (sorted heroes/accoun
 - Не платить за The Odds API на этом этапе
 - Букмекерский UI включён через **Bovada** (200 OK с Replit-IP, без ключа). Все 6 РФ-буков с
   Replit заблокированы (DNS / Cloudflare / 404), Pinnacle требует guest API key (нет).
-  `BOOKMAKERS_ENABLED` дефолт = true (opt-out через `=false`). Маркеты Bovada: Moneyline
-  (winner серии + Map 1/2), Total Maps, Under/Over Kills, Correct Score, Asian Handicap.
-  НЕ покрыто Bovada: Total Duration, First Blood — для них только наш прогноз.
-- `/api/bookmakers/matched/dota2` — fuzzy-match букмекерских ивентов с `teamsTable`
-  (по нормализованному имени + tag), группировка по упорядоченной паре team_id.
-- Admin кнопка «Обновить приложение» (`POST /api/admin/refresh-all`) сбрасывает
-  все withCache (`matches:live`, `matches:upcoming`, `matches:heroes`) — workaround
-  для dev/Replit-окружения, где TTL может «застрять» без live-нагрузки.
+  `BOOKMAKERS_ENABLED` дефолт = true. Маркеты Bovada: Moneyline (winner серии + Map 1/2),
+  Total Maps, Under/Over Kills, Correct Score, Asian Handicap. НЕ покрыто Bovada:
+  Total Duration, First Blood — для них только наш прогноз.
 - Алерты — только по `minConfidence` модели; `minEdge`/`minOdds` вернутся вместе с букмекерским UI
 - При проблемах с данными приоритет — показать актуальные матчи; ML-скоринг догружается
   сверху прогрессивно. Лимиты OpenDota тратим в первую очередь на то, что сейчас
   отображается у пользователя (live drafts), батчевые ingest'ы — фоном.
+- **Никаких фейковых/stub данных в UI.** Если поле недоступно — показываем «Данные недоступны»
+  или скрываем с прозрачным текстом «считается на бэке, для этого матча данные ещё не готовы».
+- **ML retrain — только когда новые фичи реально наполнены в БД** (см. правило в активном плане:
+  сначала ingest до ~100% покрытия, потом одна выборка 365d, потом обучение).
 
-## Логи (для прод-дебага)
+## Логи (структурный JSON через pino)
 
-Сервер пишет structured JSON через pino. Каждая запись имеет `tag` для фильтрации:
+Каждая запись имеет `tag` для фильтрации. Полный реестр тэгов и примеры grep —
+`docs/architecture.md`. Краткая таблица:
 
-| tag | где | поля |
-|---|---|---|
-| `req`/`res` | `pino-http` middleware | method, url, statusCode, responseTime |
-| `bookmaker` | `routes/bookmakers.ts::fetchSource` | source, events, durationMs, err |
-| `bookmaker-worker` | `services/BookmakerWorker.ts::tick` | mode, liveMatches, intervalMs, durationMs, totalEvents, sources[] |
-| `matched` | `GET /api/bookmakers/matched/dota2` | groups, eventsTotal, matchedToTeams, teamsLoaded, sourcesPolled |
-| `cache` | `lib/responseCache.ts::withCache` | key, ttlMs, durationMs, hit/miss/coalesced/filled/cleared |
-| `predict` | `services/PredictionModel.ts` | reason, radiantTeamId, direTeamId (для skip) |
-| `admin` | `routes/admin.ts` | action: refresh-all и др. |
-| `mobile` | `POST /api/client-logs` | type, eventName, screenName, sessionId, anonymousId, appVersion, platform |
-| `upstream` | `lib/loggedFetch.ts` | host, path, status, durationMs, bytes (новый helper, использовать для будущих fetch'ей) |
-
-Mobile (`services/logging/EventLogger.ts`) сохраняет события в `AsyncStorage`
-**и параллельно** ставит их в очередь `@dea_log_upload_queue`. Каждые 30s
-`flushLogQueue` шлёт батчи (до 50) в `POST /api/client-logs` — все мобильные
-ивенты приходят в общий поток server pino. Старт: `startLogUploader()` в
-`AppContext.useEffect` после `initLogger()`. Если бэк недоступен — батч
-возвращается в очередь.
-
-Пример фильтрации прод-логов:
-```bash
-# все запросы букмекеров с длительностью
-grep '"tag":"bookmaker"' logs.json | jq '{source, events, durationMs, err}'
-# что мобилки делали в проде
-grep '"tag":"mobile"' logs.json | jq '{eventName, screenName, sessionId}'
-# проблемные кэши (часто miss)
-grep '"\\[cache\\] miss"' logs.json | jq '.key' | sort | uniq -c
-```
+| tag | где |
+|---|---|
+| `req`/`res` | `pino-http` middleware |
+| `bookmaker` / `bookmaker-worker` / `matched` | букмекерские пайплайны |
+| `cache` | `lib/responseCache.ts::withCache` |
+| `predict` | `services/PredictionModel.ts` |
+| `admin` | `routes/admin.ts` |
+| `mobile` | `POST /api/client-logs` (мобильные ивенты через `services/logging/EventLogger.ts`, очередь `@dea_log_upload_queue`, флаш каждые 30s, батч 50) |
+| `upstream` | `lib/loggedFetch.ts` (helper для будущих fetch'ей) |
 
 ## Pointers
 
-- **`docs/business.md`** — ⭐ бизнес-описание (что это, для кого, как работает) на
-  понятном языке для не-инженеров.
-- **`docs/technical-overview.md`** — ⭐ краткий технический обзор для новых инженеров
-  (стек, эндпоинты, auth, кэш, воркеры).
-- **`docs/system-map.md`** — ⭐ системная карта связей: все источники → таблицы → фичи
-  → модели → рантайм. **Агент обязан читать перед любой архитектурной правкой.**
-- **`docs/architecture.md`** — полная архитектура: где что лежит, все API-эндпоинты,
-  admin & settings, Bookmakers roadmap, performance, architecture decisions, gotchas.
-- **`docs/changelog.md`** — историческая хронология крупных изменений (Wave 3/4/5,
-  миграция, automation, admin-web и т.д.).
+- **`docs/business.md`** — ⭐ бизнес-описание для не-инженеров.
+- **`docs/technical-overview.md`** — ⭐ краткий тех-обзор для новых инженеров.
+- **`docs/system-map.md`** — ⭐ системная карта связей: источники → таблицы → фичи →
+  модели → рантайм. **Агент обязан читать перед любой архитектурной правкой.**
+- **`docs/architecture.md`** — полная архитектура: эндпоинты, admin & settings,
+  Bookmakers roadmap, performance, decisions, gotchas, полный реестр log-тэгов.
+- **`docs/ml-feature-audit.md`** — текущий аудит фичей и моделей по бакетам.
+- **`docs/model-improvements-research.md`** — план улучшений ML.
+- **`docs/changelog.md`** — историческая хронология крупных изменений.
 - **`threat_model.md`** — модель угроз для security-сканов.
 - См. skill `pnpm-workspace` — структура монорепо, TypeScript, project references.
-
-## Email-аутентификация (DONE 2026-05-15)
-
-Добавлен User-auth (email + password) для мобильного клиента — Apple/Google
-Sign-In появятся только после публикации в App Store / Play.
-
-**Server (`routes/userAuth.ts`):**
-- `POST /api/auth/register` { email, password } → 201 `{ token, user }`
-- `POST /api/auth/login` { email, password } → 200 `{ token, user }`
-- `POST /api/auth/logout` → 200 `{ ok: true }` (stateless, для логирования)
-- `GET /api/auth/me` `Authorization: Bearer <token>` → `{ user }`
-
-Пароли: `scrypt(N=16384, keylen=64)` из `node:crypto`, хранение `${salt}$${hash}`.
-Токен: `${userId}.${expiresAtMs}.${hmacSha256(SESSION_SECRET)}` — stateless,
-TTL 30 дней. Login защищён от timing side-channel (всегда тратим время на verify).
-Per-IP throttle 20 попыток / 15 мин.
-
-**DB (`lib/db/src/schema/users.ts`):** таблица `app_users` (id, email,
-password_hash, created_at, last_login_at). Уникальный индекс по `lower(email)`.
-
-**Mobile:**
-- `services/AuthService.ts` — обёртка над AsyncStorage + fetch.
-- `context/AuthContext.tsx` — provider + hook `useAuth()`. На старте
-  гидратирует токен из AsyncStorage, в фоне дёргает `/me` чтобы проверить.
-- `app/auth.tsx` — экран логина / регистрации с переключателем mode.
-- `app/index.tsx` — роутинг: `onboarding → auth → (tabs)` (если не залогинен).
-- `app/(tabs)/settings.tsx` — карточка «Аккаунт» с email и кнопкой «Выйти».
-  Logout → `router.replace('/auth')`.
-
-ENV: `SESSION_SECRET` обязателен (используется и для admin-сессий).
 
 ## Roadmap (active)
 
@@ -311,3 +154,15 @@ ENV: `SESSION_SECRET` обязателен (используется и для a
   `BookmakerDropdown` подключить к header'у. Полный охват маркетов
   (winner/totals/firstBlood) для всех 6 букмекеров.
 - **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
+- **Большая ML-итерация (план T0→T12, активная сессия):**
+  T0 аудит фичей → T0.5 Stratz live (xp/buybacks/aegis/per-hero gold) →
+  T0.7 OpenDota replay-parse backfill → T1 docs/ml-contract.md →
+  T2 docs/data-availability-rules.md (90s/3min/25min пороги) →
+  T3 series momentum → T3.5 live total_kills/duration модели →
+  T4 динамическая форма → T5 ELO-decomp → T6 стили команд →
+  T7 entropy + side preference → T8 A vs B сравнение →
+  T9 итоги → T10 букмекеры (параллельный трек) →
+  T11 чистка реплита → T12 (DONE 2026-05-16) trim replit.md.
+  **Принципы:** новые фичи не катим в прод сразу — сначала наполняем БД до ~100%,
+  потом одна выборка 365d, потом обучение. Никаких фейк-данных. Каждая фаза —
+  явный «да» от пользователя.

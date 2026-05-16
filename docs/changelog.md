@@ -129,3 +129,121 @@ pro_matches × match_drafts (RD time-decay c=63, period=30d). 5-я v3-extra фи
 - Per-(rId,dId) кеш market-предсказаний 60s.
 - Wired в `routes/analytics.ts::popular-markets` (FB/totals override) и `totals-ladder`
   (per-line override через `probLogNormalOver`).
+
+## 2026-05-16 — T12: trim replit.md → changelog
+
+В рамках большой ML-итерации (план T0→T12) сжали `replit.md` со 313 до ~140 строк.
+Перенесены сюда DONE-блоки 2026-05-14 и 2026-05-15. В `replit.md` остался только
+живой контракт: stack, скрипты, env, API-эндпоинты, user preferences, pointers,
+активный roadmap.
+
+## 2026-05-15 — Email-аутентификация (User-auth)
+
+Добавлен User-auth (email + password) для мобильного клиента — Apple/Google
+Sign-In появятся только после публикации в App Store / Play.
+
+**Server (`routes/userAuth.ts`):**
+- `POST /api/auth/register` { email, password } → 201 `{ token, user }`
+- `POST /api/auth/login` { email, password } → 200 `{ token, user }`
+- `POST /api/auth/logout` → 200 `{ ok: true }` (stateless, для логирования)
+- `GET /api/auth/me` `Authorization: Bearer <token>` → `{ user }`
+
+Пароли: `scrypt(N=16384, keylen=64)` из `node:crypto`, хранение `${salt}$${hash}`.
+Токен: `${userId}.${expiresAtMs}.${hmacSha256(SESSION_SECRET)}` — stateless,
+TTL 30 дней. Login защищён от timing side-channel (всегда тратим время на verify).
+Per-IP throttle 20 попыток / 15 мин.
+
+**DB (`lib/db/src/schema/users.ts`):** таблица `app_users` (id, email,
+password_hash, created_at, last_login_at). Уникальный индекс по `lower(email)`.
+
+**Mobile:** `services/AuthService.ts` (AsyncStorage обёртка), `context/AuthContext.tsx`
+(`useAuth()` hook, гидратация токена + фоновый `/me` для проверки), `app/auth.tsx`
+(login/register с переключателем mode), `app/index.tsx` (роутинг
+`onboarding → auth → (tabs)`), карточка «Аккаунт» в `app/(tabs)/settings.tsx`
+с email и кнопкой «Выйти».
+
+ENV: `SESSION_SECRET` обязателен (используется и для admin-сессий).
+
+## 2026-05-15 — Перерыв между картами + честные прогнозы
+
+Серия BO3/BO5 после конца карты висит в "перерыве" 1–5 мин до старта следующей.
+В это окно OD и PandaScore рассинхронизированы: OD ещё помнит прошлую карту
+(может вернуть `game_time>0` и старый draft), PandaScore уже показывает новую
+(`begin_at` будущее). Раньше UI видел "ЛАЙВ N:NN" со старыми героями и 50/50
+прогнозом — пользователь не понимал, что происходит.
+
+**Server (`routes/matches.ts`):** `enrichWithPandaScoreRunning` сравнивает OD live +
+PS running с tolerance 60s. Если PS считает матч начавшимся, а OD ещё показывает
+старую карту — ставим `between_maps: true` на OD-объекте. `psRunningToLiveShape`
+(PS-only fallback) тоже проставляет `between_maps` если `begin_at > now`.
+`enrichLiveMatchesWithDrafts` пропускает `between_maps:true` матчи (OD-драфт
+принадлежит прошлой карте).
+
+**Mobile:** `MatchStatus = 'live' | 'between_maps' | ...`. `MatchCard` рисует
+пилюлю «ПЕРЕРЫВ» вместо «ЛАЙВ N:NN», скрывает counter. Detail header показывает
+«ПЕРЕРЫВ» + score по картам (не по убийствам). Detail tab «Прогнозы» — «Прогноз
+недоступен — перерыв». HomeScreen фильтр «Live» включает `between_maps`.
+`NotificationService.isLiveLike` тоже включает `between_maps`.
+
+## 2026-05-15 — Map_winner labelRu + честный draft
+
+Три связанных бага: (1) на 3-й карте серии 1-1 рынок назывался «Победитель карты 1»
+(сервер хардкодил mapNumber=1); (2) match_winner регулярно был 50/50 даже когда
+ELO команд явно разный; (3) Draft Score block был полностью скрыт.
+
+**Root cause 50/50:** `openDotaToMatch` в LiveDataService строил `draftFromOd` со
+**stub-значениями 0.5/0.5** для synergy/counter/scaling/early. Мобилка слала их
+в `/api/analytics/predict` как `draft.synergy1=0.5,...`, и
+`BetTypeModels.predictMatchWinner` тянул вероятность к 50/50.
+
+**Fixes:** `AnalyticsEngine.MatchInput.seriesContext` принимает `currentMapNumber`,
+дефолт `s1+s2+1`. Мобилка шлёт `seriesContext` с `seriesScore1/2 + currentMapNumber`.
+Мобилка **НЕ шлёт stub-draft**: если все 8 значений === 0.5, поле опускается → сервер
+падает на чистый ELO + form + h2h. Detail screen: блок Draft Score показывает
+ActivityIndicator + текст «Синергия и контрпики считаются на бэкенде — для этого
+матча данные ещё не готовы».
+
+TODO (future): реальные synergy/counter/scaling/early считать на бэке из
+`hero_matchups` + `hero_stats` + draft picks (есть в схеме, не используется в
+`/predict`). Тогда блок будет наполняться автоматически.
+
+## 2026-05-14 — UX поведение списка (v2): прогрессивная отрисовка + ordered emission
+
+`fetchLiveData(cbs)` поддерживает прогрессивную отрисовку с параллельным
+обогащением и ordered emission:
+
+1. После `/api/matches/live` + `/api/matches/upcoming` колбэк `onShellsReady`
+   получает скелеты — карточки появляются мгновенно, без ML. Под карточками
+   `MatchCard.tsx` показывает «Данные собираются, скоро выдадим прогноз».
+2. Bounded parallel pool (concurrency=3) обогащает live + prematch одновременно.
+   Прематч-предикты кэшируются на сервере 4 часа
+   (`predict:prematch:${matchId}:${t1}:${t2}:${format}`).
+3. Ordered emission: `onMatchEnriched(em, i)` вызывается строго в порядке index
+   через буфер. UX-инвариант «первая карточка обновляется первой» сохраняется.
+4. AbortSignal: новый `loadData` отменяет старый цикл; внутри fetchAnalytics
+   локальный 5s timeout + поддержка внешнего signal.
+
+## 2026-05-14 — BookmakerWorker (smart wake-up 2026-05-15)
+
+`services/BookmakerWorker.ts` — фоновый поллер букмекеров с тремя режимами:
+- **live** — есть ≥1 live pro-матч → next tick через 3 мин
+- **wake_for_start** — live=0, ближайший upcoming <60 мин → next tick на `(begin_at + 30s)`
+- **idle** — live=0 и нет upcoming в окне 60 мин → next tick через 60 мин
+
+Воркер автономен, делает loopback `fetch` к `/api/matches/live` и `/upcoming` через
+withCache. Первый tick через 5s после старта. Per-source ошибки скипаются silently.
+
+ENV: `DISABLE_BOOKMAKER_WORKER=true` или `BOOKMAKERS_ENABLED=false` отключают.
+Stats: `GET /api/bookmakers/status`. Лог: `[bookmaker-worker] tick complete`.
+
+**Per-match lookup:** `GET /api/bookmakers/for-match?team1=X&team2=Y[&team1Id=&team2Id=]`
+— in-memory lookup из кэша воркера, корректно flip ориентации (winner/firstBlood).
+Когда РФ-IP — 6 РФ-источников начнут отдавать данные автоматически без правок кода.
+
+## 2026-05-14 — Live-воркер dedup (skippedUnchanged)
+
+`LiveWorker.pollOnce` хеширует game_time + scores + radiant_lead + building_state +
+draft (sorted heroes/accounts) и пропускает матчи с неизменившимся хешем. In-memory
+`Map<matchId,hash>` чистится от завершённых матчей каждый тик. Stat
+`skippedUnchanged` в `getWorkerStats()`. Без этого на каждый 60s-tick OpenDota
+со stale-данными плодились дубликаты в `live_snapshots` / `predictions`.
