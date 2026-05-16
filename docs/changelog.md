@@ -3,6 +3,33 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-16 (ночь, 2) — Mobile screens поверх T8/T9 endpoints
+
+Два новых Expo-экрана + nav-кнопки в `app/match/[id].tsx`:
+
+- **`app/match/compare/[ids].tsx`** — T8 сравнение команд. Маршрут
+  `/match/compare/<aId>-<bId>`. Дёргает `/api/analytics/team-compare`, рендерит
+  две колонки (рейтинг, форма 30/90/weighted, состав/Glicko, стиль/pace,
+  энтропия пиков, side-bias) + H2H блок (winsA-winsB, период) + diff-сводка
+  «перевес в пользу A/B». Графа недоступна → em-dash в конкретной ячейке;
+  весь раздел скрывается если ни одна сторона не отдала данных.
+- **`app/match/summary/[id].tsx`** — T9 пост-матч сводка. Маршрут
+  `/match/summary/<matchId>`. Дёргает `/api/analytics/match-summary`,
+  показывает: prematch outcome (модель, вероятность Radiant, уверенность,
+  timestamp), факт+калибровка (победитель, счёт, длительность, попадание/Δ),
+  market predictions (свёрнутые по marketType с русскими подписями), агрегат
+  live snapshots (count, first/last, game time).
+
+**Навигация в `match/[id].tsx`:** к существующей кнопке `bar-chart`
+(сравнение коэффициентов) добавлены `users` (compare команд, показывается
+только при валидных числовых team1.id/team2.id) и `file-text` (summary). У
+всех трёх — `accessibilityLabel` + `accessibilityHint` для screen-reader'ов.
+
+**Code-review fixes:** убран синтез «Radiant vs Dire» когда обе команды null
+(теперь явный «Команды не указаны»), добавлены a11y props.
+
+mobile typecheck зелёный.
+
 ## 2026-05-16 (ночь) — T3–T11 endpoints + cleanup
 
 Завершён массовый scaffolding T3-T11 без новых ML-тренировок (по правилу

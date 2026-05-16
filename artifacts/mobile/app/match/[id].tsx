@@ -344,12 +344,47 @@ export default function MatchDetailScreen() {
           )}
         </View>
 
-        <TouchableOpacity
-          onPress={() => router.push({ pathname: '/market-compare/[id]', params: { id: match.id } })}
-          style={styles.compareBtn}
-        >
-          <Feather name="bar-chart" size={18} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {/* Сравнение команд (T8) — если у обеих сторон известен числовой teamId */}
+          {(() => {
+            const a = Number(match.team1.id);
+            const b = Number(match.team2.id);
+            if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) return null;
+            return (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/match/compare/[ids]', params: { ids: `${a}-${b}` } })}
+                style={styles.compareBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Сравнить команды"
+                accessibilityHint="Открыть детальное сравнение двух команд"
+              >
+                <Feather name="users" size={18} color={colors.primary} />
+              </TouchableOpacity>
+            );
+          })()}
+          {/* Сводка матча (T9) */}
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/match/summary/[id]', params: { id: match.id } })}
+            style={styles.compareBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Сводка матча"
+            accessibilityHint="Показать прогноз, факт и калибровку модели"
+          >
+            <Feather name="file-text" size={18} color={colors.primary} />
+          </TouchableOpacity>
+          {/* Сравнение коэффициентов */}
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/market-compare/[id]', params: { id: match.id } })}
+            style={styles.compareBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Сравнить коэффициенты букмекеров"
+          >
+            <Feather name="bar-chart" size={18} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── ВКЛАДКИ ───────────────────────────── */}
