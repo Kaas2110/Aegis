@@ -32,8 +32,8 @@ import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey
 import { requireAdminSession } from './adminAuth';
 import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, type SourceProbeResult } from './bookmakers';
 import { clearResponseCache } from '../lib/responseCache';
-import { db, modelVersionsTable } from '@workspace/db';
-import { desc, eq } from 'drizzle-orm';
+import { db, modelVersionsTable, matchParseQueueTable, matchParsedTable, proMatchesTable } from '@workspace/db';
+import { desc, eq, sql } from 'drizzle-orm';
 
 const router: IRouter = Router();
 
@@ -280,6 +280,59 @@ router.get('/models', async (_req, res) => {
     .where(eq(modelVersionsTable.isActive, true))
     .orderBy(desc(modelVersionsTable.createdAt));
   res.json({ models: rows });
+});
+
+// T0.7 visibility — статус очереди replay-парсинга.
+router.get('/parse-queue/stats', async (_req, res) => {
+  const byStatus = await db
+    .select({
+      status: matchParseQueueTable.status,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(matchParseQueueTable)
+    .groupBy(matchParseQueueTable.status);
+
+  const totals = await db
+    .select({
+      proMatchesTotal: sql<number>`COUNT(*)::int`,
+      proMatchesParsed: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.isParsed} = true)::int`,
+      proMatchesLast180d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= EXTRACT(EPOCH FROM NOW() - INTERVAL '180 days'))::int`,
+      proMatchesLast180dParsed: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= EXTRACT(EPOCH FROM NOW() - INTERVAL '180 days') AND ${proMatchesTable.isParsed} = true)::int`,
+    })
+    .from(proMatchesTable);
+
+  const parsedStats = await db
+    .select({
+      total: sql<number>`COUNT(*)::int`,
+      latestParsedAt: sql<Date | null>`MAX(${matchParsedTable.parsedAt})`,
+    })
+    .from(matchParsedTable);
+
+  const parsedBySchemaVer = await db
+    .select({
+      schemaVer: matchParsedTable.payloadSchemaVersion,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(matchParsedTable)
+    .groupBy(matchParsedTable.payloadSchemaVersion);
+
+  const oldestQueued = await db
+    .select({
+      matchId: matchParseQueueTable.matchId,
+      requestedAt: matchParseQueueTable.requestedAt,
+      attempts: matchParseQueueTable.attempts,
+    })
+    .from(matchParseQueueTable)
+    .where(eq(matchParseQueueTable.status, 'queued'))
+    .orderBy(matchParseQueueTable.requestedAt)
+    .limit(5);
+
+  res.json({
+    queue: byStatus,
+    proMatches: totals[0] ?? {},
+    parsed: { ...(parsedStats[0] ?? {}), bySchemaVer: parsedBySchemaVer },
+    oldestQueued,
+  });
 });
 
 export default router;

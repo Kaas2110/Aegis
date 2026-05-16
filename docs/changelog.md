@@ -3,6 +3,76 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-16 (день) — T0.5a Stratz live enrichment подключён
+
+Live snapshot теперь обогащается данными Stratz live API параллельно с OpenDota:
+
+- **Schema (live_snapshots)**: добавлены nullable JSONB-колонки `stratzMatchMeta`
+  (avgRank, gameState, gameMinute, delay, roshanRespawnSec, liveWinRateRadiant,
+  prematchWinRateRadiant, prematchDurationMin), `stratzPlayers` (массив 10
+  rich per-player записей: gold/networth/xpm/gpm/items/respawn/impPerMinute),
+  precomputed `xpAdvantage` (Σ R.xpm·gameMinute − Σ D.xpm·gameMinute) и
+  `networthAdvantage` (Σ R.networth − Σ D.networth), а также таймстамп
+  `stratzFetchedAt` (null если fetch упал).
+- **Client `lib/stratzLive.ts`**: GraphQL `live.match(id)` запрос; round-robin
+  токенов через `ApiKeysService.getStratzToken()`; fetch с 8s timeout, при
+  CF challenge — fallback на curl (зеркало `scripts/lib/stratz.ts`);
+  in-memory TTL=30s cache per matchId; circuit-breaker (20 подряд null →
+  30 мин cooldown, чтобы не выжигать квоту при пустом апстриме); INFO-лог
+  null'ов rate-limited 1/10.
+- **LiveWorker**: `fetchLiveMatchDetailBatch(changed.map(id), concurrency=4)`
+  параллельно с OD-парсингом, merge в snapshot row перед insert. Fail-soft —
+  упавший Stratz fetch → snapshot без Stratz-полей. Лог-тэг `stratz-live`
+  печатает `requested/enriched` каждый poll.
+
+**Cleanup**: `aegis_holder`, `buyback_log`, `vision_score`, `teamfight events`
+явно помечены **post-mortem only** (через OD replay-parse T0.7) во всех
+докуменациях — Stratz live их физически не отдаёт.
+
+**Текущий статус**: код активен, но Stratz live API эпизодически пуст
+(см. replit.md). Circuit breaker корректно отрабатывает. Поля начнут
+наполняться автоматически когда Stratz восстановит upstream.
+
+**Post-review исправления (architect feedback)**:
+- Breaker разделён по классу ошибки: `null_upstream` (20 подряд → 30 мин) и
+  `transport_error` (10 подряд → 5 мин). Раньше серия транзиентных 502 от
+  CF могла открыть 30-минутный cooldown даже при живом апстриме.
+- T0.7 `ingest:parsed` — три записи (match_parsed insert + pro_matches.is_parsed
+  update + queue.status update) обёрнуты в одну транзакцию. Раньше прерывание
+  процесса между ними оставляло несогласованное состояние.
+
+## 2026-05-16 (день) — OpenDota premium key + T0.7 infra (replay-parse)
+
+**OpenDota key подключён** во все 13 call sites (api-server: LiveWorker,
+OutcomeTracker, SchedulerWorker, routes/matches; scripts: ingest-{matches,
+teams,leagues,drafts,hero-stats,hero-matchups,players-heroes},
+backfill-live-snapshots). Helper `withOpenDotaKey(url)` в
+`artifacts/api-server/src/lib/openDotaUrl.ts` + `scripts/src/lib/openDotaUrl.ts`
+идемпотентно append'ит `?api_key=...`. Эффект сразу: 0 HTTP 429 в LiveWorker,
+`liveMatches` подскочило с 2-3 до 53 за poll, scheduler daily refresh проходит
+полностью без падений.
+
+**Фаза A backfill drafts**: новый флаг `--all-365d` у `ingest:drafts` снимает
+`MIN_AVG_GLICKO` фильтр и берёт ВСЕ матчи за последние 365 дней без драфта
+(~23 270 на момент запуска). Запущено в фоне через setsid (nohup в Replit
+tool shells живёт не дольше родительского bash).
+
+**T0.7 infra (replay-parse)** — управляемый pipeline:
+- Схема: `pro_matches.is_parsed`/`parsed_at` (2 новые колонки), `match_parse_queue`
+  (status: queued/parsed/failed/timeout, attempts, jobId), `match_parsed`
+  (одна JSONB-таблица с `payloadSchemaVersion` для эволюции схемы, поля
+  players/objectives/teamfights/draftTimings).
+- Скрипты: `parse:request` (POST /api/request/{id}, идемпотентно ставит в
+  очередь, дефолт 500 матчей за запуск с 0.5s rate-limit) + `ingest:parsed`
+  (для queued старше 90s тянет /matches/{id}, при version!=null сохраняет в
+  match_parsed; >2h в queued → timeout).
+- Admin endpoint `GET /api/admin/parse-queue/stats` — visibility статуса
+  очереди, покрытия (proMatchesParsed / proMatchesLast180dParsed), latest
+  parsedAt, oldest queued.
+- **НЕ подключено в scheduler** — ручной запуск до явного «да» от пользователя.
+- **НЕ тренируем модели** на новых post-mortem фичах до накопления покрытия
+  ≥80% за 180d (правило из replit.md).
+
 ## 2026-05-16 (ночь, 2) — Mobile screens поверх T8/T9 endpoints
 
 Два новых Expo-экрана + nav-кнопки в `app/match/[id].tsx`:

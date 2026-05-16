@@ -80,12 +80,67 @@ export const proMatchesTable = pgTable('pro_matches', {
   barracksStatusDire: integer('barracks_status_dire'),
   towerStatusRadiant: integer('tower_status_radiant'),
   towerStatusDire: integer('tower_status_dire'),
+  // T0.7 — флаг и таймстамп успешной replay-обработки OpenDota.
+  // is_parsed=true ⇔ есть строка в match_parsed для этого match_id.
+  isParsed: boolean('is_parsed').notNull().default(false),
+  parsedAt: timestamp('parsed_at', { withTimezone: true }),
   ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   startTimeIdx: index('pro_matches_start_time_idx').on(t.startTime),
   radiantTeamIdx: index('pro_matches_radiant_team_idx').on(t.radiantTeamId),
   direTeamIdx: index('pro_matches_dire_team_idx').on(t.direTeamId),
   seriesIdx: index('pro_matches_series_idx').on(t.series_id),
+  isParsedIdx: index('pro_matches_is_parsed_idx').on(t.isParsed),
+}));
+
+// ── T0.7: ОЧЕРЕДЬ ЗАПРОСОВ НА REPLAY-ПАРСИНГ OpenDota ───────────────────
+// Идемпотентный трекер запросов `POST /api/request/{matchId}`.
+// status: 'queued' (отправили request, ждём парсинга) | 'parsed' (готов,
+// данные в match_parsed) | 'failed' (request вернул не-200) | 'timeout'
+// (>2 часа в queued, OD не успел).
+export const matchParseQueueTable = pgTable('match_parse_queue', {
+  matchId: bigint('match_id', { mode: 'number' }).primaryKey(),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+  status: text('status').notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  // job_id из OD `POST /api/request/{matchId}` ответа.
+  jobId: bigint('job_id', { mode: 'number' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  statusIdx: index('match_parse_queue_status_idx').on(t.status),
+  requestedAtIdx: index('match_parse_queue_requested_at_idx').on(t.requestedAt),
+}));
+
+// ── T0.7: РАСПАРСЕННЫЕ ДАННЫЕ REPLAY ────────────────────────────────────
+// Одна строка на матч. Все JSONB поля — копия соответствующих секций из
+// OpenDota /api/matches/{id} после успешного парса (version != null).
+//
+// payloadSchemaVersion инкрементируется когда меняем структуру payload —
+// позволяет вычислять «нужно ли реингестить» при эволюции фичей.
+//
+// players: Array<10>, каждый элемент:
+//   { player_slot, account_id, hero_id, gold_t[], xp_t[], lh_t[], dn_t[],
+//     kills_log[], buyback_log[], purchase_log[], lane_role, is_roaming,
+//     obs_log[], sen_log[], ability_upgrades_arr[] }
+// objectives: Array<{ time, type, slot?, key?, team? }> — towers, roshans, aegis, FB
+// teamfights: Array<{ start, end, last_death, deaths, players[] }>
+// draftTimings: Array<{ order, pick, active_team, hero_id, player_slot,
+//                       extra_time, total_time_taken }>
+export const matchParsedTable = pgTable('match_parsed', {
+  matchId: bigint('match_id', { mode: 'number' }).primaryKey(),
+  parsedAt: timestamp('parsed_at', { withTimezone: true }).notNull().defaultNow(),
+  // Версия структуры payload (наша, не OD). Бамп при изменении набора сохраняемых полей.
+  payloadSchemaVersion: integer('payload_schema_version').notNull().default(1),
+  // Версия парсера OpenDota (поле `version` из /matches/{id}).
+  odVersion: integer('od_version'),
+  players: jsonb('players').notNull(),
+  objectives: jsonb('objectives'),
+  teamfights: jsonb('teamfights'),
+  draftTimings: jsonb('draft_timings'),
+}, (t) => ({
+  parsedAtIdx: index('match_parsed_parsed_at_idx').on(t.parsedAt),
+  schemaVerIdx: index('match_parsed_schema_ver_idx').on(t.payloadSchemaVersion),
 }));
 
 // ── ВЕРСИИ МОДЕЛЕЙ ────────────────────────────────────────────────────────

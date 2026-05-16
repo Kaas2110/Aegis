@@ -24,6 +24,8 @@
     "train:live-model": "tsx ./src/train-live-model.ts",
     "train:live-totals": "tsx ./src/train-live-totals.ts",
     "backfill:live-snapshots": "tsx ./src/backfill-live-snapshots.ts",
+    "parse:request": "tsx ./src/parse-request.ts",
+    "ingest:parsed": "tsx ./src/ingest-parsed.ts",
     "import:snapshot": "tsx ./src/import-snapshot.ts",
     "test:stratz": "tsx ./src/test-stratz.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -157,38 +157,66 @@ const cache = new Map<number, { at: number; value: StratzLiveDetail | null }>();
 // Чтобы не выжигать квоту/трафик на null-ответы, считаем подряд-null и при
 // пороге отрубаем Stratz на STRATZ_OFF_MS. Любой не-null ответ моментально
 // сбрасывает счётчик и возвращает enrichment в строй.
+// Разделяем breaker по классу ошибки (architect feedback):
+//   1) NULL-upstream (live.match=null) — длинный 30m cooldown, апстрим
+//      эпизодически пуст по своей воле, бессмысленно ретраить.
+//   2) Transport error (fetch/curl/parse fail) — короткий 5m cooldown,
+//      Stratz Cloudflare переменно блокирует, рано или поздно отпустит.
+// Раньше оба случая считались в один счётчик, и при серии транзиентных 502
+// breaker открывался на 30 минут даже если апстрим работал.
 let consecutiveNulls = 0;
+let consecutiveTransport = 0;
 let stratzDisabledUntil = 0;
+let lastBreakerReason: 'null_upstream' | 'transport_error' | null = null;
 const NULL_BREAKER_THRESHOLD = 20;
-const STRATZ_OFF_MS = 30 * 60_000; // 30 минут
-// Rate-limit для INFO-лога «match returned null»: чтобы при degraded Stratz
-// (50 матчей × каждый poll = 50 строк/мин до срабатывания брейкера) не
-// засорять логи. Один лог на NULL_LOG_EVERY_N null'ов.
+const TRANSPORT_BREAKER_THRESHOLD = 10;
+const STRATZ_OFF_MS_NULL = 30 * 60_000;       // 30 минут
+const STRATZ_OFF_MS_TRANSPORT = 5 * 60_000;   // 5 минут
 const NULL_LOG_EVERY_N = 10;
 let nullLogCounter = 0;
-function recordStratzOutcome(gotData: boolean): void {
-  if (gotData) {
-    if (consecutiveNulls >= NULL_BREAKER_THRESHOLD) {
+type StratzOutcome = 'ok' | 'null_upstream' | 'transport_error';
+function recordStratzOutcome(outcome: StratzOutcome): void {
+  if (outcome === 'ok') {
+    if (consecutiveNulls >= NULL_BREAKER_THRESHOLD || consecutiveTransport >= TRANSPORT_BREAKER_THRESHOLD) {
       logger.info({ tag: 'stratz-live' }, '[stratzLive] data is back, breaker reset');
     }
     consecutiveNulls = 0;
+    consecutiveTransport = 0;
     stratzDisabledUntil = 0;
+    lastBreakerReason = null;
     return;
   }
-  consecutiveNulls++;
-  if (consecutiveNulls === NULL_BREAKER_THRESHOLD) {
-    stratzDisabledUntil = Date.now() + STRATZ_OFF_MS;
-    logger.warn({ tag: 'stratz-live', cooldownMin: STRATZ_OFF_MS / 60_000 },
-      '[stratzLive] live API пуст ' + NULL_BREAKER_THRESHOLD + ' раз подряд → пауза');
+  if (outcome === 'null_upstream') {
+    consecutiveNulls++;
+    if (consecutiveNulls === NULL_BREAKER_THRESHOLD) {
+      stratzDisabledUntil = Date.now() + STRATZ_OFF_MS_NULL;
+      lastBreakerReason = 'null_upstream';
+      logger.warn({ tag: 'stratz-live', reason: 'null_upstream', cooldownMin: STRATZ_OFF_MS_NULL / 60_000 },
+        '[stratzLive] live API пуст ' + NULL_BREAKER_THRESHOLD + ' раз подряд → пауза');
+    }
+    return;
+  }
+  // transport_error
+  consecutiveTransport++;
+  if (consecutiveTransport === TRANSPORT_BREAKER_THRESHOLD) {
+    stratzDisabledUntil = Date.now() + STRATZ_OFF_MS_TRANSPORT;
+    lastBreakerReason = 'transport_error';
+    logger.warn({ tag: 'stratz-live', reason: 'transport_error', cooldownMin: STRATZ_OFF_MS_TRANSPORT / 60_000 },
+      '[stratzLive] transport errors ' + TRANSPORT_BREAKER_THRESHOLD + ' раз подряд → пауза');
   }
 }
 function isStratzDisabled(): boolean {
   if (stratzDisabledUntil === 0) return false;
   if (Date.now() >= stratzDisabledUntil) {
-    // Cooldown истёк — пробуем снова. Counter не сбрасываем, чтобы при
-    // продолжающемся пустом апстриме breaker сразу же сработал на следующем null.
+    // Cooldown истёк — пробуем снова. Соответствующий counter не сбрасываем
+    // (T-1 от порога), чтобы при продолжающемся отказе breaker сразу
+    // сработал на следующем неудачном ответе того же класса.
     stratzDisabledUntil = 0;
-    consecutiveNulls = NULL_BREAKER_THRESHOLD - 1;
+    if (lastBreakerReason === 'null_upstream') {
+      consecutiveNulls = NULL_BREAKER_THRESHOLD - 1;
+    } else if (lastBreakerReason === 'transport_error') {
+      consecutiveTransport = TRANSPORT_BREAKER_THRESHOLD - 1;
+    }
     return false;
   }
   return true;
@@ -341,12 +369,14 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
   } catch (err) {
     logger.debug({ tag: 'stratz-live', matchId, err: String(err) }, 'fetch failed');
     cacheSet(matchId, null);
-    recordStratzOutcome(false);
+    recordStratzOutcome('transport_error');
     return null;
   }
   if (!raw || typeof raw !== 'object') {
+    // Невалидный JSON / GraphQL errors — относим к transport_error, апстрим
+    // не отдал нам нормальной структуры (CF challenge, 5xx, timeout, …).
     cacheSet(matchId, null);
-    recordStratzOutcome(false);
+    recordStratzOutcome('transport_error');
     return null;
   }
   const match = (raw as { live?: { match?: StratzRawMatch | null } }).live?.match;
@@ -360,10 +390,10 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
         '[stratzLive] live.match returned null (upstream empty, sampled)');
     }
     cacheSet(matchId, null);
-    recordStratzOutcome(false);
+    recordStratzOutcome('null_upstream');
     return null;
   }
-  recordStratzOutcome(true);
+  recordStratzOutcome('ok');
 
   const players = (match.players ?? []).map(normalizePlayer);
   const meta: StratzLiveMatchMeta = {

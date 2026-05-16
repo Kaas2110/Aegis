@@ -17,6 +17,9 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   trainMaxPatches: 4,
   trainMinSamples: 1000,
   notes: null,
+  monetizationMode: null,
+  featureFlags: null,
+  storeSettings: null,
 };
 
 let cache: AppSettings | null = null;
