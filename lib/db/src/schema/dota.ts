@@ -495,6 +495,13 @@ export const appSettingsTable = pgTable('app_settings', {
   trainMaxPatches: integer('train_max_patches').notNull().default(4),
   trainMinSamples: integer('train_min_samples').notNull().default(1000),
   notes: text('notes'),
+  // ── Legacy monetization (зарезервировано под платную модель: $4/нед, $15/мес) ──
+  // Колонки физически есть в БД, кодом сейчас не читаются, но сохраняем как
+  // pass-through конфиг для будущего Lite/Premium gating. Не дропать.
+  // feature_flags формат: { <feature_id>: { free: bool, basic: bool, premium: bool } }
+  monetizationMode: text('monetization_mode'),
+  featureFlags: jsonb('feature_flags').$type<Record<string, { free?: boolean; basic?: boolean; premium?: boolean }>>(),
+  storeSettings: jsonb('store_settings').$type<Record<string, unknown>>(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
