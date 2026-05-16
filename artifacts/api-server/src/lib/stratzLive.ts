@@ -151,6 +151,49 @@ interface StratzRawMatch {
 // ── in-memory cache ────────────────────────────────────────────────────────
 const cache = new Map<number, { at: number; value: StratzLiveDetail | null }>();
 
+// ── circuit breaker ────────────────────────────────────────────────────────
+// Stratz live API эпизодически пуст (live.match(id)=null для ВСЕХ id, live.matches=[])
+// — это апстрим, не наш баг (см. docs/operations-manual.md §Stratz live).
+// Чтобы не выжигать квоту/трафик на null-ответы, считаем подряд-null и при
+// пороге отрубаем Stratz на STRATZ_OFF_MS. Любой не-null ответ моментально
+// сбрасывает счётчик и возвращает enrichment в строй.
+let consecutiveNulls = 0;
+let stratzDisabledUntil = 0;
+const NULL_BREAKER_THRESHOLD = 20;
+const STRATZ_OFF_MS = 30 * 60_000; // 30 минут
+// Rate-limit для INFO-лога «match returned null»: чтобы при degraded Stratz
+// (50 матчей × каждый poll = 50 строк/мин до срабатывания брейкера) не
+// засорять логи. Один лог на NULL_LOG_EVERY_N null'ов.
+const NULL_LOG_EVERY_N = 10;
+let nullLogCounter = 0;
+function recordStratzOutcome(gotData: boolean): void {
+  if (gotData) {
+    if (consecutiveNulls >= NULL_BREAKER_THRESHOLD) {
+      logger.info({ tag: 'stratz-live' }, '[stratzLive] data is back, breaker reset');
+    }
+    consecutiveNulls = 0;
+    stratzDisabledUntil = 0;
+    return;
+  }
+  consecutiveNulls++;
+  if (consecutiveNulls === NULL_BREAKER_THRESHOLD) {
+    stratzDisabledUntil = Date.now() + STRATZ_OFF_MS;
+    logger.warn({ tag: 'stratz-live', cooldownMin: STRATZ_OFF_MS / 60_000 },
+      '[stratzLive] live API пуст ' + NULL_BREAKER_THRESHOLD + ' раз подряд → пауза');
+  }
+}
+function isStratzDisabled(): boolean {
+  if (stratzDisabledUntil === 0) return false;
+  if (Date.now() >= stratzDisabledUntil) {
+    // Cooldown истёк — пробуем снова. Counter не сбрасываем, чтобы при
+    // продолжающемся пустом апстриме breaker сразу же сработал на следующем null.
+    stratzDisabledUntil = 0;
+    consecutiveNulls = NULL_BREAKER_THRESHOLD - 1;
+    return false;
+  }
+  return true;
+}
+
 function cacheGet(matchId: number): StratzLiveDetail | null | undefined {
   const e = cache.get(matchId);
   if (!e) return undefined;
@@ -286,6 +329,8 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
   const cached = cacheGet(matchId);
   if (cached !== undefined) return cached;
 
+  if (isStratzDisabled()) return null;
+
   const token = getStratzToken();
   if (!token) return null;
 
@@ -296,17 +341,29 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
   } catch (err) {
     logger.debug({ tag: 'stratz-live', matchId, err: String(err) }, 'fetch failed');
     cacheSet(matchId, null);
+    recordStratzOutcome(false);
     return null;
   }
   if (!raw || typeof raw !== 'object') {
     cacheSet(matchId, null);
+    recordStratzOutcome(false);
     return null;
   }
   const match = (raw as { live?: { match?: StratzRawMatch | null } }).live?.match;
   if (!match) {
+    // INFO-level (не debug), но с rate-limit 1/10 чтобы не спамить при
+    // массовом degraded upstream. Срабатывание брейкера логируется отдельным
+    // warn и всегда виден. См. docs/operations-manual.md §Stratz live.
+    nullLogCounter++;
+    if (nullLogCounter % NULL_LOG_EVERY_N === 1) {
+      logger.info({ tag: 'stratz-live', matchId, sampledEvery: NULL_LOG_EVERY_N },
+        '[stratzLive] live.match returned null (upstream empty, sampled)');
+    }
     cacheSet(matchId, null);
+    recordStratzOutcome(false);
     return null;
   }
+  recordStratzOutcome(true);
 
   const players = (match.players ?? []).map(normalizePlayer);
   const meta: StratzLiveMatchMeta = {
