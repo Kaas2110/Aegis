@@ -3,6 +3,31 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-16 — T0+T8 mini retrain после обогащения БД
+
+Большая ML-итерация T0→T12. Сегодня закрыты T0 (audit), T1 (`ml-contract.md`),
+T2 (`data-availability-rules.md`), T3-T7 spec (`ml-features-spec.md`), T12
+(`replit.md` trim 313→168), параллельный трек обогащения БД (drafts 4017→5634,
+players-heroes +24%, glicko 893→1093, recent-form/h2h/team-extended пересчитаны),
+mini retrain всех 18 bucket'ов (LR×fv×tier + LGBM×fv×tier) с 5 новыми фичами:
+`synergy_diff`, `early_game_score_diff`, `late_game_score_diff`,
+`counter_bans_diff`, `player_hero_recency_diff` (HERO_DIM=11, EXTRA_DIM=6).
+
+**SOTA после retrain:** `v3/prematch_winner` LGBM **76.8%** (baseline 57.9%),
+`v3/prematch_winner_t2` LGBM **79.6%** (baseline 57.9%). Все новые фичи в
+importance top-15 — ROI подтверждён.
+
+**Знакомые риски:** `v3/t1` LGBM 60.5% vs LR 71.6% — overfit на 646 примерах,
+маршрутизация сейчас предпочитает LGBM (−11 п.п. на t1). `v2/t1` LGBM 51.1% ниже
+baseline 56.8% (overfit + drift). Для T8 (large retrain после T0.5/T0.7/T3-T7)
+нужен bucket-level switch LGBM↔LR по cross-validated acc или отказ от LGBM на
+маленьких bucket'ах. Полная таблица retrain — `docs/ml-feature-audit.md` §T8.
+
+**Новые API хелперы (T2 §8):** `lib/availability.ts` на сервере и в mobile с
+едиными константами `FRESH_MS/STALE_SOFT_MS/STALE_HARD_MS/LIKELY_ENDED_MS`
+(90s/3min/25min/5min) и `getFieldState()` для 7-state UI. `_field_meta` и
+between_maps timeout отложены до CL с T0.5 (одна сетевая правка).
+
 ## 2026-05-14 — Live drafts enrichment + icons
 
 OpenDota `/api/live` пики/баны не отдаёт, но `/api/matches/{id}` возвращает

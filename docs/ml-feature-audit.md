@@ -256,6 +256,31 @@ pnpm --filter @workspace/scripts run train:lightgbm
 
 ---
 
+## T8 retrain (mini) — DONE 2026-05-16 15:25
+
+Retrain после обогащения БД (drafts 4017→5634, players-heroes +24%, glicko 893→1093) с 5 новыми фичами (HERO_DIM=11, EXTRA_DIM=6).
+
+| bucket | LGBM acc | LR acc | baseline | n_train | примечание |
+|---|---|---|---|---|---|
+| v3/fallback | **76.8%** | 73.1% | 57.9% | 2368 | новое SOTA (предыдущий 77.7% от 12:40 — внутри ±2-3 variance) |
+| v3/t1 | 60.5% | **71.6%** | 60.5% | 646 | LGBM overfit (TRAIN 97.8%), **LR лучше**. v3/t1 12:40 был 67.1% — −6.6 п.п. вне variance, маленький bucket |
+| v3/t2 | **79.6%** | 70.8% | 57.9% | 1722 | сильнее всех |
+| v2/fallback | 60.8% | 63.3% | 58.0% | 2592 | LR≥LGBM, без draft+accounts мало signal |
+| v2/t1 | 51.1% | 50.0% | 56.8% | 700 | **деградация ниже baseline** — overfit, drift в test |
+| v2/t2 | 59.9% | 60.3% | 58.6% | 1892 | паритет |
+| v1/* | 56-60% | 61% | — | 716-2644 | LR≥LGBM (мало фичей) |
+| v3/t3, v2/t3, v1/t3 | SKIP | SKIP | — | 0 | нет матчей где обе команды t3 (см. coverage rules) |
+
+**Маршрутизация при инференсе** (`PredictionModel.ts`) предпочитает LGBM. Для t1 матчей это сейчас даёт −11 п.п. vs LR (60.5% vs 71.6%) — это известный риск, явно фиксируем для T8 (large retrain) с предложением: либо bucket-уровневый switch LGBM↔LR по cross-validated acc, либо отказ от LGBM на t1 пока bucket не вырастет ≥1500.
+
+**Drift в test split** (видно в логе): test = последние 10% по времени, для маленьких bucket'ов это ~80-240 матчей очень свежей меты. Drift до −300% rel в `counter_bans_diff`, `experience_diff` — ожидаемо, не флаг для роллбэка, но **сравнения acc retrain-to-retrain делать с поправкой на variance**.
+
+**Importance top для v3/fallback:** `player_skill_diff` (188) и `h2h_advantage_radiant` (156) — главные. Новые фичи: `synergy_diff` (65), `early/late_game_score_diff` (59/57), `counter_bans_diff` (50) — все в топ-15, ROI 5 фичей подтверждён.
+
+**Active stack после retrain:** v1+v2+v3 × (LR + LGBM) × {fallback, t1, t2} = 18 моделей активны. v3 LGBM — primary. LR того же fv — fallback при ml-service down / timeout / circuit-breaker.
+
+---
+
 ## 8. Список TODO для финального ML-контракта (T1)
 
 В `docs/ml-contract.md` нужно будет описать:
