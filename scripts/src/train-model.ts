@@ -437,7 +437,7 @@ async function main() {
   for (const r of phsRows) {
     let inner = playerHeroStats.get(r.accountId);
     if (!inner) { inner = new Map(); playerHeroStats.set(r.accountId, inner); }
-    inner.set(r.heroId, { games: r.games, wins: r.wins });
+    inner.set(r.heroId, { games: r.games, wins: r.wins, lastPlayed: r.lastPlayed ?? null });
   }
   const formRows = await db
     .select()
@@ -636,6 +636,9 @@ async function main() {
       recentForm,
       h2h,
       playerGlicko,
+      // T0 mini-fix v2: время МАТЧА, не сегодняшнее, чтобы recency не «протекало
+      // в будущее» (играл-ли ИГРОК этого героя на момент матча).
+      nowUnix: m.startTime,
     });
     const v3Sample: Sample = {
       features: [...teamFeats, ...heroFeats, ...extraFeats],

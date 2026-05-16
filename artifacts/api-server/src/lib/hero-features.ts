@@ -34,6 +34,7 @@ export const HERO_FEATURE_NAMES = [
   'synergy_diff',
   'early_game_score_diff',
   'late_game_score_diff',
+  'counter_bans_diff',
 ] as const;
 
 export const HERO_FEATURE_DIM = HERO_FEATURE_NAMES.length;
@@ -124,6 +125,27 @@ export function buildHeroFeatures(
     }
   }
 
+  // T0 mini-fix v2: counter_bans_diff. Защитный counter-ban = бан b такой что
+  // (b vs нашему пику p).winRate > 0.5 → бан помог защититься. Сумма +adv·log(games+1).
+  let radCBan = 0;
+  let dirCBan = 0;
+  const counterBanScore = (bans: number[], ourPicks: number[]): number => {
+    let acc = 0;
+    for (const b of bans) {
+      const banOuter = matchups.get(b);
+      if (!banOuter) continue;
+      for (const p of ourPicks) {
+        const m = banOuter.get(p);
+        if (!m || m.games <= 0) continue;
+        const adv = m.winRate - 0.5;
+        if (adv > 0) acc += adv * Math.log(m.games + 1);
+      }
+    }
+    return acc;
+  };
+  radCBan = counterBanScore(radiantBans, radiantPicks);
+  dirCBan = counterBanScore(direBans, direPicks);
+
   return [
     radPickStr,
     dirPickStr,
@@ -135,12 +157,18 @@ export function buildHeroFeatures(
     radSyn - dirSyn,
     radEarly - dirEarly,
     radLate - dirLate,
+    radCBan - dirCBan,
   ];
 }
 
 // ── Wave 3: extras (player-skill, recent form, h2h, side) — зеркало scripts/src/lib ──
 
-export interface PlayerHeroStat { games: number; wins: number; }
+export interface PlayerHeroStat {
+  games: number;
+  wins: number;
+  /** T0 mini-fix v2: Unix seconds последнего матча игрока на этом герое. NULL если неизвестно. */
+  lastPlayed?: number | null;
+}
 export type PlayerHeroStatsMap = Map<number, Map<number, PlayerHeroStat>>;
 
 export interface RecentForm { winRate: number; games: number; }
@@ -158,6 +186,7 @@ export const EXTRA_FEATURE_NAMES = [
   'h2h_advantage_radiant',
   'side_advantage',
   'player_glicko_diff',
+  'player_hero_recency_diff',
 ] as const;
 
 export const EXTRA_FEATURE_DIM = EXTRA_FEATURE_NAMES.length;
@@ -202,6 +231,27 @@ function teamAvgGlicko(
   return sum / accountIds.length;
 }
 
+function teamRecency(
+  picks: number[],
+  accountIds: number[] | null | undefined,
+  playerHeroStats: PlayerHeroStatsMap,
+  nowUnix: number,
+): number {
+  if (!accountIds || accountIds.length !== picks.length) return 0;
+  let sum = 0; let n = 0;
+  for (let i = 0; i < picks.length; i++) {
+    const acc = accountIds[i];
+    const hero = picks[i];
+    if (!acc || acc <= 0) continue;
+    const stat = playerHeroStats.get(acc)?.get(hero);
+    if (!stat || stat.lastPlayed == null) continue;
+    const daysAgo = Math.max(0, (nowUnix - stat.lastPlayed) / 86400);
+    sum += Math.max(0, 1 - daysAgo / 90);
+    n++;
+  }
+  return n > 0 ? sum / n : 0;
+}
+
 export function buildExtraFeatures(args: {
   radiantTeamId: number;
   direTeamId: number;
@@ -214,6 +264,7 @@ export function buildExtraFeatures(args: {
   recentForm: RecentFormMap;
   h2h: H2HMap;
   playerGlicko: PlayerGlickoMap;
+  nowUnix?: number;
 }): number[] {
   const radSkill = teamPlayerSkill(args.radiantPicks, args.radiantAccountIds, args.playerHeroStats, args.heroStats);
   const dirSkill = teamPlayerSkill(args.direPicks, args.direAccountIds, args.playerHeroStats, args.heroStats);
@@ -243,5 +294,10 @@ export function buildExtraFeatures(args: {
     glickoDiff = (radG - dirG) / 200;
   }
 
-  return [playerSkillDiff, recentFormDiff, h2hAdv, 1, glickoDiff];
+  const now = args.nowUnix ?? Math.floor(Date.now() / 1000);
+  const recencyR = teamRecency(args.radiantPicks, args.radiantAccountIds, args.playerHeroStats, now);
+  const recencyD = teamRecency(args.direPicks, args.direAccountIds, args.playerHeroStats, now);
+  const recencyDiff = recencyR - recencyD;
+
+  return [playerSkillDiff, recentFormDiff, h2hAdv, 1, glickoDiff, recencyDiff];
 }

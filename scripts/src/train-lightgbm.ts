@@ -320,10 +320,11 @@ async function main() {
 
   const phsRows = await db.select().from(playerHeroStatsTable);
   const playerHeroStats: PlayerHeroStatsMap = new Map();
+  // T0 mini-fix v2: lastPlayed нужен для player_hero_recency_diff.
   for (const r of phsRows) {
     let inner = playerHeroStats.get(r.accountId);
     if (!inner) { inner = new Map(); playerHeroStats.set(r.accountId, inner); }
-    inner.set(r.heroId, { games: r.games, wins: r.wins });
+    inner.set(r.heroId, { games: r.games, wins: r.wins, lastPlayed: r.lastPlayed ?? null });
   }
   const formRows = await db.select().from(teamRecentFormTable).where(eq(teamRecentFormTable.periodDays, 30));
   const recentForm: RecentFormMap = new Map();
@@ -444,6 +445,7 @@ async function main() {
       radiantPicks: draft.radiantPicks, direPicks: draft.direPicks,
       radiantAccountIds: draft.radiantAccountIds, direAccountIds: draft.direAccountIds,
       playerHeroStats, heroStats, recentForm, h2h, playerGlicko,
+      nowUnix: m.startTime, // T0 mini-fix v2: time-leakage guard для recency
     });
     const v3S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats], label };
     v3All.push(v3S); if (tier) v3Bucket[tier].push(v3S);

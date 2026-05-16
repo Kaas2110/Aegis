@@ -423,6 +423,7 @@ async function refreshWave3Data(): Promise<void> {
         heroId: playerHeroStatsTable.heroId,
         games: playerHeroStatsTable.games,
         wins: playerHeroStatsTable.wins,
+        lastPlayed: playerHeroStatsTable.lastPlayed,
       }).from(playerHeroStatsTable),
       db.select({
         teamId: teamRecentFormTable.teamId,
@@ -449,7 +450,7 @@ async function refreshWave3Data(): Promise<void> {
     for (const r of phs) {
       let inner = phsMap.get(r.accountId);
       if (!inner) { inner = new Map(); phsMap.set(r.accountId, inner); }
-      inner.set(r.heroId, { games: r.games, wins: r.wins });
+      inner.set(r.heroId, { games: r.games, wins: r.wins, lastPlayed: r.lastPlayed ?? null });
     }
     const formMap: RecentFormMap = new Map();
     for (const r of form) formMap.set(r.teamId, { winRate: r.winRate, games: r.games });
