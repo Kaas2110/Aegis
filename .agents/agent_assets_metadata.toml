@@ -24,3 +24,9 @@ id = "vDCVasUBzsIUyA_U3r1ZS"
 uri = "file://docs/model-improvements-research.md"
 type = "text"
 title = "Идеи по улучшению модели (research)"
+
+[[outputs]]
+id = "jyak2oYllUMTxx1b812Ig"
+uri = "file://docs/ml-feature-audit.md"
+type = "text"
+title = "ML Feature Audit (T0)"
