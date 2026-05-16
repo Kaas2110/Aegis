@@ -175,9 +175,31 @@ export const heroStatsTable = pgTable('hero_stats', {
   proPickRate: real('pro_pick_rate').notNull().default(0),    // pick / totalProMatches
   proBanRate: real('pro_ban_rate').notNull().default(0),
   proWinRate: real('pro_win_rate').notNull().default(0.5),    // wins / picks
+  // Фазовые скоринги (0..1) — производятся из Stratz constants.heroes.roles
+  // (CARRY/DURABLE/JUNGLER → late, NUKER/INITIATOR/SUPPORT/DISABLER → early).
+  // Заливаются `ingest:hero-stats`. Используются в /api/analytics/draft-score.
+  earlyGameScore: real('early_game_score').notNull().default(0.5),
+  lateGameScore: real('late_game_score').notNull().default(0.5),
   patch: text('patch'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── ВОЛНА 2: СИНЕРГИЯ ГЕРОЕВ (ОДНА КОМАНДА) ──────────────────────────────
+// Парная статистика «hero A + hero B играют ВМЕСТЕ» из Stratz heroStats.matchUp.with.
+// Симметрична семантически, но Stratz отдаёт top-N партнёров на героя — поэтому
+// храним обе направленности и при чтении пробуем (a,b) ИЛИ (b,a).
+// Используется в /api/analytics/draft-score → бар «Синергия».
+export const heroSynergyTable = pgTable('hero_synergy', {
+  heroId: integer('hero_id').notNull(),
+  withHeroId: integer('with_hero_id').notNull(),
+  games: integer('games').notNull(),
+  wins: integer('wins').notNull(),
+  winRate: real('win_rate').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: uniqueIndex('hero_synergy_pk').on(t.heroId, t.withHeroId),
+  withHeroIdx: index('hero_synergy_with_hero_idx').on(t.withHeroId),
+}));
 
 // ── ВОЛНА 2: МАТЧАПЫ ГЕРОЕВ ──────────────────────────────────────────────
 // Парная статистика hero vs hero из OpenDota /api/heroes/:id/matchups.
@@ -505,6 +527,10 @@ export type HeroStat = typeof heroStatsTable.$inferSelect;
 export const insertHeroMatchupSchema = createInsertSchema(heroMatchupsTable);
 export type InsertHeroMatchup = z.infer<typeof insertHeroMatchupSchema>;
 export type HeroMatchup = typeof heroMatchupsTable.$inferSelect;
+
+export const insertHeroSynergySchema = createInsertSchema(heroSynergyTable);
+export type InsertHeroSynergy = z.infer<typeof insertHeroSynergySchema>;
+export type HeroSynergy = typeof heroSynergyTable.$inferSelect;
 
 // ── Wave 3 типы ──────────────────────────────────────────────────────────
 export type Player = typeof playersTable.$inferSelect;

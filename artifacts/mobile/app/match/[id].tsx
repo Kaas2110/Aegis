@@ -452,19 +452,18 @@ export default function MatchDetailScreen() {
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <SectionTitle title="Лайв-статистика" colors={colors} />
                 <View style={styles.statsGrid}>
+                  {/* OpenDota /api/live даёт ТОЛЬКО эти 4 показателя на каждую сторону.
+                      Раньше тут показывались xp/выкупы/рошан с заглушечными числами
+                      (0k опыта, 5 выкупов, «Убит») — пользователь жаловался на дезу.
+                      Поля с null (xp, выкупы, рошан) скрываем полностью; вернём
+                      когда подключим источник с полным сейв-стейтом. */}
                   <StatItem label="Убийства Р/Д" value={`${snap.radiantKills} / ${snap.direKills}`} colors={colors} />
                   <StatItem label="Голд Radiant" value={`${(snap.netWorthRadiant / 1000).toFixed(1)}k`} colors={colors} positive />
                   <StatItem label="Голд Dire" value={`${(snap.netWorthDire / 1000).toFixed(1)}k`} colors={colors} />
-                  <StatItem label="Опыт Р/Д" value={`${(snap.xpRadiant / 1000).toFixed(1)}k / ${(snap.xpDire / 1000).toFixed(1)}k`} colors={colors} />
                   <StatItem label="Башни Radiant" value={String(snap.towersRadiant)} colors={colors} />
                   <StatItem label="Башни Dire" value={String(snap.towersDire)} colors={colors} />
-                  <StatItem label="Выкупы Radiant" value={String(snap.buybacksAvailableRadiant)} colors={colors} positive />
-                  <StatItem label="Выкупы Dire" value={String(snap.buybacksAvailableDire)} colors={colors} negative={snap.buybacksAvailableDire < 2} />
-                  <StatItem
-                    label="Рошан"
-                    value={snap.roshanAlive ? 'Жив' : snap.aegisHolder ? `Аегис: ${snap.aegisHolder}` : 'Убит'}
-                    colors={colors}
-                  />
+                  <StatItem label="Бараки Radiant" value={String(snap.barracksRadiant)} colors={colors} />
+                  <StatItem label="Бараки Dire" value={String(snap.barracksDire)} colors={colors} />
                 </View>
                 {snap.lastBigEvent && (
                   <View style={[styles.eventAlert, { backgroundColor: colors.warning + '20', borderColor: colors.warning + '55' }]}>
@@ -644,37 +643,11 @@ export default function MatchDetailScreen() {
                   </View>
                 </View>
 
-                {(() => {
-                  // LiveDataService подсовывает 0.5/0.5 как заглушки когда реальные
-                  // synergy/counter/scaling/early не посчитаны бэком. Раньше блок
-                  // целиком скрывали — пользователь жаловался, что не понимает,
-                  // что происходит. Теперь честно показываем «расчёт идёт».
-                  const isStub =
-                    draft.radiantSynergy === 0.5 && draft.direSynergy === 0.5 &&
-                    draft.radiantCounter === 0.5 && draft.direCounter === 0.5 &&
-                    draft.radiantScalingScore === 0.5 && draft.direScalingScore === 0.5 &&
-                    draft.radiantEarlyGameScore === 0.5 && draft.direEarlyGameScore === 0.5;
-                  return (
-                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <SectionTitle title="Draft Score" colors={colors} />
-                      {isStub ? (
-                        <View style={styles.emptyCard}>
-                          <ActivityIndicator size="small" color={colors.primary} />
-                          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
-                            Синергия и контрпики считаются по таблице героев на бэкенде — для этого матча данные ещё не готовы.
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={styles.draftScores}>
-                          <DraftScore label="Синергия" radiant={draft.radiantSynergy} dire={draft.direSynergy} colors={colors} />
-                          <DraftScore label="Контрпики" radiant={draft.radiantCounter} dire={draft.direCounter} colors={colors} />
-                          <DraftScore label="Лейт-гейм" radiant={draft.radiantScalingScore} dire={draft.direScalingScore} colors={colors} />
-                          <DraftScore label="Ранняя игра" radiant={draft.radiantEarlyGameScore} dire={draft.direEarlyGameScore} colors={colors} />
-                        </View>
-                      )}
-                    </View>
-                  );
-                })()}
+                <DraftScoreBlock
+                  radiantHeroIds={draft.picks.filter(p => p.side === 'radiant').map(p => Number(p.heroId)).filter(n => Number.isInteger(n) && n > 0)}
+                  direHeroIds={draft.picks.filter(p => p.side === 'dire').map(p => Number(p.heroId)).filter(n => Number.isInteger(n) && n > 0)}
+                  colors={colors}
+                />
               </>
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -806,6 +779,96 @@ const totalStyles = StyleSheet.create({
   expected: { fontFamily: 'Inter_700Bold', fontSize: 22, marginTop: 4 },
   range: { fontFamily: 'Inter_400Regular', fontSize: 11 },
 });
+
+// DraftScoreBlock — фетчит реальные synergy/counter/early/late с бэка для
+// конкретных 5+5 героев. Бэк возвращает 0..100 (или null если нет данных в
+// hero_synergy/hero_matchups/hero_stats). Запрос идёт когда оба драфта полные
+// (5 пиков на сторону), иначе показываем «Завершите драфт».
+function DraftScoreBlock({ radiantHeroIds, direHeroIds, colors }: {
+  radiantHeroIds: number[]; direHeroIds: number[];
+  colors: ReturnType<typeof import('@/hooks/useColors').useColors>;
+}) {
+  type Side = { synergy: number | null; counter: number | null; early: number | null; late: number | null };
+  const [data, setData] = useState<{ radiant: Side; dire: Side; meta: { synergyPairsFound: number; counterPairsFound: number; heroesResolved: number } } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ready = radiantHeroIds.length === 5 && direHeroIds.length === 5;
+  const key = ready ? `${[...radiantHeroIds].sort().join(',')}|${[...direHeroIds].sort().join(',')}` : '';
+
+  useEffect(() => {
+    if (!ready) { setData(null); return; }
+    let cancelled = false;
+    setLoading(true); setError(null);
+    fetch('/api/analytics/draft-score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ radiantHeroIds, direHeroIds }),
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (cancelled) return;
+        if (!json?.ok) throw new Error(json?.error ?? 'unknown');
+        setData(json);
+      })
+      .catch(e => { if (!cancelled) setError(String(e?.message ?? e)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <SectionTitle title="Draft Score" colors={colors} />
+      {!ready ? (
+        <View style={styles.emptyCard}>
+          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+            Расчёт начнётся когда обе команды выберут по 5 героев (сейчас {radiantHeroIds.length}/5 vs {direHeroIds.length}/5).
+          </Text>
+        </View>
+      ) : loading && !data ? (
+        <View style={styles.emptyCard}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>Считаю синергию и контрпики…</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.emptyCard}>
+          <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>Не удалось посчитать: {error}</Text>
+        </View>
+      ) : data ? (
+        <View style={styles.draftScores}>
+          <DraftScore100 label="Синергия"     r={data.radiant.synergy} d={data.dire.synergy} colors={colors} />
+          <DraftScore100 label="Контрпики"    r={data.radiant.counter} d={data.dire.counter} colors={colors} />
+          <DraftScore100 label="Ранняя игра"  r={data.radiant.early}   d={data.dire.early}   colors={colors} />
+          <DraftScore100 label="Лейт-гейм"    r={data.radiant.late}    d={data.dire.late}    colors={colors} />
+          {data.meta.synergyPairsFound === 0 && (
+            <Text style={[styles.sectionHint, { color: colors.mutedForeground, marginTop: 6 }]}>
+              Синергия: данных пока нет — таблица hero_synergy ещё не наполнена.
+            </Text>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// DraftScore100 — версия для значений 0..100 (число процентов) с поддержкой null.
+function DraftScore100({ label, r, d, colors }: {
+  label: string; r: number | null; d: number | null;
+  colors: ReturnType<typeof import('@/hooks/useColors').useColors>;
+}) {
+  const rTxt = r == null ? '—' : `${Math.round(r)}%`;
+  const dTxt = d == null ? '—' : `${Math.round(d)}%`;
+  const rWins = r != null && d != null && r > d;
+  const dWins = r != null && d != null && d > r;
+  return (
+    <View style={draftStyles.row}>
+      <Text style={[draftStyles.rScore, { color: rWins ? colors.radiant : colors.mutedForeground }]}>{rTxt}</Text>
+      <Text style={[draftStyles.label, { color: colors.mutedForeground }]}>{label}</Text>
+      <Text style={[draftStyles.dScore, { color: dWins ? colors.dire : colors.mutedForeground }]}>{dTxt}</Text>
+    </View>
+  );
+}
 
 function DraftScore({ label, radiant, dire, colors }: {
   label: string; radiant: number; dire: number;

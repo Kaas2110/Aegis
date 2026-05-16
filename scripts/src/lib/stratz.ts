@@ -485,6 +485,93 @@ export async function fetchHeroMatchupsRanked(
 // Connectivity check (для admin probe или pre-run валидации)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Hero synergy (same-team pairs, top-tier ranked)
+// ---------------------------------------------------------------------------
+//
+// Аналог `vs`-матчапов, но `with` — две героя в ОДНОЙ команде. Stratz отдаёт
+// top-N (take=200) партнёров на героя в одном запросе. Stratz возвращает
+// асимметричную выборку (для героя A топ-партнёров != для героя B топ-партнёров),
+// поэтому при чтении в endpoint надо пробовать обе направленности (a,b)/(b,a).
+
+export interface StratzHeroSynergy {
+  heroId2: number;
+  matchCount: number;
+  winsAverage: number;  // winrate когда A и B в одной команде
+}
+
+export interface StratzHeroSynergyRow {
+  heroId: number;
+  with: StratzHeroSynergy[] | null;
+}
+
+const HERO_SYNERGY_QUERY = /* graphql */ `
+  query HeroSynergy($heroIds: [Short!]!, $take: Int!) {
+    heroStats {
+      matchUp(heroIds: $heroIds, bracketBasicIds: [DIVINE_IMMORTAL], matchLimit: 1, take: $take) {
+        heroId
+        with {
+          heroId2
+          matchCount
+          winsAverage
+        }
+      }
+    }
+  }
+`;
+
+export async function fetchHeroSynergyRanked(
+  heroIds: number[],
+  take = 200,
+): Promise<StratzHeroSynergyRow[]> {
+  if (heroIds.length === 0) return [];
+  const data = await gql<{ heroStats: { matchUp: StratzHeroSynergyRow[] } }>(
+    HERO_SYNERGY_QUERY,
+    { heroIds, take },
+  );
+  return data.heroStats.matchUp ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Hero roles (constants — статичные, дёргаются раз в патч)
+// ---------------------------------------------------------------------------
+//
+// Stratz возвращает roles[] с level 1..3 для каждой роли (CARRY, NUKER, ...).
+// Используется для фазовых скорингов (early/late) в /api/analytics/draft-score.
+// ОДИН запрос на ~127 героев (~21KB), бесплатно.
+
+export type StratzRoleId =
+  | 'CARRY' | 'SUPPORT' | 'NUKER' | 'DISABLER' | 'JUNGLER'
+  | 'DURABLE' | 'ESCAPE' | 'PUSHER' | 'INITIATOR';
+
+export interface StratzHeroRole {
+  roleId: StratzRoleId;
+  level: number;  // 1..3
+}
+
+export interface StratzHeroConst {
+  id: number;
+  displayName: string;
+  roles: StratzHeroRole[] | null;
+}
+
+const HERO_ROLES_QUERY = /* graphql */ `
+  query HeroRoles {
+    constants {
+      heroes {
+        id
+        displayName
+        roles { roleId level }
+      }
+    }
+  }
+`;
+
+export async function fetchHeroRoles(): Promise<StratzHeroConst[]> {
+  const data = await gql<{ constants: { heroes: StratzHeroConst[] } }>(HERO_ROLES_QUERY);
+  return data.constants.heroes ?? [];
+}
+
 export async function checkStratzConnectivity(): Promise<{ ok: boolean; error?: string; poolSize: number }> {
   const poolSize = getStratzPoolSize();
   try {

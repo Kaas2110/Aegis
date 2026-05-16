@@ -13,7 +13,7 @@ import {
   getSchedulerState,
   triggerManualRetrain,
 } from '../services/SchedulerWorker';
-import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable } from '@workspace/db';
+import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable, heroSynergyTable, heroMatchupsTable, heroStatsTable } from '@workspace/db';
 import { requireAdminSession } from './adminAuth';
 import { eq, desc, sql, and, gte, isNotNull, inArray, or, ilike } from 'drizzle-orm';
 
@@ -1143,6 +1143,151 @@ router.post('/backtest', async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, 'backtest failed');
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// POST /api/analytics/draft-score
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Тело: { radiantHeroIds: number[5], direHeroIds: number[5] }
+// Возвращает 4 фактора в шкале 0..100 на каждую сторону:
+//   • synergy   — средний winRate всех C(5,2)=10 пар своей команды (hero_synergy)
+//   • counter   — средний winRate 25 кросс-пар heroR vs heroD (hero_matchups)
+//   • early     — среднее earlyGameScore × 100 (hero_stats, из Stratz roles)
+//   • late      — среднее lateGameScore  × 100 (hero_stats, из Stratz roles)
+//
+// Используется на странице матча (вкладка «Драфт» → блок «Draft Score»).
+// Если в БД нет данных по конкретной паре — она пропускается; если ВСЕ пары
+// missing для метрики — поле = null с reason. UI должен показывать null честно.
+router.post('/draft-score', async (req, res) => {
+  try {
+    const body = req.body as { radiantHeroIds?: unknown; direHeroIds?: unknown };
+    const parseIds = (raw: unknown): number[] | null => {
+      if (!Array.isArray(raw)) return null;
+      const ids = raw.map(x => Number(x)).filter(n => Number.isInteger(n) && n > 0 && n < 1000);
+      return ids.length === 5 ? ids : null;
+    };
+    const rIds = parseIds(body.radiantHeroIds);
+    const dIds = parseIds(body.direHeroIds);
+    if (!rIds || !dIds) {
+      res.status(400).json({ ok: false, error: 'radiantHeroIds & direHeroIds must be 5 hero ids each' });
+      return;
+    }
+    // Уникальность внутри стороны и кросс-стороны — герой не может быть пикнут дважды.
+    if (new Set(rIds).size !== 5 || new Set(dIds).size !== 5 || rIds.some(id => dIds.includes(id))) {
+      res.status(400).json({ ok: false, error: 'hero ids must be unique within and across sides' });
+      return;
+    }
+
+    const allIds = Array.from(new Set([...rIds, ...dIds]));
+
+    // Один read из hero_stats: имена + early/late phase scores для всех 10.
+    const heroRows = await db
+      .select({
+        heroId: heroStatsTable.heroId,
+        name: heroStatsTable.name,
+        early: heroStatsTable.earlyGameScore,
+        late: heroStatsTable.lateGameScore,
+      })
+      .from(heroStatsTable)
+      .where(inArray(heroStatsTable.heroId, allIds));
+
+    const heroMap = new Map(heroRows.map(h => [h.heroId, h]));
+
+    // Synergy: 10 same-team пар на сторону (C(5,2)=10).
+    // hero_synergy симметрична семантически, но Stratz отдаёт топ-N асимметрично,
+    // поэтому пробуем обе направленности и берём max(games) или среднее winRate.
+    const synergyPairs: Array<[number, number]> = [];
+    for (const ids of [rIds, dIds]) {
+      for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) synergyPairs.push([ids[i], ids[j]]);
+    }
+    const synergyRows = synergyPairs.length
+      ? await db
+          .select({
+            heroId: heroSynergyTable.heroId,
+            withHeroId: heroSynergyTable.withHeroId,
+            games: heroSynergyTable.games,
+            winRate: heroSynergyTable.winRate,
+          })
+          .from(heroSynergyTable)
+          .where(inArray(heroSynergyTable.heroId, allIds))
+      : [];
+    const synergyByPair = new Map<string, { games: number; winRate: number }>();
+    for (const r of synergyRows) {
+      const key = r.heroId < r.withHeroId ? `${r.heroId}_${r.withHeroId}` : `${r.withHeroId}_${r.heroId}`;
+      const prev = synergyByPair.get(key);
+      // Если уже есть запись для пары — берём ту, у которой больше games (надёжнее).
+      if (!prev || r.games > prev.games) synergyByPair.set(key, { games: r.games, winRate: r.winRate });
+    }
+
+    // Counter: 25 кросс-пар heroR vs heroD из hero_matchups.
+    const counterRows = await db
+      .select({
+        heroId: heroMatchupsTable.heroId,
+        vsHeroId: heroMatchupsTable.vsHeroId,
+        games: heroMatchupsTable.games,
+        winRate: heroMatchupsTable.winRate,
+      })
+      .from(heroMatchupsTable)
+      .where(and(
+        inArray(heroMatchupsTable.heroId, allIds),
+        inArray(heroMatchupsTable.vsHeroId, allIds),
+      ));
+    const counterByPair = new Map<string, { games: number; winRate: number }>();
+    for (const r of counterRows) counterByPair.set(`${r.heroId}_${r.vsHeroId}`, { games: r.games, winRate: r.winRate });
+
+    function computeSide(ownIds: number[], oppIds: number[]) {
+      // Synergy: средний winRate всех C(5,2)=10 пар, взвешенный по log(games+1).
+      let synWeight = 0, synSum = 0, synFound = 0;
+      for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) {
+        const a = ownIds[i], b = ownIds[j];
+        const key = a < b ? `${a}_${b}` : `${b}_${a}`;
+        const v = synergyByPair.get(key);
+        if (v && v.games > 0) {
+          const w = Math.log(v.games + 1);
+          synWeight += w; synSum += v.winRate * w; synFound++;
+        }
+      }
+      // Counter: 25 own-vs-opp пар. matchups.winRate — winRate героя heroId против vsHeroId.
+      let cntWeight = 0, cntSum = 0, cntFound = 0;
+      for (const own of ownIds) for (const opp of oppIds) {
+        const v = counterByPair.get(`${own}_${opp}`);
+        if (v && v.games > 0) {
+          const w = Math.log(v.games + 1);
+          cntWeight += w; cntSum += v.winRate * w; cntFound++;
+        }
+      }
+      // Early/Late: среднее phase score по 5 героям.
+      let earlySum = 0, lateSum = 0, phaseFound = 0;
+      for (const id of ownIds) {
+        const h = heroMap.get(id);
+        if (h) { earlySum += h.early; lateSum += h.late; phaseFound++; }
+      }
+
+      const synergy = synWeight > 0 ? Math.round((synSum / synWeight) * 1000) / 10 : null;
+      const counter = cntWeight > 0 ? Math.round((cntSum / cntWeight) * 1000) / 10 : null;
+      const early = phaseFound > 0 ? Math.round((earlySum / phaseFound) * 1000) / 10 : null;
+      const late  = phaseFound > 0 ? Math.round((lateSum  / phaseFound) * 1000) / 10 : null;
+      return { synergy, counter, early, late, _meta: { synFound, cntFound, phaseFound } };
+    }
+
+    const radiant = computeSide(rIds, dIds);
+    const dire = computeSide(dIds, rIds);
+
+    res.json({
+      ok: true,
+      radiant: { synergy: radiant.synergy, counter: radiant.counter, early: radiant.early, late: radiant.late },
+      dire:    { synergy: dire.synergy,    counter: dire.counter,    early: dire.early,    late: dire.late },
+      meta: {
+        heroesResolved: heroRows.length,
+        synergyPairsFound: radiant._meta.synFound + dire._meta.synFound,
+        counterPairsFound: radiant._meta.cntFound, // симметрично, считаем один раз
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, 'draft-score failed');
     res.status(500).json({ ok: false, error: String(err) });
   }
 });

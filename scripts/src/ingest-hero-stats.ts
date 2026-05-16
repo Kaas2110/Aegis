@@ -14,7 +14,39 @@
 
 import { db, heroStatsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { fetchHeroStatsPro, StratzUnavailableError } from './lib/stratz.js';
+import {
+  fetchHeroStatsPro,
+  fetchHeroRoles,
+  StratzUnavailableError,
+  getStratzPoolSize,
+  type StratzHeroConst,
+  type StratzRoleId,
+} from './lib/stratz.js';
+
+// Веса ролей для фазового скоринга. Подобраны эмпирически:
+//  - Late: керри тащит игру; durable выживает; jungler фармит
+//  - Early: nuker даёт burst; initiator открывает файты; support позволяет
+//    линиям доминировать; disabler контролит ранние стычки.
+// max(L) = 3*1.0+3*0.5+3*0.3 = 5.4; max(E) = 3*0.7+3*0.7+3*0.5+3*0.3 = 6.6.
+const LATE_WEIGHTS: Record<string, number> = { CARRY: 1.0, DURABLE: 0.5, JUNGLER: 0.3 };
+const EARLY_WEIGHTS: Record<string, number> = { NUKER: 0.7, INITIATOR: 0.7, SUPPORT: 0.5, DISABLER: 0.3 };
+const MAX_LATE = 5.4;
+const MAX_EARLY = 6.6;
+
+function computePhaseScores(roles: StratzHeroConst['roles']): { early: number; late: number } {
+  if (!roles || roles.length === 0) return { early: 0.5, late: 0.5 };
+  let lateRaw = 0, earlyRaw = 0;
+  for (const r of roles) {
+    const lw = LATE_WEIGHTS[r.roleId as StratzRoleId] ?? 0;
+    const ew = EARLY_WEIGHTS[r.roleId as StratzRoleId] ?? 0;
+    lateRaw  += lw * r.level;
+    earlyRaw += ew * r.level;
+  }
+  return {
+    early: Math.min(1, earlyRaw / MAX_EARLY),
+    late:  Math.min(1, lateRaw  / MAX_LATE),
+  };
+}
 
 interface OpenDotaHeroStat {
   id: number;
@@ -65,6 +97,9 @@ async function main() {
 
   // Stratz professional winrate (более точный, по текущему патчу)
   let stratzWinMap: Map<number, { winCount: number; matchCount: number }> | null = null;
+  // Stratz hero roles → фазовые скоринги (early/late). Если Stratz недоступен —
+  // оставляем дефолтные 0.5/0.5 (нейтрально).
+  const phaseMap = new Map<number, { early: number; late: number }>();
   if (useStratz) {
     try {
       const stratzRows = await fetchHeroStatsPro();
@@ -75,6 +110,16 @@ async function main() {
         console.warn(`[ingest-hero-stats] Stratz unavailable (${e.message}), using OpenDota only`);
       } else {
         throw e;
+      }
+    }
+    if (getStratzPoolSize() > 0) {
+      try {
+        const heroConsts = await fetchHeroRoles();
+        for (const h of heroConsts) phaseMap.set(h.id, computePhaseScores(h.roles));
+        console.log(`[ingest-hero-stats] Stratz: roles for ${heroConsts.length} heroes → phase scores computed`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[ingest-hero-stats] Stratz roles unavailable (${msg}), phase scores оставлены 0.5`);
       }
     }
   }
@@ -109,20 +154,23 @@ async function main() {
     }
 
     const banRate = totalOdMatches > 0 ? odBan / totalOdMatches : 0;
+    const phase = phaseMap.get(h.id) ?? { early: 0.5, late: 0.5 };
 
     return {
-      heroId:       h.id,
-      name:         h.localized_name,
-      primaryAttr:  h.primary_attr,
-      attackType:   h.attack_type,
-      proPickCount: pickCount,
-      proBanCount:  odBan,
-      proWinCount:  winCount,
-      proPickRate:  pickRate,
-      proBanRate:   banRate,
-      proWinRate:   winRate,
+      heroId:         h.id,
+      name:           h.localized_name,
+      primaryAttr:    h.primary_attr,
+      attackType:     h.attack_type,
+      proPickCount:   pickCount,
+      proBanCount:    odBan,
+      proWinCount:    winCount,
+      proPickRate:    pickRate,
+      proBanRate:     banRate,
+      proWinRate:     winRate,
+      earlyGameScore: phase.early,
+      lateGameScore:  phase.late,
       patch,
-      updatedAt:    new Date(),
+      updatedAt:      new Date(),
     };
   });
 
@@ -138,11 +186,13 @@ async function main() {
         proPickCount: sql`excluded.pro_pick_count`,
         proBanCount:  sql`excluded.pro_ban_count`,
         proWinCount:  sql`excluded.pro_win_count`,
-        proPickRate:  sql`excluded.pro_pick_rate`,
-        proBanRate:   sql`excluded.pro_ban_rate`,
-        proWinRate:   sql`excluded.pro_win_rate`,
-        patch:        sql`excluded.patch`,
-        updatedAt:    sql`excluded.updated_at`,
+        proPickRate:    sql`excluded.pro_pick_rate`,
+        proBanRate:     sql`excluded.pro_ban_rate`,
+        proWinRate:     sql`excluded.pro_win_rate`,
+        earlyGameScore: sql`excluded.early_game_score`,
+        lateGameScore:  sql`excluded.late_game_score`,
+        patch:          sql`excluded.patch`,
+        updatedAt:      sql`excluded.updated_at`,
       },
     });
 

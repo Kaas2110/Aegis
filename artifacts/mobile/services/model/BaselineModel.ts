@@ -60,10 +60,15 @@ export class BaselineModel implements ModelProvider {
       gameTimeSec: snap.gameTimeSeconds,
       killDiff: snap.radiantKills - snap.direKills,
       netWorthDiff: snap.netWorthRadiant - snap.netWorthDire,
-      xpDiff: snap.xpRadiant - snap.xpDire,
-      towersLost: 7 - snap.towersDire,
+      // xp/buybacks/aegis сейчас от OpenDota приходят null (источник не отдаёт);
+      // в фолбэк-модели интерпретируем null как «нет преимущества» (0).
+      xpDiff: (snap.xpRadiant ?? 0) - (snap.xpDire ?? 0),
+      // towers: 11 башен на сторону по полному набору (3 эшелона × 3 линии + 2 трона).
+      // Раньше тут был hardcoded `7 - snap.towersDire` от старой эры; с реальным
+      // декодом из building_state значение может быть до 11 → выставляем clamp.
+      towersLost: Math.max(0, Math.min(11, 11 - snap.towersDire)),
       roshanControl: snap.aegisHolder === 'radiant' ? 1 : snap.aegisHolder === 'dire' ? -1 : 0,
-      buybackAdvantage: snap.buybacksAvailableRadiant - snap.buybacksAvailableDire,
+      buybackAdvantage: (snap.buybacksAvailableRadiant ?? 0) - (snap.buybacksAvailableDire ?? 0),
       netWorthSwingLast5: 8200,
     };
   }

@@ -12,6 +12,7 @@
     "ingest:drafts": "tsx ./src/ingest-drafts.ts",
     "ingest:hero-stats": "tsx ./src/ingest-hero-stats.ts",
     "ingest:hero-matchups": "tsx ./src/ingest-hero-matchups.ts",
+    "ingest:hero-synergy": "tsx ./src/ingest-hero-synergy.ts",
     "ingest:players-heroes": "tsx ./src/ingest-players-heroes.ts",
     "compute:recent-form": "tsx ./src/compute-recent-form.ts",
     "compute:h2h": "tsx ./src/compute-h2h.ts",

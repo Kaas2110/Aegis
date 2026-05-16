@@ -76,6 +76,11 @@ export interface Draft {
   comfortHeroes: { heroName: string; side: MapSide; masteryScore: number }[];
 }
 
+// LiveSnapshot — данные текущего матча. Поля `null` означают «источник не отдаёт».
+// OpenDota /api/live даёт ТОЛЬКО: kills, gold (через radiant_lead), game_time,
+// building_state (декодируется в towers/barracks). Остальное (xp, buybacks,
+// roshan, aegis) НЕ доступно ни от OD, ни от Stratz Pulse — поэтому null.
+// UI должен скрывать null-поля, не рендерить плейсхолдеры.
 export interface LiveSnapshot {
   snapshotId: string;
   gameTimeSeconds: number;
@@ -83,16 +88,16 @@ export interface LiveSnapshot {
   direKills: number;
   netWorthRadiant: number;
   netWorthDire: number;
-  xpRadiant: number;
-  xpDire: number;
-  towersRadiant: number;
+  xpRadiant: number | null;
+  xpDire: number | null;
+  towersRadiant: number;       // декодируется из building_state
   towersDire: number;
-  barracksRadiant: number;
+  barracksRadiant: number;     // декодируется из building_state
   barracksDire: number;
-  roshanAlive: boolean;
+  roshanAlive: boolean | null;
   aegisHolder: MapSide | null;
-  buybacksAvailableRadiant: number;
-  buybacksAvailableDire: number;
+  buybacksAvailableRadiant: number | null;
+  buybacksAvailableDire: number | null;
   lastBigEvent: string | null;
   snapshotAge: number;
   sourceId: string;

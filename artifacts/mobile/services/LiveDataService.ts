@@ -130,12 +130,47 @@ function buildTeam(name: string, id: number | undefined, side: 'radiant' | 'dire
   };
 }
 
+// Декодер OpenDota building_state. Стандартный битовый layout Dota 2:
+//   bits  0..10 (11 bits) = Radiant towers (set bit = башня стоит)
+//   bits 11..21 (11 bits) = Dire towers
+//   bits 22..27 (6 bits)  = Radiant barracks
+//   bits 28..33 (6 bits)  = Dire barracks
+// Значение 0 (или undefined) трактуем как «информации нет» → возвращаем дефолты.
+function decodeBuildingState(state: number | undefined): {
+  towersRadiant: number; towersDire: number;
+  barracksRadiant: number; barracksDire: number;
+} {
+  if (!state || state <= 0) {
+    return { towersRadiant: 11, towersDire: 11, barracksRadiant: 6, barracksDire: 6 };
+  }
+  // ВАЖНО: JS bitwise — 32-битные знаковые, shift по модулю 32, sign-extension.
+  // Биты 32-33 (Dire barracks bits 4-5) и bit31 (Dire barrack bit 3) читаются
+  // с ошибкой через `state >> i`. Используем BigInt + Math.floor/(2**i) делением.
+  const s = BigInt(state);
+  const bitSet = (i: number): number => Number((s >> BigInt(i)) & 1n);
+  let tR = 0, tD = 0, bR = 0, bD = 0;
+  for (let i = 0;  i < 11; i++) tR += bitSet(i);
+  for (let i = 11; i < 22; i++) tD += bitSet(i);
+  for (let i = 22; i < 28; i++) bR += bitSet(i);
+  for (let i = 28; i < 34; i++) bD += bitSet(i);
+  return { towersRadiant: tR, towersDire: tD, barracksRadiant: bR, barracksDire: bD };
+}
+
 function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
   // OpenDota /api/live uses flat fields (no nested scoreboard)
   const radiantKills = raw.radiant_score ?? 0;
   const direKills = raw.dire_score ?? 0;
   const gameSec = raw.game_time ?? 0;
   const nwLead = raw.radiant_lead ?? 0; // positive = radiant leads
+  const buildings = decodeBuildingState(raw.building_state);
+
+  // Sanity-check: OpenDota изредка отдаёт «застрявший» снапшот предыдущего матча
+  // (gameSec=0, но score=32:43, или микро-gameSec с десятками киллов). Если на
+  // первой минуте (game_time<5min, включая 0) уже >30 убийств — это абсурд,
+  // не отдаём liveSnapshot, чтобы UI не показывал мусорные цифры. Сам матч
+  // (статус, draft) отдаём — может прийти живой snapshot на следующем 60s tick.
+  const totalKills = radiantKills + direKills;
+  const sanityFail = gameSec < 300 && totalKills > 30;
 
   const team1 = buildTeam(raw.team_name_radiant ?? '', raw.team_id_radiant, 'radiant');
   const team2 = buildTeam(raw.team_name_dire ?? '', raw.team_id_dire, 'dire');
@@ -193,23 +228,27 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
       gameTimeSeconds: gameSec,
       score: { radiant: radiantKills, dire: direKills },
     },
-    liveSnapshot: {
+    // Если sanity-check провалился — НЕ отдаём liveSnapshot вообще.
+    // OpenDota /api/live даёт только 5 реальных полей: kills, gold (через
+    // radiant_lead), game_time, building_state. xp/buybacks/roshan/aegis
+    // отсутствуют в источнике — ставим null, UI их скрывает.
+    liveSnapshot: sanityFail ? undefined : {
       snapshotId: `snap_od_${raw.match_id}`,
       gameTimeSeconds: gameSec,
       radiantKills,
       direKills,
       netWorthRadiant: 30000 + Math.max(0, nwLead),
       netWorthDire: 30000 + Math.max(0, -nwLead),
-      xpRadiant: 0,
-      xpDire: 0,
-      towersRadiant: 7,
-      towersDire: 7,
-      barracksRadiant: 6,
-      barracksDire: 6,
-      roshanAlive: false,
+      xpRadiant: null,
+      xpDire: null,
+      towersRadiant: buildings.towersRadiant,
+      towersDire: buildings.towersDire,
+      barracksRadiant: buildings.barracksRadiant,
+      barracksDire: buildings.barracksDire,
+      roshanAlive: null,
       aegisHolder: null,
-      buybacksAvailableRadiant: 5,
-      buybacksAvailableDire: 5,
+      buybacksAvailableRadiant: null,
+      buybacksAvailableDire: null,
       lastBigEvent: null,
       snapshotAge: 15,
       sourceId: 'opendota',
@@ -331,13 +370,19 @@ async function fetchAnalytics(match: Match, odds?: OddsData, signal?: AbortSigna
           early1: d.radiantEarlyGameScore, early2: d.direEarlyGameScore,
         };
       })(),
+      // Live-фичи. xp/buybacks/aegis сейчас всегда null (OD не даёт), но мы
+      // оставляем поля как Optional null чтобы серверная live-модель видела
+      // «фича отсутствует» вместо ложного 0. towers/barracks — РЕАЛЬНЫЕ из
+      // building_state; aegis-holder остаётся null до интеграции замены источника.
       liveSnapshot: snap ? {
         netWorthLead: snap.netWorthRadiant - snap.netWorthDire,
         killsLead: snap.radiantKills - snap.direKills,
         towerLead: snap.towersRadiant - snap.towersDire,
         barracksLost: (6 - snap.barracksRadiant) + (6 - snap.barracksDire),
         aegisHolder: snap.aegisHolder === 'radiant' ? 1 : snap.aegisHolder === 'dire' ? 2 : null,
-        buybackDisadv: Math.max(0, snap.buybacksAvailableRadiant - snap.buybacksAvailableDire),
+        buybackDisadv: snap.buybacksAvailableRadiant != null && snap.buybacksAvailableDire != null
+          ? Math.max(0, snap.buybacksAvailableRadiant - snap.buybacksAvailableDire)
+          : null,
         gameTimeSec: snap.gameTimeSeconds,
       } : undefined,
       bookmakerOdds: odds?.bookmakers[0] ? {
