@@ -3,6 +3,52 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-16 (поздний вечер) — T3.5 live totals LightGBM
+
+До T3.5 показатели «прогноз тоталов на live» были экстраполяцией темпа
+(`current_kills / current_min × full_duration`), не ML. Теперь две регрессионные
+LightGBM-модели смотрят на live-снапшот и предсказывают **финальный**
+`total_kills` и `duration_sec`.
+
+**Новые модели в `model_versions`** (engine='lightgbm', featuresVersion=1):
+- `live_total_kills` — regression на `log(final_kills + 1)`. blob 72.3 KB,
+  test r2=0.134, rmse=0.246 (log-space), residual_std=0.285.
+- `live_total_duration` — regression на `log(final_duration_sec)`. blob 66.5 KB,
+  test r2=0.150, rmse=0.239, residual_std=0.266.
+
+**Trainer:** `scripts/src/train-live-totals.ts` (`pnpm --filter @workspace/scripts
+run train:live-totals`). JOIN `live_snapshots × pro_matches`, sub-sample до
+≤5 снапшотов/матч в окнах [3,8,15,25,40]min, фильтр `game_time_sec ∈ [60,
+duration]`. 15 525 joined rows → 1 952 sub-sampled (468 матчей) за 180d окно.
+
+**Feature view v1 (7 фич, OD-only — Stratz xp/nw advantage добавятся в v2 через
+~7d после T0.5a):** `[bias, game_min, kills_so_far, kill_rate_per_min,
+kill_diff_abs, nw_lead_kgold, building_state_norm]`. Top importance:
+nw_lead_kgold > kill_rate_per_min > kill_diff_abs (kills), nw_lead_kgold >
+kill_diff_abs > kill_rate_per_min (duration). Физически осмысленно: net-worth
+лидерство и темп килов — самые сильные предикторы исхода.
+
+**Inference path:** `services/MarketLgbm.ts::predictLiveTotalsFor(snapshot)` →
+`{mean, std}` в log-space + активные версии моделей. LiveWorker вызывает
+после snapshot-insert (только при `game_time >= 60`) и пишет 2 строки в
+`predictions` per snapshot: `marketType='live_total_kills'|'live_total_duration'`,
+`modelProbTeam1=mean`, `modelProbTeam2=std` (переиспользование колонок без
+schema migration). Fail-soft — circuit-breaker MarketLgbm покрывает.
+
+**Parity-инвариант:** `buildLiveTotalsFeatures` дублируется в trainer и
+api-server, формулы обязаны быть байт-в-байт идентичны (та же дисциплина
+ml-contract §3 для LR↔LightGBM). См. doc-comment в обеих копиях.
+
+**Не сделано в T3.5 (выносится в follow-up):**
+- Mobile UI чтение `live_total_kills`/`live_total_duration` из predictions
+  (сейчас данные пишутся, но компоненты тоталов по-прежнему используют
+  prematch market_total_kills/duration). Добавить в TotalsLadder ветку
+  «live mode → бери последнюю predictions строку с marketType=live_total_*».
+- v2 feature set с Stratz xpAdvantage_kxp / networthAdvantage_kgold после
+  накопления `live_snapshots.stratz_match_meta` (~7 дней).
+- 50% interval из quantile моделей (как у `market_total_duration_q25/q75`) —
+  пока используем log-нормаль `(mean, std)`.
+
 ## 2026-05-16 (вечер) — T0.5a Stratz live enrichment
 
 Stratz GraphQL schema introspection показала: Stratz live API **не отдаёт**

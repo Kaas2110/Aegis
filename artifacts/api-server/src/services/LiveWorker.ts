@@ -11,6 +11,7 @@ import { predictMatchWinner, loadActiveModel, getActiveModel, type DraftInput } 
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
 import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
+import { predictLiveTotalsFor } from './MarketLgbm';
 
 const POLL_INTERVAL_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
@@ -241,6 +242,50 @@ async function pollOnce(): Promise<void> {
     stats.totalSnapshots += rows.length;
   } catch (err) {
     logger.error({ err }, '[LiveWorker] snapshot insert failed');
+  }
+
+  // T3.5 — live totals: НЕЗАВИСИМЫЙ от prematch путь. Эти модели смотрят
+  // только на live-снапшот, не требуют team-ratings и должны срабатывать
+  // даже если prematch winner недоступен (architect-feedback: предыдущая
+  // версия гейтилась на getActiveModel() и pred!=null, что блокировало
+  // ~весь поток при любых проблемах с prematch).
+  for (const m of changed) {
+    if ((m.game_time ?? -1) < 60) continue;
+    try {
+      const lt = await predictLiveTotalsFor({
+        gameTimeSec: m.game_time ?? 0,
+        radiantScore: m.radiant_score ?? null,
+        direScore: m.dire_score ?? null,
+        radiantLead: m.radiant_lead ?? null,
+        buildingState: m.building_state ?? null,
+      });
+      if (lt.totalKillsLogN && lt.modelVersions.kills) {
+        await db.insert(predictionsTable).values({
+          matchId: m.match_id!,
+          modelVersion: lt.modelVersions.kills,
+          marketType: 'live_total_kills',
+          // log-нормаль: mean/std в log-space; team1=mean, team2=std для
+          // переиспользования existing колонок без миграции схемы.
+          modelProbTeam1: lt.totalKillsLogN.mean,
+          modelProbTeam2: lt.totalKillsLogN.std,
+          confidence: 0.5,
+          features: { game_min: (m.game_time ?? 0) / 60 },
+        });
+      }
+      if (lt.totalDurationLogN && lt.modelVersions.duration) {
+        await db.insert(predictionsTable).values({
+          matchId: m.match_id!,
+          modelVersion: lt.modelVersions.duration,
+          marketType: 'live_total_duration',
+          modelProbTeam1: lt.totalDurationLogN.mean,
+          modelProbTeam2: lt.totalDurationLogN.std,
+          confidence: 0.5,
+          features: { game_min: (m.game_time ?? 0) / 60 },
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, matchId: m.match_id }, '[LiveWorker] live totals insert failed');
+    }
   }
 
   // Делаем предсказания если модель активна

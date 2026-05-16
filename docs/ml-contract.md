@@ -315,8 +315,19 @@ Mobile parses `version` как opaque строку (для отображени�
    уведомления при drift >X%.
 4. **Live-модель LightGBM** — сейчас только LR (см. `ml-feature-audit.md`
    gap 1). Добавится в T8.
-5. **Live total_kills / total_duration модели** — сейчас экстраполяция
-   темпа, не ML. Добавится в T3.5.
+5. ~~**Live total_kills / total_duration модели**~~ — ✅ **DONE T3.5 (2026-05-16)**.
+   `live_total_kills` и `live_total_duration` (LightGBM regression на
+   log-target). Trainer `scripts/src/train-live-totals.ts`, inference
+   `services/MarketLgbm.ts::predictLiveTotalsFor()`, integration
+   `LiveWorker.ts` (пишет 2 строки в `predictions` per snapshot:
+   `marketType='live_total_kills'|'live_total_duration'`, `modelProbTeam1=mean`,
+   `modelProbTeam2=std` в log-space — переиспользование колонок без миграции).
+   Feature view v1 (7 фич, OD-only): `[bias, game_min, kills_so_far,
+   kill_rate_per_min, kill_diff_abs, nw_lead_kgold, building_state_norm]`.
+   **Parity invariant:** `scripts/src/train-live-totals.ts::buildLiveTotalsFeatures`
+   и `services/MarketLgbm.ts::buildLiveTotalsFeatures` обязаны быть побайтово
+   идентичны (та же дисциплина §3 для LR↔LightGBM). v2 (с Stratz xp/nw advantage)
+   запланирован после ~7d накопления stratz_match_meta в live_snapshots.
 6. **A/B-эксперимент в проде** — две активные модели одного `(kind, fv,
    engine)` не разрешены индексом `oneActivePerKindEngineIdx`. Если захотим
    честный A/B — нужно расширить ключ (например, добавить `experiment_id`).

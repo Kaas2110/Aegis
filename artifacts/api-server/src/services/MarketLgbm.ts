@@ -40,7 +40,12 @@ export type MarketKind =
   | 'market_total_kills'
   | 'market_total_duration'
   | 'market_total_duration_q25'
-  | 'market_total_duration_q75';
+  | 'market_total_duration_q75'
+  // T3.5 — live regression: смотрят на текущий снапшот матча, предсказывают
+  // финальный total_kills / duration_sec. Используют 7-фичей feature view
+  // (см. buildLiveTotalsFeatures ниже + scripts/src/train-live-totals.ts).
+  | 'live_total_kills'
+  | 'live_total_duration';
 
 const ALL_MARKET_KINDS: MarketKind[] = [
   'market_first_blood',
@@ -48,7 +53,35 @@ const ALL_MARKET_KINDS: MarketKind[] = [
   'market_total_duration',
   'market_total_duration_q25',
   'market_total_duration_q75',
+  'live_total_kills',
+  'live_total_duration',
 ];
+
+/**
+ * T3.5 live totals feature view (v1, 7 фич, OD-only). ОБЯЗАТЕЛЬНО должна
+ * быть побайтово идентична `buildLiveTotalsFeatures` в
+ * `scripts/src/train-live-totals.ts` — иначе serialized blob будет инферить
+ * на «другом» feature view.
+ *
+ * v2 (TODO когда Stratz накопит ~7d данных): добавить xpAdvantage_kxp,
+ * networthAdvantage_kgold; сменить kind на live_total_kills_v2 и сделать
+ * параллельный retrain без поломки v1.
+ */
+export function buildLiveTotalsFeatures(s: {
+  gameTimeSec: number;
+  radiantScore: number | null;
+  direScore: number | null;
+  radiantLead: number | null;
+  buildingState: number | null;
+}): number[] {
+  const gameMin = Math.max(0.5, s.gameTimeSec / 60);
+  const kills = (s.radiantScore ?? 0) + (s.direScore ?? 0);
+  const killRate = kills / gameMin;
+  const killDiffAbs = Math.abs((s.radiantScore ?? 0) - (s.direScore ?? 0));
+  const nwLeadKgold = (s.radiantLead ?? 0) / 1000;
+  const buildingNorm = (s.buildingState ?? 4_194_303) / 4_194_304;
+  return [1, gameMin, kills, killRate, killDiffAbs, nwLeadKgold, buildingNorm];
+}
 
 type TaskType = 'classification' | 'regression' | 'quantile';
 
@@ -56,6 +89,9 @@ interface LoadedMarket {
   kind: MarketKind;
   taskType: TaskType;
   blobB64: string;
+  /** Версия модели (modelVersionsTable.version) — пишется в predictions.model_version
+   * детерминированно, без отдельного lazy fetch (фикс race из architect-review). */
+  version: string;
   loadedAt: number;
 }
 
@@ -138,6 +174,7 @@ export async function loadActiveMarketModels(): Promise<number> {
       next.set(kind, {
         kind,
         taskType,
+        version: r.version,
         blobB64: Buffer.isBuffer(blob) ? blob.toString('base64') : Buffer.from(blob).toString('base64'),
         loadedAt: Date.now(),
       });
@@ -353,4 +390,56 @@ export function getActiveMarketModelInfo(): Array<{ kind: MarketKind; taskType: 
     taskType: m.taskType,
     loadedAt: m.loadedAt,
   }));
+}
+
+/**
+ * T3.5 — live totals inference. Принимает текущий снапшот матча и возвращает
+ * (mean, std) в log-пространстве для финального total_kills и duration_sec.
+ * Caller должен делать exp(mean) чтобы получить point estimate, и использовать
+ * std для непараметрической ladder/probability.
+ *
+ * Возвращает null'ы если модели не загружены или ml-service недоступен.
+ * Cache не используется (снапшот меняется каждые 60s, key взрывается).
+ */
+export interface LiveTotalsPrediction {
+  totalKillsLogN: { mean: number; std: number } | null;
+  totalDurationLogN: { mean: number; std: number } | null;
+  modelVersions: { kills: string | null; duration: string | null };
+}
+
+export async function predictLiveTotalsFor(snapshot: {
+  gameTimeSec: number;
+  radiantScore: number | null;
+  direScore: number | null;
+  radiantLead: number | null;
+  buildingState: number | null;
+}): Promise<LiveTotalsPrediction> {
+  const lk = cached.get('live_total_kills');
+  const ld = cached.get('live_total_duration');
+  const modelVersions = {
+    kills: lk?.version ?? null,
+    duration: ld?.version ?? null,
+  };
+  const empty: LiveTotalsPrediction = {
+    totalKillsLogN: null,
+    totalDurationLogN: null,
+    modelVersions,
+  };
+  if (cached.size === 0) return empty;
+  if (snapshot.gameTimeSec < 60) return empty; // pre-laning, фичи бессмысленны
+  if (!lk && !ld) return empty;
+
+  const features = buildLiveTotalsFeatures(snapshot);
+  const [lkR, ldR] = await Promise.all([
+    lk ? callMlPredict(lk.blobB64, features) : Promise.resolve(null),
+    ld ? callMlPredict(ld.blobB64, features) : Promise.resolve(null),
+  ]);
+
+  return {
+    totalKillsLogN: lkR && lkR.task_type === 'regression'
+      ? { mean: lkR.mean, std: Math.max(1e-3, lkR.std) } : null,
+    totalDurationLogN: ldR && ldR.task_type === 'regression'
+      ? { mean: ldR.mean, std: Math.max(1e-3, ldR.std) } : null,
+    modelVersions,
+  };
 }
