@@ -67,7 +67,12 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 глоссарий из 15 типов рынков. Backed by:
 
 - **Live ML predictions** на текущих pro-матчах (обновление каждые 60s).
-  Live-винер модель обучена на `live_snapshots × prematch_outcomes`.
+  Live-винер модель обучена на `live_snapshots × prematch_outcomes`. Snapshots
+  теперь обогащаются Stratz GraphQL `live.match(id)` (T0.5a, 2026-05-16):
+  per-player gold/networth/xpm/items + meta (avgRank, gameState, liveWinRate
+  Stratz, roshanRespawn) + pre-computed `xp_advantage` / `networth_advantage`.
+  Stratz **не отдаёт live** buyback/aegis/vision/teamfights — это только
+  через OD replay-parse (T0.7, post-mortem).
 - **Match-winner model** (LightGBM v3 + LR fallback, маршрутизация по tier и
   наличию draft + account_ids). Историческую метрику и обзор фичей см.
   `docs/ml-feature-audit.md` и `docs/changelog.md`. ⚠️ Сравнения acc между
@@ -155,8 +160,8 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   (winner/totals/firstBlood) для всех 6 букмекеров.
 - **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
 - **Большая ML-итерация (план T0→T12, активная сессия):**
-  T0 аудит фичей → T0.5 Stratz live (xp/buybacks/aegis/per-hero gold) →
-  T0.7 OpenDota replay-parse backfill → T1 docs/ml-contract.md →
+  T0 аудит фичей → T0.5a Stratz live (per-player gold/networth/xpm/items + xp_advantage agg) DONE 2026-05-16 →
+  T0.7 OD replay-parse backfill (buyback/aegis/vision/teamfights — post-mortem only) → T1 docs/ml-contract.md →
   T2 docs/data-availability-rules.md (90s/3min/25min пороги) →
   T3 series momentum → T3.5 live total_kills/duration модели →
   T4 динамическая форма → T5 ELO-decomp → T6 стили команд →

@@ -42,16 +42,16 @@ union type, единая точка истины. **Запрещено** ком�
 net_worth}`, `activate_time`.
 
 **НЕ даёт (permanent_unavailable для этого источника):**
-- `xp_per_min`, `xp_total`
-- `buyback_state` (cooldown / charges)
-- `aegis_holder`
-- `roshan_state` (alive / dead time / spawn window)
-- `per-hero gold` (только агрегатный team gold доступен)
-- `picks_bans`
+- `xp_per_min`, `xp_total` → ✅ закрыто T0.5a (Stratz live)
+- `per-hero gold/networth/items` → ✅ закрыто T0.5a (Stratz live)
+- `picks_bans` → OD `/api/matches/{id}` enrichment (раз в 60 сек)
+- `buyback_state` (cooldown / charges) → ⚠️ **physically unavailable live** — есть только в post-match replay-parse (T0.7)
+- `aegis_holder` → ⚠️ **physically unavailable live** — only replay-parse (T0.7)
+- `roshan_state` (kill timeline / killer team) → ⚠️ только timer respawn доступен через Stratz; владелец Aegis — replay-parse (T0.7)
 
-Эти поля **существуют объективно** в матче, но OpenDota их не публикует.
-Получим через Stratz live (T0.5) или OpenDota post-match `/api/matches/{id}`
-после конца карты.
+Поля помеченные ⚠️ **не отдаются ни OpenDota live, ни Stratz live** — Valve
+публикует full replay только после конца матча. Это **архитектурный лимит**
+realtime источников, не наш баг.
 
 ### 2.2 OpenDota `/api/matches/{match_id}` (live-draft enrichment)
 
@@ -72,10 +72,15 @@ PandaScore это ловит и помечает `between_maps: true`.
 
 ### 2.4 Stratz `/League/live` (60 сек кэш, round-robin токен)
 
-**Даёт сейчас:** league/match presence, server steam ID.
+**Лёгкий probe:** league/match presence, server steam ID (используется в `routes/matches.ts::/api/matches/live` для дополнения OD-листинга).
 
-**Даст после T0.5:** xp_per_min, buyback_state, aegis_holder, roshan_state,
-per-hero gold/xp/lh/dn, kill timeline.
+### 2.4a Stratz `live.match(matchId)` GraphQL (T0.5a — DONE 2026-05-16)
+
+LiveWorker вызывает per active match (concurrency 4) и merge'ит в `live_snapshots`:
+- **Match-level meta** (`stratz_match_meta` JSONB): `avgRank`, `gameState` (PRE/DRAFT/STRATEGY/PLAY/POST_GAME), `gameMinute`, `delay`, `roshanRespawnSec`, `liveWinRateRadiant` (Stratz собственная live-модель), `prematchWinRateRadiant`, `prematchDurationMin`
+- **Per-player rich** (`stratz_players` JSONB, 10 элементов): gold, goldSpent, networth, gpm, xpm, kills/deaths/assists, lastHits/denies, heroDamage, towerDamage, respawnTimer, impPerMinute, items (6 slots), level
+- **Pre-computed агрегаты:** `xp_advantage` (integer column) = Σ(R.xpm)·gameMinute − Σ(D.xpm)·gameMinute, `networth_advantage` = Σ R.networth − Σ D.networth
+- **Stratz API НЕ отдаёт live:** `numBuybacks`, `hasAegis`, vision/wards, teamfight events — это в `playbackData` blob или только в post-match replay-parse (T0.7)
 
 ### 2.5 `live_snapshots` (запись каждые 60 сек LiveWorker'ом)
 
@@ -119,7 +124,8 @@ per-hero gold/xp/lh/dn, kill timeline.
 
 | Поле | Когда permanent_unavailable | Причина |
 |---|---|---|
-| `xp_per_min`, `buyback`, `aegis`, `roshan`, per-hero gold | live-матч **без** Stratz live (до T0.5 — всегда) | OD /live не отдаёт |
+| `xp_per_min`, per-hero gold/networth/items | Stratz live fetch упал ИЛИ `STRATZ_TOKEN` не задан | OD /live не отдаёт; обычно временно — следующий poll догонит |
+| `buyback`, `aegis`, vision_score, teamfight_events | live-матч в любой момент | Permanent для live. Valve публикует replay-данные только после матча → T0.7 backfill |
 | `picks_bans` | live-матч в **первые 30 сек** после начала | Драфт ещё не начался — это **временно**, НЕ permanent. Стрим спиннер. |
 | `picks_bans` | live-матч с `between_maps:true` | На карте идёт пауза. Появится когда стартует новый драфт. |
 | `account_ids` для игроков | приватные lobby / без Steam binding | Permanent. v3 фичи (player_glicko, player_hero_recency) не рассчитываются. |
@@ -175,13 +181,15 @@ captured_at?: ISO }`. Mobile-хелпер `getFieldState()` смотрит сн�
   "building_state": 2097151,
   "draft": { /* picks_bans или null */ },
   "live_fields": {
-    "xp_per_min": null,                  // permanent_unavailable до T0.5
-    "buyback_state": null,
-    "aegis_holder": null,
-    "roshan_state": null
+    "xp_advantage": 4200,                // от Stratz live (T0.5a)
+    "networth_advantage": 3100,
+    "buyback_state": null,               // permanent_unavailable для live
+    "aegis_holder": null,                // permanent_unavailable для live
+    "roshan_respawn_sec": 240            // от Stratz live (T0.5a)
   },
   "_field_meta": {
-    "xp_per_min": { "permanent_unavailable": true, "reason": "od_live_no_stratz" },
+    "buyback_state": { "permanent_unavailable": true, "reason": "replay_parse_only" },
+    "aegis_holder": { "permanent_unavailable": true, "reason": "replay_parse_only" },
     "draft": { "captured_at": "2026-05-16T14:22:50Z" }
   }
 }
@@ -255,8 +263,7 @@ permanent     | (скрыто)   (никакой плашки, никакого 
    зафиксирован в `artifacts/api-server/src/lib/availability.ts` и
    `artifacts/mobile/lib/availability.ts` (зеркала). prune-job и LiveWorker
    должны использовать константу вместо magic number'ов.
-5. **Stratz live (T0.5)** уберёт permanent_unavailable для xp/buyback/
-   aegis/roshan — тогда таблица §4 обновится.
+5. ✅ **Stratz live (T0.5a, DONE 2026-05-16)** — убрал permanent_unavailable для xp/per-hero gold/networth/items и добавил roshan_respawn_sec. **buyback/aegis/vision/teamfights остаются permanent для live** (Valve не публикует realtime — только в replay-parse T0.7).
 6. **between_maps duration timeout** — константа `BETWEEN_MAPS_TIMEOUT_MS =
    20*60*1000` зафиксирована в `artifacts/api-server/src/lib/availability.ts`,
    но **поведение ещё не подключено** в `routes/matches.ts`. Сейчас матч

@@ -10,6 +10,7 @@ import { logger } from '../lib/logger';
 import { predictMatchWinner, loadActiveModel, getActiveModel, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
+import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
 
 const POLL_INTERVAL_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
@@ -199,19 +200,43 @@ async function pollOnce(): Promise<void> {
     return;
   }
 
+  // T0.5a Stratz enrichment: параллельно с OD-данными тянем per-player rich
+  // от Stratz live для каждого changed матча. Concurrency 4 (мягко к 250/min
+  // на токен). Fail-soft: упавший fetch → snapshot пишется без Stratz полей.
+  let stratzMap = new Map<number, StratzLiveDetail | null>();
+  let stratzEnriched = 0;
+  try {
+    stratzMap = await fetchLiveMatchDetailBatch(changed.map(m => m.match_id!), 4);
+    stratzEnriched = [...stratzMap.values()].filter(v => v !== null).length;
+    // INFO даже при 0 — чтобы по логам было ясно: «попробовали, league live пуст»
+    // ≠ «забыли позвать». Норма для не-pro времени = N requested / 0 enriched.
+    logger.info({ tag: 'stratz-live', requested: changed.length, enriched: stratzEnriched },
+      '[LiveWorker] Stratz enrichment');
+  } catch (err) {
+    logger.warn({ tag: 'stratz-live', err: String(err) }, '[LiveWorker] Stratz batch failed');
+  }
+
   // Сохраняем снапшоты только для изменившихся матчей.
   try {
-    const rows = changed.map(m => ({
-      matchId: m.match_id!,
-      gameTimeSec: m.game_time ?? null,
-      radiantTeamId: m.team_id_radiant ?? null,
-      direTeamId: m.team_id_dire ?? null,
-      radiantScore: m.radiant_score ?? null,
-      direScore: m.dire_score ?? null,
-      radiantLead: m.radiant_lead ?? null,
-      buildingState: m.building_state ?? null,
-      rawPayload: m as unknown as Record<string, unknown>,
-    }));
+    const rows = changed.map(m => {
+      const sz = stratzMap.get(m.match_id!) ?? null;
+      return {
+        matchId: m.match_id!,
+        gameTimeSec: m.game_time ?? null,
+        radiantTeamId: m.team_id_radiant ?? null,
+        direTeamId: m.team_id_dire ?? null,
+        radiantScore: m.radiant_score ?? null,
+        direScore: m.dire_score ?? null,
+        radiantLead: m.radiant_lead ?? null,
+        buildingState: m.building_state ?? null,
+        rawPayload: m as unknown as Record<string, unknown>,
+        stratzMatchMeta: sz?.meta ?? null,
+        stratzPlayers: sz?.players ?? null,
+        xpAdvantage: sz?.xpAdvantage ?? null,
+        networthAdvantage: sz?.networthAdvantage ?? null,
+        stratzFetchedAt: sz ? new Date() : null,
+      };
+    });
     await db.insert(liveSnapshotsTable).values(rows);
     stats.totalSnapshots += rows.length;
   } catch (err) {

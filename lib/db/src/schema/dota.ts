@@ -355,6 +355,46 @@ export const liveSnapshotsTable = pgTable('live_snapshots', {
   /** 'live' = реальный онлайн-снапшот; 'backfill' = синтетический из истории OpenDota */
   source: text('source').default('live'),
   rawPayload: jsonb('raw_payload').$type<Record<string, unknown>>(),
+  // ── T0.5a Stratz live enrichment (всё nullable, fail-soft) ──────────────
+  /** Stratz match-level meta: avgRank, gameState, gameMinute, delay, roshanRespawnSec, liveWinRateRadiant, prematchWinRateRadiant, prematchDurationMin */
+  stratzMatchMeta: jsonb('stratz_match_meta').$type<{
+    avgRank: number | null;
+    gameState: string | null;
+    gameMinute: number | null;
+    delay: number | null;
+    roshanRespawnSec: number | null;
+    liveWinRateRadiant: number | null;
+    prematchWinRateRadiant: number | null;
+    prematchDurationMin: number | null;
+  } | null>(),
+  /** Stratz per-player rich array (10 элементов). null поля если Stratz не вернул. */
+  stratzPlayers: jsonb('stratz_players').$type<Array<{
+    steamAccountId: number | null;
+    heroId: number | null;
+    isRadiant: boolean;
+    level: number | null;
+    kills: number | null;
+    deaths: number | null;
+    assists: number | null;
+    lastHits: number | null;
+    denies: number | null;
+    gold: number | null;
+    goldSpent: number | null;
+    networth: number | null;
+    goldPerMinute: number | null;
+    experiencePerMinute: number | null;
+    heroDamage: number | null;
+    towerDamage: number | null;
+    respawnTimer: number | null;
+    impPerMinute: number | null;
+    items: number[];
+  }> | null>(),
+  /** Σ(Radiant.xpm)·gameMinute − Σ(Dire.xpm)·gameMinute. Precomputed для быстрого ML. */
+  xpAdvantage: integer('xp_advantage'),
+  /** Σ Radiant.networth − Σ Dire.networth. */
+  networthAdvantage: integer('networth_advantage'),
+  /** Когда Stratz отдал данные. null если fetch упал. */
+  stratzFetchedAt: timestamp('stratz_fetched_at', { withTimezone: true }),
 }, (t) => ({
   matchIdx: index('live_snapshots_match_idx').on(t.matchId),
   capturedIdx: index('live_snapshots_captured_idx').on(t.capturedAt),

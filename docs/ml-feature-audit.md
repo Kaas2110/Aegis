@@ -78,7 +78,7 @@ fallback bucket: prematch_winner (общий, если конкретного т
 |---|---|---|
 | Map Handicap | Math (Binomial от p(win)) | Нет, формульно правильно |
 | Correct Score | Math (Conditional от p(win) + текущий счёт) | Нет, формульно правильно |
-| Comeback (live) | Math (Sigmoid от NW gap + time + aegis) | Возможно — если нашлёпаем live данных, тренируем |
+| Comeback (live) | Math (Sigmoid от NW gap + time) | Возможно — если нашлёпаем live данных, тренируем. ⚠️ aegis_holder в live недоступен (нет в Stratz live, только в OD replay-parse). |
 
 ---
 
@@ -152,7 +152,8 @@ tier_t1, tier_t2, tier_t3,
 
 | Фаза | Фичи | Куда применимо |
 |---|---|---|
-| **T0.5 Stratz live** | per-hero gold/xp, точный roshan_state, real buybacks, real aegis_holder | live_winner, live_total_kills, live_total_duration, comeback |
+| **T0.5a Stratz live** (DONE 2026-05-16) | per-player gold/networth/xpm/gpm/items, avgRank, gameState, liveWinRate Stratz, xp/networth advantage агрегаты | live_winner, live_total_kills, live_total_duration, comeback |
+| **T0.7 OD replay-parse** (pending) | aegis_holder, buyback_log, vision_score, teamfight events — **post-mortem only** (Valve публикует replay после матча, в Stratz live тоже отсутствуют) | post-mortem training, calibration |
 | **T0.7 OpenDota parse** | early/mid/late kill density, ward density per minute, smoke usage, gank frequency | team_styles → влияет на ВСЕ модели через стилевые фичи |
 | **T3 series momentum** | map_number, series_score_diff, is_decider, prev_map_kill_diff, prev_map_duration | ВСЕ prematch + live |
 | **T3.5 live total models** | game_time, current kills/min, current networth_diff, building tier_lost, draft, prematch фичи | НОВЫЕ модели live_total_kills / live_total_duration (с квантилями) |

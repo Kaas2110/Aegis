@@ -3,6 +3,52 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-16 (вечер) — T0.5a Stratz live enrichment
+
+Stratz GraphQL schema introspection показала: Stratz live API **не отдаёт**
+`numBuybacks`, `hasAegis`, vision/wards, teamfight events (Valve публикует
+realtime лишь то, что есть в game-state JSON — buyback/aegis/vision видны
+только в полном replay, который доступен после матча). **Изначальный план T0.5**
+(«xp/buybacks/aegis/per-hero gold») пересмотрен: реалистично доступно через
+Stratz live только то, что **физически передаётся в стрим**.
+
+**Что добавлено в `live_snapshots` (5 новых колонок, all nullable, fail-soft):**
+
+- `stratz_match_meta` JSONB — avgRank, gameState (PRE/DRAFT/STRATEGY/PLAY/POST_GAME),
+  gameMinute, delay, roshanRespawnSec, **liveWinRateRadiant** (Stratz собственная
+  live-модель — кандидат на stacking-фичу), prematchWinRateRadiant, prematchDurationMin.
+- `stratz_players` JSONB (Array<10>) — per-player gold, goldSpent, networth, gpm, xpm,
+  kills/deaths/assists, lastHits/denies, heroDamage, towerDamage, respawnTimer,
+  impPerMinute, items (6 slot IDs), level.
+- `xp_advantage` integer — Σ(R.xpm)·gameMinute − Σ(D.xpm)·gameMinute, precomputed для
+  быстрого использования в ML без перебора JSONB.
+- `networth_advantage` integer — Σ R.networth − Σ D.networth.
+- `stratz_fetched_at` TIMESTAMPTZ — когда Stratz ответил (null если fetch упал
+  или матч не найден в Stratz league API).
+
+**Реализация:**
+- `artifacts/api-server/src/lib/stratzLive.ts` — клиент `fetchLiveMatchDetail(id)` +
+  батч `fetchLiveMatchDetailBatch(ids, concurrency=4)`. Curl-fallback (TLS-JA3
+  bypass) зеркало `scripts/src/lib/stratz.ts`. 30s in-memory TTL cache per match.
+- `LiveWorker.pollOnce()` — между дедупом и `db.insert(liveSnapshotsTable)`
+  делает Stratz batch и merge'ит результат в каждую row. Fail-soft на каждом
+  уровне: упавший fetch → snapshot пишется без Stratz полей.
+- Round-robin токен через `ApiKeysService.getStratzToken()`.
+
+**Gotcha найден и исправлен:** Stratz schema требует `live { match(id: $id) }`,
+не `match(matchId:)` как было в первой версии query. До исправления — все
+fetches возвращали GraphQL error → null. После: матчи которых нет в Stratz
+league (pubs/scrims из OD `/api/live`) возвращают `data.live.match: null` —
+тоже корректно, snapshot пишется без Stratz полей.
+
+**Что НЕ покрыто T0.5a и переехало в T0.7 (OD replay-parse, post-mortem):**
+buybacks (`buyback_log[]`), aegis_holder (chat events), vision_score, teamfight
+timeline. Это **архитектурный лимит realtime источников**, не наш баг —
+заполнится backfill'ом после конца матча.
+
+Документы синхронизированы: `docs/data-availability-rules.md` §2.4a + §4 +
+§6.1 + §8.5, `docs/ml-feature-audit.md` §1.5 + §T0.5a, `replit.md` roadmap.
+
 ## 2026-05-16 — T0+T8 mini retrain после обогащения БД
 
 Большая ML-итерация T0→T12. Сегодня закрыты T0 (audit), T1 (`ml-contract.md`),
