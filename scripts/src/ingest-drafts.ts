@@ -25,7 +25,12 @@ import {
   type StratzPlayerSlot,
 } from './lib/stratz.js';
 
-const MIN_AVG_GLICKO = 1200;
+// 2026-05-16: снижено 1200 → 0. Обоснование: фильтр работает на teams.rating
+// (Glicko команды от OpenDota), top-1000 OpenDota команд = pro. Но 81% pro-матчей
+// в БД имеют команды БЕЗ записи в teams (rating=NULL) — фильтр их отбрасывает,
+// блокируя ~23k драфтов. Снижаем до 0, чтобы тянуть всё; tier фильтр работает
+// на этапе train (classifyTier по avg rating), а здесь нам нужны просто данные.
+const MIN_AVG_GLICKO = 0;
 
 // ---------- OpenDota types ----------
 

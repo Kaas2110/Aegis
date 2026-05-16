@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/ml-service: ML Service"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Data Enrichment"
+
 [[workflows.workflow]]
 name = "artifacts/ml-service: ML Service"
 author = "agent"
@@ -28,6 +32,17 @@ author = "agent"
 task = "shell.exec"
 args = "pnpm --filter @workspace/ml-service run dev"
 waitForPort = 8090
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Data Enrichment"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-enrichment-pipeline.sh"
 
 [workflows.workflow.metadata]
 outputType = "console"
