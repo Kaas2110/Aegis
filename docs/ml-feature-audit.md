@@ -96,20 +96,40 @@ tier_t1, tier_t2, tier_t3,
   avg_duration_30d_diff, win_streak_score
 ```
 
-### HERO_FEATURE_NAMES (драфт, в v2/v3)
-```
-draft_strength_diff, matchup_advantage,
-synergy_diff (по matchups, НЕ по hero_synergy ❗),
-counter_diff, ban_priority_diff,
-meta_score_diff, hero_winrate_diff
-```
+### HERO_FEATURE_NAMES (драфт, в v2/v3) — **HERO_FEATURE_DIM = 11**
+Источник истины: `scripts/src/lib/hero-features.ts` и зеркало
+`artifacts/api-server/src/lib/hero-features.ts`. Порядок фиксирован
+(меняешь — обязан переобучить все bucket'ы).
 
-### EXTRA_FEATURE_NAMES (v3 only)
-```
-player_skill_on_hero_diff,
-player_recent_form_diff,
-h2h_score, player_glicko_diff, player_glicko_uncertainty_diff
-```
+| # | имя | смысл | источник |
+|---|---|---|---|
+| 1 | `radiant_pick_strength` | Σ `proWinRate` по 5 пикам radiant | `hero_stats` |
+| 2 | `dire_pick_strength` | то же для dire | `hero_stats` |
+| 3 | `pick_strength_diff` | (1) − (2) | derived |
+| 4 | `matchup_advantage` | Σ по 25 парам (r,d) `(wr−0.5)·log(games+1)`, симметричный fallback (d→r инвертируется) | `hero_matchups` |
+| 5 | `radiant_meta_score` | Σ `proPickRate` радианта (популярность героев) | `hero_stats` |
+| 6 | `dire_meta_score` | то же для dire | `hero_stats` |
+| 7 | `ban_priority_diff` | Σ pickrate банов radiant − dire (умные баны бьют по топ-меты) | `hero_stats` |
+| 8 | `synergy_diff` (T0) | Σ по 10 внутрикомандным парам `(wr−0.5)·log(g+1)` для radiant − то же для dire | `hero_synergy` (Stratz DIVINE_IMMORTAL) |
+| 9 | `early_game_score_diff` (T0) | Σ `earlyGameScore` радианта − dire (сила пиков в первые 25 мин) | `hero_stats.early_game_score` |
+| 10 | `late_game_score_diff` (T0) | то же для late_game (>40 мин) | `hero_stats.late_game_score` |
+| 11 | `counter_bans_diff` (T0 v2) | «защитный» counter-ban: команда забанила b, который контрил бы свои пики (winRate(b,p)>0.5). Суммируется `(wr−0.5)·log(g+1)` только по положительным | `hero_matchups` |
+
+### EXTRA_FEATURE_NAMES (v3 only) — **EXTRA_FEATURE_DIM = 6**
+
+| # | имя | смысл | источник |
+|---|---|---|---|
+| 1 | `player_skill_diff` | Σ (winrate_on_hero − global_winrate_on_hero)·log(g+1), radiant − dire | `player_hero_stats` |
+| 2 | `recent_form_diff` | form30.winRate(radiant) − form30.winRate(dire) | `team_recent_form` |
+| 3 | `h2h_advantage_radiant` | P(radiant выигр в h2h)−0.5, шкала log(g+1) | `team_h2h` |
+| 4 | `side_advantage` | константа 1 (radiant всегда radiant) — модель учит side-вес | derived |
+| 5 | `player_glicko_diff` | (avg(radiant glicko) − avg(dire glicko)) / 200 | `player_ratings` |
+| 6 | `player_hero_recency_diff` (T0 v2) | avg «свежести» (last_played) по 5 пикам radiant − dire | `player_hero_stats.last_played` |
+
+⚠️ **Удалено относительно ранней версии этого аудита:** `player_glicko_uncertainty_diff` —
+в коде нет, не путать с другими `_diff` полями.
+
+**Полный prematch feature view = TEAM_FEATURE_DIM (17) + HERO_FEATURE_DIM (11) + EXTRA_FEATURE_DIM (6) = 34 фичи в v3 bucket'е.**
 
 ---
 
@@ -170,46 +190,69 @@ h2h_score, player_glicko_diff, player_glicko_uncertainty_diff
 
 Эти правки безопасны и не зависят от новых данных:
 
-- [x] **A.** Добавить `hero_synergy` в `buildHeroFeatures` как новую фичу `synergy_diff`. Перетренировать `train:model` (LR) и `train:lightgbm` для всех bucket'ов. **CODE DONE 2026-05-16, retrain pending.**
-- [x] **B.** Добавить `early_game_score_diff` и `late_game_score_diff` в `buildHeroFeatures` (агрегат early/late_game_score по героям сторон). Туда же. **CODE DONE 2026-05-16, retrain pending.**
-- [x] **C.** Убрать хардкод `netWorthSwingLast5 = 8200` в BaselineModel. **DONE 2026-05-16** — поставлен `0` (нет данных) с TODO считать на сервере из rolling window последних 5 live_snapshots и слать как `snap.netWorthSwingLast5`.
+- [x] **A.** `synergy_diff` из `hero_synergy` (Stratz DIVINE_IMMORTAL). **CODE DONE 2026-05-16.**
+- [x] **B.** `early_game_score_diff` + `late_game_score_diff` из `hero_stats.early/late_game_score`. **CODE DONE 2026-05-16.**
+- [x] **C.** Убран хардкод `netWorthSwingLast5 = 8200` в BaselineModel → 0 + TODO для server-side rolling window. **DONE 2026-05-16.**
+- [x] **D (v2).** `counter_bans_diff` — защитный counter-ban (см. секцию 2, фича 11). **CODE DONE 2026-05-16.**
+- [x] **E (v2).** `player_hero_recency_diff` — средняя свежесть `player_hero_stats.last_played`. **CODE DONE 2026-05-16.**
 
-### T0 mini-fix — детали (2026-05-16)
+### T0 mini-fix — детали (2026-05-16, обновлено)
 
 **Что сделано в коде** (typecheck ✅ во всех 6 пакетах):
 
 1. `scripts/src/lib/hero-features.ts` + `artifacts/api-server/src/lib/hero-features.ts` (зеркала):
-   - `HeroStat` расширен опциональными `earlyGameScore` / `lateGameScore` (default 0.5 если null).
-   - Новый тип `HeroSynergyMap = Map<heroId, Map<withHeroId, {games, winRate}>>` с симметричным lookup (a→b ИЛИ b→a).
-   - `HERO_FEATURE_NAMES`: **+3 в КОНЕЦ** (порядок старых 7 фичей не меняется). Новый `HERO_FEATURE_DIM = 10`:
-     - `synergy_diff` — Σ по 10 уникальным парам (i<j) внутри команды; `(winRate-0.5)·log(games+1)`; radiant - dire.
-     - `early_game_score_diff` — Σ по 5 героям radiant minus dire.
-     - `late_game_score_diff` — то же.
-   - `buildHeroFeatures` принимает новый optional `synergy?: HeroSynergyMap`. Если не передан — `synergy_diff = 0` (нейтрально, BC-safe).
+   - `HeroStat` расширен опциональными `earlyGameScore` / `lateGameScore` (default 0.5).
+   - Новый тип `HeroSynergyMap` с симметричным lookup (a→b ИЛИ b→a).
+   - `HERO_FEATURE_NAMES`: **+4 в конец** (порядок старых 7 не меняется). Итог `HERO_FEATURE_DIM = 11`:
+     `synergy_diff`, `early_game_score_diff`, `late_game_score_diff`, `counter_bans_diff`.
+   - `PlayerHeroStat.lastPlayed?: number|null` (Unix sec) добавлен.
+   - `EXTRA_FEATURE_NAMES`: **+1 в конец** (`player_hero_recency_diff`). Итог `EXTRA_FEATURE_DIM = 6`.
+   - `buildHeroFeatures` принимает optional `synergy`; если не передан — `synergy_diff=0` (BC-safe).
 2. `scripts/src/train-model.ts` (LR) и `scripts/src/train-lightgbm.ts` (LightGBM):
    - Загружают `heroSynergyTable` целиком в `Map`.
-   - Расширили SELECT по `heroStatsTable` чтобы тянуть `earlyGameScore`/`lateGameScore`.
-   - Передают `heroSynergy` в `buildHeroFeatures` для v2/v3 bucket'ов.
+   - SELECT по `heroStatsTable` расширен на `earlyGameScore`/`lateGameScore`.
+   - SELECT по `playerHeroStats` расширен на `lastPlayed`.
+   - Передают `heroSynergy` в `buildHeroFeatures` для v2/v3.
 3. `artifacts/api-server/src/services/PredictionModel.ts`:
-   - Новый кэш `heroSynergyCache` с тем же TTL что `heroStatsCache` (60 мин).
+   - Новый `heroSynergyCache` с TTL 60 мин.
    - `refreshHeroData` параллелит 3-й SELECT (synergy) и обогащает heroStats полями early/late.
    - `buildHeroFeatures` вызывается с `heroSynergyCache`.
-4. `artifacts/mobile/services/model/BaselineModel.ts:72`: убран хардкод 8200 → 0 + комментарий + TODO для server-side rolling window.
+4. `artifacts/mobile/services/model/BaselineModel.ts:72`: убран хардкод 8200.
 
-**Что НЕ сделано (требует ресурсов / явного согласия пользователя):**
+**Состояние БД на 2026-05-16 (после `ingest:teams` + `ingest:hero-stats` + `ingest:hero-matchups` + `ingest:hero-synergy`):**
+- `hero_stats` = 127 (Stratz-supplemented, есть early/late_game_score) ✅
+- `hero_matchups` = 15 993 (Stratz DIVINE_IMMORTAL, ⚠️ matchCount шкала ≠ OpenDota — после ingest нужен retrain) ✅
+- `hero_synergy` = 15 942 ✅
+- `pro_matches_365d` = 28 904; `match_drafts_365d` = 4 016
+- Pipeline-в-фоне: `ingest:matches 100` (≈10k свежих pro × 1.1с ≈ 3ч) → drafts → players-heroes → compute:player-glicko/recent-form/h2h/team-extended.
 
-- ⚠️ **Retrain LR (`train:model`) и LightGBM (`train:lightgbm`)** — ОБЯЗАТЕЛЕН до того как новые фичи начнут работать. До retrain активные модели в БД имеют featureDim=7 (старая HERO_FEATURE_DIM), а инференс будет вычислять 10 — `featureDim` mismatch гарантирует **fallback на v1 (только team-фичи)** для всех матчей с draft. То есть: до retrain система временно работает на team-only ELO+form+h2h, без draft-вклада. Это **временная просадка качества** (-3..-5 п.п. accuracy для матчей с draft) пока модели не переобучены.
-- ⚠️ Тренировка требует `ML Service` workflow (для LightGBM) + `DATABASE_URL` доступа. Workflows сейчас остановлены — поднимаем когда пользователь даст «старт retrain».
-- Для retrain команды (после старта workflow `ML Service`):
-  ```bash
-  pnpm --filter @workspace/scripts run train:model
-  pnpm --filter @workspace/scripts run train:lightgbm
-  ```
+**Что НЕ сделано — БЛОКИРОВКА RETRAIN:**
 
-**Регресс-инвариант (важно для будущих правок hero-features):**
-Если меняешь `HERO_FEATURE_NAMES` — обязан в одной CL'е выполнить retrain ВСЕХ активных моделей и убедиться что `featureDim` в БД и в коде совпадают, иначе PredictionModel молча упадёт на нижестоящий fallback и качество просядет без видимой ошибки.
+- ⚠️ **Retrain LR + LightGBM** — ОБЯЗАТЕЛЕН до того как новые 5 фичей начнут реально работать. До retrain активные модели в БД имеют **featureDim=7 hero + 5 extra**, а инференс теперь вычисляет **11+6=17**. `featureDim` mismatch гарантирует **fallback на v1 (team-only)** для всех матчей с draft. То есть **сейчас система временно работает без draft-вклада** (-3..-5 п.п. accuracy на drafted матчах).
+- ⚠️ **Не запускаем retrain пока pipeline не отработает.** Принцип: «новые фичи не катим в прод сразу — сначала наполняем БД до ~100%, потом одна выборка 365d, потом обучение» (см. roadmap в `replit.md`). Pipeline в фоне (~4-5 ч wall-time) → потом одна команда `train:model` + `train:lightgbm` атомарно подменяет все bucket'ы.
 
-Это **2-3 часа работы**, +1-2 п.п. accuracy сразу, и **закрывает 3 уже существующих gap'а** до того как наслаивать новые большие фазы.
+Для retrain (после окончания pipeline):
+```bash
+pnpm --filter @workspace/scripts run train:model
+pnpm --filter @workspace/scripts run train:lightgbm
+```
+
+**Регресс-инвариант (для будущих правок hero-features / extra-features):**
+Меняешь `HERO_FEATURE_NAMES` или `EXTRA_FEATURE_NAMES` — обязан в одной CL'е выполнить retrain ВСЕХ активных моделей. `featureDim` в БД и в коде должны совпадать, иначе `PredictionModel` молча упадёт на нижестоящий fallback (логи `predict tag` покажут, что v3 не загрузился) и качество просядет без видимой ошибки.
+
+**Ожидаемый эффект retrain:** +1-2 п.п. accuracy сразу, и закрывает 5 gap'ов до наслаивания T3+ фаз.
+
+---
+
+## T0 ИТОГИ — DONE 2026-05-16
+
+- ✅ Маршрутизация моделей разобрана и зафиксирована (секция 1).
+- ✅ Полный feature view промаркирован поимённо (секция 2, 34 фичи в v3).
+- ✅ Зафиксированы 3 главных gap'а: live LightGBM нет, live total-моделей нет (экстраполяция темпа), first_tower/first_roshan только эвристики (секция 1).
+- ✅ Зафиксированы 5 фичей из БД, которые ещё не дотащены в модели (секция 3).
+- ✅ T0 mini-fix v1+v2 (5 новых фичей) выкачены в код, retrain отложен до окончания pipeline обогащения.
+
+**Что разблокировано T0:** T1 (`ml-contract.md`), T3 (series momentum), T3.5 (live total-модели — теперь точно знаем, что их надо писать с нуля, а не патчить prematch), T8 (после обогащения и retrain).
 
 ---
 
