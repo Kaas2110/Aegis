@@ -33,6 +33,7 @@ import {
   playerRatingsTable,
   teamRecentFormTable,
   teamH2HTable,
+  teamExtendedFeaturesTable,
 } from '@workspace/db';
 import { asc, gte, and, eq, inArray } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
@@ -422,7 +423,30 @@ async function main() {
       radiantWin: m.radiantWin, firstBloodTime: m.firstBloodTime,
     });
   }
-  console.log(`[train-lightgbm] as-of snapshots: ${extByMatch.size} matches, ${rollStates.size} teams`);
+  // ⚠ ИЗВЕСТНЫЙ КОМПРОМИСС (leakage): подмешиваем CURRENT peer_synergy в каждый
+  // as-of snapshot. Это технически утечка будущей информации о составах в
+  // прошлые матчи. Альтернатива (as-of пересчёт peer-synergy на каждый матч)
+  // требует chronological roster tracking + per-match player_peers lookup —
+  // дорого и хрупко. Решение: для топ-команд ростер стабилен ~6 мес, эффект
+  // утечки невелик, фича выигрывает важность top-3 (см. importance в логе).
+  // TODO: если v3/fallback acc упадёт, переписать на bucketed (по месяцам/патчам).
+  // Команды без peer_synergy = null → в buildExtendedTeamFeatures дают 0 (нейтрал).
+  const peerRows = await db.select({
+    teamId: teamExtendedFeaturesTable.teamId,
+    peerSynergy: teamExtendedFeaturesTable.peerSynergy,
+  }).from(teamExtendedFeaturesTable);
+  const peerMap = new Map<number, number | null>();
+  for (const r of peerRows) peerMap.set(r.teamId, r.peerSynergy);
+  let patched = 0;
+  for (const m of allMatchesForRoll) {
+    if (!m.radiantTeamId || !m.direTeamId) continue;
+    const e = extByMatch.get(m.matchId);
+    if (!e) continue;
+    e.r.peerSynergy = peerMap.get(m.radiantTeamId) ?? null;
+    e.d.peerSynergy = peerMap.get(m.direTeamId) ?? null;
+    if (e.r.peerSynergy != null || e.d.peerSynergy != null) patched += 1;
+  }
+  console.log(`[train-lightgbm] as-of snapshots: ${extByMatch.size} matches, ${rollStates.size} teams, peer_synergy patched: ${patched}`);
 
   // Сборка бакетов
   const v1All: Sample[] = [];

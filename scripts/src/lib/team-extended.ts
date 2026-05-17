@@ -68,6 +68,7 @@ export interface TeamExtendedSnapshot {
   firstBloodRate30d: number | null;   // null если 0 матчей в окне
   radiantWinrate: number | null;      // null если 0 игр за свет
   direWinrate: number | null;         // null если 0 игр за тьму
+  peerSynergy: number | null;         // средний попарный wr core-5 ростера, 0..1; заполняется ИЗВНЕ (rolling state не отслеживает игроков)
 }
 
 export function snapshotAt(state: TeamRollingState, nowSec: number): TeamExtendedSnapshot {
@@ -87,6 +88,7 @@ export function snapshotAt(state: TeamRollingState, nowSec: number): TeamExtende
     firstBloodRate30d: n > 0 ? fb / n : null,
     radiantWinrate: state.radiantGames > 0 ? state.radiantWins / state.radiantGames : null,
     direWinrate: state.direGames > 0 ? state.direWins / state.direGames : null,
+    peerSynergy: null,  // заполняется отдельным проходом (compute-team-extended) или patch'ем в train-скрипте
   };
 }
 
@@ -134,8 +136,9 @@ export const EXTENDED_TEAM_FEATURE_NAMES = [
   'avg_duration_30d_diff',    // (r - d) в минутах, clipped ±10, /10
   'fb_rate_30d_diff',         // (r - d) -1..1
   'side_pref_diff',           // r.radiantWr - d.direWr, -1..1
+  'peer_synergy_diff',        // r.peerSynergy - d.peerSynergy (0..1 каждый, дефолт 0.5), clipped ±0.4
 ] as const;
-export const EXTENDED_TEAM_FEATURE_DIM = EXTENDED_TEAM_FEATURE_NAMES.length;  // 6
+export const EXTENDED_TEAM_FEATURE_DIM = EXTENDED_TEAM_FEATURE_NAMES.length;  // 7
 
 function clip(x: number, abs: number): number {
   if (x > abs) return abs;
@@ -176,7 +179,13 @@ export function buildExtendedTeamFeatures(
   const sidePrefD = ds.direWinrate ?? 0.5;
   const sidePref = sidePrefR - sidePrefD;
 
-  return [winStreakDiff, restDaysDiff, matchesDiff, durDiff, fbDiff, sidePref];
+  // peer synergy: 0.5 = нейтрально (нет данных о паре), clipping ±0.4 чтобы
+  // редкие "идеальные" пары (wr 1.0 с 1-2 играми) не доминировали
+  const peerR = rs.peerSynergy ?? 0.5;
+  const peerD = ds.peerSynergy ?? 0.5;
+  const peerDiff = clip(peerR - peerD, 0.4) / 0.4;
+
+  return [winStreakDiff, restDaysDiff, matchesDiff, durDiff, fbDiff, sidePref, peerDiff];
 }
 
 function defaultSnapshot(): TeamExtendedSnapshot {
@@ -188,5 +197,6 @@ function defaultSnapshot(): TeamExtendedSnapshot {
     firstBloodRate30d: null,
     radiantWinrate: null,
     direWinrate: null,
+    peerSynergy: null,
   };
 }

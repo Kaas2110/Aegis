@@ -393,6 +393,7 @@ async function refreshTeamExtended(): Promise<void> {
       firstBloodRate30d: teamExtendedFeaturesTable.firstBloodRate30d,
       radiantWinrate: teamExtendedFeaturesTable.radiantWinrate,
       direWinrate: teamExtendedFeaturesTable.direWinrate,
+      peerSynergy: teamExtendedFeaturesTable.peerSynergy,
     }).from(teamExtendedFeaturesTable);
     const next = new Map<number, TeamExtendedSnapshot>();
     for (const r of rows) {
@@ -404,6 +405,7 @@ async function refreshTeamExtended(): Promise<void> {
         firstBloodRate30d: r.firstBloodRate30d,
         radiantWinrate: r.radiantWinrate,
         direWinrate: r.direWinrate,
+        peerSynergy: r.peerSynergy,
       });
     }
     teamExtendedCache = next;

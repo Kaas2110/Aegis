@@ -34,7 +34,7 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 | `compute:h2h` | Recompute `team_h2h` (365-day) |
 | `compute:player-glicko` | Glicko-1 (c=63, period=30d). Идемпотентно; `--reset` пересоздаёт |
 | `compute:bo3-series [days=180]` | Aggregate `bo3_series` |
-| `compute:team-extended` | Team extended snapshot features |
+| `compute:team-extended` | Team extended snapshot features (winStreak, restDays, matches30d, avgDuration, fbRate, sidePref, **peerSynergy** — средний попарный wr core-5 ростера из `player_peers`, 365d, top-5 по играм, мин. 3 пары × 10 совместных игр) |
 | `train:model` | Atomic swap всех v1+v2+v3 prematch LR моделей (fallback baseline) |
 | `train:lightgbm [LIGHTGBM_KINDS=v3/fallback,...]` | LightGBM prematch (через ml-service). Атомарный per-bucket swap. Лог печатает `IMPORTANCE top15`, `DRIFT (>10%)`, `LABEL train/test radiantWR` |
 | `train:market-models [-- --market <name>]` | LightGBM derived-market (FB / total_kills / total_duration ± q25/q75) |

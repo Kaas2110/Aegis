@@ -14,6 +14,7 @@ export interface TeamExtendedSnapshot {
   firstBloodRate30d: number | null;
   radiantWinrate: number | null;
   direWinrate: number | null;
+  peerSynergy: number | null;
 }
 
 export const EXTENDED_TEAM_FEATURE_NAMES = [
@@ -23,8 +24,9 @@ export const EXTENDED_TEAM_FEATURE_NAMES = [
   'avg_duration_30d_diff',
   'fb_rate_30d_diff',
   'side_pref_diff',
+  'peer_synergy_diff',
 ] as const;
-export const EXTENDED_TEAM_FEATURE_DIM = EXTENDED_TEAM_FEATURE_NAMES.length;  // 6
+export const EXTENDED_TEAM_FEATURE_DIM = EXTENDED_TEAM_FEATURE_NAMES.length;  // 7
 
 function clip(x: number, abs: number): number {
   if (x > abs) return abs;
@@ -41,6 +43,7 @@ function defaultSnapshot(): TeamExtendedSnapshot {
     firstBloodRate30d: null,
     radiantWinrate: null,
     direWinrate: null,
+    peerSynergy: null,
   };
 }
 
@@ -65,5 +68,8 @@ export function buildExtendedTeamFeatures(
   const sidePrefR = rs.radiantWinrate ?? 0.5;
   const sidePrefD = ds.direWinrate ?? 0.5;
   const sidePref = sidePrefR - sidePrefD;
-  return [winStreakDiff, restDaysDiff, matchesDiff, durDiff, fbDiff, sidePref];
+  const peerR = rs.peerSynergy ?? 0.5;
+  const peerD = ds.peerSynergy ?? 0.5;
+  const peerDiff = clip(peerR - peerD, 0.4) / 0.4;
+  return [winStreakDiff, restDaysDiff, matchesDiff, durDiff, fbDiff, sidePref, peerDiff];
 }

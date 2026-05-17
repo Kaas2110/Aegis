@@ -515,3 +515,12 @@ draft (sorted heroes/accounts) и пропускает матчи с неизм�
 `Map<matchId,hash>` чистится от завершённых матчей каждый тик. Stat
 `skippedUnchanged` в `getWorkerStats()`. Без этого на каждый 60s-tick OpenDota
 со stale-данными плодились дубликаты в `live_snapshots` / `predictions`.
+
+## 2026-05-17 — peer_synergy фича добавлена в team_extended
+
+- В `teamExtendedFeaturesTable` добавлена колонка `peer_synergy real` (0..1, null если данных мало).
+- `compute:team-extended` теперь считает per-team peer-synergy: top-5 account_ids по играм за 365d → mean попарный winrate из `player_peers` (взвешен по games, мин. 10 совместных игр на пару, мин. 3 пары иначе null). Заполнено 1451/1998 команд.
+- `EXTENDED_TEAM_FEATURE_DIM` поднят 6 → 7 (новая фича `peer_synergy_diff`, clipped ±0.4). Зеркальные правки в `scripts/src/lib/team-extended.ts` и `artifacts/api-server/src/lib/team-extended.ts`.
+- `train:lightgbm`: историческим as-of снапшотам peer_synergy патчится из текущих значений (ростер топ-команд стабилен ~6мес, full chronological tracking слишком дорог). Команды без peer_synergy → 0 (нейтрал).
+- Ретрейн всех LightGBM v1/v2/v3 × {fallback, t1, t2} 9 моделей. `peer_synergy_diff` попал в top-3 importance у v2/fallback (102), v2/t1 (72), v2/t2 (45); top-15 у v3/t1 (28); у v3/fallback/t2 за пределами top-15 (доминируют h2h + player_skill). Метрики: v3/fallback test_acc 76.7% (baseline 77.4%, в пределах ±2-3pp шума), v3/t2 79.6% (улучшение), v3/t1 63.7% (улучшение с 61.3% baseline).
+- Также перетренированы market models (FB / total_kills / total_duration ± q25/q75) и live-winner v8 (acc 70.0%, brier 0.223, lift +17.13pp над прематч-baseline).

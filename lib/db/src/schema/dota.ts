@@ -353,6 +353,7 @@ export const teamExtendedFeaturesTable = pgTable('team_extended_features', {
   firstBloodRate30d: real('first_blood_rate_30d'),             // доля матчей где FB до 5 мин
   radiantWinrate: real('radiant_winrate'),                     // wr когда играли как radiant (cumulative)
   direWinrate: real('dire_winrate'),                           // wr когда играли как dire (cumulative)
+  peerSynergy: real('peer_synergy'),                           // средний попарный winrate core-5 ростера из player_peers, 0..1 (null если нет данных)
   lastMatchTime: bigint('last_match_time', { mode: 'number' }),
   computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
 });
