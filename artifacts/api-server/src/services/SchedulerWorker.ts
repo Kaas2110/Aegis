@@ -247,10 +247,11 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     if (teamsRun.code !== 0) throw new Error(`ingest:teams failed: ${teamsRun.tail}`);
     await updateState({ lastIngestAt: new Date() });
 
-    const matchesRun = await runPnpmScript('ingest:matches', ['200']);
-    stepResults['ingest:matches'] = matchesRun.code === 0;
-    logger.info({ code: matchesRun.code }, '[Scheduler] ingest:matches done');
-    if (matchesRun.code !== 0) throw new Error(`ingest:matches failed: ${matchesRun.tail}`);
+    // ingest:matches — non-fatal: при 429 от OD pipeline продолжает работать
+    // с уже накопленными данными в БД. Критичность убрана, чтобы 429 не блокировал
+    // весь ретрейн-цикл (исторически убивал pipeline с 2026-05-14).
+    stepResults['ingest:matches'] = await runScriptSafe('ingest:matches', 'ingest:matches', ['200']);
+    logger.info({ ok: stepResults['ingest:matches'] }, '[Scheduler] ingest:matches done (non-fatal)');
 
     // Non-fatal обогащение: drafts, hero-stats, hero-matchups, players-heroes, leagues
     stepResults['ingest:drafts'] = await runScriptSafe('ingest:drafts', 'ingest:drafts');
@@ -358,6 +359,14 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     if (stepResults['train:live-model']) {
       try { await loadActiveLiveModel(); } catch (err) {
         logger.warn({ err: String(err) }, '[Scheduler] reload after train:live-model failed');
+      }
+    }
+
+    // train:live-totals — non-fatal (live regression: total_kills + total_duration)
+    stepResults['train:live-totals'] = await runScriptSafe('train:live-totals', 'train:live-totals', trainArgs, { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    if (stepResults['train:live-totals']) {
+      try { await loadActiveLiveModel(); } catch (err) {
+        logger.warn({ err: String(err) }, '[Scheduler] reload after train:live-totals failed');
       }
     }
 
@@ -624,8 +633,9 @@ export const TRAIN_SCRIPT_WHITELIST: Record<string, { args: readonly string[] }>
   'train:lightgbm':      { args: ['--label', '--since-unix', '--min-samples'] },
   'train:market-models': { args: ['--market', '--since-unix', '--min-samples'] },
   'train:live-model':    { args: ['--since-unix', '--min-samples'] },
+  'train:live-totals':   { args: ['--market', '--since-unix', '--min-samples'] },
 };
-export type TrainScriptName = 'train:model' | 'train:lightgbm' | 'train:market-models' | 'train:live-model';
+export type TrainScriptName = 'train:model' | 'train:lightgbm' | 'train:market-models' | 'train:live-model' | 'train:live-totals';
 
 /**
  * Запускает один тренировочный скрипт в фоне с whitelist'ом аргументов.

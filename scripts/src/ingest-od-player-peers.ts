@@ -50,13 +50,26 @@ async function fetchPeers(accountId: number): Promise<OdPeer[]> {
 async function main() {
   const cutoff = new Date(Date.now() - FRESHNESS_DAYS * 86_400_000);
 
-  // Все уникальные account_id из дraftов (radiant + dire)
-  const rows = await db
-    .selectDistinct({ accountId: sql<number>`unnest(${matchDraftsTable.radiantAccountIds} || ${matchDraftsTable.direAccountIds})`.as('account_id') })
-    .from(matchDraftsTable)
-    .where(sql`${matchDraftsTable.radiantAccountIds} IS NOT NULL OR ${matchDraftsTable.direAccountIds} IS NOT NULL`);
+  // Все уникальные account_id из дraftов (radiant + dire).
+  // radiant_account_ids / dire_account_ids — JSONB-массивы, unnest(jsonb) в PG не работает.
+  // Используем jsonb_array_elements_text + cast.
+  const rawRows = await db.execute<{ account_id: string }>(sql`
+    SELECT DISTINCT elem::bigint AS account_id
+    FROM match_drafts,
+    LATERAL jsonb_array_elements_text(
+      COALESCE(${matchDraftsTable.radiantAccountIds}, '[]'::jsonb) ||
+      COALESCE(${matchDraftsTable.direAccountIds}, '[]'::jsonb)
+    ) AS elem
+    WHERE (${matchDraftsTable.radiantAccountIds} IS NOT NULL
+        OR ${matchDraftsTable.direAccountIds} IS NOT NULL)
+      AND elem ~ '^[0-9]+$'
+  `);
 
-  const allIds = [...new Set(rows.map(r => r.accountId).filter((id): id is number => !!id && id > 0))];
+  const allIds = [...new Set(
+    (rawRows.rows ?? rawRows as unknown as { account_id: string }[])
+      .map((r: { account_id: string }) => Number(r.account_id))
+      .filter((id: number) => id > 0)
+  )];
   console.log(`[od-player-peers] ${allIds.length} distinct account_ids`);
 
   // Найти свежие аккаунты чтобы пропустить их
