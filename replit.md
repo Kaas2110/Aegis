@@ -70,13 +70,13 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 глоссарий из 15 типов рынков. Backed by:
 
 - **Live ML predictions** на текущих pro-матчах (обновление каждые 60s).
-  Live-винер модель обучена на `live_snapshots × prematch_outcomes`. Код для
-  Stratz GraphQL `live.match(id)` enrichment (T0.5a) написан и подключён,
-  fail-soft. ⚠️ **2026-05-16:** Stratz live апстрим сам пуст (`live.matches`=[],
-  `live.match(id)`=null для всех id). Добавлен circuit-breaker (20 подряд null
-  → 30 мин пауза). Включится автоматически когда Stratz восстановит live ingest.
-  См. `docs/operations-manual.md §3 Stratz live`. Buyback/aegis/vision/teamfights —
-  только через OD replay-parse (T0.7, post-mortem).
+  Live-винер модель обучена на `live_snapshots × prematch_outcomes`.
+  ⚠️ **Stratz live: DORMANT** — `fetchLiveMatchDetailBatch()` закомментирован в
+  `services/LiveWorker.ts` (upstream пуст с 2026-05-16: `live.matches`=[],
+  `live.match(id)`=null). Код сохранён в `lib/stratzLive.ts` целиком; 5 полей
+  `live_snapshots.stratz_*` остаются null. **Вернуть: раскомментировать блок**
+  `// DORMANT` в LiveWorker.ts когда Stratz восстановит live ingest.
+  Buyback/aegis/vision/teamfights — только через OD replay-parse (T0.7, post-mortem).
 - **Match-winner model** (LightGBM v3 + LR fallback, маршрутизация по tier и
   наличию draft + account_ids). Историческую метрику и обзор фичей см.
   `docs/ml-feature-audit.md` и `docs/changelog.md`. ⚠️ Сравнения acc между
@@ -164,7 +164,7 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   (winner/totals/firstBlood) для всех 6 букмекеров.
 - **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
 - **Большая ML-итерация (план T0→T12):**
-  T0 аудит DONE, T0.5a Stratz live DONE (waiting upstream), T1 ml-contract DONE,
+  T0 аудит DONE, T0.5a Stratz live DORMANT (код сохранён, вызовы закомментированы), T1 ml-contract DONE,
   T2 data-availability-rules DONE, T3.5 live totals DONE, T12 trim replit.md DONE.
   T3/T4/T5/T6/T7 feature-services DONE 2026-05-16 как `services/features/teamProfile.ts`
   + endpoint `/api/analytics/team-profile?teamId=N`. T8 A-vs-B DONE как
