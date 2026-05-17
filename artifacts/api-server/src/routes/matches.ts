@@ -811,6 +811,20 @@ router.get('/live', async (req, res) => {
       // пустое состояние.
       noData: !hasData,
       pandascoreRunning: psMatches.length,
+      // B1 (Фаза 4): метаданные о свежести и происхождении данных.
+      // Mobile использует чтобы показывать «обновлено 30s назад» и отличать
+      // permanent (имена команд, лига) от transient (live kills/networth).
+      _field_meta: {
+        fetchedAt: new Date().toISOString(),
+        cacheTtlSec: 30,
+        sources: {
+          opendota_live: { freshness: 'transient', maxAgeSec: 30, sourceTable: 'upstream:opendota /api/live' },
+          stratz_live:   { freshness: 'transient', maxAgeSec: 30, sourceTable: 'upstream:stratz GraphQL (DORMANT)' },
+          pandascore_running: { freshness: 'transient', maxAgeSec: 60, sourceTable: 'upstream:pandascore /running' },
+          team_names: { freshness: 'permanent', sourceTable: 'db:teams' },
+          league_names: { freshness: 'permanent', sourceTable: 'db:leagues' },
+        },
+      },
     };
   }, (v) => !(v as { noData?: boolean }).noData);
   res.json(payload);

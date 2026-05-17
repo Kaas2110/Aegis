@@ -3,6 +3,26 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-17 — A5 full feature registry + B1 _field_meta
+
+- **A5 full (Фаза 5)**: `docs/feature-registry.json` расширен с 5 примеров до полного
+  реестра 51 фичи всех моделей (18 prematch_team + 11 prematch_hero + 6 prematch_extra
+  + 9 live_winner + 7 live_totals). Машинно-читаемые поля: `valueType`, `rangeMin/Max`,
+  `unit`, `nullable`, `computedBy`, `sourceTables[]`, `engines[]`, `usedInBuckets[]`,
+  плюс русские `label_ru`/`shortHint_ru`/`longDescription_ru`. `artifacts/admin-web/src/data/feature-registry.json`
+  — symlink на `docs/feature-registry.json` (единый источник истины, без рассинхрона;
+  Vite ходит по симлинку).
+- **Feature Explorer UI**: на странице `/admin-web/metrics` добавлена карточка
+  «Реестр фичей моделей» с фильтром по id/названию/таблице, группировкой по
+  5 секциям и раскрытием каждой строки (clickable row → грид с подробным описанием,
+  computedBy, sourceTables, engines, rangeMin/Max).
+- **B1 _field_meta (Фаза 4)**: `routes/matches.ts /live` теперь возвращает блок
+  `_field_meta` с `fetchedAt`, `cacheTtlSec` и `sources` (freshness=transient/permanent,
+  maxAgeSec, sourceTable) для opendota_live, stratz_live (DORMANT), pandascore_running,
+  team_names, league_names. Mobile использует чтобы показывать «обновлено N сек назад»
+  и отличать permanent (имена команд, лига — из БД) от transient (live kills/networth —
+  из upstream).
+
 ## 2026-05-17 — Mobile UI cap, between-maps timeout, admin retrain button, A5 sample
 
 Batch правок по мастер-плану (Фазы 2/4/5/7):
