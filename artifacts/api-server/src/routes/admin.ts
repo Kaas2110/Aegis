@@ -32,6 +32,7 @@ import {
   type TrainScriptName,
 } from '../services/SchedulerWorker';
 import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/OutcomeTracker';
+import { getHeartbeats as getWorkerHeartbeats } from '../services/workerHeartbeats';
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
@@ -518,6 +519,7 @@ router.get('/workers/config', async (_req, res) => {
     envDisableLiveWorker: process.env['DISABLE_LIVE_WORKER'] === 'true',
     envDisableScheduler: process.env['DISABLE_SCHEDULER'] === 'true',
     envDisableAutoRetrain: process.env['DISABLE_AUTO_RETRAIN'] === 'true',
+    heartbeats: getWorkerHeartbeats(),
     note: 'liveWorkerDisabled/schedulerDisabled вступают в силу при следующем рестарте api-server. autoRetrainDisabled — на следующем 24h-тике шедулера.',
   });
 });
@@ -559,6 +561,7 @@ router.post('/workers/config', async (req, res) => {
     envDisableLiveWorker: process.env['DISABLE_LIVE_WORKER'] === 'true',
     envDisableScheduler: process.env['DISABLE_SCHEDULER'] === 'true',
     envDisableAutoRetrain: process.env['DISABLE_AUTO_RETRAIN'] === 'true',
+    heartbeats: getWorkerHeartbeats(),
     note: 'liveWorkerDisabled/schedulerDisabled вступают в силу при следующем рестарте api-server. autoRetrainDisabled — на следующем 24h-тике шедулера.',
   });
 });

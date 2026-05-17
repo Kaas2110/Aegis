@@ -5,6 +5,7 @@
  * Aegis API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminWorkersConfigHeartbeats } from "./adminWorkersConfigHeartbeats";
 
 export interface AdminWorkersConfig {
   ok?: boolean;
@@ -14,5 +15,6 @@ export interface AdminWorkersConfig {
   envDisableLiveWorker: boolean;
   envDisableScheduler: boolean;
   envDisableAutoRetrain: boolean;
+  heartbeats: AdminWorkersConfigHeartbeats;
   note: string;
 }

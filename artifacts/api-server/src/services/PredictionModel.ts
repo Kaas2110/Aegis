@@ -416,64 +416,192 @@ async function refreshTeamExtended(): Promise<void> {
   }
 }
 
-async function refreshWave3Data(): Promise<void> {
-  if (Date.now() - lastWave3Load < WAVE3_CACHE_TTL_MS && playerHeroStatsCache.size > 0) return;
+/**
+ * Sets «уже опрошенных» teamId / accountId. Защищает от повторного похода в БД
+ * за теми же ID, у которых строк нет вовсе (т.е. отсутствие в кеше != «нужно
+ * перезагрузить»). Сбрасываются при full-refresh / TTL expire.
+ */
+const triedWave3TeamIds = new Set<number>();
+const triedWave3AccountIds = new Set<number>();
+let wave3FullyLoaded = false;
+
+function resetWave3Caches() {
+  playerHeroStatsCache.clear();
+  recentFormCache.clear();
+  h2hCache.clear();
+  playerGlickoCache.clear();
+  triedWave3TeamIds.clear();
+  triedWave3AccountIds.clear();
+  wave3FullyLoaded = false;
+}
+
+/**
+ * B3: lazy Wave-3 cache.
+ *
+ * - hint=undefined → full snapshot (используется maintenance-вызовом
+ *   `loadActiveModel`/scheduler hot-reload и initial warmup). Грузит все
+ *   player_hero_stats / team_recent_form / team_h2h / player_ratings.
+ *
+ * - hint={teamIds, accountIds} → инкрементальная подгрузка только тех ID,
+ *   которых ещё нет в кеше и которые не помечены как «опрошенные пустые».
+ *   Используется на inference path в `predictMatchWinner` — экономит десятки
+ *   тысяч строк на каждый predict при большой БД.
+ *
+ * TTL: 30 минут (общий «возраст» снапшота). По истечении — следующий вызов
+ * либо с hint, либо без, сбрасывает кеш целиком.
+ */
+async function refreshWave3Data(
+  hint?: { teamIds?: Array<number | null | undefined>; accountIds?: Array<number | null | undefined> | null },
+): Promise<void> {
+  const expired = Date.now() - lastWave3Load >= WAVE3_CACHE_TTL_MS;
+  if (expired) resetWave3Caches();
+
+  if (!hint) {
+    if (wave3FullyLoaded && !expired) return;
+    try {
+      const [phs, form, h2hRows, prRows] = await Promise.all([
+        db.select({
+          accountId: playerHeroStatsTable.accountId,
+          heroId: playerHeroStatsTable.heroId,
+          games: playerHeroStatsTable.games,
+          wins: playerHeroStatsTable.wins,
+          lastPlayed: playerHeroStatsTable.lastPlayed,
+        }).from(playerHeroStatsTable),
+        db.select({
+          teamId: teamRecentFormTable.teamId,
+          winRate: teamRecentFormTable.winRate,
+          games: teamRecentFormTable.games,
+        })
+          .from(teamRecentFormTable)
+          .where(eq(teamRecentFormTable.periodDays, 30)),
+        db.select({
+          teamLowId: teamH2HTable.teamLowId,
+          teamHighId: teamH2HTable.teamHighId,
+          games: teamH2HTable.games,
+          winsLow: teamH2HTable.winsLow,
+        })
+          .from(teamH2HTable)
+          .where(eq(teamH2HTable.periodDays, 365)),
+        db.select({
+          accountId: playerRatingsTable.accountId,
+          rating: playerRatingsTable.rating,
+          rd: playerRatingsTable.rd,
+        }).from(playerRatingsTable),
+      ]);
+      const phsMap: PlayerHeroStatsMap = new Map();
+      for (const r of phs) {
+        let inner = phsMap.get(r.accountId);
+        if (!inner) { inner = new Map(); phsMap.set(r.accountId, inner); }
+        inner.set(r.heroId, { games: r.games, wins: r.wins, lastPlayed: r.lastPlayed ?? null });
+      }
+      const formMap: RecentFormMap = new Map();
+      for (const r of form) formMap.set(r.teamId, { winRate: r.winRate, games: r.games });
+      const h2hMap: H2HMap = new Map();
+      for (const r of h2hRows) {
+        h2hMap.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
+      }
+      const prMap: PlayerGlickoMap = new Map();
+      for (const r of prRows) prMap.set(r.accountId, { rating: r.rating, rd: r.rd });
+
+      playerHeroStatsCache = phsMap;
+      recentFormCache = formMap;
+      h2hCache = h2hMap;
+      playerGlickoCache = prMap;
+      lastWave3Load = Date.now();
+      wave3FullyLoaded = true;
+      triedWave3TeamIds.clear();
+      triedWave3AccountIds.clear();
+      logger.info(
+        { phsAccounts: phsMap.size, formTeams: formMap.size, h2hPairs: h2hMap.size, glickoPlayers: prMap.size },
+        '[PredictionModel] Wave 3 data refreshed (full)',
+      );
+    } catch (err) {
+      logger.error({ err }, '[PredictionModel] Failed to load Wave 3 data');
+    }
+    return;
+  }
+
+  // Partial / lazy path
+  if (wave3FullyLoaded) return; // already have everything
+
+  const teamIds = (hint.teamIds ?? []).filter((id): id is number => typeof id === 'number' && id > 0);
+  const accountIds = (hint.accountIds ?? []).filter((id): id is number => typeof id === 'number' && id > 0);
+
+  const needTeams = Array.from(new Set(teamIds.filter(id => !triedWave3TeamIds.has(id))));
+  const needAccs = Array.from(new Set(accountIds.filter(id => !triedWave3AccountIds.has(id))));
+  if (needTeams.length === 0 && needAccs.length === 0) return;
+
   try {
-    const [phs, form, h2hRows, prRows] = await Promise.all([
-      db.select({
-        accountId: playerHeroStatsTable.accountId,
-        heroId: playerHeroStatsTable.heroId,
-        games: playerHeroStatsTable.games,
-        wins: playerHeroStatsTable.wins,
-        lastPlayed: playerHeroStatsTable.lastPlayed,
-      }).from(playerHeroStatsTable),
-      db.select({
-        teamId: teamRecentFormTable.teamId,
-        winRate: teamRecentFormTable.winRate,
-        games: teamRecentFormTable.games,
-      })
-        .from(teamRecentFormTable)
-        .where(eq(teamRecentFormTable.periodDays, 30)),
-      db.select({
-        teamLowId: teamH2HTable.teamLowId,
-        teamHighId: teamH2HTable.teamHighId,
-        games: teamH2HTable.games,
-        winsLow: teamH2HTable.winsLow,
-      })
-        .from(teamH2HTable)
-        .where(eq(teamH2HTable.periodDays, 365)),
-      db.select({
-        accountId: playerRatingsTable.accountId,
-        rating: playerRatingsTable.rating,
-        rd: playerRatingsTable.rd,
-      }).from(playerRatingsTable),
-    ]);
-    const phsMap: PlayerHeroStatsMap = new Map();
+    const formP = needTeams.length > 0
+      ? db.select({
+          teamId: teamRecentFormTable.teamId,
+          winRate: teamRecentFormTable.winRate,
+          games: teamRecentFormTable.games,
+        })
+          .from(teamRecentFormTable)
+          .where(and(eq(teamRecentFormTable.periodDays, 30), inArray(teamRecentFormTable.teamId, needTeams)))
+      : Promise.resolve([] as Array<{ teamId: number; winRate: number; games: number }>);
+
+    // h2h: тянем все пары среди needTeams (обычно 2 ID → 1 пара)
+    const h2hP = needTeams.length >= 2
+      ? db.select({
+          teamLowId: teamH2HTable.teamLowId,
+          teamHighId: teamH2HTable.teamHighId,
+          games: teamH2HTable.games,
+          winsLow: teamH2HTable.winsLow,
+        })
+          .from(teamH2HTable)
+          .where(and(
+            eq(teamH2HTable.periodDays, 365),
+            inArray(teamH2HTable.teamLowId, needTeams),
+            inArray(teamH2HTable.teamHighId, needTeams),
+          ))
+      : Promise.resolve([] as Array<{ teamLowId: number; teamHighId: number; games: number; winsLow: number }>);
+
+    const phsP = needAccs.length > 0
+      ? db.select({
+          accountId: playerHeroStatsTable.accountId,
+          heroId: playerHeroStatsTable.heroId,
+          games: playerHeroStatsTable.games,
+          wins: playerHeroStatsTable.wins,
+          lastPlayed: playerHeroStatsTable.lastPlayed,
+        })
+          .from(playerHeroStatsTable)
+          .where(inArray(playerHeroStatsTable.accountId, needAccs))
+      : Promise.resolve([] as Array<{ accountId: number; heroId: number; games: number; wins: number; lastPlayed: number | null }>);
+
+    const prP = needAccs.length > 0
+      ? db.select({
+          accountId: playerRatingsTable.accountId,
+          rating: playerRatingsTable.rating,
+          rd: playerRatingsTable.rd,
+        })
+          .from(playerRatingsTable)
+          .where(inArray(playerRatingsTable.accountId, needAccs))
+      : Promise.resolve([] as Array<{ accountId: number; rating: number; rd: number }>);
+
+    const [form, h2hRows, phs, prRows] = await Promise.all([formP, h2hP, phsP, prP]);
+
+    for (const r of form) recentFormCache.set(r.teamId, { winRate: r.winRate, games: r.games });
+    for (const r of h2hRows) h2hCache.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
     for (const r of phs) {
-      let inner = phsMap.get(r.accountId);
-      if (!inner) { inner = new Map(); phsMap.set(r.accountId, inner); }
+      let inner = playerHeroStatsCache.get(r.accountId);
+      if (!inner) { inner = new Map(); playerHeroStatsCache.set(r.accountId, inner); }
       inner.set(r.heroId, { games: r.games, wins: r.wins, lastPlayed: r.lastPlayed ?? null });
     }
-    const formMap: RecentFormMap = new Map();
-    for (const r of form) formMap.set(r.teamId, { winRate: r.winRate, games: r.games });
-    const h2hMap: H2HMap = new Map();
-    for (const r of h2hRows) {
-      h2hMap.set(`${r.teamLowId}_${r.teamHighId}`, { games: r.games, winsLow: r.winsLow });
-    }
-    const prMap: PlayerGlickoMap = new Map();
-    for (const r of prRows) prMap.set(r.accountId, { rating: r.rating, rd: r.rd });
+    for (const r of prRows) playerGlickoCache.set(r.accountId, { rating: r.rating, rd: r.rd });
 
-    playerHeroStatsCache = phsMap;
-    recentFormCache = formMap;
-    h2hCache = h2hMap;
-    playerGlickoCache = prMap;
-    lastWave3Load = Date.now();
-    logger.info(
-      { phsAccounts: phsMap.size, formTeams: formMap.size, h2hPairs: h2hMap.size, glickoPlayers: prMap.size },
-      '[PredictionModel] Wave 3 data refreshed',
+    for (const id of needTeams) triedWave3TeamIds.add(id);
+    for (const id of needAccs) triedWave3AccountIds.add(id);
+    if (lastWave3Load === 0) lastWave3Load = Date.now();
+
+    logger.debug(
+      { needTeams: needTeams.length, needAccs: needAccs.length,
+        found: { form: form.length, h2h: h2hRows.length, phs: phs.length, glicko: prRows.length } },
+      '[PredictionModel] Wave 3 partial load',
     );
   } catch (err) {
-    logger.error({ err }, '[PredictionModel] Failed to load Wave 3 data');
+    logger.error({ err }, '[PredictionModel] Wave 3 partial load failed');
   }
 }
 
@@ -694,7 +822,10 @@ export async function predictMatchWinner(
   const needRadiantFallback = !r || (r.wins + r.losses) < 5;
   const needDireFallback = !d || (d.wins + d.losses) < 5;
   if ((needRadiantFallback || needDireFallback) && drafts) {
-    await refreshWave3Data();
+    await refreshWave3Data({
+      teamIds: [radiantTeamId, direTeamId],
+      accountIds: [...(drafts.radiantAccountIds ?? []), ...(drafts.direAccountIds ?? [])],
+    });
     const synthFromGlicko = (
       accountIds: number[] | null | undefined,
     ): { rating: number; wins: number; losses: number } | null => {
@@ -783,7 +914,10 @@ export async function predictMatchWinner(
     drafts &&
     (drafts.radiantAccountIds || drafts.direAccountIds)
   ) {
-    await refreshWave3Data();
+    await refreshWave3Data({
+      teamIds: [radiantTeamId, direTeamId],
+      accountIds: [...(drafts.radiantAccountIds ?? []), ...(drafts.direAccountIds ?? [])],
+    });
     extraFeats = buildExtraFeatures({
       radiantTeamId,
       direTeamId,

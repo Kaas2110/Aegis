@@ -3,6 +3,69 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-17 — Phase 9 баг-лист зафиксирован (после live-теста на iPhone)
+
+Пользователь прогнал Phase 2 UI на эмуляторе и нашёл 8 проблем (F1-F8). Все
+записаны в `.local/session_plan.md` → «Фаза 9 — баг-фиксы», в `replit.md`
+Roadmap добавлена сводка. Фаза 9 запускается **после** Фазы 3 ML (L1-L9) —
+сейчас кода не трогаем, только бэклог.
+
+Краткая сводка:
+- **P0:** F1 завершённые матчи в «Лайв» с прогнозами, F2 чипы коэф 1.2+/1.5+
+  не подключены к `applyFilters`, F3 вкладка «Бэктест» снова видна (нужно
+  вернуть `href: null`).
+- **P1:** F4 «Сравнение коэф.» в табе Длительности рендерит имена команд
+  вместо «ТБ/ТМ», F5 «Сводка матча» = «Некорректный ID» (matchId не доходит),
+  F6 «Сравнение команд» все «—» (мелкие team_id без данных).
+- **P2:** F7 Bovada events=0 (нужна диагностика сырого JSON), F8 e2e алертов.
+
+Корень для F3 (исторический): Phase 2 M4 раскрыл вкладку «Бэктест» (7391
+outcomes уже хватает по числам), но UX ещё не готов и пользователь хочет
+обратно скрыть. Запомнить: «достаточно данных» ≠ «готов UI».
+
+## 2026-05-17 — Phase 4 B3 (lazy Wave-3) + Phase 5 A1/A4 + Phase 7 laptop-deploy
+
+- **Phase 4 B3 — lazy Wave-3 cache** в `services/PredictionModel.ts`. `refreshWave3Data`
+  получила опциональный `hint = { teamIds, accountIds }`:
+  - hint=undefined → старое поведение, грузим всё (используется warmup'ом
+    `loadActiveModel` и hot-reload'ом scheduler'а).
+  - hint={…} → инкрементальная подгрузка только нужных строк через `inArray`
+    в `team_recent_form` / `team_h2h` / `player_hero_stats` / `player_ratings`.
+  - Добавлены `triedWave3TeamIds` / `triedWave3AccountIds` Sets и `wave3FullyLoaded`
+    флаг, чтобы не ходить в БД повторно за «пустыми» ID. `resetWave3Caches()`
+    срабатывает по TTL (30 мин) или при следующем full-refresh.
+  - Оба inference-callsite в `predictMatchWinner` (player-glicko fallback и
+    Wave-3 extraFeats) теперь зовут `refreshWave3Data` с хинтом из текущего
+    матча — экономит десятки тысяч строк на каждый predict при росте БД.
+- **Phase 5 A4 — worker heartbeats**. Новый модуль `services/workerHeartbeats.ts`
+  с in-memory регистром (`liveWorker`, `scheduler`): `lastTickAt`, `lastStatus`
+  (`ok|error|idle`), `lastError`, `totalTicks`, `lastDurationMs`. `LiveWorker.ts`
+  и `SchedulerWorker.ts` вызывают `recordHeartbeat` после каждого тика
+  (`pollOnce` / `tickOnce`). `GET /api/admin/workers/config` отдаёт их под
+  ключом `heartbeats`, POST тоже возвращает свежий снимок.
+- **OpenAPI**: `WorkerHeartbeat` schema + `AdminWorkersConfig.heartbeats`
+  (required, оба воркера). Прогнан `pnpm --filter @workspace/api-spec run codegen`,
+  типы регенерированы.
+- **Phase 5 A1 — coverage cards на dashboard**. `pages/dashboard.tsx` использует
+  `useGetAdminCoverage` (хук уже был сгенерирован) и рендерит 6 ячеек:
+  Drafts 90d/365d (% с цветовой шкалой <50% dire / 50-80% primary / ≥80%
+  radiant), Parsed 60d (+cruise-ready флаг), Outcomes (+live-train ready),
+  Team form 30d, Live snapshots 24h. У каждой ячейки русский tooltip-hint
+  «что это значит и какой порог нужен».
+- **Phase 5 A4 UI — heartbeats panel** в `pages/workers.tsx`. WorkerFlagsPanel
+  под флагами теперь рисует grid 2×1: для каждого воркера показывает status,
+  возраст последнего тика (если >5 мин — красным «stale»), totalTicks,
+  длительность тика и lastError. In-memory подписан явно.
+- **Phase 7 — `docs/laptop-deploy.md`**. Пошаговая инструкция переезда фоновой
+  работы с Replit на личный ноут: предусловия (Node 24 / pnpm 9 / Python /
+  PG), smoke-test (вручную прогнать `scripts/run-*.sh`), вариант A (crontab),
+  вариант B (systemd с готовыми unit-файлами `aegis-api.service`,
+  `aegis-ml.service`, `aegis-replay-parse.service`, и timer'ами
+  `aegis-daily.timer` / `aegis-hourly.timer` / `aegis-enrichment.timer`),
+  мониторинг через `journalctl` + admin-web heartbeats, бэкап PG, чек-лист.
+  Зафиксировано решение НЕ переносить `parse:cycle` в SchedulerWorker
+  (см. user prefs) и держать `DISABLE_AUTO_RETRAIN=true` до явного разрешения.
+
 ## 2026-05-17 — Phase 2 Mobile UI: M3 (alerts +minEdge/minOdds) + M5 (getFieldState)
 
 - **M3 (Phase 2)**: вернул `minEdge` / `minOdds` в правила алертов как опциональные

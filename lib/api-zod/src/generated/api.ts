@@ -275,6 +275,32 @@ export const GetAdminWorkersConfigResponse = zod.object({
   envDisableLiveWorker: zod.boolean(),
   envDisableScheduler: zod.boolean(),
   envDisableAutoRetrain: zod.boolean(),
+  heartbeats: zod.object({
+    liveWorker: zod.object({
+      lastTickAt: zod
+        .string()
+        .nullable()
+        .describe(
+          "ISO timestamp последнего тика воркера (in-memory, сбрасывается при рестарте api-server)",
+        ),
+      lastStatus: zod.enum(["ok", "error", "idle"]),
+      lastError: zod.string().nullable(),
+      totalTicks: zod.number(),
+      lastDurationMs: zod.number().nullable(),
+    }),
+    scheduler: zod.object({
+      lastTickAt: zod
+        .string()
+        .nullable()
+        .describe(
+          "ISO timestamp последнего тика воркера (in-memory, сбрасывается при рестарте api-server)",
+        ),
+      lastStatus: zod.enum(["ok", "error", "idle"]),
+      lastError: zod.string().nullable(),
+      totalTicks: zod.number(),
+      lastDurationMs: zod.number().nullable(),
+    }),
+  }),
   note: zod.string(),
 });
 
@@ -295,6 +321,32 @@ export const UpdateAdminWorkersConfigResponse = zod.object({
   envDisableLiveWorker: zod.boolean(),
   envDisableScheduler: zod.boolean(),
   envDisableAutoRetrain: zod.boolean(),
+  heartbeats: zod.object({
+    liveWorker: zod.object({
+      lastTickAt: zod
+        .string()
+        .nullable()
+        .describe(
+          "ISO timestamp последнего тика воркера (in-memory, сбрасывается при рестарте api-server)",
+        ),
+      lastStatus: zod.enum(["ok", "error", "idle"]),
+      lastError: zod.string().nullable(),
+      totalTicks: zod.number(),
+      lastDurationMs: zod.number().nullable(),
+    }),
+    scheduler: zod.object({
+      lastTickAt: zod
+        .string()
+        .nullable()
+        .describe(
+          "ISO timestamp последнего тика воркера (in-memory, сбрасывается при рестарте api-server)",
+        ),
+      lastStatus: zod.enum(["ok", "error", "idle"]),
+      lastError: zod.string().nullable(),
+      totalTicks: zod.number(),
+      lastDurationMs: zod.number().nullable(),
+    }),
+  }),
   note: zod.string(),
 });
 

@@ -34,6 +34,7 @@ import { recordPrematchPrediction } from './OutcomeTracker';
 // import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
 import { predictLiveTotalsFor } from './MarketLgbm';
 import { withOpenDotaKey } from '../lib/openDotaUrl';
+import { recordHeartbeat } from './workerHeartbeats';
 
 // E0.1: снижено с 60s до 30s — OD premium даёт 3000 req/min, бюджет позволяет.
 // Больше снапшотов на матч → лучше live-winner калибровка и более плавный winprob.
@@ -433,13 +434,18 @@ async function scheduleNextPoll(delayMs: number): Promise<void> {
     }
     pollInFlight = true;
     const startedAt = Date.now();
+    let tickOk = true;
+    let tickErr: string | null = null;
     try {
       await pollOnce();
     } catch (err) {
+      tickOk = false;
+      tickErr = err instanceof Error ? err.message : String(err);
       logger.error({ err }, '[LiveWorker] poll error');
     } finally {
       stats.lastPollDurationMs = Date.now() - startedAt;
       pollInFlight = false;
+      recordHeartbeat('liveWorker', { ok: tickOk, durationMs: stats.lastPollDurationMs, error: tickErr });
       // Используем динамический backoff: при 429/5xx будет 120s/240s/...
       void scheduleNextPoll(currentBackoffMs);
     }

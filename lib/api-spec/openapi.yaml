@@ -693,6 +693,7 @@ components:
         - envDisableLiveWorker
         - envDisableScheduler
         - envDisableAutoRetrain
+        - heartbeats
         - note
       properties:
         ok: { type: boolean }
@@ -702,7 +703,30 @@ components:
         envDisableLiveWorker: { type: boolean }
         envDisableScheduler: { type: boolean }
         envDisableAutoRetrain: { type: boolean }
+        heartbeats:
+          type: object
+          required: [liveWorker, scheduler]
+          properties:
+            liveWorker: { $ref: "#/components/schemas/WorkerHeartbeat" }
+            scheduler:  { $ref: "#/components/schemas/WorkerHeartbeat" }
         note: { type: string }
+
+    WorkerHeartbeat:
+      type: object
+      required: [lastTickAt, lastStatus, lastError, totalTicks, lastDurationMs]
+      properties:
+        lastTickAt:
+          type: ["string", "null"]
+          description: ISO timestamp последнего тика воркера (in-memory, сбрасывается при рестарте api-server)
+        lastStatus:
+          type: string
+          enum: [ok, error, idle]
+        lastError:
+          type: ["string", "null"]
+        totalTicks:
+          type: integer
+        lastDurationMs:
+          type: ["integer", "null"]
 
     AdminWorkersConfigInput:
       type: object

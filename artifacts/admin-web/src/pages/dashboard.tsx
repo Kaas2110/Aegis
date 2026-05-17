@@ -3,20 +3,22 @@ import {
   useGetAdminSchedulerState,
   useGetAdminModels,
   useGetAdminMetrics,
+  useGetAdminCoverage,
   useTriggerAdminRefreshAll,
   useTriggerAdminRetrain,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatMetric } from "@/lib/utils";
-import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert, RefreshCw, Cpu } from "lucide-react";
+import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert, RefreshCw, Cpu, Database } from "lucide-react";
 
 export default function Dashboard() {
   const { data: schedulerState, isLoading: isLoadingScheduler } = useGetAdminSchedulerState();
   const { data: modelsData, isLoading: isLoadingModels } = useGetAdminModels();
   const { data: metricsData, isLoading: isLoadingMetrics } = useGetAdminMetrics();
+  const { data: coverageData, isLoading: isLoadingCoverage } = useGetAdminCoverage();
   const refreshAll = useTriggerAdminRefreshAll();
   const retrain = useTriggerAdminRetrain();
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
@@ -133,6 +135,68 @@ export default function Dashboard() {
         )}
       </div>
 
+      <Card className="rounded-none border-border bg-card">
+        <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+              Покрытие данных
+            </CardTitle>
+            <CardDescription className="font-mono text-[10px] mt-1">
+              На каком % матчей за последние 90/365 дней реально есть фичи. От этого зависит точность моделей.
+            </CardDescription>
+          </div>
+          <Database className="w-4 h-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent className="pt-4">
+          {isLoadingCoverage ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+            </div>
+          ) : coverageData ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <CoverageCell
+                label="Drafts 90d"
+                pct={coverageData.drafts.pct90d}
+                detail={`${coverageData.drafts.covered90d}/${coverageData.drafts.total90d}`}
+                hint="Доля матчей с пиками/банами + account_id игроков за 90 дней. Нужно ≥80% для стабильного v3."
+              />
+              <CoverageCell
+                label="Drafts 365d"
+                pct={coverageData.drafts.pct365d}
+                detail={`${coverageData.drafts.covered365d}/${coverageData.drafts.total365d}`}
+                hint="То же за 365 дней — окно обучения v3 prematch_winner."
+              />
+              <CoverageCell
+                label="Parsed 60d"
+                pct={coverageData.parsed.pct60d}
+                detail={`${coverageData.parsed.parsed60d}/${coverageData.parsed.total60d}`}
+                hint={`Доля распарсенных реплеев OD за 60 дней. Cruise-ready: ${coverageData.parsed.cruiseReady60d ? "✓ да" : "✗ нет"} (нужно ≥80%).`}
+              />
+              <CoverageCell
+                label="Outcomes"
+                pct={null}
+                detail={`${coverageData.prematchOutcomes.total}`}
+                hint={`prematch_outcomes (валидируют predict vs reality). Live-train ready: ${coverageData.prematchOutcomes.liveTrainReady ? "✓ да (≥200)" : "✗ нет"}.`}
+              />
+              <CoverageCell
+                label="Team form 30d"
+                pct={null}
+                detail={`${coverageData.teamFeatures.recentFormRows} команд`}
+                hint="team_recent_form (period_days=30). ≥500 — здоровая live-картина."
+              />
+              <CoverageCell
+                label="Live snapshots 24h"
+                pct={null}
+                detail={`${coverageData.liveSnapshots.last24h}`}
+                hint="Снапшоты live-матчей за 24 ч. <50 в активный игровой день — сигнал что LiveWorker молчит."
+              />
+            </div>
+          ) : (
+            <EmptyState message="Coverage не загружен" />
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="rounded-none border-border bg-card">
           <CardHeader className="pb-3 border-b border-border">
@@ -220,6 +284,30 @@ function StatusCard({ title, value, subtitle, status, icon: Icon }: { title: str
       </CardContent>
     </Card>
   )
+}
+
+function CoverageCell({
+  label,
+  pct,
+  detail,
+  hint,
+}: { label: string; pct: number | null; detail: string; hint: string }) {
+  const pctNum = typeof pct === "number" ? pct : null;
+  const bad = pctNum !== null && pctNum < 50;
+  const warn = pctNum !== null && pctNum >= 50 && pctNum < 80;
+  const ok = pctNum !== null && pctNum >= 80;
+  const accent = bad ? "text-dire" : warn ? "text-primary" : ok ? "text-radiant" : "text-muted-foreground";
+  return (
+    <div className="bg-background border border-border p-3 space-y-1" title={hint}>
+      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`font-bold text-lg ${accent}`}>
+        {pctNum !== null ? `${pctNum.toFixed(0)}%` : detail}
+      </p>
+      {pctNum !== null && (
+        <p className="font-mono text-[10px] text-muted-foreground">{detail}</p>
+      )}
+    </div>
+  );
 }
 
 function EmptyState({ message }: { message: string }) {

@@ -179,6 +179,34 @@ export interface AdminModelActivateResponse {
   version: string;
 }
 
+export type WorkerHeartbeatLastStatus =
+  (typeof WorkerHeartbeatLastStatus)[keyof typeof WorkerHeartbeatLastStatus];
+
+export const WorkerHeartbeatLastStatus = {
+  ok: "ok",
+  error: "error",
+  idle: "idle",
+} as const;
+
+export interface WorkerHeartbeat {
+  /**
+   * ISO timestamp последнего тика воркера (in-memory, сбрасывается при рестарте api-server)
+   * @nullable
+   */
+  lastTickAt: string | null;
+  lastStatus: WorkerHeartbeatLastStatus;
+  /** @nullable */
+  lastError: string | null;
+  totalTicks: number;
+  /** @nullable */
+  lastDurationMs: number | null;
+}
+
+export type AdminWorkersConfigHeartbeats = {
+  liveWorker: WorkerHeartbeat;
+  scheduler: WorkerHeartbeat;
+};
+
 export interface AdminWorkersConfig {
   ok?: boolean;
   liveWorkerDisabled: boolean;
@@ -187,6 +215,7 @@ export interface AdminWorkersConfig {
   envDisableLiveWorker: boolean;
   envDisableScheduler: boolean;
   envDisableAutoRetrain: boolean;
+  heartbeats: AdminWorkersConfigHeartbeats;
   note: string;
 }
 

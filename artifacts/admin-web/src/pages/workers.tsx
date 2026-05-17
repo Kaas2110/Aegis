@@ -221,6 +221,53 @@ function WorkerFlagsPanel() {
             Данные недоступны
           </p>
         )}
+        {data?.heartbeats ? (
+          <div className="border-t border-border pt-4 space-y-2">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Heartbeats (in-memory, сбрасываются при рестарте api-server)
+            </p>
+            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+              {(["liveWorker", "scheduler"] as const).map((hkey) => {
+                const hb = (data as AdminWorkersConfig).heartbeats[hkey];
+                const ok = hb.lastStatus === "ok";
+                const err = hb.lastStatus === "error";
+                const ageMs = hb.lastTickAt ? Date.now() - new Date(hb.lastTickAt).getTime() : null;
+                const stale = ageMs !== null && ageMs > 5 * 60_000;
+                const color = err ? "bg-dire/60" : ok && !stale ? "bg-radiant/60" : stale ? "bg-primary/60" : "bg-muted-foreground/40";
+                return (
+                  <div key={hkey} className="border border-border bg-background p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] font-bold uppercase">
+                        {hkey === "liveWorker" ? "Live Worker" : "Scheduler"}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${color}`} />
+                        <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                          {hb.lastStatus}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      Последний тик: {hb.lastTickAt ? formatDate(hb.lastTickAt) : "—"}
+                      {ageMs !== null && (
+                        <span className={stale ? "text-dire" : ""}> ({fmtMs(ageMs)} назад)</span>
+                      )}
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      Тиков: {hb.totalTicks}
+                      {hb.lastDurationMs !== null && ` · длительность ${fmtMs(hb.lastDurationMs)}`}
+                    </p>
+                    {hb.lastError && (
+                      <p className="font-mono text-[10px] text-dire break-words">
+                        ⚠ {hb.lastError}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         {data?.note ? (
           <p className="font-mono text-[10px] text-muted-foreground border-t border-border pt-3 leading-relaxed">
             ℹ {(data as { note?: string }).note}

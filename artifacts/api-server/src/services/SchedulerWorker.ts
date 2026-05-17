@@ -21,6 +21,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { db, schedulerStateTable, proMatchesTable } from '@workspace/db';
+import { recordHeartbeat } from './workerHeartbeats';
 import { eq, lt, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { loadActiveModel } from './PredictionModel';
@@ -559,12 +560,18 @@ async function scheduleNextTick(delayMs: number): Promise<void> {
   if (stopRequested) return;
   timeoutId = setTimeout(async () => {
     if (stopRequested) return;
+    const startedAt = Date.now();
+    let tickOk = true;
+    let tickErr: string | null = null;
     try {
       await tickOnce();
     } catch (err) {
+      tickOk = false;
+      tickErr = err instanceof Error ? err.message : String(err);
       logger.error({ err }, '[Scheduler] tick error');
-      stats.lastError = String(err);
+      stats.lastError = tickErr;
     } finally {
+      recordHeartbeat('scheduler', { ok: tickOk, durationMs: Date.now() - startedAt, error: tickErr });
       void scheduleNextTick(CHECK_INTERVAL_MS);
     }
   }, delayMs);
