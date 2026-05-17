@@ -31,6 +31,7 @@ import type {
   AdminLoginResult,
   AdminMetricsResponse,
   AdminModelActivateResponse,
+  AdminModelCalibrationResponse,
   AdminModelRetrainInput,
   AdminModelsHistoryResponse,
   AdminModelsResponse,
@@ -1752,6 +1753,98 @@ export const useActivateAdminModel = <
 > => {
   return useMutation(getActivateAdminModelMutationOptions(options));
 };
+
+/**
+ * @summary Isotonic calibration bins + featureImportance top-15 for a model version
+ */
+export const getGetAdminModelCalibrationUrl = (id: number) => {
+  return `/api/admin/models/${id}/calibration`;
+};
+
+export const getAdminModelCalibration = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminModelCalibrationResponse> => {
+  return customFetch<AdminModelCalibrationResponse>(
+    getGetAdminModelCalibrationUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAdminModelCalibrationQueryKey = (id: number) => {
+  return [`/api/admin/models/${id}/calibration`] as const;
+};
+
+export const getGetAdminModelCalibrationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminModelCalibration>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAdminModelCalibration>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAdminModelCalibrationQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminModelCalibration>>
+  > = ({ signal }) =>
+    getAdminModelCalibration(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminModelCalibration>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminModelCalibrationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminModelCalibration>>
+>;
+export type GetAdminModelCalibrationQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Isotonic calibration bins + featureImportance top-15 for a model version
+ */
+
+export function useGetAdminModelCalibration<
+  TData = Awaited<ReturnType<typeof getAdminModelCalibration>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAdminModelCalibration>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminModelCalibrationQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)

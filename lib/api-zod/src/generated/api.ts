@@ -446,6 +446,37 @@ export const ActivateAdminModelResponse = zod.object({
 });
 
 /**
+ * @summary Isotonic calibration bins + featureImportance top-15 for a model version
+ */
+export const GetAdminModelCalibrationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAdminModelCalibrationResponse = zod.object({
+  id: zod.number(),
+  kind: zod.string(),
+  version: zod.string(),
+  engine: zod.string(),
+  calibration: zod.object({
+    identity: zod.boolean(),
+    sampleSize: zod.number().nullish(),
+    bins: zod.array(
+      zod.object({
+        minProb: zod.number(),
+        maxProb: zod.number(),
+        calibratedProb: zod.number(),
+      }),
+    ),
+  }),
+  featureImportance: zod.array(
+    zod.object({
+      name: zod.string(),
+      weight: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)
  */
 export const GetAdminCoverageResponse = zod.object({

@@ -12,6 +12,7 @@ import Metrics from "@/pages/metrics";
 import Operations from "@/pages/operations";
 import Coverage from "@/pages/coverage";
 import Workers from "@/pages/workers";
+import Models from "@/pages/models";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -61,6 +62,7 @@ function App() {
                 <Route path="/coverage" element={<Coverage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/metrics" element={<Metrics />} />
+                <Route path="/models" element={<Models />} />
                 <Route path="/operations" element={<Operations />} />
                 <Route path="/workers" element={<Workers />} />
               </Route>

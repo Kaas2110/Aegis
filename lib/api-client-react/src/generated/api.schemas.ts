@@ -179,6 +179,33 @@ export interface AdminModelActivateResponse {
   version: string;
 }
 
+export interface AdminModelCalibrationBin {
+  minProb: number;
+  maxProb: number;
+  calibratedProb: number;
+}
+
+export interface AdminModelCalibrationBlock {
+  identity: boolean;
+  /** @nullable */
+  sampleSize?: number | null;
+  bins: AdminModelCalibrationBin[];
+}
+
+export interface AdminModelFeatureImportanceItem {
+  name: string;
+  weight: number;
+}
+
+export interface AdminModelCalibrationResponse {
+  id: number;
+  kind: string;
+  version: string;
+  engine: string;
+  calibration: AdminModelCalibrationBlock;
+  featureImportance: AdminModelFeatureImportanceItem[];
+}
+
 export type WorkerHeartbeatLastStatus =
   (typeof WorkerHeartbeatLastStatus)[keyof typeof WorkerHeartbeatLastStatus];
 

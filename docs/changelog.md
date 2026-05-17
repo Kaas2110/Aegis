@@ -3,6 +3,31 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-17 — Phase 5 A3 Model Management UI DONE
+
+Закрыли отложенный пункт админки — раздел `/models` в `artifacts/admin-web`.
+
+**Backend:** новый endpoint `GET /api/admin/models/:id/calibration` —
+читает `model_versions.metadata.calibration` (isotonic bins + sampleSize) и
+`metadata.featureImportance` (top-15 по |weight|). При отсутствии калибровки
+возвращает `identity:true, bins:[]`. Edge cases: 400 на не-числовой id,
+404 на отсутствующую модель. OpenAPI: схемы `AdminModelCalibrationResponse`
+/ `Block` / `Bin` / `FeatureImportanceItem`, codegen прогнан.
+
+**Frontend:** `pages/models.tsx` через `useGetAdminModelsHistory` —
+таблица последних 50 версий с `kind/version/engine/testAcc/Brier/N/createdAt`
++ бейдж ACTIVE/shadow. Кнопка «Активировать» вызывает `useActivateAdminModel`
+с `window.confirm`, тостом, инвалидацией кэшей `/models` и `/models/history`.
+Expandable row через chevron открывает панель калибровки: Recharts LineChart
+(x = mid сырой p, y = калиброванная p) + diagonal `y=x` ReferenceLine как
+референс, плюс горизонтальные бары feature importance top-15. Когда bins
+пусты или identity — текстовая подсказка вместо графика, никаких fake-данных.
+Роут `/models` в `App.tsx`, навигация — иконка Layers, лейбл «Модели».
+
+Активация безопасна — серверная транзакция в `routes/admin.ts:728` атомарно
+деактивирует конкурента с тем же `(kind, featuresVersion, engine)`. Сессия
+админа через HttpOnly cookie, токен не уходит на клиент.
+
 ## 2026-05-17 — Phase 9 баг-лист зафиксирован (после live-теста на iPhone)
 
 Пользователь прогнал Phase 2 UI на эмуляторе и нашёл 8 проблем (F1-F8). Все

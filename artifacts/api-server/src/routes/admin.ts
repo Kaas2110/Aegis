@@ -746,6 +746,66 @@ router.post('/models/:id/activate', async (req, res) => {
   res.json({ ok: true, alreadyActive: false, activatedId: id, kind: target.kind, engine: target.engine, version: target.version });
 });
 
+/**
+ * GET /api/admin/models/:id/calibration
+ * Возвращает isotonic calibration модели (bins) для отрисовки reliability-диаграммы
+ * + featureImportance top-15 (если есть). Если калибровки нет — identity=true.
+ */
+router.get('/models/:id/calibration', async (req, res) => {
+  const id = parseInt(req.params['id'] ?? '', 10);
+  if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
+
+  const [row] = await db
+    .select({
+      id: modelVersionsTable.id,
+      kind: modelVersionsTable.kind,
+      version: modelVersionsTable.version,
+      engine: modelVersionsTable.engine,
+      metadata: modelVersionsTable.metadata,
+    })
+    .from(modelVersionsTable)
+    .where(eq(modelVersionsTable.id, id))
+    .limit(1);
+  if (!row) { res.status(404).json({ error: 'model not found' }); return; }
+
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+  const calibrationRaw = meta['calibration'] as Record<string, unknown> | undefined;
+  const identity = !calibrationRaw || calibrationRaw['identity'] === true;
+  const binsRaw = Array.isArray(calibrationRaw?.['bins']) ? (calibrationRaw['bins'] as Array<Record<string, unknown>>) : [];
+  const bins = binsRaw.map((b) => ({
+    minProb: Number(b['minProb'] ?? 0),
+    maxProb: Number(b['maxProb'] ?? 0),
+    calibratedProb: Number(b['calibratedProb'] ?? 0),
+  }));
+  const sampleSize = typeof calibrationRaw?.['sampleSize'] === 'number' ? (calibrationRaw['sampleSize'] as number) : null;
+
+  const importanceRaw = (meta['featureImportance'] ?? meta['importance']) as unknown;
+  let featureImportance: Array<{ name: string; weight: number }> = [];
+  if (Array.isArray(importanceRaw)) {
+    featureImportance = (importanceRaw as Array<Record<string, unknown>>)
+      .map((f) => ({
+        name: String(f['name'] ?? f['feature'] ?? ''),
+        weight: Number(f['weight'] ?? f['importance'] ?? 0),
+      }))
+      .filter((f) => f.name && Number.isFinite(f.weight))
+      .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
+      .slice(0, 15);
+  }
+
+  res.json({
+    id: row.id,
+    kind: row.kind,
+    version: row.version,
+    engine: row.engine,
+    calibration: {
+      identity,
+      sampleSize,
+      bins,
+    },
+    featureImportance,
+  });
+});
+
 // ── T0.7 visibility ─────────────────────────────────────────────────────────
 
 // T0.7 visibility — статус очереди replay-парсинга.

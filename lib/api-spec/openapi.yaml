@@ -358,6 +358,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminModelActivateResponse"
 
+  /admin/models/{id}/calibration:
+    get:
+      operationId: getAdminModelCalibration
+      tags: [admin]
+      summary: Isotonic calibration bins + featureImportance top-15 for a model version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Model calibration payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminModelCalibrationResponse"
+
   /admin/coverage:
     get:
       operationId: getAdminCoverage
@@ -683,6 +702,47 @@ components:
         kind: { type: string }
         engine: { type: string }
         version: { type: string }
+
+    AdminModelCalibrationBin:
+      type: object
+      required: [minProb, maxProb, calibratedProb]
+      properties:
+        minProb: { type: number }
+        maxProb: { type: number }
+        calibratedProb: { type: number }
+
+    AdminModelCalibrationBlock:
+      type: object
+      required: [identity, bins]
+      properties:
+        identity: { type: boolean }
+        sampleSize: { type: ["integer", "null"] }
+        bins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminModelCalibrationBin"
+
+    AdminModelFeatureImportanceItem:
+      type: object
+      required: [name, weight]
+      properties:
+        name: { type: string }
+        weight: { type: number }
+
+    AdminModelCalibrationResponse:
+      type: object
+      required: [id, kind, version, engine, calibration, featureImportance]
+      properties:
+        id: { type: integer }
+        kind: { type: string }
+        version: { type: string }
+        engine: { type: string }
+        calibration:
+          $ref: "#/components/schemas/AdminModelCalibrationBlock"
+        featureImportance:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminModelFeatureImportanceItem"
 
     AdminWorkersConfig:
       type: object
