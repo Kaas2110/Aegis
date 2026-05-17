@@ -318,6 +318,31 @@ export const GetAdminIntegrationsResponse = zod.object({
       source: zod.enum(["override", "env", "none"]),
       preview: zod.string().nullish(),
       overrideUpdatedAt: zod.string().nullish(),
+      requestsTotal: zod
+        .number()
+        .nullish()
+        .describe("Total HTTP requests sent to this source since server boot."),
+      responsesOk: zod
+        .number()
+        .nullish()
+        .describe(
+          "Successful responses (HTTP 2xx with parsed events) since boot.",
+        ),
+      lastTickStatus: zod
+        .object({
+          ok: zod.boolean(),
+          events: zod
+            .number()
+            .describe(
+              "Number of events returned in the last tick (0 if error).",
+            ),
+          error: zod.string().nullish(),
+          checkedAt: zod
+            .string()
+            .describe("ISO timestamp of the last fetch attempt."),
+          durationMs: zod.number(),
+        })
+        .nullish(),
     }),
   ),
 });
@@ -354,5 +379,28 @@ export const UpdateAdminIntegrationResponse = zod.object({
     source: zod.enum(["override", "env", "none"]),
     preview: zod.string().nullish(),
     overrideUpdatedAt: zod.string().nullish(),
+    requestsTotal: zod
+      .number()
+      .nullish()
+      .describe("Total HTTP requests sent to this source since server boot."),
+    responsesOk: zod
+      .number()
+      .nullish()
+      .describe(
+        "Successful responses (HTTP 2xx with parsed events) since boot.",
+      ),
+    lastTickStatus: zod
+      .object({
+        ok: zod.boolean(),
+        events: zod
+          .number()
+          .describe("Number of events returned in the last tick (0 if error)."),
+        error: zod.string().nullish(),
+        checkedAt: zod
+          .string()
+          .describe("ISO timestamp of the last fetch attempt."),
+        durationMs: zod.number(),
+      })
+      .nullish(),
   }),
 });

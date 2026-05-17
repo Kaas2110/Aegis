@@ -183,6 +183,17 @@ export const AdminIntegrationStatusSource = {
   none: "none",
 } as const;
 
+export type AdminIntegrationStatusLastTickStatus = {
+  ok: boolean;
+  /** Number of events returned in the last tick (0 if error). */
+  events: number;
+  /** @nullable */
+  error?: string | null;
+  /** ISO timestamp of the last fetch attempt. */
+  checkedAt: string;
+  durationMs: number;
+} | null;
+
 export interface AdminIntegrationStatus {
   envName: string;
   label: string;
@@ -198,6 +209,11 @@ export interface AdminIntegrationStatus {
   preview?: string | null;
   /** @nullable */
   overrideUpdatedAt?: string | null;
+  /** Total HTTP requests sent to this source since server boot. */
+  requestsTotal?: number | null;
+  /** Successful responses (HTTP 2xx with parsed events) since boot. */
+  responsesOk?: number | null;
+  lastTickStatus?: AdminIntegrationStatusLastTickStatus;
 }
 
 export interface AdminIntegrationsResponse {

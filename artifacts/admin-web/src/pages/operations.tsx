@@ -387,6 +387,13 @@ function IntegrationCard({ integration }: { integration: AdminIntegrationStatus 
 
   const [showHowTo, setShowHowTo] = useState(false);
 
+  const tick = integration.lastTickStatus ?? null;
+  const statusDot = tick === null
+    ? { cls: "bg-muted-foreground/40", label: "нет данных" }
+    : tick.ok
+      ? { cls: "bg-radiant", label: `ОК · ${tick.events} событий` }
+      : { cls: "bg-dire", label: `ОШИБКА · ${tick.error ?? "неизвестно"}` };
+
   return (
     <div className="border border-border bg-background p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -396,10 +403,29 @@ function IntegrationCard({ integration }: { integration: AdminIntegrationStatus 
             <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider bg-card border border-border px-1.5 py-0.5">
               {CATEGORY_LABEL[integration.category] ?? integration.category}
             </span>
+            {/* Live status dot */}
+            <span
+              className="flex items-center gap-1 font-mono text-[10px]"
+              title={tick ? `Проверено: ${formatDate(tick.checkedAt)} · ${tick.durationMs}мс` : "Ещё не опрашивался"}
+            >
+              <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${statusDot.cls}`} />
+              <span className="text-muted-foreground">{statusDot.label}</span>
+            </span>
           </div>
           <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
             {integration.description}
           </p>
+          {/* Request counters */}
+          {integration.requestsTotal != null && (
+            <div className="flex items-center gap-3 pt-0.5">
+              <span className="font-mono text-[10px] text-muted-foreground">
+                Запросов: <span className="text-foreground font-bold">{integration.requestsTotal}</span>
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                Успешных: <span className={`font-bold ${integration.responsesOk === integration.requestsTotal ? "text-radiant" : "text-primary"}`}>{integration.responsesOk ?? 0}</span>
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2 pt-1 flex-wrap">
             <code className="font-mono text-[10px] bg-card border border-border px-1.5 py-0.5 text-muted-foreground">
               {integration.envName}
@@ -425,6 +451,12 @@ function IntegrationCard({ integration }: { integration: AdminIntegrationStatus 
               <p className="font-mono text-[11px] text-foreground leading-relaxed">
                 {(integration as { howToGet?: string }).howToGet}
               </p>
+            </div>
+          ) : null}
+          {/* Last error detail */}
+          {tick && !tick.ok && tick.error ? (
+            <div className="mt-1 px-2 py-1 bg-dire/10 border border-dire/30 font-mono text-[10px] text-dire truncate" title={tick.error}>
+              {tick.error}
             </div>
           ) : null}
         </div>

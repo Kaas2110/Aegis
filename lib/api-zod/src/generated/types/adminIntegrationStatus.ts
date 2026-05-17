@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AdminIntegrationStatusCategory } from "./adminIntegrationStatusCategory";
+import type { AdminIntegrationStatusLastTickStatus } from "./adminIntegrationStatusLastTickStatus";
 import type { AdminIntegrationStatusSource } from "./adminIntegrationStatusSource";
 
 export interface AdminIntegrationStatus {
@@ -23,4 +24,9 @@ export interface AdminIntegrationStatus {
   preview?: string | null;
   /** @nullable */
   overrideUpdatedAt?: string | null;
+  /** Total HTTP requests sent to this source since server boot. */
+  requestsTotal?: number | null;
+  /** Successful responses (HTTP 2xx with parsed events) since boot. */
+  responsesOk?: number | null;
+  lastTickStatus?: AdminIntegrationStatusLastTickStatus;
 }

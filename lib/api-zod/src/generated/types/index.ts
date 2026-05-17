@@ -13,6 +13,7 @@ export * from "./adminBookmakerProbeResult";
 export * from "./adminIntegrationsResponse";
 export * from "./adminIntegrationStatus";
 export * from "./adminIntegrationStatusCategory";
+export * from "./adminIntegrationStatusLastTickStatus";
 export * from "./adminIntegrationStatusSource";
 export * from "./adminIntegrationUpdateInput";
 export * from "./adminIntegrationUpdateResponse";

@@ -183,10 +183,56 @@ function dotaStatus(s: unknown): UnifiedBookmakerEvent['status'] {
   return 'unknown';
 }
 
+// ---------- Per-source request / response tracker ----------
+
+export interface SourceTickStatus {
+  ok: boolean;
+  events: number;
+  error: string | null;
+  checkedAt: string;
+  durationMs: number;
+}
+
+interface SourceCounter {
+  requestsTotal: number;
+  responsesOk: number;
+  lastStatus: SourceTickStatus | null;
+}
+
+const sourceCounters: Record<string, SourceCounter> = {};
+
+function getCounter(source: string): SourceCounter {
+  if (!sourceCounters[source]) {
+    sourceCounters[source] = { requestsTotal: 0, responsesOk: 0, lastStatus: null };
+  }
+  return sourceCounters[source]!;
+}
+
+/** ENV-name → bookmaker source-id mapping for admin integrations enrichment. */
+export const ENV_NAME_TO_SOURCE: Record<string, string> = {
+  FONBET_API_KEY: 'fonbet',
+  LIGASTAVOK_API_KEY: 'liga_stavok',
+  PARI_API_KEY: 'pari',
+  BETBOOM_API_KEY: 'betboom',
+  X1STAVKA_API_KEY: 'x1stavka',
+  OLIMP_API_KEY: 'olimp',
+};
+
+export function getSourceTrackers(): Record<string, { requestsTotal: number; responsesOk: number; lastStatus: SourceTickStatus | null }> {
+  const result: Record<string, { requestsTotal: number; responsesOk: number; lastStatus: SourceTickStatus | null }> = {};
+  for (const [k, v] of Object.entries(sourceCounters)) {
+    result[k] = { requestsTotal: v.requestsTotal, responsesOk: v.responsesOk, lastStatus: v.lastStatus };
+  }
+  return result;
+}
+
 // ---------- Adapters ----------
 
 async function adapterFonbet(): Promise<SourceResponse> {
-  const url = 'https://line34.fonbet.ru/api/v1/line/sport/events?sport=12&count=50';
+  // Fonbet v1 line API. Factors array carries odds inline alongside event list.
+  // Factor ids (esports): "1"=П1(team1 wins), "2"=П2(team2 wins).
+  // Kill totals: "1751"=TotalO, "1752"=TotalU — pt field is the line value.
+  const url = 'https://line34.fonbet.ru/api/v1/line/sport/events?sport=12&count=100';
   const resp = await fetchWithProxy(url, {
     'Origin': 'https://www.fonbet.ru',
     'Referer': 'https://www.fonbet.ru/sports/esports/',
@@ -200,47 +246,149 @@ async function adapterFonbet(): Promise<SourceResponse> {
       team2?: string;
       startTime?: number;
       sportId?: number;
+      // Flat factors array — field name is either "f" or "id" depending on API version
+      factors?: Array<{ f?: string | number; id?: string | number; v?: number; pt?: string | number }>;
     }>;
   };
   const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
     .filter((e) => (e.sportId === 12 || e.sportId === undefined))
-    .map((e) => ({
-      source: 'fonbet',
-      eventId: String(e.id ?? ''),
-      team1: e.team1 ?? '',
-      team2: e.team2 ?? '',
-      startsAt: e.startTime ? new Date(e.startTime * 1000).toISOString() : null,
-      status: 'unknown' as const,
-      markets: {},
-      updatedAt: new Date().toISOString(),
-    }))
+    .map((e) => {
+      const factors = e.factors ?? [];
+      const getFactor = (fid: string): number | null => {
+        const f = factors.find((x) => String(x.f ?? x.id ?? '') === fid);
+        return num(f?.v);
+      };
+      const t1 = getFactor('1');
+      const t2 = getFactor('2');
+
+      // Group kill-total factors by pt (line value)
+      const overFactors = factors.filter((x) => String(x.f ?? x.id ?? '') === '1751');
+      const underFactors = factors.filter((x) => String(x.f ?? x.id ?? '') === '1752');
+      const killsLines: UnifiedMarketTotal[] = [];
+      for (const o of overFactors) {
+        const line = num(o.pt);
+        const over = num(o.v);
+        const u = underFactors.find((x) => x.pt === o.pt);
+        const under = u ? num(u.v) : null;
+        if (line !== null && over !== null && under !== null) {
+          killsLines.push({ line, over, under });
+        }
+      }
+
+      return {
+        source: 'fonbet',
+        eventId: String(e.id ?? ''),
+        team1: e.team1 ?? '',
+        team2: e.team2 ?? '',
+        startsAt: e.startTime ? new Date(e.startTime * 1000).toISOString() : null,
+        status: 'unknown' as const,
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    })
     .filter((e) => e.team1 && e.team2);
   return { source: 'fonbet', noData: false, events, fetchedAt: new Date().toISOString() };
 }
 
 async function adapterLigaStavok(): Promise<SourceResponse> {
-  const url = 'https://line.ligastavok.ru/lsbets/api/v3/line/championships?sportFamilyKind=Esports&take=200';
-  const resp = await fetchWithProxy(url, {
+  // Step 1: fetch championships list to get championship IDs for Dota 2.
+  const champsUrl = 'https://line.ligastavok.ru/lsbets/api/v3/line/championships?sportFamilyKind=Esports&take=200';
+  const champsResp = await fetchWithProxy(champsUrl, {
     'Origin': 'https://www.ligastavok.ru',
     'Referer': 'https://www.ligastavok.ru/bets/esports/dota',
   });
-  if (!resp.ok) throw new Error(`LigaStavok HTTP ${resp.status}`);
-  const raw = (await resp.json()) as {
-    data?: { events?: Array<{ id?: string; name?: string; team1?: string; team2?: string; startsAt?: string; tournament?: { sport?: string } }> };
+  if (!champsResp.ok) throw new Error(`LigaStavok championships HTTP ${champsResp.status}`);
+  const champsRaw = (await champsResp.json()) as {
+    data?: Array<{
+      id?: string | number;
+      name?: string;
+      sport?: { name?: string };
+      sportFamily?: { name?: string };
+      events?: Array<{
+        id?: string;
+        name?: string;
+        team1?: string;
+        team2?: string;
+        startsAt?: string;
+        // Markets may be inline (varies by API version)
+        markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; odds?: number; coefficient?: number }> }>;
+        odds?: { w1?: number; w2?: number };
+      }>;
+    }> | { events?: Array<{ id?: string; name?: string; team1?: string; team2?: string; startsAt?: string; tournament?: { sport?: string }; markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; odds?: number; coefficient?: number }> }> }> };
   };
-  const evList = raw.data?.events ?? [];
+
+  // The API may return an array of championships OR a single object with events
+  type LsEvent = {
+    id?: string;
+    name?: string;
+    team1?: string;
+    team2?: string;
+    startsAt?: string;
+    markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; odds?: number; coefficient?: number }> }>;
+    tournament?: { sport?: string };
+    odds?: { w1?: number; w2?: number };
+  };
+
+  let evList: LsEvent[] = [];
+  if (Array.isArray(champsRaw.data)) {
+    for (const champ of champsRaw.data) {
+      const champName = (champ.name ?? '').toLowerCase();
+      const sportName = (champ.sport?.name ?? champ.sportFamily?.name ?? '').toLowerCase();
+      if (!champName.includes('dota') && !sportName.includes('dota')) continue;
+      evList.push(...(champ.events ?? []));
+    }
+  } else if (champsRaw.data && 'events' in champsRaw.data) {
+    const d = champsRaw.data as { events?: LsEvent[] };
+    evList = (d.events ?? []).filter((e) => (e.tournament?.sport ?? '').toLowerCase().includes('dota'));
+  }
+
+  const getOdds = (o: { odds?: number; coefficient?: number } | undefined) =>
+    num(o?.odds) ?? num(o?.coefficient) ?? null;
+
   const events: UnifiedBookmakerEvent[] = evList
-    .filter((e) => (e.tournament?.sport ?? '').toLowerCase().includes('dota'))
-    .map((e) => ({
-      source: 'liga_stavok',
-      eventId: String(e.id ?? ''),
-      team1: e.team1 ?? '',
-      team2: e.team2 ?? '',
-      startsAt: e.startsAt ?? null,
-      status: 'unknown' as const,
-      markets: {},
-      updatedAt: new Date().toISOString(),
-    }))
+    .map((e) => {
+      const winnerMkt = (e.markets ?? []).find((m) => {
+        const n = (m.name ?? '').toLowerCase();
+        return n.includes('победитель') || n.includes('winner') || n === 'п1/п2' || n === 'исход';
+      });
+      const t1 = winnerMkt?.outcomes?.[0] ? getOdds(winnerMkt.outcomes[0]) : num(e.odds?.w1) ?? null;
+      const t2 = winnerMkt?.outcomes?.[1] ? getOdds(winnerMkt.outcomes[1]) : num(e.odds?.w2) ?? null;
+
+      // Parse kill totals if present
+      const killsMkt = (e.markets ?? []).find((m) => {
+        const n = (m.name ?? '').toLowerCase();
+        return (n.includes('убийств') || n.includes('kill') || n.includes('фраг')) && (n.includes('тотал') || n.includes('total'));
+      });
+      const killsLines: UnifiedMarketTotal[] = [];
+      if (killsMkt?.outcomes && killsMkt.outcomes.length >= 2) {
+        for (let i = 0; i + 1 < killsMkt.outcomes.length; i += 2) {
+          const o = killsMkt.outcomes[i];
+          const u = killsMkt.outcomes[i + 1];
+          const lineMatch = (o?.name ?? '').match(/(\d+\.?\d*)/);
+          const line = lineMatch ? parseFloat(lineMatch[1]!) : null;
+          const over = getOdds(o);
+          const under = getOdds(u);
+          if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
+        }
+      }
+
+      return {
+        source: 'liga_stavok',
+        eventId: String(e.id ?? ''),
+        team1: e.team1 ?? '',
+        team2: e.team2 ?? '',
+        startsAt: e.startsAt ?? null,
+        status: 'unknown' as const,
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    })
     .filter((e) => e.team1 && e.team2);
   return { source: 'liga_stavok', noData: false, events, fetchedAt: new Date().toISOString() };
 }
@@ -259,9 +407,32 @@ async function adapterPari(): Promise<SourceResponse> {
   const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
     .filter((e) => (e.tournamentName ?? '').toLowerCase().includes('dota'))
     .map((e) => {
-      const winnerMarket = (e.markets ?? []).find((m) => (m.name ?? '').toLowerCase() === 'победитель' || (m.name ?? '').toLowerCase() === 'winner');
-      const t1 = winnerMarket?.outcomes?.[0]?.coefficient ?? null;
-      const t2 = winnerMarket?.outcomes?.[1]?.coefficient ?? null;
+      const mkts = e.markets ?? [];
+      const winnerMkt = mkts.find((m) => {
+        const n = (m.name ?? '').toLowerCase();
+        return n === 'победитель' || n === 'winner' || n.includes('победитель матча');
+      });
+      const t1 = num(winnerMkt?.outcomes?.[0]?.coefficient);
+      const t2 = num(winnerMkt?.outcomes?.[1]?.coefficient);
+
+      // Parse total kills market
+      const killsMkt = mkts.find((m) => {
+        const n = (m.name ?? '').toLowerCase();
+        return (n.includes('убийств') || n.includes('kill') || n.includes('фраг')) && (n.includes('тотал') || n.includes('total'));
+      });
+      const killsLines: UnifiedMarketTotal[] = [];
+      if (killsMkt?.outcomes && killsMkt.outcomes.length >= 2) {
+        for (let i = 0; i + 1 < killsMkt.outcomes.length; i += 2) {
+          const o = killsMkt.outcomes[i];
+          const u = killsMkt.outcomes[i + 1];
+          const lineMatch = (o?.name ?? '').match(/(\d+\.?\d*)/);
+          const line = lineMatch ? parseFloat(lineMatch[1]!) : null;
+          const over = num(o?.coefficient);
+          const under = num(u?.coefficient);
+          if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
+        }
+      }
+
       return {
         source: 'pari',
         eventId: String(e.id ?? ''),
@@ -269,7 +440,10 @@ async function adapterPari(): Promise<SourceResponse> {
         team2: e.team2 ?? '',
         startsAt: e.startsAt ?? null,
         status: 'unknown' as const,
-        markets: t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {},
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
+        },
         updatedAt: new Date().toISOString(),
       };
     })
@@ -286,13 +460,53 @@ async function adapterBetBoom(): Promise<SourceResponse> {
   });
   if (!resp.ok) throw new Error(`BetBoom HTTP ${resp.status}`);
   const raw = (await resp.json()) as {
-    events?: Array<{ id?: string; name?: string; team1?: string; team2?: string; beginAt?: string; sectionName?: string; w1?: number; w2?: number }>;
+    events?: Array<{
+      id?: string;
+      name?: string;
+      team1?: string;
+      team2?: string;
+      beginAt?: string;
+      sectionName?: string;
+      w1?: number;
+      w2?: number;
+      // Extended markets (present when endpoint returns full event detail)
+      markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; value?: number; coefficient?: number }> }>;
+      totals?: Array<{ name?: string; type?: string; value?: number; over?: number; under?: number }>;
+    }>;
   };
   const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
     .filter((e) => (e.sectionName ?? '').toLowerCase().includes('dota'))
     .map((e) => {
       const t1 = num(e.w1);
       const t2 = num(e.w2);
+
+      // Try to parse totalKills from markets or totals sub-arrays (if endpoint includes them)
+      const killsLines: UnifiedMarketTotal[] = [];
+      for (const m of e.markets ?? []) {
+        const n = (m.name ?? '').toLowerCase();
+        if ((n.includes('убийств') || n.includes('kill') || n.includes('фраг')) && (n.includes('тотал') || n.includes('total'))) {
+          const outcomes = m.outcomes ?? [];
+          for (let i = 0; i + 1 < outcomes.length; i += 2) {
+            const o = outcomes[i];
+            const u = outcomes[i + 1];
+            const lineMatch = (o?.name ?? '').match(/(\d+\.?\d*)/);
+            const line = lineMatch ? parseFloat(lineMatch[1]!) : null;
+            const over = num(o?.value ?? o?.coefficient);
+            const under = num(u?.value ?? u?.coefficient);
+            if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
+          }
+        }
+      }
+      for (const t of e.totals ?? []) {
+        const n = (t.name ?? t.type ?? '').toLowerCase();
+        if (n.includes('убийств') || n.includes('kill') || n.includes('фраг')) {
+          const line = num(t.value);
+          const over = num(t.over);
+          const under = num(t.under);
+          if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
+        }
+      }
+
       return {
         source: 'betboom',
         eventId: String(e.id ?? ''),
@@ -300,7 +514,10 @@ async function adapterBetBoom(): Promise<SourceResponse> {
         team2: e.team2 ?? '',
         startsAt: e.beginAt ?? null,
         status: 'unknown' as const,
-        markets: t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {},
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
+        },
         updatedAt: new Date().toISOString(),
       };
     })
@@ -348,12 +565,56 @@ async function adapterOlimp(): Promise<SourceResponse> {
   });
   if (!resp.ok) throw new Error(`Olimp HTTP ${resp.status}`);
   const raw = (await resp.json()) as {
-    events?: Array<{ id?: string; team1?: string; team2?: string; date?: string; coef1?: number; coef2?: number }>;
+    events?: Array<{
+      id?: string;
+      team1?: string;
+      team2?: string;
+      date?: string;
+      coef1?: number;
+      coef2?: number;
+      // Extended fields that Olimp may return
+      totals?: Array<{ name?: string; type?: string; value?: number; over?: number; under?: number }>;
+      firstBlood?: { yes?: number; no?: number; 1?: number; 2?: number };
+      markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; coefficient?: number; value?: number }> }>;
+    }>;
   };
   const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
     .map((e) => {
       const t1 = num(e.coef1);
       const t2 = num(e.coef2);
+
+      // Parse kill totals from totals array or markets
+      const killsLines: UnifiedMarketTotal[] = [];
+      for (const t of e.totals ?? []) {
+        const n = (t.name ?? t.type ?? '').toLowerCase();
+        if (n.includes('убийств') || n.includes('kill') || n.includes('фраг')) {
+          const line = num(t.value);
+          const over = num(t.over);
+          const under = num(t.under);
+          if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
+        }
+      }
+      for (const m of e.markets ?? []) {
+        const n = (m.name ?? '').toLowerCase();
+        if ((n.includes('убийств') || n.includes('kill')) && (n.includes('тотал') || n.includes('total'))) {
+          const outcomes = m.outcomes ?? [];
+          for (let i = 0; i + 1 < outcomes.length; i += 2) {
+            const o = outcomes[i];
+            const u = outcomes[i + 1];
+            const lineMatch = (o?.name ?? '').match(/(\d+\.?\d*)/);
+            const line = lineMatch ? parseFloat(lineMatch[1]!) : null;
+            const over = num(o?.coefficient ?? o?.value);
+            const under = num(u?.coefficient ?? u?.value);
+            if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
+          }
+        }
+      }
+
+      // Parse first blood
+      const fbRaw = e.firstBlood;
+      const fbYes = fbRaw ? (num(fbRaw.yes) ?? num((fbRaw as { 1?: number })[1])) : null;
+      const fbNo = fbRaw ? (num(fbRaw.no) ?? num((fbRaw as { 2?: number })[2])) : null;
+
       return {
         source: 'olimp',
         eventId: String(e.id ?? ''),
@@ -361,7 +622,11 @@ async function adapterOlimp(): Promise<SourceResponse> {
         team2: e.team2 ?? '',
         startsAt: e.date ?? null,
         status: 'unknown' as const,
-        markets: t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {},
+        markets: {
+          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
+          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
+          ...(fbYes !== null && fbNo !== null ? { firstBlood: { yes: fbYes, no: fbNo } } : {}),
+        },
         updatedAt: new Date().toISOString(),
       };
     })
@@ -621,10 +886,12 @@ export async function fetchSource(source: string, opts?: { force?: boolean }): P
       '[bookmaker] fetched',
     );
     setCached(source, result);
+    { const c = getCounter(source); c.requestsTotal += 1; c.responsesOk += 1; c.lastStatus = { ok: true, events: result.events.length, error: null, checkedAt: new Date().toISOString(), durationMs }; }
     return result;
   } catch (err) {
     const durationMs = Date.now() - startedAt;
     const errMsg = err instanceof Error ? err.message : String(err);
+    { const c = getCounter(source); c.requestsTotal += 1; c.lastStatus = { ok: false, events: 0, error: errMsg, checkedAt: new Date().toISOString(), durationMs }; }
     bookmakerLogger.warn({ tag: 'bookmaker', source, durationMs, err: errMsg }, '[bookmaker] fetch failed');
     const fail: SourceResponse = {
       source,

@@ -539,6 +539,31 @@ components:
           type: ["string", "null"]
         overrideUpdatedAt:
           type: ["string", "null"]
+        requestsTotal:
+          type: integer
+          nullable: true
+          description: Total HTTP requests sent to this source since server boot.
+        responsesOk:
+          type: integer
+          nullable: true
+          description: Successful responses (HTTP 2xx with parsed events) since boot.
+        lastTickStatus:
+          nullable: true
+          type: object
+          required: [ok, events, checkedAt, durationMs]
+          properties:
+            ok:
+              type: boolean
+            events:
+              type: integer
+              description: Number of events returned in the last tick (0 if error).
+            error:
+              type: ["string", "null"]
+            checkedAt:
+              type: string
+              description: ISO timestamp of the last fetch attempt.
+            durationMs:
+              type: integer
     AdminIntegrationsResponse:
       type: object
       required: [integrations]

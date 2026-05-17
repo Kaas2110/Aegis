@@ -32,7 +32,7 @@ import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/Outcome
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
-import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, type SourceProbeResult } from './bookmakers';
+import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, getSourceTrackers, ENV_NAME_TO_SOURCE, type SourceProbeResult } from './bookmakers';
 import { clearResponseCache } from '../lib/responseCache';
 import {
   db,
@@ -209,7 +209,19 @@ router.get('/scheduler/state', async (_req, res) => {
  */
 router.get('/integrations', async (_req, res) => {
   const integrations = await listIntegrations();
-  res.json({ integrations });
+  const trackers = getSourceTrackers();
+  const enriched = integrations.map((integration) => {
+    const sourceId = ENV_NAME_TO_SOURCE[integration.envName];
+    const tracker = sourceId ? trackers[sourceId] : null;
+    if (!tracker) return integration;
+    return {
+      ...integration,
+      requestsTotal: tracker.requestsTotal,
+      responsesOk: tracker.responsesOk,
+      lastTickStatus: tracker.lastStatus ?? null,
+    };
+  });
+  res.json({ integrations: enriched });
 });
 
 /**

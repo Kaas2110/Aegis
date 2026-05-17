@@ -11,7 +11,7 @@ import { logger } from '../lib/logger';
 
 const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   id: 1,
-  useBookmakerOdds: false,
+  useBookmakerOdds: true,
   liveSnapshotPruneDays: 7,
   trainWindowDays: 365,
   trainMaxPatches: 4,
