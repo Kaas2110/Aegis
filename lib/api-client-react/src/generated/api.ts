@@ -19,6 +19,7 @@ import type {
 import type {
   AdminBookmakerProbeInput,
   AdminBookmakerProbeResponse,
+  AdminCoverageResponse,
   AdminIntegrationUpdateInput,
   AdminIntegrationUpdateResponse,
   AdminIntegrationsResponse,
@@ -27,6 +28,7 @@ import type {
   AdminMetricsResponse,
   AdminModelRetrainInput,
   AdminModelsResponse,
+  AdminOdUsageResponse,
   AdminOkResult,
   AdminOpenObject,
   AdminPruneInput,
@@ -1161,6 +1163,232 @@ export function useGetAdminModels<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAdminModelsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)
+ */
+export const getGetAdminCoverageUrl = () => {
+  return `/api/admin/coverage`;
+};
+
+export const getAdminCoverage = async (
+  options?: RequestInit,
+): Promise<AdminCoverageResponse> => {
+  return customFetch<AdminCoverageResponse>(getGetAdminCoverageUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminCoverageQueryKey = () => {
+  return [`/api/admin/coverage`] as const;
+};
+
+export const getGetAdminCoverageQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminCoverage>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminCoverage>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminCoverageQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminCoverage>>
+  > = ({ signal }) => getAdminCoverage({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminCoverage>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminCoverageQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminCoverage>>
+>;
+export type GetAdminCoverageQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)
+ */
+
+export function useGetAdminCoverage<
+  TData = Awaited<ReturnType<typeof getAdminCoverage>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminCoverage>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminCoverageQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replay parse queue status, parsed totals, oldest queued items
+ */
+export const getGetAdminParseQueueStatsUrl = () => {
+  return `/api/admin/parse-queue/stats`;
+};
+
+export const getAdminParseQueueStats = async (
+  options?: RequestInit,
+): Promise<AdminOpenObject> => {
+  return customFetch<AdminOpenObject>(getGetAdminParseQueueStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminParseQueueStatsQueryKey = () => {
+  return [`/api/admin/parse-queue/stats`] as const;
+};
+
+export const getGetAdminParseQueueStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminParseQueueStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminParseQueueStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAdminParseQueueStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminParseQueueStats>>
+  > = ({ signal }) => getAdminParseQueueStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminParseQueueStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminParseQueueStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminParseQueueStats>>
+>;
+export type GetAdminParseQueueStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Replay parse queue status, parsed totals, oldest queued items
+ */
+
+export function useGetAdminParseQueueStats<
+  TData = Awaited<ReturnType<typeof getAdminParseQueueStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminParseQueueStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminParseQueueStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary OpenDota API key usage (in-memory counters, resets on restart)
+ */
+export const getGetAdminOdUsageUrl = () => {
+  return `/api/admin/od-usage`;
+};
+
+export const getAdminOdUsage = async (
+  options?: RequestInit,
+): Promise<AdminOdUsageResponse> => {
+  return customFetch<AdminOdUsageResponse>(getGetAdminOdUsageUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminOdUsageQueryKey = () => {
+  return [`/api/admin/od-usage`] as const;
+};
+
+export const getGetAdminOdUsageQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminOdUsage>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminOdUsage>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminOdUsageQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOdUsage>>> = ({
+    signal,
+  }) => getAdminOdUsage({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminOdUsage>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminOdUsageQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminOdUsage>>
+>;
+export type GetAdminOdUsageQueryError = ErrorType<unknown>;
+
+/**
+ * @summary OpenDota API key usage (in-memory counters, resets on restart)
+ */
+
+export function useGetAdminOdUsage<
+  TData = Awaited<ReturnType<typeof getAdminOdUsage>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminOdUsage>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminOdUsageQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

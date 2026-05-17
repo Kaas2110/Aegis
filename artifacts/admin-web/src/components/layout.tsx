@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAdminLogout } from "@workspace/api-client-react";
-import { LogOut, Activity, Settings2, ShieldAlert, Cpu } from "lucide-react";
+import { LogOut, Activity, Settings2, ShieldAlert, Cpu, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Layout() {
@@ -9,6 +9,7 @@ export default function Layout() {
 
   const navItems = [
     { href: "/", label: "Панель", icon: Activity },
+    { href: "/coverage", label: "Coverage", icon: Database },
     { href: "/metrics", label: "Метрики", icon: ShieldAlert },
     { href: "/operations", label: "Операции", icon: Cpu },
     { href: "/settings", label: "Настройки", icon: Settings2 },

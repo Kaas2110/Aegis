@@ -398,7 +398,7 @@ router.get('/coverage', async (_req, res) => {
     // Prematch outcomes (для разблокировки live-train)
     db.select({
       total: sql<number>`COUNT(*)::int`,
-      last30d: sql<number>`COUNT(*) FILTER (WHERE ${prematchOutcomesTable.predictedAt} >= ${ts24hAgo})::int`,
+      last30d: sql<number>`COUNT(*) FILTER (WHERE ${prematchOutcomesTable.predictedAt} >= NOW() - INTERVAL '30 days')::int`,
     })
       .from(prematchOutcomesTable),
   ]);

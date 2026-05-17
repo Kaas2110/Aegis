@@ -10,6 +10,7 @@ import Login from "@/pages/login";
 import Settings from "@/pages/settings";
 import Metrics from "@/pages/metrics";
 import Operations from "@/pages/operations";
+import Coverage from "@/pages/coverage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -56,6 +57,7 @@ function App() {
             <Route element={<AuthGate />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/coverage" element={<Coverage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/metrics" element={<Metrics />} />
                 <Route path="/operations" element={<Operations />} />

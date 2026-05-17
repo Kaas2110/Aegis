@@ -264,6 +264,86 @@ export const GetAdminModelsResponse = zod.object({
 });
 
 /**
+ * @summary Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)
+ */
+export const GetAdminCoverageResponse = zod.object({
+  drafts: zod.object({
+    covered30d: zod.number(),
+    total30d: zod.number(),
+    pct30d: zod.number(),
+    covered90d: zod.number(),
+    total90d: zod.number(),
+    pct90d: zod.number(),
+    covered365d: zod.number(),
+    total365d: zod.number(),
+    pct365d: zod.number(),
+  }),
+  parsed: zod.object({
+    parsed60d: zod.number(),
+    total60d: zod.number(),
+    pct60d: zod.number(),
+    parsed180d: zod.number(),
+    total180d: zod.number(),
+    pct180d: zod.number(),
+    parsedTotal: zod.number(),
+    cruiseReadyThreshold: zod.number(),
+    cruiseReady60d: zod.boolean(),
+  }),
+  playerStats: zod.object({
+    playerHeroRows: zod.number(),
+    playerRatingRows: zod.number(),
+  }),
+  teamFeatures: zod.object({
+    recentFormRows: zod.number(),
+    recentFormLastAt: zod.string().nullish(),
+    extendedRows: zod.number(),
+    extendedLastAt: zod.string().nullish(),
+    h2hRows: zod.number(),
+  }),
+  liveSnapshots: zod.object({
+    last24h: zod.number(),
+    withStratzEnrichment: zod.number(),
+    stratzPct: zod.number(),
+    lastCapturedAt: zod.string().nullish(),
+  }),
+  prematchOutcomes: zod.object({
+    total: zod.number(),
+    last30d: zod.number(),
+    liveTrainReadyThreshold: zod.number(),
+    liveTrainReady: zod.boolean(),
+  }),
+  generatedAt: zod.string(),
+});
+
+/**
+ * @summary Replay parse queue status, parsed totals, oldest queued items
+ */
+export const GetAdminParseQueueStatsResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+/**
+ * @summary OpenDota API key usage (in-memory counters, resets on restart)
+ */
+export const GetAdminOdUsageResponse = zod.object({
+  today: zod.number(),
+  last7d: zod.number(),
+  last30d: zod.number(),
+  estimatedCostUsdToday: zod.number(),
+  estimatedCostUsdLast30d: zod.number(),
+  hasKey: zod.boolean(),
+  history: zod.array(
+    zod.object({
+      date: zod.string(),
+      count: zod.number(),
+      estimatedCostUsd: zod.number(),
+    }),
+  ),
+  note: zod.string(),
+});
+
+/**
  * @summary Diagnostic — live single request to each bookmaker source
  */
 export const ProbeAdminBookmakersBody = zod.object({

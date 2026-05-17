@@ -236,6 +236,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminModelsResponse"
 
+  /admin/coverage:
+    get:
+      operationId: getAdminCoverage
+      tags: [admin]
+      summary: Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)
+      responses:
+        "200":
+          description: Coverage payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCoverageResponse"
+
+  /admin/parse-queue/stats:
+    get:
+      operationId: getAdminParseQueueStats
+      tags: [admin]
+      summary: Replay parse queue status, parsed totals, oldest queued items
+      responses:
+        "200":
+          description: Parse queue stats (open shape)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOpenObject"
+
+  /admin/od-usage:
+    get:
+      operationId: getAdminOdUsage
+      tags: [admin]
+      summary: OpenDota API key usage (in-memory counters, resets on restart)
+      responses:
+        "200":
+          description: OD usage stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOdUsageResponse"
+
   /admin/bookmakers/probe:
     post:
       operationId: probeAdminBookmakers
@@ -500,6 +539,100 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminModelRow"
+
+    # ---- Admin coverage (data health) ----
+    AdminCoverageResponse:
+      type: object
+      required:
+        - drafts
+        - parsed
+        - playerStats
+        - teamFeatures
+        - liveSnapshots
+        - prematchOutcomes
+        - generatedAt
+      properties:
+        drafts:
+          type: object
+          required: [covered30d, total30d, pct30d, covered90d, total90d, pct90d, covered365d, total365d, pct365d]
+          properties:
+            covered30d: { type: integer }
+            total30d: { type: integer }
+            pct30d: { type: number }
+            covered90d: { type: integer }
+            total90d: { type: integer }
+            pct90d: { type: number }
+            covered365d: { type: integer }
+            total365d: { type: integer }
+            pct365d: { type: number }
+        parsed:
+          type: object
+          required: [parsed60d, total60d, pct60d, parsed180d, total180d, pct180d, parsedTotal, cruiseReadyThreshold, cruiseReady60d]
+          properties:
+            parsed60d: { type: integer }
+            total60d: { type: integer }
+            pct60d: { type: number }
+            parsed180d: { type: integer }
+            total180d: { type: integer }
+            pct180d: { type: number }
+            parsedTotal: { type: integer }
+            cruiseReadyThreshold: { type: integer }
+            cruiseReady60d: { type: boolean }
+        playerStats:
+          type: object
+          required: [playerHeroRows, playerRatingRows]
+          properties:
+            playerHeroRows: { type: integer }
+            playerRatingRows: { type: integer }
+        teamFeatures:
+          type: object
+          required: [recentFormRows, extendedRows, h2hRows]
+          properties:
+            recentFormRows: { type: integer }
+            recentFormLastAt: { type: ["string", "null"] }
+            extendedRows: { type: integer }
+            extendedLastAt: { type: ["string", "null"] }
+            h2hRows: { type: integer }
+        liveSnapshots:
+          type: object
+          required: [last24h, withStratzEnrichment, stratzPct]
+          properties:
+            last24h: { type: integer }
+            withStratzEnrichment: { type: integer }
+            stratzPct: { type: number }
+            lastCapturedAt: { type: ["string", "null"] }
+        prematchOutcomes:
+          type: object
+          required: [total, last30d, liveTrainReadyThreshold, liveTrainReady]
+          properties:
+            total: { type: integer }
+            last30d: { type: integer }
+            liveTrainReadyThreshold: { type: integer }
+            liveTrainReady: { type: boolean }
+        generatedAt:
+          type: string
+
+    # ---- Admin OD usage ----
+    AdminOdUsageResponse:
+      type: object
+      required: [today, last7d, last30d, estimatedCostUsdToday, estimatedCostUsdLast30d, hasKey, history, note]
+      properties:
+        today: { type: integer }
+        last7d: { type: integer }
+        last30d: { type: integer }
+        estimatedCostUsdToday: { type: number }
+        estimatedCostUsdLast30d: { type: number }
+        hasKey: { type: boolean }
+        history:
+          type: array
+          items:
+            type: object
+            required: [date, count, estimatedCostUsd]
+            properties:
+              date: { type: string }
+              count: { type: integer }
+              estimatedCostUsd: { type: number }
+        note: { type: string }
 
     # ---- Admin integrations (external API keys) ----
     AdminIntegrationStatus:

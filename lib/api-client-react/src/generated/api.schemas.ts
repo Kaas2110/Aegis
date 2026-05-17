@@ -164,6 +164,87 @@ export interface AdminModelsResponse {
   models: AdminModelRow[];
 }
 
+export type AdminCoverageResponseDrafts = {
+  covered30d: number;
+  total30d: number;
+  pct30d: number;
+  covered90d: number;
+  total90d: number;
+  pct90d: number;
+  covered365d: number;
+  total365d: number;
+  pct365d: number;
+};
+
+export type AdminCoverageResponseParsed = {
+  parsed60d: number;
+  total60d: number;
+  pct60d: number;
+  parsed180d: number;
+  total180d: number;
+  pct180d: number;
+  parsedTotal: number;
+  cruiseReadyThreshold: number;
+  cruiseReady60d: boolean;
+};
+
+export type AdminCoverageResponsePlayerStats = {
+  playerHeroRows: number;
+  playerRatingRows: number;
+};
+
+export type AdminCoverageResponseTeamFeatures = {
+  recentFormRows: number;
+  /** @nullable */
+  recentFormLastAt?: string | null;
+  extendedRows: number;
+  /** @nullable */
+  extendedLastAt?: string | null;
+  h2hRows: number;
+};
+
+export type AdminCoverageResponseLiveSnapshots = {
+  last24h: number;
+  withStratzEnrichment: number;
+  stratzPct: number;
+  /** @nullable */
+  lastCapturedAt?: string | null;
+};
+
+export type AdminCoverageResponsePrematchOutcomes = {
+  total: number;
+  last30d: number;
+  liveTrainReadyThreshold: number;
+  liveTrainReady: boolean;
+};
+
+export interface AdminCoverageResponse {
+  drafts: AdminCoverageResponseDrafts;
+  parsed: AdminCoverageResponseParsed;
+  playerStats: AdminCoverageResponsePlayerStats;
+  teamFeatures: AdminCoverageResponseTeamFeatures;
+  liveSnapshots: AdminCoverageResponseLiveSnapshots;
+  prematchOutcomes: AdminCoverageResponsePrematchOutcomes;
+  generatedAt: string;
+}
+
+export type AdminOdUsageResponseHistoryItem = {
+  date: string;
+  count: number;
+  estimatedCostUsd: number;
+};
+
+export interface AdminOdUsageResponse {
+  today: number;
+  last7d: number;
+  last30d: number;
+  estimatedCostUsdToday: number;
+  estimatedCostUsdLast30d: number;
+  hasKey: boolean;
+  history: AdminOdUsageResponseHistoryItem[];
+  note: string;
+}
+
 export type AdminIntegrationStatusCategory =
   (typeof AdminIntegrationStatusCategory)[keyof typeof AdminIntegrationStatusCategory];
 
