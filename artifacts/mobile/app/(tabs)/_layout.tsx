@@ -89,12 +89,11 @@ function ClassicTabLayout({ isAdmin }: { isAdmin: boolean }) {
             ),
         }}
       />
-      {/* TODO(backtest): см. NativeTabLayout — экран скрыт от пользователя,
-          но маршрут оставлен чтобы можно было быстро вернуть. */}
+      {/* M4 DONE 2026-05-17: backtest вкладка раскрыта (prematch_outcomes ≥ 7391,
+          порог ≥200 перевыполнен в 37 раз; endpoint /api/analytics/backtest готов). */}
       <Tabs.Screen
         name="backtest"
         options={{
-          href: null,
           title: 'Бэктест',
         }}
       />

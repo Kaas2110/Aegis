@@ -108,6 +108,15 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 - Язык интерфейса — русский
 - Pinnacle парсим самостоятельно, без платного API (пользователь предупреждён про ToS)
 - Не предлагать Reserved VM деплой пока пользователь не попросит
+- **🖥️ КРИТИЧНО: прод будет на личном ноуте пользователя** (а не на Replit Autoscale).
+  Это значит: все воркеры (Daily Ingest, Hourly Live, Replay Parse Loop, Data Enrichment,
+  Drafts Backfill) должны запускаться как обычные cron/systemd-юниты на ноуте — точно так же,
+  как сейчас крутятся как Replit workflows. **При переезде на ноут нужно: (а) убедиться что
+  все 5 workflow-скриптов (`scripts/run-*.sh`) работают standalone с переменными окружения
+  из `.env`; (б) задокументировать в `docs/laptop-deploy.md` как поднять cron на ноуте
+  (crontab пример с интервалами TICK_SEC=1800 для parse-loop, ежечасно для hourly,
+  раз в сутки для daily, раз в неделю для enrichment); (в) НЕ нужно переносить parse:cycle
+  в SchedulerWorker (Фаза 4 B5) — на ноуте отдельные workflows проще ребутить и логировать.**
 - Не платить за The Odds API на этом этапе
 - Букмекерский UI включён через **Bovada** (200 OK с Replit-IP, без ключа). Все 6 РФ-буков с
   Replit заблокированы (DNS / Cloudflare / 404), Pinnacle требует guest API key (нет).
