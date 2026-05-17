@@ -82,6 +82,13 @@ const ALLOWED_RUN_SCRIPTS = new Set([
   'backfill:live-snapshots',
 ]);
 
+// Bash shell wrappers (multi-step pipelines). Spawn `bash <relpath>` from
+// workspace root. Whitelist по ключу — никаких user-controlled путей в spawn.
+const SHELL_SCRIPTS: Record<string, string> = {
+  'sh:daily': 'scripts/run-daily.sh',
+  'sh:enrichment': 'scripts/run-enrichment-pipeline.sh',
+};
+
 const ADMIN_WORKSPACE_ROOT = path.resolve(process.cwd(), '../..');
 
 const router: IRouter = Router();
@@ -578,7 +585,11 @@ router.get('/jobs', (_req, res) => {
         ? j.finishedAt.getTime() - j.startedAt.getTime()
         : Date.now() - j.startedAt.getTime(),
     }));
-  res.json({ jobs, allowedScripts: [...ALLOWED_RUN_SCRIPTS].sort() });
+  res.json({
+    jobs,
+    allowedScripts: [...ALLOWED_RUN_SCRIPTS].sort(),
+    allowedShellScripts: Object.keys(SHELL_SCRIPTS).sort(),
+  });
 });
 
 /**
@@ -587,21 +598,50 @@ router.get('/jobs', (_req, res) => {
  */
 router.post('/jobs/run', (req, res) => {
   const { script, args = [] } = req.body as { script?: string; args?: unknown[] };
-  if (!script || !ALLOWED_RUN_SCRIPTS.has(script)) {
-    res.status(400).json({ error: `script '${script ?? ''}' not in whitelist`, allowedScripts: [...ALLOWED_RUN_SCRIPTS].sort() });
+  // Object.hasOwn — защита от prototype-chain bypass (toString/constructor/__proto__).
+  const isShell = typeof script === 'string' && Object.hasOwn(SHELL_SCRIPTS, script);
+  const isPnpm = typeof script === 'string' && ALLOWED_RUN_SCRIPTS.has(script);
+  if (!script || (!isShell && !isPnpm)) {
+    res.status(400).json({
+      error: `script '${script ?? ''}' not in whitelist`,
+      allowedScripts: [...ALLOWED_RUN_SCRIPTS].sort(),
+      allowedShellScripts: Object.keys(SHELL_SCRIPTS).sort(),
+    });
     return;
   }
   if (!Array.isArray(args) || args.some((a) => typeof a !== 'string')) {
     res.status(400).json({ error: 'args must be an array of strings' });
     return;
   }
+  if (isShell && args.length > 0) {
+    res.status(400).json({ error: 'shell scripts do not accept args' });
+    return;
+  }
   const safeArgs = args as string[];
+
+  // Per-script mutex: тот же script уже бежит → 409. Долгие shell-пайплайны
+  // (~25-100 мин) особенно опасны параллельным запуском (OD/Stratz quota burn,
+  // DB contention). Глобальный cap не нужен — admin-only endpoint.
+  const dup = [...adminJobs.values()].find(
+    (j) => j.status === 'running' && j.script === script,
+  );
+  if (dup) {
+    res.status(409).json({
+      error: `script '${script}' is already running`,
+      runningJobId: dup.id,
+      startedAt: dup.startedAt.toISOString(),
+    });
+    return;
+  }
 
   const jobId = randomUUID();
   const job: AdminJob = { id: jobId, script, args: safeArgs, status: 'running', startedAt: new Date(), output: [] };
   adminJobs.set(jobId, job);
 
-  const child = spawn('pnpm', ['--filter', '@workspace/scripts', 'run', script, ...safeArgs], {
+  const [cmd, cmdArgs] = isShell
+    ? ['bash', [SHELL_SCRIPTS[script]!]] as const
+    : ['pnpm', ['--filter', '@workspace/scripts', 'run', script, ...safeArgs]] as const;
+  const child = spawn(cmd, cmdArgs, {
     cwd: ADMIN_WORKSPACE_ROOT,
     env: process.env,
     stdio: ['ignore', 'pipe', 'pipe'],

@@ -3,6 +3,22 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-17 — A2 daily-ingest button (фасад над shell-пайплайнами)
+
+- **A2 (Фаза 5)**: admin job runner расширен — `POST /api/admin/jobs/run` теперь
+  принимает не только pnpm-скрипты из `ALLOWED_RUN_SCRIPTS`, но и shell-обёртки
+  из нового whitelist `SHELL_SCRIPTS` (`sh:daily` → `bash scripts/run-daily.sh`,
+  `sh:enrichment` → `bash scripts/run-enrichment-pipeline.sh`). Shell-скрипты
+  args не принимают (`{error: 'shell scripts do not accept args'}`). Любой
+  `script` вне обоих whitelist-ов → 400 с обоими списками. `GET /api/admin/jobs`
+  отдаёт `allowedShellScripts` рядом с `allowedScripts`.
+- **UI**: в `pages/workers.tsx` PRESETS появилась новая секция ★ «Полные
+  пайплайны (целиком)» с двумя кнопками — DAILY (~25-40 мин, 11 пресетов в
+  правильном порядке) и ENRICH (тяжёлый, ~1.7ч). Job stream + полоса прогресса
+  работают тем же механизмом, что и индивидуальные пресеты.
+- **Зачем**: точечный запуск отдельных скриптов уже был; теперь можно одной
+  кнопкой прогнать полный daily-батч из admin-web вместо терминала.
+
 ## 2026-05-17 — A5 full feature registry + B1 _field_meta
 
 - **A5 full (Фаза 5)**: `docs/feature-registry.json` расширен с 5 примеров до полного

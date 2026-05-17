@@ -1,0 +1,230 @@
+Aegis — полный мастер-план с подробностями
+Архитектурный закон (применять везде)
+Mobile НИКОГДА не дёргает апстрим. OpenDota/Stratz/PandaScore/Bovada — только из фоновых воркеров (ingest/compute/live-poll/parse-loop). API-server в request handler'ах отвечает только из БД и in-memory cache. Никаких fake/stub данных в UI — если поля нет, показываем «Данные недоступны» или «считается на бэке».
+
+Исключение: mobile может писать в свой профиль (push-подписки, фильтры, избранные команды, фидбек).
+
+⚠ Stratz live: DORMANT
+Stratz live.matches / live.match(id) отдаёт пусто с 2026-05-16. Код сохранён, вызовы закомментированы:
+
+services/LiveWorker.ts — блок // DORMANT: Stratz live upstream пуст
+lib/stratzLive.ts — клиент/типы/circuit breaker целиком
+5 колонок live_snapshots.stratz_* остаются nullable
+Возврат: раскомментировать DORMANT блок когда Stratz восстановит ingest → ретрейн live-моделей с фичами xpAdvantage, networthAdvantage, kxp, heroDmg, towerDmg.
+
+Фаза 0 — Наполнение БД ✅ ЗАВЕРШЕНО
+Таблица       Строк  Статус
+teams  1 011  ✅
+leagues       9 740  ✅
+pro_matches   28 939 ✅
+hero_stats    127    ✅
+hero_matchups 16 002 ✅ Stratz DIVINE_IMMORTAL
+hero_synergy  15 942 ✅
+match_drafts  31 503 ✅
+player_hero_stats    295 245       ✅
+player_peers  167 864+      ✅
+hero_scenarios       255    ✅
+hero_durations       118+   ✅
+meta_distributions   1      ✅
+match_parsed  5 617 → растёт       🔄 Replay Parse Loop работает
+live_snapshots       33 367 ✅
+team_recent_form     984    ✅
+team_h2h      6 055  ✅
+player_ratings       4 519  ✅ Glicko-1
+team_extended_features      2 924  ✅ incl. peer_synergy
+bo3_series    4 502  ✅
+prematch_outcomes    7 391  ✅
+Что осталось: match_parsed добивается до 15-20k фоном через Replay Parse Loop (TICK_SEC=1800, parse каждый 4-й тик), это разблокирует Фазу 3 (L1/L3/L6).
+
+Фаза 1 — Ретрейн моделей ✅ ЗАВЕРШЕНО 2026-05-17
+Вариант B реализован: peer_synergy добавлен в compute:team-extended, пересчитано 1451/1998 команд (мин 3 пары × 10 совместных игр), ретрейн всех LightGBM v1/v2/v3 × fallback/t1/t2 = 9 моделей + market models + live-winner v8.
+
+Метрики:
+
+v3/fallback: acc 76.7% / brier 0.164
+v3/t2: acc 79.6%
+v3/t1: acc 63.7%
+live-winner v8: acc 70.0% / brier 0.223 / lift +17.13pp
+peer_synergy_diff top-3 importance у v2 (102/72/45), top-15 у v3/t1 (28)
+Активные модели surface: lgbm-2026-05-17-20-51-01-v3-prematch_winner, engineCounts: logreg=9, lightgbm=9.
+
+Известный компромисс (задокументирован): patch peer_synergy в train-lightgbm.ts использует ТЕКУЩИЕ значения в исторические снапшоты (leakage признан, ростеры стабильны ~6мес).
+
+Фаза 2 — Mobile UI ← СЛЕДУЮЩАЯ
+M1 — EV-merge букмекеров на главном экране
+Что: matching events Bovada к pro_matches, реальное использование filters.bookmaker в app/(tabs)/index.tsx::applyFilters. Подключить BookmakerDropdown к header'у (компонент уже есть, не используется).
+Зачем: сейчас фильтр по букмекеру не работает — выбор в dropdown не меняет список.
+Как: для каждого матча искать event в /api/bookmakers/for-match?team1=&team2=, мерджить odds в карточку, считать EV = pred_prob × odds − 1.
+Файлы: artifacts/mobile/app/(tabs)/index.tsx, artifacts/mobile/components/BookmakerDropdown.tsx, artifacts/mobile/hooks/useBookmakerOdds.ts (создать).
+
+M2 — Bookmaker picker в карточке матча
+Что: убрать TODO(bookmakers) в app/match/[id].tsx, добавить picker между букмекерами, показывать их линии рядом с нашим прогнозом.
+Зачем: пользователь должен видеть нашу вероятность ↔ котировку букмекера ↔ EV.
+Файлы: artifacts/mobile/app/match/[id].tsx.
+
+M3 — Алерты: minEdge / minOdds
+Что: вернуть поля minEdge и minOdds в админ-настройки и в UI алертов (сейчас только minConfidence).
+Зачем: пользователь хочет фильтровать алерты не только по уверенности модели, но и по edge'у и минимальному кэфу.
+Файлы: admin settings page, mobile alerts screen, lib/db/src/schema/dota.ts (alert_rules columns), валидация в lib/api-spec/openapi.yaml.
+
+M4 — Backtest UI (1-минутная задача)
+Что: убрать href: null с app/(tabs)/backtest.tsx — вкладка появится в табах.
+Зачем: уже 7391 outcomes (порог ≥200 перевыполнен в 37 раз), эндпоинт /api/analytics/backtest готов.
+Файлы: artifacts/mobile/app/(tabs)/_layout.tsx.
+
+M5 — Field metadata UI (7-state)
+Что: реализовать getFieldState() для каждого поля карточки: loaded / loading / unavailable_permanent / unavailable_transient / stale / error / not_applicable. Каждое состояние — своя визуализация (skeleton/иконка/пояснение).
+Зачем: убрать «магические нули» и «—» в карточках, пользователь должен понимать почему данные нет.
+Файлы: artifacts/mobile/lib/fieldState.ts (создать), компоненты карточек.
+Зависит от: B1 (_field_meta в ответах API).
+
+M6 — Прогрессивный скоринг
+Что: показывать «считается на бэке, для этого матча ML ещё не готов» когда у матча нет prediction'а.
+Зачем: часть live-матчей появляется раньше чем для них успевает посчитаться prematch_outcome.
+Файлы: карточки матчей в (tabs)/index.tsx и match/[id].tsx.
+
+Фаза 3 — ML / Модели (ПАУЗА, ждём match_parsed ≥ 15-20k)
+После порога — накатить все фичи одной волной, измерить суммарный эффект. Также проверить гипотезу: одна объединённая модель (prematch+live с маской фичей) vs две раздельных.
+
+L1 — Team Styles из parsed реплеев (нужны parsed)
+Что: агрегировать из match_parsed стилевые метрики команды: агрессия (early kills/min), farming (GPM команды), pace (objectives/min), late-game (winrate матчей > 35мин). Сохранить в team_styles.
+Источник: match_parsed.players (kills 0-10min, gpm, lh@10), match_parsed.objectives (towers, roshan).
+
+L2 — Dynamic Form 7/14/30/90d (данные есть)
+Что: скользящие окна Elo-дельты по 4 горизонтам, плюс hot-streak флаг (3+ побед подряд), плюс vs-top10 winrate.
+Источник: pro_matches + текущий team_recent_form.
+
+L3 — Elo по фазам игры (нужны parsed)
+Что: три отдельных Glicko-1: early (по lane_outcome), mid (по net_worth_lead@25), late (по матчам > 35мин).
+Источник: match_parsed.lane_outcomes.
+
+L4 — Hero pool / side bias (данные есть)
+Что: entropy hero pool команды за 90d (разнообразие пиков), radiant/dire winrate split.
+Источник: match_drafts.
+
+L5 — Quantile live kills (данные есть)
+Что: LightGBM α=0.25 и α=0.75 для live total_kills (по аналогии с уже работающими duration quantile). Непараметрический 50% interval вокруг live темпа.
+Источник: live_snapshots × prematch_outcomes (как уже работающий live-winner).
+
+L6 — First Tower ML (нужны parsed)
+Что: заменить math heuristics в services/MarketHeuristics.ts::firstTower на LightGBM. Таргет: какая команда сносит первую башню.
+Источник: match_parsed.objectives (тип CHAT_MESSAGE_FIRSTBLOOD/tower).
+
+L7 — Feature parity test (данные есть)
+Что: скрипт scripts/src/test-feature-parity.ts сравнивает feature vector LR vs LGBM на одних input'ах, ассертит идентичность.
+Зачем: защита от расхождения engineering пайплайнов между двумя моделями.
+
+L8 — Live-winner LightGBM (данные есть)
+Что: уже работает v8 (LightGBM), но можно расширить feature view v2 с stratz-полями когда DORMANT снимут.
+
+L9 — Stratz live recovery (ждёт апстрим)
+Что: раскомментировать DORMANT блок в services/LiveWorker.ts, ретрейн live-моделей с xpAdvantage / networthAdvantage / kxp / heroDmg / towerDmg.
+
+Готово прямо сейчас: L7, L8, L4, L5, L2
+Ждёт match_parsed: L1, L3, L6
+Ждёт апстрим: L9
+
+Фаза 4 — Backend / API
+B1 — _field_meta в ответах
+Что: добавить поле _field_meta в /api/matches/live и /api/predict с разметкой по каждому полю: freshness_ms, kind: permanent|transient, source: db|cache|model|computed.
+Зачем: разблокирует M5 (7-state UI).
+Файлы: routes/matches.ts, routes/predict.ts, OpenAPI spec.
+
+B2 — Between-maps timeout
+Что: BETWEEN_MAPS_TIMEOUT_MS=20min в routes/matches.ts. Сейчас матч с between_maps:true живёт без таймаута.
+Файлы: artifacts/api-server/src/routes/matches.ts.
+
+B3 — Lazy Wave 3 cache
+Что: PredictionModel.refreshWave3Data должен грузить данные по teamIds запроса, а не всю таблицу.
+Зачем: ускоряет cold start, экономит память.
+
+B4 — PandaScore filter
+Что: в /api/matches/upcoming отфильтровывать матчи где winner уже объявлен (PandaScore иногда отдаёт finished как upcoming).
+
+B5 — Replay parse в Scheduler
+Что: интегрировать parse:cycle в Daily cron вместо отдельного workflow.
+Файлы: services/SchedulerWorker.ts, scripts/run-daily.sh.
+
+Фаза 5 — Admin Control Plane
+A1 — Health / Coverage cards
+Что: на главной admin: карточки drafts coverage %, parsed ratio, активные модели с метриками (acc/brier/lift), последний ретрейн, размер очереди парсинга.
+Файлы: artifacts/admin-web/src/pages/dashboard.tsx.
+
+A2 — Backfill triggers
+Что: кнопка «Запустить весь enrichment pipeline» — последовательно ingest:teams → matches → drafts → players-heroes → compute:* → train:* одним кликом.
+Файлы: artifacts/admin-web/src/pages/workers.tsx.
+
+A3 — Model management
+Что: UI promotion shadow→active, rollback на предыдущую версию, график calibration по бакетам.
+Источник: model_versions table.
+
+A4 — Worker control
+Что: Start/Stop/Reschedule для LiveWorker / Scheduler / Replay Loop из админки.
+
+A5 — Таблица моделей с feature explorer
+Что:
+
+Строки таблицы: каждая активная модель (logreg/lightgbm × v1/v2/v3 × fallback/t1/t2 + market + live).
+Колонки: русское описание (что предсказывает), рынок, кол-во фичей, acc/brier, дата обучения.
+Раскрытие строки: список фичей с весом (importance из LGBM / |коэф| из logreg), отсортирован по убыванию.
+Клик по фиче: popup с русским объяснением (что это, как считается, из каких таблиц/окон).
+Реестр объяснений: docs/feature-registry.json — {feature_name: {ru_name, ru_description, source_tables, formula}}.
+Данные для UI: model_versions.metadata.importance и .weights (уже сохраняются при train).
+Расположение: /metrics или новая /models.
+Фаза 6 — Bookmakers
+K1 — Bovada market coverage
+Что: добавить парсинг Total Duration и First Blood (сейчас только winner/totals/correct_score из Bovada).
+Файлы: artifacts/api-server/src/services/bookmakers/BovadaAdapter.ts.
+
+K2 — РФ-прокси
+Что: настроить PROXY_URL для разблокировки 6 РФ-источников (FonBet, Winline, Olimp, Liga Stavok, BetBoom, Pari).
+Зачем: все 6 написаны по доке, активируются автоматически с РФ-IP.
+
+K3 — Платный API
+Что: The Odds API Pro — когда появятся платящие пользователи.
+
+Фаза 7 — Production воркеры
+P1 — Daily Ingest
+Что: scripts/run-daily.sh — все 19 пресетов в правильном порядке: teams → leagues → hero-stats → hero-matchups → hero-synergy → matches → drafts → players-heroes → compute:recent-form → compute:h2h → compute:player-glicko → compute:bo3-series → compute:team-extended.
+
+P2 — Hourly Live
+Что: ingest:matches --recent-hours 6 + compute:recent-form --incremental каждый час.
+
+P3 — Replay Parse Loop cruise
+Что: TICK_SEC=1800, limit=200, parse каждый 4-й тик (раз в 2 часа). Уже работает.
+
+P4 — LiveWorker
+Что: оставить как есть (60s in-process в api-server).
+
+P5 — Auto-retrain
+Что: раскрутить DISABLE_AUTO_RETRAIN — раз в месяц или при Dota patch bump. Сейчас отключено.
+
+Фаза 8 — Infra / Docs
+I1 — Reserved VM
+Только когда пользователь явно попросит.
+
+D1 — ML contract
+Что: явные FEATURE_VIEW_VERSION строки в каждой feature-service функции, ассерты при загрузке модели.
+
+D2 — Drift alarms
+Что: автоалерты при drift > 10% между train и prod feature distributions.
+
+D3 — Обновления docs
+Что: replit.md / architecture.md / changelog.md по каждой фазе.
+
+Рекомендованная последовательность
+СЕЙЧАС → Фаза 2 Mobile (M4 → M1 → M2 → M3 → M5/M6)
+       + Фаза 5 A5 (параллельно, можно в одной сессии)
+       → Фаза 3 ML (после match_parsed ≥ 15-20k, одной волной)
+       → Фаза 4 Backend B1-B5
+       → Фаза 6 Bookmakers K1-K2
+       → Фаза 7 Production P1-P5
+       → Фаза 8 Infra/Docs
+
+Принципы (повторяю)
+Каждая фаза — отдельный «да» от пользователя
+Никаких fake/stub данных в UI
+Ретрейн только когда фичи реально наполнены в БД
+Сначала ingest до ~100% покрытия → одна выборка 365d → обучение
+Mobile никогда не дёргает апстрим
+RU интерфейс, RU комментарии в admin

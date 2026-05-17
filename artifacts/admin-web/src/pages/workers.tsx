@@ -47,6 +47,16 @@ type Preset = {
 };
 
 const PRESETS: Preset[] = [
+  // ── Полные shell-пайплайны (фасад над scripts/run-*.sh) ──
+  { phase: "★ Полные пайплайны (целиком, в правильном порядке)",
+    label: "DAILY · run-daily.sh",
+    script: "sh:daily",
+    description: "Полный daily-батч: 11 пресетов (teams → matches → leagues → hero-stats → hero-matchups → hero-synergy → recent-form → h2h → player-glicko → team-extended → bo3-series). ~25-40 мин. Лог: /tmp/ingest_logs/daily.log" },
+  { phase: "★ Полные пайплайны (целиком, в правильном порядке)",
+    label: "ENRICH · run-enrichment-pipeline.sh",
+    script: "sh:enrichment",
+    description: "Еженедельный enrichment: тяжёлые ingest:drafts (~1.7ч) + ingest:players-heroes. НЕ запускать в рабочее время. Лог: /tmp/ingest_logs/enrichment.log" },
+
   // ── Replay Parse (отдельная группа, запускается вручную при наполнении БД) ──
   { phase: "0. Replay Parse — один цикл (parse:request → 90s → ingest:parsed)",
     label: "00 · parse:cycle",   script: "parse:cycle",   description: "Ставит 500 матчей в очередь OD, ждёт 90s, сохраняет разобранные. ~6 мин. Запускать повторно пока match_parsed растёт." },
