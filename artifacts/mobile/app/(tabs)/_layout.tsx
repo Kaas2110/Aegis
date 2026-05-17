@@ -22,10 +22,7 @@ function NativeTabLayout({ isAdmin }: { isAdmin: boolean }) {
         <Icon sf={{ default: 'bell', selected: 'bell.fill' }} />
         <Label>Алерты</Label>
       </NativeTabs.Trigger>
-      {/* TODO(backtest): экран временно скрыт по запросу пользователя — функционал
-          ждёт накопления prematch_outcomes. Файл `backtest.tsx` оставлен;
-          вернётся когда наберётся ≥200 резолвнутых прогнозов. */}
-      <NativeTabs.Trigger name="backtest" hidden>
+      <NativeTabs.Trigger name="backtest">
         <Icon sf={{ default: 'chart.xyaxis.line', selected: 'chart.xyaxis.line' }} />
         <Label>Бэктест</Label>
       </NativeTabs.Trigger>

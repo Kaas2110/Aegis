@@ -298,10 +298,20 @@ function psRunningToLiveShape(ps: PsRunningMatch[]): Record<string, unknown>[] {
       ? Math.floor(new Date(runningGame.begin_at).getTime() / 1000) > nowSec - 60
       : false;
     const betweenMaps = finished.length > 0 && (!runningGame || runningStartedRecently);
+    // B2: время окончания последней завершённой карты — используем в /live
+    // чтобы отбросить «протухшие» between-maps матчи (серия закончилась >20мин
+    // назад, но PS не пометил статус). Берём максимум end_at среди finished.
+    let latestEndAtSec = 0;
+    for (const g of finished) {
+      if (!g.end_at) continue;
+      const t = Math.floor(new Date(g.end_at).getTime() / 1000);
+      if (t > latestEndAtSec) latestEndAtSec = t;
+    }
     return {
       // Используем синтетический match_id (отрицательный, не пересекается с OD).
       match_id: -m.id,
       ps_match_id: m.id,
+      _latest_end_at_sec: latestEndAtSec,
       team_id_radiant: o1Id ?? 0,
       team_id_dire:    o2Id ?? 0,
       team_name_radiant: o1?.name ?? '',
@@ -427,6 +437,13 @@ function enrichWithPandaScoreRunning(
         }
       }
     }
+    // B2: запоминаем end_at последней завершённой карты для staleness-фильтра.
+    let latestEndAtSec = 0;
+    for (const g of finishedGames) {
+      if (!g.end_at) continue;
+      const t = Math.floor(new Date(g.end_at).getTime() / 1000);
+      if (t > latestEndAtSec) latestEndAtSec = t;
+    }
 
     if (betweenMaps) {
       // Чистим live-снапшот: ML на устаревших данных предыдущей карты считать
@@ -461,7 +478,25 @@ function enrichWithPandaScoreRunning(
       current_map: currentMap,
       ps_match_id: ps.id,
       between_maps: false,
+      _latest_end_at_sec: latestEndAtSec,
     };
+  });
+}
+
+// B2: BETWEEN_MAPS_TIMEOUT_MS — серия, висящая в between_maps дольше этого
+// окна (default 20 мин), считается завершённой/брошенной и не показывается.
+// PS иногда не переключает status=finished вовремя.
+const BETWEEN_MAPS_TIMEOUT_MS = 20 * 60 * 1000;
+
+function dropStaleBetweenMaps(matches: unknown): unknown {
+  if (!Array.isArray(matches)) return matches;
+  const cutoffSec = Math.floor((Date.now() - BETWEEN_MAPS_TIMEOUT_MS) / 1000);
+  return matches.filter(raw => {
+    const m = raw as Record<string, unknown>;
+    if (m['between_maps'] !== true) return true;
+    const t = Number(m['_latest_end_at_sec'] ?? 0);
+    if (t > 0 && t < cutoffSec) return false;
+    return true;
   });
 }
 
@@ -742,7 +777,8 @@ router.get('/live', async (req, res) => {
           '[matches/live] filtered low-tier matches',
         );
       }
-      results.push({ ...openDota.value, data: filtered });
+      const fresh = dropStaleBetweenMaps(filtered);
+      results.push({ ...openDota.value, data: fresh });
     }
     if (stratz.status === 'fulfilled') results.push(stratz.value);
 
@@ -764,7 +800,7 @@ router.get('/live', async (req, res) => {
             }),
           ).catch(() => psShaped as Record<string, unknown>[])
         : psShaped;
-      results.push({ source: 'pandascore', data: psFiltered });
+      results.push({ source: 'pandascore', data: dropStaleBetweenMaps(psFiltered) });
     }
 
     const hasData = results.some(r => !r.error && Array.isArray(r.data) && (r.data as unknown[]).length > 0);
@@ -801,7 +837,19 @@ router.get('/upcoming', async (req, res) => {
       const resp = await apiFetch(url.toString());
       if (!resp.ok) throw new Error(`PandaScore: HTTP ${resp.status}`);
       const raw = await resp.json() as unknown;
-      const enriched = await enrichWithLeagueNames(raw).catch(() => raw);
+      // B4: защитный фильтр — отбрасываем матчи, где PS уже выставил winner_id
+      // (status=not_started, но игра по факту сыграна/отменена). Так же дропаем
+      // матчи без обеих команд (TBD vs TBD из плейофф-сетки) — не показываем
+      // болванки.
+      const cleaned = Array.isArray(raw)
+        ? (raw as Record<string, unknown>[]).filter(m => {
+            if (m['winner_id'] !== null && m['winner_id'] !== undefined) return false;
+            const opps = (m['opponents'] as Array<{ opponent?: { id?: number; name?: string } }> | undefined) ?? [];
+            const hasBoth = opps[0]?.opponent?.name && opps[1]?.opponent?.name;
+            return Boolean(hasBoth);
+          })
+        : raw;
+      const enriched = await enrichWithLeagueNames(cleaned).catch(() => cleaned);
       // Фильтр по min team rating: PS upcoming имеет shape
       // [{opponents:[{opponent:{id,name}}]}] — извлекаем имена и сравниваем
       // с нашей таблицей `teams`.

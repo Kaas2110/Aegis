@@ -38,8 +38,21 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
       .finally(() => setLoading(false));
   }, [expanded, teams, loading]);
 
+  const MAX_FAVORITES = 10;
   function toggle(id: number) {
-    const next = selected.includes(id) ? selected.filter(t => t !== id) : [...selected, id];
+    let next: number[];
+    if (selected.includes(id)) {
+      next = selected.filter(t => t !== id);
+    } else {
+      if (selected.length >= MAX_FAVORITES) {
+        Alert.alert(
+          'Лимит достигнут',
+          `Можно выбрать максимум ${MAX_FAVORITES} любимых команд. Снимите одну, чтобы добавить новую.`,
+        );
+        return;
+      }
+      next = [...selected, id];
+    }
     updateSettings({ favoriteTeamIds: next });
   }
 
@@ -87,7 +100,8 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
           })}
           {teams && teams.length > 0 && (
             <Text style={[teamStyles.hint, { color: colors.mutedForeground }]}>
-              Топ-{teams.length} команд по рейтингу OpenDota. Получите пуш-уведомление, когда матч любимой команды начнётся в лайве.
+              Выбрано {selected.length}/{MAX_FAVORITES}. Топ-{teams.length} команд по рейтингу OpenDota.
+              Пуш приходит, когда матч любимой команды начинается в лайве.
             </Text>
           )}
         </View>

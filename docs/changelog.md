@@ -3,6 +3,33 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-17 — Mobile UI cap, between-maps timeout, admin retrain button, A5 sample
+
+Batch правок по мастер-плану (Фазы 2/4/5/7):
+
+- **M3 (10-fav cap)**: `app/(tabs)/settings.tsx::FavoriteTeamsCard.toggle()` — лимит
+  `MAX_FAVORITES=10` с Alert при попытке добавить 11-ю. Подпись `Выбрано N/10`.
+- **M4 (Backtest UI)**: убран `href: null` из `_layout.tsx` для `app/(tabs)/backtest.tsx`
+  (≥7391 outcomes, условие выполнено).
+- **M2/M6**: подтверждены как уже реализованные (per-map drafts TODO ≠ bookmakers;
+  прогрессивный плейсхолдер «Данные собираются» уже в `MatchCard.tsx`).
+- **B2 (between-maps timeout)**: `routes/matches.ts` — `_latest_end_at_sec` добавлен
+  в `psRunningToLiveShape` + `enrichWithPandaScoreRunning`; `dropStaleBetweenMaps()`
+  с `BETWEEN_MAPS_TIMEOUT_MS=20min` применён к обоим веткам /live (kept + ml-enriched).
+- **B4 (PandaScore filter)**: PS upcoming endpoint фильтрует матчи с `winner_id` ≠ null
+  и без обоих opponent.name.
+- **P1 (Daily Ingest)**: `scripts/run-daily.sh` переписан на 11 шагов в правильном
+  порядке (добавлены hero-matchups, hero-synergy, player-glicko, team-extended).
+- **P5 / Admin manual retrain**: на `dashboard.tsx` добавлена кнопка «Переобучить
+  модели» (через `useTriggerAdminRetrain`) с confirm и сообщением о статусе.
+  Auto-retrain toggle уже был в `workers.tsx::WorkerFlagsPanel`.
+- **A5 sample**: создан `docs/feature-registry.json` (5 примеров: team_glicko,
+  team_recent_form_30d_wr, h2h_365d_wr, peer_synergy_diff,
+  live_radiant_networth_advantage). Ждём подтверждения формата перед расширением
+  до всех ~80 фич и подключением к UI на `/metrics`.
+
+Typecheck: api-server / admin-web / mobile — все зелёные.
+
 ## 2026-05-16 (день) — T0.5a Stratz live enrichment подключён
 
 Live snapshot теперь обогащается данными Stratz live API параллельно с OpenDota:

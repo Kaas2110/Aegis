@@ -1,0 +1,70 @@
+{
+  "_meta": {
+    "version": "0.1.0",
+    "createdAt": "2026-05-17",
+    "description": "Реестр фичей моделей: русское название, что значит, как считается, из каких таблиц. Используется в админке `/metrics` для feature explorer (A5).",
+    "status": "SAMPLE — 5 примеров, ждём подтверждения формата перед расширением на все ~80 фичей"
+  },
+  "features": [
+    {
+      "id": "team_glicko",
+      "label_ru": "Glicko-1 рейтинг команды",
+      "shortHint_ru": "Сила команды по системе Glicko (как Elo, но с учётом давности игр)",
+      "longDescription_ru": "Численная оценка силы команды по системе Glicko-1 (расширение Elo). Чем выше — тем сильнее команда исторически. Перерасчёт раз в 30 дней. В отличие от классического Elo, учитывает «деградацию уверенности» — старые игры весят меньше, и команда без матчей быстро размывается обратно к среднему.",
+      "computedBy": "compute:player-glicko (агрегат по 5 игрокам стартового ростера команды)",
+      "sourceTables": ["player_ratings", "match_drafts"],
+      "engines": ["lightgbm", "logreg"],
+      "usedInBuckets": ["v1", "v2", "v3"],
+      "typicalRange": "1200–2400",
+      "missingValueStrategy": "Если у команды нет 5 размеченных игроков — фича null, бакет роутится в fallback."
+    },
+    {
+      "id": "team_recent_form_30d_wr",
+      "label_ru": "Форма команды за 30 дней (винрейт)",
+      "shortHint_ru": "Доля побед команды в pro-матчах за последние 30 дней",
+      "longDescription_ru": "Винрейт команды по всем pro-матчам, сыгранным за последние 30 дней. Простой агрегат: победы / (победы + поражения). При <5 играх возвращаем null чтобы не ловить шум.",
+      "computedBy": "compute:recent-form",
+      "sourceTables": ["pro_matches", "team_recent_form"],
+      "engines": ["lightgbm", "logreg"],
+      "usedInBuckets": ["v1", "v2", "v3"],
+      "typicalRange": "0.0–1.0",
+      "missingValueStrategy": "null при <5 матчей за период, бакет роутится в fallback или фича дропается."
+    },
+    {
+      "id": "h2h_365d_wr",
+      "label_ru": "Винрейт H2H за 365 дней",
+      "shortHint_ru": "Винрейт команды A против команды B за последний год",
+      "longDescription_ru": "Голова-к-голове за 365 дней между двумя конкретными командами. Считаем долю побед radiantTeamId над direTeamId по всем играм этой пары. Если пара играла <3 раз — фича null, шум.",
+      "computedBy": "compute:h2h",
+      "sourceTables": ["pro_matches", "team_h2h"],
+      "engines": ["lightgbm", "logreg"],
+      "usedInBuckets": ["v1", "v2", "v3"],
+      "typicalRange": "0.0–1.0",
+      "missingValueStrategy": "null при <3 встреч, бакет роутится в fallback."
+    },
+    {
+      "id": "peer_synergy_diff",
+      "label_ru": "Разница попарной синергии core-5",
+      "shortHint_ru": "Насколько ростер A слаженнее ростера B по совместным играм",
+      "longDescription_ru": "Для каждой команды считаем средний попарный винрейт топ-5 игроков core-ростера по таблице player_peers (365 дней, минимум 10 совместных игр на пару, минимум 3 пары). Затем берём разницу A − B. Положительное → ростер A сыгранее. Это T7 фича, попала в top-3 importance v2 (102/72/45) и top-15 v3/t1 (28).",
+      "computedBy": "compute:team-extended",
+      "sourceTables": ["player_peers", "match_drafts", "team_extended_features"],
+      "engines": ["lightgbm"],
+      "usedInBuckets": ["v2", "v3"],
+      "typicalRange": "-0.15 до +0.15",
+      "missingValueStrategy": "null если у одной из команд нет 3 пар с ≥10 совместных игр."
+    },
+    {
+      "id": "live_radiant_networth_advantage",
+      "label_ru": "Преимущество Radiant в нетворте (live)",
+      "shortHint_ru": "Текущая разница в общем золоте команд (radiant − dire)",
+      "longDescription_ru": "Live-фича: сумма net worth всех 5 игроков Radiant минус то же для Dire, в текущий момент матча. Главный краткосрочный индикатор кто выигрывает игру. Берётся из OpenDota /api/live (поле `radiant_networth_advantage`). DORMANT для Stratz-источника (заморожен с 2026-05-16).",
+      "computedBy": "LiveWorker (snapshot каждые 20-30 сек)",
+      "sourceTables": ["live_snapshots"],
+      "engines": ["lightgbm"],
+      "usedInBuckets": ["live-winner-v8", "live-totals-v1"],
+      "typicalRange": "-30000 до +30000 голда",
+      "missingValueStrategy": "null если матч не в активной фазе игры (драфт/пауза/между картами)."
+    }
+  ]
+}

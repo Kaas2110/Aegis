@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
-# Лёгкий daily-батч (~10-15 мин). Запускать раз в день когда workspace открыт.
-# Запуск: bash scripts/run-daily.sh   (или из workflow "Daily Batch")
+# Полный daily-батч (~25-40 мин). Все 11 пресетов в правильном порядке.
+# Запуск: bash scripts/run-daily.sh   (или из workflow "Daily Ingest")
 #
-# Что делает (по приоритету):
-#   1. ingest:teams        — обновить рейтинги команд (~30с)
-#   2. ingest:matches 5    — последние ~500 pro-матчей (~10с)
-#   3. ingest:leagues      — названия турниров
-#   4. ingest:hero-stats   — мета-винрейты (раз в день достаточно)
-#   5. compute:recent-form — пересчитать форму команд (быстро)
-#   6. compute:h2h         — H2H матрица (быстро)
-#   7. compute:bo3-series  — агрегаты BO3/BO5 для T3 momentum
+# Зависимости порядка:
+#   teams → matches → leagues → hero-stats → hero-matchups → hero-synergy →
+#   recent-form → h2h → player-glicko → team-extended (peer_synergy) → bo3-series
 #
-# НЕ запускается тут (это тяжёлые штуки из run-enrichment-pipeline.sh):
-#   - ingest:drafts (1.7ч с MIN_AVG_GLICKO=0)
-#   - ingest:players-heroes (Stratz, ~7-day freshness — нет смысла каждый день)
-#   - compute:player-glicko (после ingest:drafts)
-#   - тренировки моделей (отдельный график)
+# НЕ запускается тут (тяжёлые штуки из run-enrichment-pipeline.sh):
+#   - ingest:drafts (1.7ч с MIN_AVG_GLICKO=0) — еженедельно
+#   - ingest:players-heroes (Stratz, ~7-day freshness)
+#   - тренировки моделей (отдельный график / auto-retrain)
 set -u
 cd "$(dirname "$0")/.."
 
@@ -36,13 +30,18 @@ step() {
   else echo "[$(ts)] ⚠️  FAILED rc=$? (continuing)"; fi
 }
 
-step 1 7 "ingest:teams"        pnpm --filter @workspace/scripts run ingest:teams
-step 2 7 "ingest:matches 5"    pnpm --filter @workspace/scripts run ingest:matches 5
-step 3 7 "ingest:leagues"      pnpm --filter @workspace/scripts run ingest:leagues
-step 4 7 "ingest:hero-stats"   pnpm --filter @workspace/scripts run ingest:hero-stats
-step 5 7 "compute:recent-form" pnpm --filter @workspace/scripts run compute:recent-form
-step 6 7 "compute:h2h"         pnpm --filter @workspace/scripts run compute:h2h
-step 7 7 "compute:bo3-series"  pnpm --filter @workspace/scripts run compute:bo3-series
+TOTAL=11
+step  1 $TOTAL "ingest:teams"          pnpm --filter @workspace/scripts run ingest:teams
+step  2 $TOTAL "ingest:matches 5"      pnpm --filter @workspace/scripts run ingest:matches 5
+step  3 $TOTAL "ingest:leagues"        pnpm --filter @workspace/scripts run ingest:leagues
+step  4 $TOTAL "ingest:hero-stats"     pnpm --filter @workspace/scripts run ingest:hero-stats
+step  5 $TOTAL "ingest:hero-matchups"  pnpm --filter @workspace/scripts run ingest:hero-matchups
+step  6 $TOTAL "ingest:hero-synergy"   pnpm --filter @workspace/scripts run ingest:hero-synergy
+step  7 $TOTAL "compute:recent-form"   pnpm --filter @workspace/scripts run compute:recent-form
+step  8 $TOTAL "compute:h2h"           pnpm --filter @workspace/scripts run compute:h2h
+step  9 $TOTAL "compute:player-glicko" pnpm --filter @workspace/scripts run compute:player-glicko
+step 10 $TOTAL "compute:team-extended" pnpm --filter @workspace/scripts run compute:team-extended
+step 11 $TOTAL "compute:bo3-series"    pnpm --filter @workspace/scripts run compute:bo3-series
 
 echo
 echo "[$(ts)] ===== DAILY BATCH DONE ====="
