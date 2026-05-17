@@ -46,7 +46,12 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 
 **Required env:** `DATABASE_URL`. **Optional:** `ODDS_API_KEY`, `STRATZ_TOKEN`,
 `PANDASCORE_API_KEY`, `PINNACLE_GUEST_API_KEY`, `ADMIN_TOKEN`, `DISABLE_LIVE_WORKER`,
-`DISABLE_SCHEDULER`, `DISABLE_AUTO_RETRAIN`, `BOOKMAKERS_ENABLED` (default true),
+`DISABLE_SCHEDULER`, `DISABLE_AUTO_RETRAIN` (killswitch для фазы тренировки),
+`AUTO_RETRAIN_CRON_HOUR_UTC` (P5 safety: целое 0..23 — обучение разрешено
+ТОЛЬКО в этот час UTC; если не задан — открыто всегда при снятом killswitch.
+На Replit оставляем `DISABLE_AUTO_RETRAIN=true`, на ноуте: kill снят +
+`AUTO_RETRAIN_CRON_HOUR_UTC=4` (~7 утра МСК), чтобы тренировка не конкурировала
+с cron-workflow'ами ingest), `BOOKMAKERS_ENABLED` (default true),
 `PROXY_URL` (РФ-прокси для букмекеров с не-РФ IP), `AUTO_DB_PUSH=false`,
 `SESSION_SECRET` (обязателен для admin + user-auth токенов),
 `ML_SERVICE_URL` (default `http://localhost:8090`), `ML_SERVICE_TOKEN` (иначе ml-service пишет ephemeral в `/tmp/aegis_ml_token`).

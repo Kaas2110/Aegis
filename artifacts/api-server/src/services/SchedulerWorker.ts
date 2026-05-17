@@ -213,6 +213,66 @@ async function runScriptSafe(
 const SCRIPT_DEFAULT_TIMEOUT_MS = 30 * 60 * 1000; // 30 минут — крупный потолок
 const SCRIPT_FAST_TIMEOUT_MS = 10 * 60 * 1000;    // 10 минут — для быстрых compute
 
+/**
+ * P5 — auto-retrain safety gate.
+ * Возвращает строку-причину пропуска или null если можно тренировать.
+ *
+ *  - `DISABLE_AUTO_RETRAIN=true` — killswitch (priority).
+ *  - `AUTO_RETRAIN_CRON_HOUR_UTC=<0..23>` — если задан, разрешает обучение
+ *    только в этот час UTC. Если не задан — открыто всегда (но килла нет).
+ *
+ * Замысел: на Replit оставить `DISABLE_AUTO_RETRAIN=true` (другие cron-
+ * workflow'ы наполняют БД и не должны конкурировать с обучением). На ноуте
+ * — `DISABLE_AUTO_RETRAIN` снят, `AUTO_RETRAIN_CRON_HOUR_UTC=4` (~7 утра МСК).
+ */
+function checkAutoRetrainGate(): string | null {
+  if (process.env['DISABLE_AUTO_RETRAIN'] === 'true') return 'DISABLE_AUTO_RETRAIN';
+  const hourRaw = process.env['AUTO_RETRAIN_CRON_HOUR_UTC'];
+  if (hourRaw != null && hourRaw !== '') {
+    const hour = Number(hourRaw);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      logger.warn({ hourRaw }, '[Scheduler] AUTO_RETRAIN_CRON_HOUR_UTC некорректен (ожидается 0..23) — пропускаю обучение');
+      return 'AUTO_RETRAIN_CRON_HOUR_UTC_INVALID';
+    }
+    const now = new Date();
+    if (now.getUTCHours() !== hour) {
+      return `AUTO_RETRAIN_CRON_HOUR_UTC=${hour} (now=${now.getUTCHours()}h UTC)`;
+    }
+  }
+  return null;
+}
+
+export { checkAutoRetrainGate };
+
+/**
+ * Считает delay до ближайшего наступления указанного часа UTC (wall-clock).
+ * Используется когда задан `AUTO_RETRAIN_CRON_HOUR_UTC`, чтобы tick не дрейфовал
+ * от tick'а из-за длительности скриптов и не «промазывал» 1-часовое окно
+ * (см. architect-review P5 #5: за неделю 24h-setTimeout сдвигается на часы).
+ */
+function delayToNextUtcHour(targetHour: number): number {
+  const now = new Date();
+  const target = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), targetHour, 0, 0, 0,
+  ));
+  if (target.getTime() <= now.getTime()) {
+    target.setUTCDate(target.getUTCDate() + 1);
+  }
+  return Math.max(1_000, target.getTime() - now.getTime());
+}
+
+/** Возвращает CHECK_INTERVAL_MS или wall-clock delay до cron-окна. */
+function nextTickDelay(): number {
+  const hourRaw = process.env['AUTO_RETRAIN_CRON_HOUR_UTC'];
+  if (hourRaw != null && hourRaw !== '') {
+    const hour = Number(hourRaw);
+    if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+      return delayToNextUtcHour(hour);
+    }
+  }
+  return CHECK_INTERVAL_MS;
+}
+
 async function runRetrainPipeline(reason: string): Promise<boolean> {
   if (runInFlight) {
     logger.warn('[Scheduler] retrain already in flight, skipping');
@@ -280,15 +340,23 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     stepResults['compute:bo3-series'] = await runScriptSafe('compute:bo3-series', 'compute:bo3-series', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
     stepResults['compute:player-glicko'] = await runScriptSafe('compute:player-glicko', 'compute:player-glicko', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
 
-    if (process.env['DISABLE_AUTO_RETRAIN'] === 'true') {
-      logger.warn('[Scheduler] DISABLE_AUTO_RETRAIN=true — пропускаю фазу тренировки (lastTrainAt НЕ обновляется)');
-      stats.lastRetrainResult = 'data-only (training skipped via DISABLE_AUTO_RETRAIN)';
+    // P5 — safety gates перед фазой тренировки.
+    //
+    // 1. DISABLE_AUTO_RETRAIN=true — жёсткий killswitch (без обновления lastTrainAt).
+    // 2. AUTO_RETRAIN_CRON_HOUR_UTC=<0..23> — обучение разрешено ТОЛЬКО в этот
+    //    час UTC (на ноуте ставим, например, 4 — 7-9 утра МСК, когда live-poll
+    //    тихий). Если не задан → ведём себя как раньше (обучаем если killswitch
+    //    снят). На Replit оставляем DISABLE_AUTO_RETRAIN=true чтобы не мешать
+    //    параллельным cron-workflow'ам наполнения БД.
+    const skipTrainingReason = checkAutoRetrainGate();
+    if (skipTrainingReason) {
+      logger.warn({ skipTrainingReason }, '[Scheduler] retrain phase skipped (safety gate)');
+      stats.lastRetrainResult = `data-only (training skipped: ${skipTrainingReason})`;
       // НЕ обновляем lastTrainAt и nextTrainDueAt: иначе после снятия флага
       // следующее переобучение отложится на 30 дней и пропуски моделей замаскируются.
-      // Обновляем lastIngestAt и notes — этого достаточно для аудита.
       await updateState({
         lastIngestAt: new Date(),
-        notes: { reason, completedAt: new Date().toISOString(), stepResults, prunedOldMatches: deleted.length, dataOnly: true, trainingSkipped: 'DISABLE_AUTO_RETRAIN' },
+        notes: { reason, completedAt: new Date().toISOString(), stepResults, prunedOldMatches: deleted.length, dataOnly: true, trainingSkipped: skipTrainingReason },
       });
       return true;
     }
@@ -572,7 +640,9 @@ async function scheduleNextTick(delayMs: number): Promise<void> {
       stats.lastError = tickErr;
     } finally {
       recordHeartbeat('scheduler', { ok: tickOk, durationMs: Date.now() - startedAt, error: tickErr });
-      void scheduleNextTick(CHECK_INTERVAL_MS);
+      // P5 — при заданном AUTO_RETRAIN_CRON_HOUR_UTC выравниваемся на wall-clock,
+      // чтобы 24h-дрейф не «проглатывал» 1-часовое retrain-окно (architect-review #5).
+      void scheduleNextTick(nextTickDelay());
     }
   }, delayMs);
 }

@@ -37,6 +37,7 @@ import {
 import { eq, desc, and, inArray } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { applyCalibration, type CalibrationModel } from '../lib/isotonic';
+import { currentFeatureViewFor } from '@workspace/db';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier, type PrematchKind } from '../lib/tier';
 import {
   buildHeroFeatures,
@@ -322,6 +323,16 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
       },
       '[PredictionModel] Active models loaded',
     );
+    // D1 — feature view staleness warning.
+    if (surface) {
+      const currentFv = currentFeatureViewFor(surface.kind);
+      if (currentFv != null && surface.featuresVersion < currentFv) {
+        logger.warn(
+          { kind: surface.kind, modelFv: surface.featuresVersion, currentFv, version: surface.version },
+          '[PredictionModel] Active surface uses STALE featureView — bump CURRENT or retrain',
+        );
+      }
+    }
     // Превентивно подгрузим hero stats, чтобы первые live-предсказания не ждали БД
     void refreshHeroData().catch(() => {});
     return surface;

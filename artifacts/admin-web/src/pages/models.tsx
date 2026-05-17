@@ -30,7 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { CheckCircle2, ChevronDown, ChevronRight, RotateCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 
 function fmt(n: number | null | undefined, digits = 3): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -66,9 +66,13 @@ function CalibrationPanel({ modelId }: { modelId: number }) {
     calibrated: b.calibratedProb,
   }));
 
+  const fv = data.featureView;
+  const drifts = data.drifts ?? [];
+  const severeDrifts = drifts.filter((d) => Math.abs(d.rel) > 0.20);
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+      <div className="grid grid-cols-3 gap-2 text-xs font-mono">
         <div className="border border-border/50 bg-background p-2">
           <span className="text-muted-foreground uppercase tracking-wider">Тип</span>
           <div className="font-bold mt-1">
@@ -81,7 +85,65 @@ function CalibrationPanel({ modelId }: { modelId: number }) {
             {bins.length} bins · n={data.calibration.sampleSize ?? "—"}
           </div>
         </div>
+        <div
+          className={`border p-2 ${fv.stale ? "border-amber-500/60 bg-amber-500/10" : "border-border/50 bg-background"}`}
+          title="D1 — feature view версия модели vs текущая константа в коде"
+        >
+          <span className="text-muted-foreground uppercase tracking-wider">Feature View</span>
+          <div className="font-bold mt-1 flex items-center gap-1">
+            {fv.stale && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+            fv={fv.modelFv}
+            {fv.currentFv != null && fv.currentFv !== fv.modelFv && (
+              <span className="text-muted-foreground"> / cur={fv.currentFv}</span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {drifts.length > 0 && (
+        <div>
+          <div className="text-xs font-mono uppercase text-muted-foreground tracking-wider mb-2 flex items-center gap-2">
+            {severeDrifts.length > 0 && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+            Data drift · top {drifts.length} (|train−test mean| &gt; 10%)
+          </div>
+          <div className="bg-background border border-border/50">
+            {drifts.map((d) => {
+              const severe = Math.abs(d.rel) > 0.20;
+              const pct = Math.min(100, Math.abs(d.rel) * 100);
+              return (
+                <div
+                  key={d.name}
+                  className="flex items-center gap-2 px-2 py-1 border-b border-border/30 last:border-b-0"
+                >
+                  <div className="font-mono text-[11px] w-44 truncate" title={d.name}>
+                    {d.name}
+                  </div>
+                  <div className="flex-1 h-2 bg-muted/30 relative">
+                    <div
+                      className={`absolute top-0 left-0 h-2 ${severe ? "bg-amber-400/80" : "bg-primary/50"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="font-mono text-[11px] w-28 text-right text-muted-foreground">
+                    {fmt(d.trainMean, 2)} → {fmt(d.testMean, 2)}
+                  </div>
+                  <div
+                    className={`font-mono text-[11px] w-12 text-right font-bold ${severe ? "text-amber-400" : ""}`}
+                  >
+                    {(d.rel * 100).toFixed(0)}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {severeDrifts.length > 0 && (
+            <div className="text-[10px] font-mono text-amber-400/80 mt-2 leading-relaxed">
+              ⚠ {severeDrifts.length} фич(ей) с |drift| &gt; 20% между train и test — стоит проверить
+              распределения и, возможно, пересобрать окно тренировки.
+            </div>
+          )}
+        </div>
+      )}
 
       {bins.length >= 2 ? (
         <div>

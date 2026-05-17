@@ -457,6 +457,11 @@ export const GetAdminModelCalibrationResponse = zod.object({
   kind: zod.string(),
   version: zod.string(),
   engine: zod.string(),
+  featureView: zod.object({
+    modelFv: zod.number(),
+    currentFv: zod.number().nullish(),
+    stale: zod.boolean(),
+  }),
   calibration: zod.object({
     identity: zod.boolean(),
     sampleSize: zod.number().nullish(),
@@ -472,6 +477,14 @@ export const GetAdminModelCalibrationResponse = zod.object({
     zod.object({
       name: zod.string(),
       weight: zod.number(),
+    }),
+  ),
+  drifts: zod.array(
+    zod.object({
+      name: zod.string(),
+      trainMean: zod.number(),
+      testMean: zod.number(),
+      rel: zod.number(),
     }),
   ),
 });

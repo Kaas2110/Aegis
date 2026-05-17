@@ -197,13 +197,29 @@ export interface AdminModelFeatureImportanceItem {
   weight: number;
 }
 
+export interface AdminModelDriftItem {
+  name: string;
+  trainMean: number;
+  testMean: number;
+  rel: number;
+}
+
+export interface AdminModelFeatureViewBlock {
+  modelFv: number;
+  /** @nullable */
+  currentFv?: number | null;
+  stale: boolean;
+}
+
 export interface AdminModelCalibrationResponse {
   id: number;
   kind: string;
   version: string;
   engine: string;
+  featureView: AdminModelFeatureViewBlock;
   calibration: AdminModelCalibrationBlock;
   featureImportance: AdminModelFeatureImportanceItem[];
+  drifts: AdminModelDriftItem[];
 }
 
 export type WorkerHeartbeatLastStatus =

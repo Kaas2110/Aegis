@@ -698,3 +698,33 @@ draft (sorted heroes/accounts) и пропускает матчи с неизм�
 - `train:lightgbm`: историческим as-of снапшотам peer_synergy патчится из текущих значений (ростер топ-команд стабилен ~6мес, full chronological tracking слишком дорог). Команды без peer_synergy → 0 (нейтрал).
 - Ретрейн всех LightGBM v1/v2/v3 × {fallback, t1, t2} 9 моделей. `peer_synergy_diff` попал в top-3 importance у v2/fallback (102), v2/t1 (72), v2/t2 (45); top-15 у v3/t1 (28); у v3/fallback/t2 за пределами top-15 (доминируют h2h + player_skill). Метрики: v3/fallback test_acc 76.7% (baseline 77.4%, в пределах ±2-3pp шума), v3/t2 79.6% (улучшение), v3/t1 63.7% (улучшение с 61.3% baseline).
 - Также перетренированы market models (FB / total_kills / total_duration ± q25/q75) и live-winner v8 (acc 70.0%, brier 0.223, lift +17.13pp над прематч-baseline).
+
+## 2026-05-17 — Фаза 8 D1+D2 DONE, P5 безопасная активация на ноуте
+
+**D1 — FEATURE_VIEW_VERSION (единый источник правды о fv):**
+- Новый файл `lib/db/src/feature-view.ts` экспортирует `FEATURE_VIEW.PREMATCH=3`,
+  `LIVE_WINNER=1`, `LIVE_TOTALS=1`, `MARKET=1` + хелпер `currentFeatureViewFor(kind)`.
+- `PredictionModel.loadActiveModel()` логирует warning `running on STALE featureView`
+  если активная surface-модель имеет `featuresVersion < CURRENT`.
+- Admin endpoint `/api/admin/models/:id/calibration` отдаёт `featureView: {modelFv, currentFv, stale}`.
+- Admin UI `pages/models.tsx`: третья ячейка «Feature View» с amber-бордером + иконкой
+  AlertTriangle когда `stale=true`.
+
+**D2 — drift alarms:**
+- `scripts/src/train-lightgbm.ts` сохраняет полный массив drift'ов (|Δrel|>10%)
+  в `model_versions.metadata.drifts` (структура `{name, trainMean, testMean, rel}`).
+- Admin endpoint `/admin/models/:id/calibration` возвращает поле `drifts` top-15
+  по |rel|. OpenAPI schema `AdminModelDriftItem` + `AdminModelFeatureViewBlock`.
+- Admin UI: новый блок «Data drift · top N» с горизонтальными бар-чартами,
+  amber-подсветкой при |rel|>20%, summary-строкой про severe drifts.
+
+**P5 — Auto-retrain safety gate (двухуровневый):**
+- `SchedulerWorker.checkAutoRetrainGate()`: (1) `DISABLE_AUTO_RETRAIN=true` —
+  killswitch (как раньше), (2) `AUTO_RETRAIN_CRON_HOUR_UTC=<0..23>` — обучение
+  разрешено только в указанный час UTC. На Replit `DISABLE_AUTO_RETRAIN=true`
+  остаётся (не мешаем cron-workflow'ам наполнения БД). На ноуте: kill снят +
+  `AUTO_RETRAIN_CRON_HOUR_UTC=4` (~7 утра МСК).
+- `lastTrainAt` НЕ обновляется при skipped — после снятия флага следующий retrain
+  идёт без 30d-отложки.
+
+Typecheck зелёный, server поднимается без warning'ов (активный fv=3=current).

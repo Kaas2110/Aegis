@@ -6,13 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AdminModelCalibrationBlock } from "./adminModelCalibrationBlock";
+import type { AdminModelDriftItem } from "./adminModelDriftItem";
 import type { AdminModelFeatureImportanceItem } from "./adminModelFeatureImportanceItem";
+import type { AdminModelFeatureViewBlock } from "./adminModelFeatureViewBlock";
 
 export interface AdminModelCalibrationResponse {
   id: number;
   kind: string;
   version: string;
   engine: string;
+  featureView: AdminModelFeatureViewBlock;
   calibration: AdminModelCalibrationBlock;
   featureImportance: AdminModelFeatureImportanceItem[];
+  drifts: AdminModelDriftItem[];
 }

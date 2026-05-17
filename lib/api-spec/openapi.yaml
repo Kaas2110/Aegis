@@ -729,20 +729,43 @@ components:
         name: { type: string }
         weight: { type: number }
 
+    AdminModelDriftItem:
+      type: object
+      required: [name, trainMean, testMean, rel]
+      properties:
+        name: { type: string }
+        trainMean: { type: number }
+        testMean: { type: number }
+        rel: { type: number }
+
+    AdminModelFeatureViewBlock:
+      type: object
+      required: [modelFv, stale]
+      properties:
+        modelFv: { type: integer }
+        currentFv: { type: ["integer", "null"] }
+        stale: { type: boolean }
+
     AdminModelCalibrationResponse:
       type: object
-      required: [id, kind, version, engine, calibration, featureImportance]
+      required: [id, kind, version, engine, featureView, calibration, featureImportance, drifts]
       properties:
         id: { type: integer }
         kind: { type: string }
         version: { type: string }
         engine: { type: string }
+        featureView:
+          $ref: "#/components/schemas/AdminModelFeatureViewBlock"
         calibration:
           $ref: "#/components/schemas/AdminModelCalibrationBlock"
         featureImportance:
           type: array
           items:
             $ref: "#/components/schemas/AdminModelFeatureImportanceItem"
+        drifts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminModelDriftItem"
 
     AdminWorkersConfig:
       type: object

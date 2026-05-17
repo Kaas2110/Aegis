@@ -233,14 +233,16 @@ async function trainBucket(
     const drifts = featureNames.map((n, i) => {
       const tr = trainMean[i], te = testMean[i];
       const denom = Math.max(Math.abs(tr), 1e-3);
-      return { n, tr, te, rel: (te - tr) / denom };
+      return { name: n, trainMean: tr, testMean: te, rel: (te - tr) / denom };
     }).filter(d => Math.abs(d.rel) > 0.10)
-      .sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel))
-      .slice(0, 8);
+      .sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel));
     if (drifts.length > 0) {
-      console.log(`  [${label}] DRIFT (|Δrel|>10%): ` + drifts.map(d =>
-        `${d.n}: train=${d.tr.toFixed(3)} test=${d.te.toFixed(3)} (${(d.rel * 100).toFixed(0)}%)`).join(', '));
+      const top = drifts.slice(0, 8);
+      console.log(`  [${label}] DRIFT (|Δrel|>10%): ` + top.map(d =>
+        `${d.name}: train=${d.trainMean.toFixed(3)} test=${d.testMean.toFixed(3)} (${(d.rel * 100).toFixed(0)}%)`).join(', '));
     }
+    // D2 — drifts хранятся в data так, чтобы вызывающий код мог сохранить их в metadata.
+    (data as TrainResponse & { drifts?: typeof drifts }).drifts = drifts;
     const trainPos = train.reduce((s, x) => s + x.label, 0) / train.length;
     const testPos = test.reduce((s, x) => s + x.label, 0) / test.length;
     console.log(`  [${label}] LABEL radiantWR train=${(trainPos * 100).toFixed(1)}% test=${(testPos * 100).toFixed(1)}%`);
@@ -587,6 +589,8 @@ async function main() {
         calibSampleSize: r.calib_metrics.n,
         baselineAcc: r.baseline_acc,
         featureImportance: r.feature_importance,
+        // D2 — drift snapshot из trainBucket (train↔test mean shift по фичам, |Δrel|>10%).
+        drifts: (r as TrainResponse & { drifts?: Array<{ name: string; trainMean: number; testMean: number; rel: number }> }).drifts ?? [],
         windowDays: TRAIN_WINDOW_DAYS,
         windowStartUnix: minStartTime,
         minAvgGlicko: MIN_AVG_GLICKO,

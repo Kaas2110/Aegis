@@ -41,7 +41,12 @@ long-running процессом (systemd-юнит, pm2, screen). Внутри н
    # выключатели (по необходимости)
    DISABLE_LIVE_WORKER=false
    DISABLE_SCHEDULER=false
-   DISABLE_AUTO_RETRAIN=true     # пока не нужны авто-ретрейны
+   # Auto-retrain (P5): на ноуте включаем, на Replit — выключено.
+   #   DISABLE_AUTO_RETRAIN=true → killswitch (фаза train пропускается).
+   #   AUTO_RETRAIN_CRON_HOUR_UTC=0..23 → разрешено ТОЛЬКО в этот час UTC.
+   # Стандарт для ноута:
+   DISABLE_AUTO_RETRAIN=false
+   AUTO_RETRAIN_CRON_HOUR_UTC=4  # ~07:00 МСК — тихий час, нет live-poll нагрузки
    ```
 4. `pnpm install` в корне репо
 
@@ -249,5 +254,8 @@ sudo systemctl list-timers '*aegis*'
 - `parse:cycle` НЕ интегрируется в SchedulerWorker (см. user prefs в
   `replit.md`) — на ноуте `run-replay-parse-loop.sh` под systemd проще
   ребутить и логировать.
-- `train:lightgbm` и `train:model` — оставляем под флагом `DISABLE_AUTO_RETRAIN=true`,
+- `train:lightgbm` и `train:model` — на ноуте управляются через SchedulerWorker
+  (фаза train в `runRetrainPipeline`). Защита от конфликтов с ingest-cron'ами —
+  через `AUTO_RETRAIN_CRON_HOUR_UTC=4`: тренировка стартует только в указанный
+  час UTC. На Replit оставляем `DISABLE_AUTO_RETRAIN=true`,
   пока пользователь явно не разрешит «да, можно автоматом».

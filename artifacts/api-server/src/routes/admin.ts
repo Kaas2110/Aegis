@@ -33,6 +33,7 @@ import {
 } from '../services/SchedulerWorker';
 import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/OutcomeTracker';
 import { getHeartbeats as getWorkerHeartbeats } from '../services/workerHeartbeats';
+import { currentFeatureViewFor } from '@workspace/db';
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
@@ -779,30 +780,72 @@ router.get('/models/:id/calibration', async (req, res) => {
   }));
   const sampleSize = typeof calibrationRaw?.['sampleSize'] === 'number' ? (calibrationRaw['sampleSize'] as number) : null;
 
-  const importanceRaw = (meta['featureImportance'] ?? meta['importance']) as unknown;
+  const importanceRaw = meta['featureImportance'] ?? meta['importance'];
   let featureImportance: Array<{ name: string; weight: number }> = [];
-  if (Array.isArray(importanceRaw)) {
-    featureImportance = (importanceRaw as Array<Record<string, unknown>>)
-      .map((f) => ({
-        name: String(f['name'] ?? f['feature'] ?? ''),
-        weight: Number(f['weight'] ?? f['importance'] ?? 0),
-      }))
+  if (importanceRaw && typeof importanceRaw === 'object') {
+    // Может быть либо массив [{name,weight}], либо словарь {name: weight}.
+    const entries = Array.isArray(importanceRaw)
+      ? (importanceRaw as Array<Record<string, unknown>>).map((f) => ({
+          name: String(f['name'] ?? f['feature'] ?? ''),
+          weight: Number(f['weight'] ?? f['importance'] ?? 0),
+        }))
+      : Object.entries(importanceRaw as Record<string, unknown>).map(([k, v]) => ({
+          name: k,
+          weight: Number(v),
+        }));
+    featureImportance = entries
       .filter((f) => f.name && Number.isFinite(f.weight))
       .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
       .slice(0, 15);
   }
+
+  // D2 — drifts (train↔test mean shift) уже посчитаны в train-lightgbm и
+  // сохранены в metadata.drifts. Возвращаем top-15 по |rel|.
+  const driftsRaw = meta['drifts'];
+  let drifts: Array<{ name: string; trainMean: number; testMean: number; rel: number }> = [];
+  if (Array.isArray(driftsRaw)) {
+    drifts = (driftsRaw as Array<Record<string, unknown>>)
+      .map((d) => ({
+        name: String(d['name'] ?? ''),
+        trainMean: Number(d['trainMean'] ?? 0),
+        testMean: Number(d['testMean'] ?? 0),
+        rel: Number(d['rel'] ?? 0),
+      }))
+      .filter((d) => d.name && Number.isFinite(d.rel))
+      .sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel))
+      .slice(0, 15);
+  }
+
+  // D1 — staleFeatureView флаг: если модель собрана на устаревшем feature view.
+  const modelFv = (row.metadata && typeof row.metadata === 'object'
+    ? Number((row.metadata as Record<string, unknown>)['featuresVersion'] ?? 0)
+    : 0);
+  const fvFromRow = await db
+    .select({ fv: modelVersionsTable.featuresVersion })
+    .from(modelVersionsTable)
+    .where(eq(modelVersionsTable.id, row.id))
+    .limit(1);
+  const effectiveFv = fvFromRow[0]?.fv ?? modelFv;
+  const currentFv = currentFeatureViewFor(row.kind);
+  const staleFeatureView = currentFv != null && effectiveFv > 0 && effectiveFv < currentFv;
 
   res.json({
     id: row.id,
     kind: row.kind,
     version: row.version,
     engine: row.engine,
+    featureView: {
+      modelFv: effectiveFv,
+      currentFv,
+      stale: staleFeatureView,
+    },
     calibration: {
       identity,
       sampleSize,
       bins,
     },
     featureImportance,
+    drifts,
   });
 });
 
