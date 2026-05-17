@@ -8,10 +8,13 @@ import {
   useProbeAdminBookmakers,
   useGetAdminModels,
   useTriggerAdminModelRetrain,
+  useGetAdminModelsHistory,
+  useActivateAdminModel,
   getGetAdminIntegrationsQueryKey,
   getGetAdminOddsStatusQueryKey,
   getGetAdminSettingsQueryKey,
   getGetAdminModelsQueryKey,
+  getGetAdminModelsHistoryQueryKey,
   type AdminIntegrationStatus,
   type AdminBookmakerProbeResult,
   type AdminModelRow,
@@ -538,6 +541,168 @@ function IntegrationCard({ integration }: { integration: AdminIntegrationStatus 
   );
 }
 
+// ─── F4: Model History Panel ─────────────────────────────────────────────────
+
+const ENGINE_COLOR: Record<string, string> = {
+  lightgbm: "text-primary",
+  lr: "text-muted-foreground",
+};
+
+function ModelHistoryPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetAdminModelsHistory();
+  const activate = useActivateAdminModel();
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+
+  const handleActivate = (id: number) => {
+    activate.mutate(
+      { id },
+      {
+        onSuccess: (res) => {
+          const r = res as { alreadyActive?: boolean; kind?: string; version?: string };
+          void queryClient.invalidateQueries({ queryKey: getGetAdminModelsQueryKey() });
+          void queryClient.invalidateQueries({ queryKey: getGetAdminModelsHistoryQueryKey() });
+          toast({
+            title: r.alreadyActive ? "Уже активна" : "Модель активирована",
+            description: `${r.kind ?? ""} v${r.version ?? ""}`,
+          });
+          setConfirmId(null);
+        },
+        onError: (err: unknown) => {
+          toast({
+            variant: "destructive",
+            title: "Ошибка",
+            description: err instanceof Error ? err.message : "Не удалось активировать модель",
+          });
+          setConfirmId(null);
+        },
+      },
+    );
+  };
+
+  const models: AdminModelRow[] = (data as { models?: AdminModelRow[] } | undefined)?.models ?? [];
+
+  const groupedByKind = models.reduce<Record<string, AdminModelRow[]>>((acc, m) => {
+    const key = m.kind;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(m);
+    return acc;
+  }, {});
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="border-b border-border pb-4">
+        <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+          История моделей
+        </CardTitle>
+        <CardDescription className="font-mono text-xs">
+          Все версии (active + inactive). «Активировать» — атомарный swap без рестарта.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-6">
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
+        ) : models.length === 0 ? (
+          <div className="text-center py-6 font-mono text-xs text-muted-foreground uppercase">
+            Нет версий моделей в БД
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {Object.entries(groupedByKind).map(([kind, rows]) => (
+              <div key={kind} className="space-y-2">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border pb-1">
+                  {KIND_LABEL_RU[kind] ?? kind}
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] font-mono">
+                    <thead>
+                      <tr className="text-muted-foreground uppercase border-b border-border/50">
+                        <th className="text-left py-1 pr-3 font-normal">Версия</th>
+                        <th className="text-left py-1 pr-3 font-normal">Engine</th>
+                        <th className="text-left py-1 pr-3 font-normal">FV</th>
+                        <th className="text-right py-1 pr-3 font-normal">Train%</th>
+                        <th className="text-right py-1 pr-3 font-normal">Test%</th>
+                        <th className="text-right py-1 pr-3 font-normal">Brier</th>
+                        <th className="text-right py-1 pr-3 font-normal">N train</th>
+                        <th className="text-left py-1 pr-3 font-normal">Создан</th>
+                        <th className="text-left py-1 font-normal">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((m) => (
+                        <tr
+                          key={m.id}
+                          className={`border-b border-border/30 hover:bg-card/50 transition-colors ${m.isActive ? "bg-primary/5" : ""}`}
+                        >
+                          <td className="py-1.5 pr-3 font-bold">{m.version}</td>
+                          <td className={`py-1.5 pr-3 ${ENGINE_COLOR[m.engine] ?? ""}`}>{m.engine}</td>
+                          <td className="py-1.5 pr-3 text-muted-foreground">v{m.featuresVersion}</td>
+                          <td className="py-1.5 pr-3 text-right">
+                            {m.trainAccuracy != null ? `${(m.trainAccuracy * 100).toFixed(1)}%` : "—"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right">
+                            {m.testAccuracy != null ? `${(m.testAccuracy * 100).toFixed(1)}%` : "—"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right text-muted-foreground">
+                            {m.brierScore != null ? m.brierScore.toFixed(4) : "—"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right text-muted-foreground">
+                            {m.trainSampleSize != null ? m.trainSampleSize.toLocaleString() : "—"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                            {formatDate(m.createdAt)}
+                          </td>
+                          <td className="py-1.5">
+                            {m.isActive ? (
+                              <span className="text-radiant uppercase font-bold">ACTIVE</span>
+                            ) : confirmId === m.id ? (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  disabled={activate.isPending}
+                                  className="rounded-none h-5 px-2 text-[9px] uppercase"
+                                  onClick={() => handleActivate(m.id)}
+                                >
+                                  {activate.isPending ? "..." : "Да"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="rounded-none h-5 px-2 text-[9px] uppercase"
+                                  onClick={() => setConfirmId(null)}
+                                >
+                                  Нет
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="rounded-none h-5 px-2 text-[9px] uppercase text-muted-foreground hover:text-primary"
+                                onClick={() => setConfirmId(m.id)}
+                              >
+                                Активировать
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Operations() {
   const { data: oddsStatus, isLoading: isOddsLoading } = useGetAdminOddsStatus();
   const { data: integrationsData, isLoading: isIntegrationsLoading } = useGetAdminIntegrations();
@@ -601,6 +766,8 @@ export default function Operations() {
       </div>
 
       <ActiveModelsPanel />
+
+      <ModelHistoryPanel />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="rounded-none border-border bg-card">

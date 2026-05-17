@@ -23,10 +23,16 @@ import type {
   AdminIntegrationUpdateInput,
   AdminIntegrationUpdateResponse,
   AdminIntegrationsResponse,
+  AdminJobRunInput,
+  AdminJobRunResponse,
+  AdminJobStatusResponse,
+  AdminJobsListResponse,
   AdminLoginInput,
   AdminLoginResult,
   AdminMetricsResponse,
+  AdminModelActivateResponse,
   AdminModelRetrainInput,
+  AdminModelsHistoryResponse,
   AdminModelsResponse,
   AdminOdUsageResponse,
   AdminOkResult,
@@ -38,6 +44,9 @@ import type {
   AdminSettingsOnlyResponse,
   AdminSettingsResponse,
   AdminWhoami,
+  AdminWorkersConfig,
+  AdminWorkersConfigInput,
+  GetAdminJobStatus404,
   HealthStatus,
 } from "./api.schemas";
 
@@ -1170,6 +1179,579 @@ export function useGetAdminModels<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Current worker feature flags (DB + env)
+ */
+export const getGetAdminWorkersConfigUrl = () => {
+  return `/api/admin/workers/config`;
+};
+
+export const getAdminWorkersConfig = async (
+  options?: RequestInit,
+): Promise<AdminWorkersConfig> => {
+  return customFetch<AdminWorkersConfig>(getGetAdminWorkersConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminWorkersConfigQueryKey = () => {
+  return [`/api/admin/workers/config`] as const;
+};
+
+export const getGetAdminWorkersConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminWorkersConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminWorkersConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminWorkersConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminWorkersConfig>>
+  > = ({ signal }) => getAdminWorkersConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminWorkersConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminWorkersConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminWorkersConfig>>
+>;
+export type GetAdminWorkersConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Current worker feature flags (DB + env)
+ */
+
+export function useGetAdminWorkersConfig<
+  TData = Awaited<ReturnType<typeof getAdminWorkersConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminWorkersConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminWorkersConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update worker flags in DB (partial update)
+ */
+export const getUpdateAdminWorkersConfigUrl = () => {
+  return `/api/admin/workers/config`;
+};
+
+export const updateAdminWorkersConfig = async (
+  adminWorkersConfigInput: AdminWorkersConfigInput,
+  options?: RequestInit,
+): Promise<AdminWorkersConfig> => {
+  return customFetch<AdminWorkersConfig>(getUpdateAdminWorkersConfigUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminWorkersConfigInput),
+  });
+};
+
+export const getUpdateAdminWorkersConfigMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminWorkersConfig>>,
+    TError,
+    { data: BodyType<AdminWorkersConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminWorkersConfig>>,
+  TError,
+  { data: BodyType<AdminWorkersConfigInput> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminWorkersConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminWorkersConfig>>,
+    { data: BodyType<AdminWorkersConfigInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAdminWorkersConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminWorkersConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminWorkersConfig>>
+>;
+export type UpdateAdminWorkersConfigMutationBody =
+  BodyType<AdminWorkersConfigInput>;
+export type UpdateAdminWorkersConfigMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update worker flags in DB (partial update)
+ */
+export const useUpdateAdminWorkersConfig = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminWorkersConfig>>,
+    TError,
+    { data: BodyType<AdminWorkersConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminWorkersConfig>>,
+  TError,
+  { data: BodyType<AdminWorkersConfigInput> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminWorkersConfigMutationOptions(options));
+};
+
+/**
+ * @summary List recent one-shot admin jobs (in-memory, resets on restart)
+ */
+export const getGetAdminJobsUrl = () => {
+  return `/api/admin/jobs`;
+};
+
+export const getAdminJobs = async (
+  options?: RequestInit,
+): Promise<AdminJobsListResponse> => {
+  return customFetch<AdminJobsListResponse>(getGetAdminJobsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminJobsQueryKey = () => {
+  return [`/api/admin/jobs`] as const;
+};
+
+export const getGetAdminJobsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminJobs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminJobs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminJobsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminJobs>>> = ({
+    signal,
+  }) => getAdminJobs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminJobs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminJobsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminJobs>>
+>;
+export type GetAdminJobsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List recent one-shot admin jobs (in-memory, resets on restart)
+ */
+
+export function useGetAdminJobs<
+  TData = Awaited<ReturnType<typeof getAdminJobs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminJobs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminJobsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Spawn a pnpm script in background, returns jobId immediately
+ */
+export const getRunAdminJobUrl = () => {
+  return `/api/admin/jobs/run`;
+};
+
+export const runAdminJob = async (
+  adminJobRunInput: AdminJobRunInput,
+  options?: RequestInit,
+): Promise<AdminJobRunResponse> => {
+  return customFetch<AdminJobRunResponse>(getRunAdminJobUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminJobRunInput),
+  });
+};
+
+export const getRunAdminJobMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runAdminJob>>,
+    TError,
+    { data: BodyType<AdminJobRunInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runAdminJob>>,
+  TError,
+  { data: BodyType<AdminJobRunInput> },
+  TContext
+> => {
+  const mutationKey = ["runAdminJob"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runAdminJob>>,
+    { data: BodyType<AdminJobRunInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return runAdminJob(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunAdminJobMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runAdminJob>>
+>;
+export type RunAdminJobMutationBody = BodyType<AdminJobRunInput>;
+export type RunAdminJobMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Spawn a pnpm script in background, returns jobId immediately
+ */
+export const useRunAdminJob = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runAdminJob>>,
+    TError,
+    { data: BodyType<AdminJobRunInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runAdminJob>>,
+  TError,
+  { data: BodyType<AdminJobRunInput> },
+  TContext
+> => {
+  return useMutation(getRunAdminJobMutationOptions(options));
+};
+
+/**
+ * @summary Poll job status and last 100 output lines
+ */
+export const getGetAdminJobStatusUrl = (jobId: string) => {
+  return `/api/admin/jobs/${jobId}`;
+};
+
+export const getAdminJobStatus = async (
+  jobId: string,
+  options?: RequestInit,
+): Promise<AdminJobStatusResponse> => {
+  return customFetch<AdminJobStatusResponse>(getGetAdminJobStatusUrl(jobId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminJobStatusQueryKey = (jobId: string) => {
+  return [`/api/admin/jobs/${jobId}`] as const;
+};
+
+export const getGetAdminJobStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminJobStatus>>,
+  TError = ErrorType<GetAdminJobStatus404>,
+>(
+  jobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAdminJobStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAdminJobStatusQueryKey(jobId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminJobStatus>>
+  > = ({ signal }) => getAdminJobStatus(jobId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!jobId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminJobStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminJobStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminJobStatus>>
+>;
+export type GetAdminJobStatusQueryError = ErrorType<GetAdminJobStatus404>;
+
+/**
+ * @summary Poll job status and last 100 output lines
+ */
+
+export function useGetAdminJobStatus<
+  TData = Awaited<ReturnType<typeof getAdminJobStatus>>,
+  TError = ErrorType<GetAdminJobStatus404>,
+>(
+  jobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAdminJobStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminJobStatusQueryOptions(jobId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary All model versions (active + inactive), last 50 by date
+ */
+export const getGetAdminModelsHistoryUrl = () => {
+  return `/api/admin/models/history`;
+};
+
+export const getAdminModelsHistory = async (
+  options?: RequestInit,
+): Promise<AdminModelsHistoryResponse> => {
+  return customFetch<AdminModelsHistoryResponse>(
+    getGetAdminModelsHistoryUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAdminModelsHistoryQueryKey = () => {
+  return [`/api/admin/models/history`] as const;
+};
+
+export const getGetAdminModelsHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminModelsHistory>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminModelsHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminModelsHistoryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminModelsHistory>>
+  > = ({ signal }) => getAdminModelsHistory({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminModelsHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminModelsHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminModelsHistory>>
+>;
+export type GetAdminModelsHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary All model versions (active + inactive), last 50 by date
+ */
+
+export function useGetAdminModelsHistory<
+  TData = Awaited<ReturnType<typeof getAdminModelsHistory>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminModelsHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminModelsHistoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Atomically promote a model version to active (deactivates siblings)
+ */
+export const getActivateAdminModelUrl = (id: number) => {
+  return `/api/admin/models/${id}/activate`;
+};
+
+export const activateAdminModel = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminModelActivateResponse> => {
+  return customFetch<AdminModelActivateResponse>(getActivateAdminModelUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getActivateAdminModelMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateAdminModel>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof activateAdminModel>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["activateAdminModel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof activateAdminModel>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return activateAdminModel(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ActivateAdminModelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof activateAdminModel>>
+>;
+
+export type ActivateAdminModelMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Atomically promote a model version to active (deactivates siblings)
+ */
+export const useActivateAdminModel = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateAdminModel>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof activateAdminModel>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getActivateAdminModelMutationOptions(options));
+};
 
 /**
  * @summary Database coverage health snapshot (drafts/parsed/players/teams/live/outcomes)

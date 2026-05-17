@@ -30,4 +30,6 @@ export interface AdminModelRow {
   /** @nullable */
   hardMatchCount?: number | null;
   createdAt: string;
+  /** @nullable */
+  isActive?: boolean | null;
 }

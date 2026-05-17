@@ -259,8 +259,138 @@ export const GetAdminModelsResponse = zod.object({
       hardMatchBrier: zod.number().nullish(),
       hardMatchCount: zod.number().nullish(),
       createdAt: zod.string(),
+      isActive: zod.boolean().nullish(),
     }),
   ),
+});
+
+/**
+ * @summary Current worker feature flags (DB + env)
+ */
+export const GetAdminWorkersConfigResponse = zod.object({
+  ok: zod.boolean().optional(),
+  liveWorkerDisabled: zod.boolean(),
+  schedulerDisabled: zod.boolean(),
+  autoRetrainDisabled: zod.boolean(),
+  envDisableLiveWorker: zod.boolean(),
+  envDisableScheduler: zod.boolean(),
+  envDisableAutoRetrain: zod.boolean(),
+  note: zod.string(),
+});
+
+/**
+ * @summary Update worker flags in DB (partial update)
+ */
+export const UpdateAdminWorkersConfigBody = zod.object({
+  liveWorkerDisabled: zod.boolean().optional(),
+  schedulerDisabled: zod.boolean().optional(),
+  autoRetrainDisabled: zod.boolean().optional(),
+});
+
+export const UpdateAdminWorkersConfigResponse = zod.object({
+  ok: zod.boolean().optional(),
+  liveWorkerDisabled: zod.boolean(),
+  schedulerDisabled: zod.boolean(),
+  autoRetrainDisabled: zod.boolean(),
+  envDisableLiveWorker: zod.boolean(),
+  envDisableScheduler: zod.boolean(),
+  envDisableAutoRetrain: zod.boolean(),
+  note: zod.string(),
+});
+
+/**
+ * @summary List recent one-shot admin jobs (in-memory, resets on restart)
+ */
+export const GetAdminJobsResponse = zod.object({
+  jobs: zod.array(
+    zod.object({
+      id: zod.string(),
+      script: zod.string(),
+      args: zod.array(zod.string()),
+      status: zod.enum(["running", "done", "failed"]),
+      startedAt: zod.string(),
+      finishedAt: zod.string().nullish(),
+      exitCode: zod.number().nullish(),
+      durationMs: zod.number(),
+    }),
+  ),
+  allowedScripts: zod.array(zod.string()),
+});
+
+/**
+ * @summary Spawn a pnpm script in background, returns jobId immediately
+ */
+export const RunAdminJobBody = zod.object({
+  script: zod.string(),
+  args: zod.array(zod.string()).optional(),
+});
+
+export const RunAdminJobResponse = zod.object({
+  jobId: zod.string(),
+  script: zod.string(),
+  args: zod.array(zod.string()),
+  startedAt: zod.string(),
+});
+
+/**
+ * @summary Poll job status and last 100 output lines
+ */
+export const GetAdminJobStatusParams = zod.object({
+  jobId: zod.coerce.string(),
+});
+
+export const GetAdminJobStatusResponse = zod.object({
+  id: zod.string(),
+  script: zod.string(),
+  args: zod.array(zod.string()),
+  status: zod.enum(["running", "done", "failed"]),
+  startedAt: zod.string(),
+  finishedAt: zod.string().nullish(),
+  exitCode: zod.number().nullish(),
+  output: zod.array(zod.string()),
+  durationMs: zod.number(),
+});
+
+/**
+ * @summary All model versions (active + inactive), last 50 by date
+ */
+export const GetAdminModelsHistoryResponse = zod.object({
+  models: zod.array(
+    zod.object({
+      id: zod.number(),
+      kind: zod.string(),
+      version: zod.string(),
+      algorithm: zod.string(),
+      engine: zod.string(),
+      featuresVersion: zod.number(),
+      trainAccuracy: zod.number().nullish(),
+      testAccuracy: zod.number().nullish(),
+      brierScore: zod.number().nullish(),
+      trainSampleSize: zod.number().nullish(),
+      testSampleSize: zod.number().nullish(),
+      hardMatchAccuracy: zod.number().nullish(),
+      hardMatchBrier: zod.number().nullish(),
+      hardMatchCount: zod.number().nullish(),
+      createdAt: zod.string(),
+      isActive: zod.boolean().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Atomically promote a model version to active (deactivates siblings)
+ */
+export const ActivateAdminModelParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ActivateAdminModelResponse = zod.object({
+  ok: zod.boolean(),
+  alreadyActive: zod.boolean(),
+  activatedId: zod.number(),
+  kind: zod.string(),
+  engine: zod.string(),
+  version: zod.string(),
 });
 
 /**

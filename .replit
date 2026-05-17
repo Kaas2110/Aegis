@@ -32,6 +32,14 @@ args = "Drafts Backfill 365d"
 task = "workflow.run"
 args = "Replay Parse Loop"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Daily Ingest"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Hourly Live"
+
 [[workflows.workflow]]
 name = "artifacts/ml-service: ML Service"
 author = "agent"
@@ -73,6 +81,28 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-replay-parse-loop.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Daily Ingest"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-daily.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Hourly Live"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-hourly.sh"
 
 [workflows.workflow.metadata]
 outputType = "console"

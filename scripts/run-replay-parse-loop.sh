@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# T0.7 regular replay-parse loop. Долгоживущий процесс под workflow
-# "Replay Parse Loop". Делает два параллельных периодических цикла:
-#   * parse:request    каждые 30 мин — ставит свежие матчи в очередь OD parser
-#   * ingest:parsed    каждые 10 мин — забирает готовые из очереди в match_parsed
+# T0.7 CRUISE replay-parse loop. Долгоживущий процесс под workflow
+# "Replay Parse Loop". Два периодических цикла (крейсерский режим):
+#   * parse:request    каждые 2 ч  (каждый 4-й тик) — ставит свежие матчи в очередь OD parser
+#   * ingest:parsed    каждые 30 мин — забирает готовые из очереди в match_parsed
 #
+# Крейсерский режим активирован 2026-05-17: parse 60d→90d покрытие >99%.
 # Не запускает retraining (правило replit.md: только после явного «да»).
 # Логи: stdout (workflow) + /tmp/ingest_logs/replay-parse.log
 set -u
@@ -27,23 +28,23 @@ echo
 RUNNING=1
 trap 'echo "[$(ts)] SIGTERM received, finishing current iteration…"; RUNNING=0' TERM INT
 
-# Тик = 10 минут. Каждый 3-й тик (== 30 мин) запускаем parse:request.
-TICK_SEC=600
+# Крейсерский режим: тик = 30 мин, parse:request каждые 2ч (каждый 4-й тик).
+TICK_SEC=1800
 tick=0
 
 while [ $RUNNING -eq 1 ]; do
   tick=$((tick + 1))
 
-  if [ $((tick % 3)) -eq 1 ]; then
+  if [ $((tick % 4)) -eq 1 ]; then
     echo
-    echo "[$(ts)] --- tick=$tick · parse:request (limit=500, since=60d) ---"
-    pnpm --filter @workspace/scripts run parse:request -- --limit 500 --since-days 60 \
+    echo "[$(ts)] --- tick=$tick · parse:request (cruise: limit=200, since=90d) ---"
+    pnpm --filter @workspace/scripts run parse:request -- --limit 200 --since-days 90 \
       || echo "[$(ts)] parse:request failed (continuing)"
   fi
 
   echo
-  echo "[$(ts)] --- tick=$tick · ingest:parsed (limit=300) ---"
-  pnpm --filter @workspace/scripts run ingest:parsed -- --limit 300 \
+  echo "[$(ts)] --- tick=$tick · ingest:parsed (limit=150) ---"
+  pnpm --filter @workspace/scripts run ingest:parsed -- --limit 150 \
     || echo "[$(ts)] ingest:parsed failed (continuing)"
 
   echo

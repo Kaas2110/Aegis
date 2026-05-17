@@ -236,6 +236,128 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminModelsResponse"
 
+  /admin/workers/config:
+    get:
+      operationId: getAdminWorkersConfig
+      tags: [admin]
+      summary: Current worker feature flags (DB + env)
+      responses:
+        "200":
+          description: Worker flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWorkersConfig"
+    post:
+      operationId: updateAdminWorkersConfig
+      tags: [admin]
+      summary: Update worker flags in DB (partial update)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminWorkersConfigInput"
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWorkersConfig"
+
+  /admin/jobs:
+    get:
+      operationId: getAdminJobs
+      tags: [admin]
+      summary: List recent one-shot admin jobs (in-memory, resets on restart)
+      responses:
+        "200":
+          description: Job list + allowed scripts whitelist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminJobsListResponse"
+
+  /admin/jobs/run:
+    post:
+      operationId: runAdminJob
+      tags: [admin]
+      summary: Spawn a pnpm script in background, returns jobId immediately
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminJobRunInput"
+      responses:
+        "200":
+          description: Job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminJobRunResponse"
+
+  /admin/jobs/{jobId}:
+    get:
+      operationId: getAdminJobStatus
+      tags: [admin]
+      summary: Poll job status and last 100 output lines
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminJobStatusResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+
+  /admin/models/history:
+    get:
+      operationId: getAdminModelsHistory
+      tags: [admin]
+      summary: All model versions (active + inactive), last 50 by date
+      responses:
+        "200":
+          description: Model history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminModelsHistoryResponse"
+
+  /admin/models/{id}/activate:
+    post:
+      operationId: activateAdminModel
+      tags: [admin]
+      summary: Atomically promote a model version to active (deactivates siblings)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Activation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminModelActivateResponse"
+
   /admin/coverage:
     get:
       operationId: getAdminCoverage
@@ -531,6 +653,8 @@ components:
           type: ["integer", "null"]
         createdAt:
           type: string
+        isActive:
+          type: ["boolean", "null"]
     AdminModelsResponse:
       type: object
       required: [models]
@@ -539,6 +663,108 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminModelRow"
+
+    AdminModelsHistoryResponse:
+      type: object
+      required: [models]
+      properties:
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminModelRow"
+
+    AdminModelActivateResponse:
+      type: object
+      required: [ok, alreadyActive, activatedId, kind, engine, version]
+      properties:
+        ok: { type: boolean }
+        alreadyActive: { type: boolean }
+        activatedId: { type: integer }
+        kind: { type: string }
+        engine: { type: string }
+        version: { type: string }
+
+    AdminWorkersConfig:
+      type: object
+      required:
+        - liveWorkerDisabled
+        - schedulerDisabled
+        - autoRetrainDisabled
+        - envDisableLiveWorker
+        - envDisableScheduler
+        - envDisableAutoRetrain
+        - note
+      properties:
+        ok: { type: boolean }
+        liveWorkerDisabled: { type: boolean }
+        schedulerDisabled: { type: boolean }
+        autoRetrainDisabled: { type: boolean }
+        envDisableLiveWorker: { type: boolean }
+        envDisableScheduler: { type: boolean }
+        envDisableAutoRetrain: { type: boolean }
+        note: { type: string }
+
+    AdminWorkersConfigInput:
+      type: object
+      properties:
+        liveWorkerDisabled: { type: boolean }
+        schedulerDisabled: { type: boolean }
+        autoRetrainDisabled: { type: boolean }
+
+    AdminJobSummary:
+      type: object
+      required: [id, script, args, status, startedAt, durationMs]
+      properties:
+        id: { type: string }
+        script: { type: string }
+        args: { type: array, items: { type: string } }
+        status: { type: string, enum: [running, done, failed] }
+        startedAt: { type: string }
+        finishedAt: { type: ["string", "null"] }
+        exitCode: { type: ["integer", "null"] }
+        durationMs: { type: integer }
+
+    AdminJobsListResponse:
+      type: object
+      required: [jobs, allowedScripts]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminJobSummary"
+        allowedScripts:
+          type: array
+          items: { type: string }
+
+    AdminJobRunInput:
+      type: object
+      required: [script]
+      properties:
+        script: { type: string }
+        args: { type: array, items: { type: string } }
+
+    AdminJobRunResponse:
+      type: object
+      required: [jobId, script, args, startedAt]
+      properties:
+        jobId: { type: string }
+        script: { type: string }
+        args: { type: array, items: { type: string } }
+        startedAt: { type: string }
+
+    AdminJobStatusResponse:
+      type: object
+      required: [id, script, args, status, startedAt, output, durationMs]
+      properties:
+        id: { type: string }
+        script: { type: string }
+        args: { type: array, items: { type: string } }
+        status: { type: string, enum: [running, done, failed] }
+        startedAt: { type: string }
+        finishedAt: { type: ["string", "null"] }
+        exitCode: { type: ["integer", "null"] }
+        output: { type: array, items: { type: string } }
+        durationMs: { type: integer }
 
     # ---- Admin coverage (data health) ----
     AdminCoverageResponse:

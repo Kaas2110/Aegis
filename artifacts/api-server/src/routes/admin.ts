@@ -20,7 +20,10 @@
  */
 
 import { Router, type IRouter } from 'express';
-import { getAppSettings, updateAppSettings } from '../services/AppSettings';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { getAppSettings, updateAppSettings, invalidateAppSettingsCache } from '../services/AppSettings';
 import {
   triggerManualRetrain,
   getSchedulerState,
@@ -36,6 +39,7 @@ import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, getSourceTrackers, 
 import { clearResponseCache } from '../lib/responseCache';
 import {
   db,
+  appSettingsTable,
   modelVersionsTable,
   matchParseQueueTable,
   matchParsedTable,
@@ -51,6 +55,34 @@ import {
 } from '@workspace/db';
 import { desc, eq, sql } from 'drizzle-orm';
 import { getOdUsageStats } from '../lib/openDotaUrl';
+
+// ── F3: In-memory job store for one-shot admin script runs ──────────────────
+interface AdminJob {
+  id: string;
+  script: string;
+  args: string[];
+  status: 'running' | 'done' | 'failed';
+  startedAt: Date;
+  finishedAt?: Date;
+  exitCode?: number;
+  output: string[];
+}
+const adminJobs = new Map<string, AdminJob>();
+const MAX_JOB_OUTPUT = 300;
+const MAX_JOBS_STORED = 20;
+
+const ALLOWED_RUN_SCRIPTS = new Set([
+  'ingest:drafts', 'ingest:players-heroes', 'ingest:hero-stats',
+  'ingest:hero-matchups', 'ingest:hero-synergy', 'ingest:matches',
+  'ingest:teams', 'ingest:leagues', 'ingest:od-scenarios',
+  'ingest:od-player-peers', 'ingest:od-distributions',
+  'compute:recent-form', 'compute:h2h', 'compute:player-glicko',
+  'compute:team-extended', 'compute:bo3-series',
+  'parse:request', 'ingest:parsed',
+  'backfill:live-snapshots',
+]);
+
+const ADMIN_WORKSPACE_ROOT = path.resolve(process.cwd(), '../..');
 
 const router: IRouter = Router();
 
@@ -462,6 +494,216 @@ router.get('/coverage', async (_req, res) => {
     generatedAt: now.toISOString(),
   });
 });
+
+// ── F2: Worker flags (stored in app_settings.store_settings) ───────────────
+
+/**
+ * GET /api/admin/workers/config
+ * Текущие флаги включения/отключения фоновых воркеров из БД + env.
+ */
+router.get('/workers/config', async (_req, res) => {
+  const settings = await getAppSettings();
+  const store = (settings.storeSettings ?? {}) as Record<string, unknown>;
+  res.json({
+    liveWorkerDisabled: store['liveWorkerDisabled'] === true,
+    schedulerDisabled: store['schedulerDisabled'] === true,
+    autoRetrainDisabled: store['autoRetrainDisabled'] === true,
+    envDisableLiveWorker: process.env['DISABLE_LIVE_WORKER'] === 'true',
+    envDisableScheduler: process.env['DISABLE_SCHEDULER'] === 'true',
+    envDisableAutoRetrain: process.env['DISABLE_AUTO_RETRAIN'] === 'true',
+    note: 'liveWorkerDisabled/schedulerDisabled вступают в силу при следующем рестарте api-server. autoRetrainDisabled — на следующем 24h-тике шедулера.',
+  });
+});
+
+/**
+ * POST /api/admin/workers/config
+ * Обновить флаги воркеров в БД. Частичное обновление — передавай только нужные поля.
+ */
+router.post('/workers/config', async (req, res) => {
+  const body = req.body as Partial<{
+    liveWorkerDisabled: boolean;
+    schedulerDisabled: boolean;
+    autoRetrainDisabled: boolean;
+  }>;
+
+  const current = await getAppSettings();
+  const store = (current.storeSettings ?? {}) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  if (typeof body.liveWorkerDisabled === 'boolean') patch['liveWorkerDisabled'] = body.liveWorkerDisabled;
+  if (typeof body.schedulerDisabled === 'boolean') patch['schedulerDisabled'] = body.schedulerDisabled;
+  if (typeof body.autoRetrainDisabled === 'boolean') patch['autoRetrainDisabled'] = body.autoRetrainDisabled;
+
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'no valid fields to update' });
+    return;
+  }
+
+  const merged = { ...store, ...patch };
+  await db.update(appSettingsTable)
+    .set({ storeSettings: merged, updatedAt: new Date() })
+    .where(eq(appSettingsTable.id, 1));
+  invalidateAppSettingsCache();
+
+  res.json({
+    ok: true,
+    liveWorkerDisabled: merged['liveWorkerDisabled'] === true,
+    schedulerDisabled: merged['schedulerDisabled'] === true,
+    autoRetrainDisabled: merged['autoRetrainDisabled'] === true,
+    envDisableLiveWorker: process.env['DISABLE_LIVE_WORKER'] === 'true',
+    envDisableScheduler: process.env['DISABLE_SCHEDULER'] === 'true',
+    envDisableAutoRetrain: process.env['DISABLE_AUTO_RETRAIN'] === 'true',
+    note: 'liveWorkerDisabled/schedulerDisabled вступают в силу при следующем рестарте api-server. autoRetrainDisabled — на следующем 24h-тике шедулера.',
+  });
+});
+
+// ── F3: One-shot admin job runner ───────────────────────────────────────────
+
+/**
+ * GET /api/admin/jobs
+ * Список последних 20 запущенных job'ов + whitelist скриптов.
+ */
+router.get('/jobs', (_req, res) => {
+  const jobs = [...adminJobs.values()]
+    .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+    .slice(0, MAX_JOBS_STORED)
+    .map((j) => ({
+      id: j.id,
+      script: j.script,
+      args: j.args,
+      status: j.status,
+      startedAt: j.startedAt.toISOString(),
+      finishedAt: j.finishedAt?.toISOString() ?? null,
+      exitCode: j.exitCode ?? null,
+      durationMs: j.finishedAt
+        ? j.finishedAt.getTime() - j.startedAt.getTime()
+        : Date.now() - j.startedAt.getTime(),
+    }));
+  res.json({ jobs, allowedScripts: [...ALLOWED_RUN_SCRIPTS].sort() });
+});
+
+/**
+ * POST /api/admin/jobs/run
+ * Запускает pnpm-скрипт в фоне. Немедленно возвращает jobId, не ждёт завершения.
+ */
+router.post('/jobs/run', (req, res) => {
+  const { script, args = [] } = req.body as { script?: string; args?: unknown[] };
+  if (!script || !ALLOWED_RUN_SCRIPTS.has(script)) {
+    res.status(400).json({ error: `script '${script ?? ''}' not in whitelist`, allowedScripts: [...ALLOWED_RUN_SCRIPTS].sort() });
+    return;
+  }
+  if (!Array.isArray(args) || args.some((a) => typeof a !== 'string')) {
+    res.status(400).json({ error: 'args must be an array of strings' });
+    return;
+  }
+  const safeArgs = args as string[];
+
+  const jobId = randomUUID();
+  const job: AdminJob = { id: jobId, script, args: safeArgs, status: 'running', startedAt: new Date(), output: [] };
+  adminJobs.set(jobId, job);
+
+  const child = spawn('pnpm', ['--filter', '@workspace/scripts', 'run', script, ...safeArgs], {
+    cwd: ADMIN_WORKSPACE_ROOT,
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const addLine = (chunk: Buffer) => {
+    const lines = chunk.toString('utf8').split('\n').filter((l) => l.trim());
+    for (const l of lines) {
+      job.output.push(l);
+      if (job.output.length > MAX_JOB_OUTPUT) job.output.shift();
+    }
+  };
+  child.stdout?.on('data', addLine);
+  child.stderr?.on('data', addLine);
+  child.on('close', (code) => { job.status = code === 0 ? 'done' : 'failed'; job.exitCode = code ?? -1; job.finishedAt = new Date(); });
+  child.on('error', (err) => { job.output.push(`spawn error: ${String(err)}`); job.status = 'failed'; job.exitCode = -1; job.finishedAt = new Date(); });
+
+  // GC: держим не более MAX_JOBS_STORED завершённых job'ов
+  if (adminJobs.size > MAX_JOBS_STORED) {
+    const sorted = [...adminJobs.entries()].sort((a, b) => a[1].startedAt.getTime() - b[1].startedAt.getTime());
+    for (const [id] of sorted.slice(0, sorted.length - MAX_JOBS_STORED)) adminJobs.delete(id);
+  }
+
+  res.json({ jobId, script, args: safeArgs, startedAt: job.startedAt.toISOString() });
+});
+
+/**
+ * GET /api/admin/jobs/:jobId
+ * Статус и последние 100 строк вывода job'а.
+ */
+router.get('/jobs/:jobId', (req, res) => {
+  const job = adminJobs.get(req.params['jobId'] ?? '');
+  if (!job) { res.status(404).json({ error: 'job not found' }); return; }
+  res.json({
+    id: job.id, script: job.script, args: job.args, status: job.status,
+    startedAt: job.startedAt.toISOString(),
+    finishedAt: job.finishedAt?.toISOString() ?? null,
+    exitCode: job.exitCode ?? null,
+    output: job.output.slice(-100),
+    durationMs: job.finishedAt ? job.finishedAt.getTime() - job.startedAt.getTime() : Date.now() - job.startedAt.getTime(),
+  });
+});
+
+// ── F4: Model history + activate ────────────────────────────────────────────
+
+/**
+ * GET /api/admin/models/history
+ * Все версии моделей (не только активные), последние 50 по дате.
+ */
+router.get('/models/history', async (_req, res) => {
+  const rows = await db
+    .select({
+      id: modelVersionsTable.id,
+      kind: modelVersionsTable.kind,
+      version: modelVersionsTable.version,
+      algorithm: modelVersionsTable.algorithm,
+      engine: modelVersionsTable.engine,
+      featuresVersion: modelVersionsTable.featuresVersion,
+      trainAccuracy: modelVersionsTable.trainAccuracy,
+      testAccuracy: modelVersionsTable.testAccuracy,
+      brierScore: modelVersionsTable.brierScore,
+      trainSampleSize: modelVersionsTable.trainSampleSize,
+      testSampleSize: modelVersionsTable.testSampleSize,
+      hardMatchAccuracy: modelVersionsTable.hardMatchAccuracy,
+      hardMatchBrier: modelVersionsTable.hardMatchBrier,
+      hardMatchCount: modelVersionsTable.hardMatchCount,
+      isActive: modelVersionsTable.isActive,
+      createdAt: modelVersionsTable.createdAt,
+    })
+    .from(modelVersionsTable)
+    .orderBy(desc(modelVersionsTable.createdAt))
+    .limit(50);
+  res.json({ models: rows });
+});
+
+/**
+ * POST /api/admin/models/:id/activate
+ * Атомарно продвигает версию модели в активную. Деактивирует конкурентов
+ * с тем же (kind, featuresVersion, engine).
+ */
+router.post('/models/:id/activate', async (req, res) => {
+  const id = parseInt(req.params['id'] ?? '', 10);
+  if (isNaN(id)) { res.status(400).json({ error: 'invalid id' }); return; }
+
+  const [target] = await db.select().from(modelVersionsTable).where(eq(modelVersionsTable.id, id)).limit(1);
+  if (!target) { res.status(404).json({ error: 'model not found' }); return; }
+  if (target.isActive) { res.json({ ok: true, alreadyActive: true, activatedId: id, kind: target.kind, engine: target.engine, version: target.version }); return; }
+
+  await db.transaction(async (tx) => {
+    await tx.update(modelVersionsTable)
+      .set({ isActive: false })
+      .where(sql`${modelVersionsTable.kind} = ${target.kind}
+        AND ${modelVersionsTable.featuresVersion} = ${target.featuresVersion}
+        AND ${modelVersionsTable.engine} = ${target.engine}
+        AND ${modelVersionsTable.isActive} = true`);
+    await tx.update(modelVersionsTable).set({ isActive: true }).where(eq(modelVersionsTable.id, id));
+  });
+
+  res.json({ ok: true, alreadyActive: false, activatedId: id, kind: target.kind, engine: target.engine, version: target.version });
+});
+
+// ── T0.7 visibility ─────────────────────────────────────────────────────────
 
 // T0.7 visibility — статус очереди replay-парсинга.
 router.get('/parse-queue/stats', async (_req, res) => {

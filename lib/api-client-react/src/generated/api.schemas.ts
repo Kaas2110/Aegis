@@ -158,10 +158,104 @@ export interface AdminModelRow {
   /** @nullable */
   hardMatchCount?: number | null;
   createdAt: string;
+  /** @nullable */
+  isActive?: boolean | null;
 }
 
 export interface AdminModelsResponse {
   models: AdminModelRow[];
+}
+
+export interface AdminModelsHistoryResponse {
+  models: AdminModelRow[];
+}
+
+export interface AdminModelActivateResponse {
+  ok: boolean;
+  alreadyActive: boolean;
+  activatedId: number;
+  kind: string;
+  engine: string;
+  version: string;
+}
+
+export interface AdminWorkersConfig {
+  ok?: boolean;
+  liveWorkerDisabled: boolean;
+  schedulerDisabled: boolean;
+  autoRetrainDisabled: boolean;
+  envDisableLiveWorker: boolean;
+  envDisableScheduler: boolean;
+  envDisableAutoRetrain: boolean;
+  note: string;
+}
+
+export interface AdminWorkersConfigInput {
+  liveWorkerDisabled?: boolean;
+  schedulerDisabled?: boolean;
+  autoRetrainDisabled?: boolean;
+}
+
+export type AdminJobSummaryStatus =
+  (typeof AdminJobSummaryStatus)[keyof typeof AdminJobSummaryStatus];
+
+export const AdminJobSummaryStatus = {
+  running: "running",
+  done: "done",
+  failed: "failed",
+} as const;
+
+export interface AdminJobSummary {
+  id: string;
+  script: string;
+  args: string[];
+  status: AdminJobSummaryStatus;
+  startedAt: string;
+  /** @nullable */
+  finishedAt?: string | null;
+  /** @nullable */
+  exitCode?: number | null;
+  durationMs: number;
+}
+
+export interface AdminJobsListResponse {
+  jobs: AdminJobSummary[];
+  allowedScripts: string[];
+}
+
+export interface AdminJobRunInput {
+  script: string;
+  args?: string[];
+}
+
+export interface AdminJobRunResponse {
+  jobId: string;
+  script: string;
+  args: string[];
+  startedAt: string;
+}
+
+export type AdminJobStatusResponseStatus =
+  (typeof AdminJobStatusResponseStatus)[keyof typeof AdminJobStatusResponseStatus];
+
+export const AdminJobStatusResponseStatus = {
+  running: "running",
+  done: "done",
+  failed: "failed",
+} as const;
+
+export interface AdminJobStatusResponse {
+  id: string;
+  script: string;
+  args: string[];
+  status: AdminJobStatusResponseStatus;
+  startedAt: string;
+  /** @nullable */
+  finishedAt?: string | null;
+  /** @nullable */
+  exitCode?: number | null;
+  output: string[];
+  durationMs: number;
 }
 
 export type AdminCoverageResponseDrafts = {
@@ -347,3 +441,7 @@ export interface AdminBookmakerProbeResponse {
 export interface AdminOpenObject {
   [key: string]: unknown;
 }
+
+export type GetAdminJobStatus404 = {
+  error: string;
+};
