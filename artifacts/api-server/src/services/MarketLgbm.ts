@@ -63,9 +63,11 @@ const ALL_MARKET_KINDS: MarketKind[] = [
  * `scripts/src/train-live-totals.ts` — иначе serialized blob будет инферить
  * на «другом» feature view.
  *
- * v2 (TODO когда Stratz накопит ~7d данных): добавить xpAdvantage_kxp,
- * networthAdvantage_kgold; сменить kind на live_total_kills_v2 и сделать
- * параллельный retrain без поломки v1.
+ * v2 (DORMANT — Stratz live upstream пуст с 2026-05-16): добавить xpAdvantage_kxp,
+ * networthAdvantage_kgold (из live_snapshots.xp_advantage / networth_advantage);
+ * сменить kind на live_total_kills_v2 и сделать параллельный retrain без поломки v1.
+ * КАК ВКЛЮЧИТЬ: восстановить Stratz enrichment в LiveWorker.ts → накопить ≥7d данных
+ * → обновить buildLiveTotalsFeatures здесь И в train-live-totals.ts (обязательно синхронно!).
  */
 export function buildLiveTotalsFeatures(s: {
   gameTimeSec: number;

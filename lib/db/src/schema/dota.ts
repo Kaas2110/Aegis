@@ -588,6 +588,85 @@ export const schedulerStateTable = pgTable('scheduler_state', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── E0 Premium OD tables ─────────────────────────────────────────────────
+//
+// Три таблицы для новых данных из OpenDota premium endpoints.
+// Наполняются скриптами ingest:od-scenarios / ingest:od-player-peers /
+// ingest:od-distributions — запускаются из run-enrichment-pipeline.sh.
+// Используются как дополнительные фичи в prematch ML моделях (шаг D).
+
+/**
+ * hero_scenarios — winrate героя по игровым сценариям из /api/scenarios/*.
+ *
+ * scenario_type: 'itemTimings' | 'laneRoles' | 'misc'
+ * data: сырой массив от OD (jsonb, структура зависит от endpoint'а):
+ *   itemTimings: [{item, time, games, wins, hero_id}]
+ *   laneRoles:   [{hero_id, lane_role, time_0_30_min, games, wins}]
+ *   misc:        [{scenario, is_win, games, wins}]
+ *
+ * Уникальный ключ: (hero_id, scenario_type). hero_id=0 для 'misc'.
+ * Обновляется upsert (on conflict do update set data, fetched_at).
+ */
+export const heroScenariosTable = pgTable('hero_scenarios', {
+  id: serial('id').primaryKey(),
+  heroId: integer('hero_id').notNull(),
+  scenarioType: text('scenario_type').notNull(), // 'itemTimings' | 'laneRoles' | 'misc'
+  data: jsonb('data').$type<unknown[]>().notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  heroScenarioUniq: uniqueIndex('hero_scenarios_hero_scenario_uniq').on(t.heroId, t.scenarioType),
+}));
+
+/**
+ * player_peers — с кем чаще играл pro-игрок и их winrate вместе.
+ * Источник: /api/players/{account_id}/peers
+ *
+ * Используется в compute:team-extended как фича «средний peer-winrate
+ * среди текущего ростера» — усиливает сигнал командной синергии.
+ * Freshness: 7 дней (ingest:od-player-peers пропускает свежие строки).
+ */
+export const playerPeersTable = pgTable('player_peers', {
+  id: serial('id').primaryKey(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull(),
+  peerId: bigint('peer_id', { mode: 'number' }).notNull(),
+  games: integer('games').notNull(),
+  wins: integer('wins').notNull(),
+  winrate: real('winrate').notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  peerUniq: uniqueIndex('player_peers_account_peer_uniq').on(t.accountId, t.peerId),
+}));
+
+/**
+ * hero_durations — распределение исходов по длительности матча per hero.
+ * Источник: /api/heroes/{id}/durations
+ *
+ * data: [{duration_bin: number, games_played: number, wins: number}]
+ * Используется как prior для total_duration модели (q25/q75 квантили).
+ * Обновляется раз в неделю.
+ */
+export const heroDurationsTable = pgTable('hero_durations', {
+  id: serial('id').primaryKey(),
+  heroId: integer('hero_id').notNull().unique(),
+  data: jsonb('data').$type<Array<{ duration_bin: number; games_played: number; wins: number }>>().notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * meta_distributions — агрегированные распределения из /api/distributions.
+ *
+ * kind: строковый ключ верхнего уровня ответа OD (например 'mmr',
+ * 'country_mmr', 'ranks', 'mmr_estimates').
+ * data: jsonb, структура per-kind.
+ * Обновляется раз в неделю.
+ */
+export const metaDistributionsTable = pgTable('meta_distributions', {
+  id: serial('id').primaryKey(),
+  kind: text('kind').notNull().unique(),
+  data: jsonb('data').$type<unknown>().notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ── Zod-схемы для вставки ────────────────────────────────────────────────
 export const insertProMatchSchema = createInsertSchema(proMatchesTable);
 export type InsertProMatch = z.infer<typeof insertProMatchSchema>;
@@ -657,4 +736,17 @@ export type Bo3Series = typeof bo3SeriesTable.$inferSelect;
 export type InsertBo3Series = typeof bo3SeriesTable.$inferInsert;
 
 export type League = typeof leaguesTable.$inferSelect;
+
+// ── E0 Premium OD типы ────────────────────────────────────────────────────
+export type HeroScenario = typeof heroScenariosTable.$inferSelect;
+export type InsertHeroScenario = typeof heroScenariosTable.$inferInsert;
+
+export type PlayerPeer = typeof playerPeersTable.$inferSelect;
+export type InsertPlayerPeer = typeof playerPeersTable.$inferInsert;
+
+export type HeroDuration = typeof heroDurationsTable.$inferSelect;
+export type InsertHeroDuration = typeof heroDurationsTable.$inferInsert;
+
+export type MetaDistribution = typeof metaDistributionsTable.$inferSelect;
+export type InsertMetaDistribution = typeof metaDistributionsTable.$inferInsert;
 export type InsertLeague = typeof leaguesTable.$inferInsert;

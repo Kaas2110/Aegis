@@ -28,6 +28,9 @@
     "ingest:parsed": "tsx ./src/ingest-parsed.ts",
     "import:snapshot": "tsx ./src/import-snapshot.ts",
     "test:stratz": "tsx ./src/test-stratz.ts",
+    "ingest:od-scenarios": "tsx ./src/ingest-od-scenarios.ts",
+    "ingest:od-player-peers": "tsx ./src/ingest-od-player-peers.ts",
+    "ingest:od-distributions": "tsx ./src/ingest-od-distributions.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

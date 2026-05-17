@@ -1,4 +1,34 @@
 /**
+ * ════════════════════════════════════════════════════════════════════
+ *  DORMANT — Stratz live upstream пуст с 2026-05-16
+ * ════════════════════════════════════════════════════════════════════
+ *
+ * Этот файл сохранён намеренно — код готов к повторному включению.
+ * Вызовы из LiveWorker.ts закомментированы. Ни один путь в runtime
+ * сейчас не доходит до этого файла.
+ *
+ * КАК ВКЛЮЧИТЬ ОБРАТНО:
+ *   1. В LiveWorker.ts раскомментировать import (строка ~33) и блок enrichment.
+ *   2. Добавить xpAdvantage_kxp / networthAdvantage_kgold в buildLiveTotalsFeatures
+ *      (MarketLgbm.ts + scripts/src/train-live-totals.ts), сменить kind на
+ *      live_total_kills_v2, запустить train:live-totals.
+ *   3. В /api/admin/coverage раскомментировать stratzPct метрику.
+ *
+ * ЧТО ДАВАЛ STRATZ LIVE (чего нет в OpenDota /api/live):
+ *   - per-player: gold, networth, xpm, gpm, items, respawn time, impPerMinute
+ *   - match meta: avgRank, gameState, gameMinute, delay, roshanRespawnSec
+ *   - Stratz projections: liveWinRate, prematchWinRate/Duration
+ *
+ * OpenDota /api/live отдаёт только match-level: game_time, scores,
+ * building_state, kills — per-player live телеметрия недоступна через OD
+ * (нужен GC-бот, как у Stratz).
+ *
+ * Пять nullable колонок в live_snapshots сохранены в БД:
+ *   stratz_match_meta, stratz_players, xp_advantage,
+ *   networth_advantage, stratz_fetched_at
+ *
+ * ════════════════════════════════════════════════════════════════════
+ *
  * Stratz live API client — fetches rich per-player + match-meta data for a
  * currently-running pro match. Used by LiveWorker to enrich OpenDota /api/live
  * snapshots with fields OpenDota doesn't expose:

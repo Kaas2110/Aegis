@@ -1,8 +1,28 @@
 /**
- * Воркер, который раз в минуту опрашивает OpenDota /api/live,
+ * Воркер, который раз в 30 секунд опрашивает OpenDota /api/live,
  * сохраняет снапшоты в БД, и считает предсказания через активную ML-модель.
  *
  * Запускается из index.ts если ENABLE_LIVE_WORKER=true (по умолчанию включено в dev).
+ *
+ * ── Stratz live enrichment (DORMANT) ────────────────────────────────────────
+ * Stratz /live.match(id) давал per-player данные которые OpenDota не отдаёт:
+ *   - per-player: gold, networth, xpm, gpm, items, respawn time, impPerMinute
+ *   - match meta: avgRank, gameState, gameMinute, delay, roshanRespawnSec
+ *   - Stratz projections: liveWinRate, prematchWinRate/Duration
+ *
+ * Эти поля планировалось добавить в live totals модель (live_total_kills_v2)
+ * как фичи xpAdvantage_kxp и networthAdvantage_kgold. Модель называлась бы
+ * live_total_kills_v2 (MarketLgbm.ts) вместо v1.
+ *
+ * СТАТУС: DORMANT с 2026-05-16 — Stratz upstream live пуст (live.matches=[],
+ * live.match(id)=null для всех match_id). Код stratzLive.ts сохранён целиком
+ * (клиент + curl fallback + circuit breaker + типы). Пять nullable колонок в
+ * live_snapshots (stratz_match_meta, stratz_players, xp_advantage,
+ * networth_advantage, stratz_fetched_at) тоже сохранены в схеме БД.
+ *
+ * КАК ВКЛЮЧИТЬ ОБРАТНО: раскомментировать import и блок enrichment ниже,
+ * переименовать модель в v2, запустить train:live-totals.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { db, liveSnapshotsTable, predictionsTable } from '@workspace/db';
@@ -10,11 +30,14 @@ import { logger } from '../lib/logger';
 import { predictMatchWinner, loadActiveModel, getActiveModel, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
-import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
+// DORMANT — Stratz live upstream пуст. Раскомментировать при восстановлении:
+// import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
 import { predictLiveTotalsFor } from './MarketLgbm';
 import { withOpenDotaKey } from '../lib/openDotaUrl';
 
-const POLL_INTERVAL_MS = 60_000;
+// E0.1: снижено с 60s до 30s — OD premium даёт 3000 req/min, бюджет позволяет.
+// Больше снапшотов на матч → лучше live-winner калибровка и более плавный winprob.
+const POLL_INTERVAL_MS = 30_000;
 const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
 const OPENDOTA_LIVE_URL = 'https://api.opendota.com/api/live';
 
@@ -202,26 +225,28 @@ async function pollOnce(): Promise<void> {
     return;
   }
 
-  // T0.5a Stratz enrichment: параллельно с OD-данными тянем per-player rich
-  // от Stratz live для каждого changed матча. Concurrency 4 (мягко к 250/min
-  // на токен). Fail-soft: упавший fetch → snapshot пишется без Stratz полей.
-  let stratzMap = new Map<number, StratzLiveDetail | null>();
-  let stratzEnriched = 0;
-  try {
-    stratzMap = await fetchLiveMatchDetailBatch(changed.map(m => m.match_id!), 4);
-    stratzEnriched = [...stratzMap.values()].filter(v => v !== null).length;
-    // INFO даже при 0 — чтобы по логам было ясно: «попробовали, league live пуст»
-    // ≠ «забыли позвать». Норма для не-pro времени = N requested / 0 enriched.
-    logger.info({ tag: 'stratz-live', requested: changed.length, enriched: stratzEnriched },
-      '[LiveWorker] Stratz enrichment');
-  } catch (err) {
-    logger.warn({ tag: 'stratz-live', err: String(err) }, '[LiveWorker] Stratz batch failed');
-  }
+  // ── Stratz live enrichment DORMANT ──────────────────────────────────────────
+  // Stratz upstream пуст с 2026-05-16 (live.matches=[], live.match(id)=null).
+  // Код оставлен в lib/stratzLive.ts — раскомментировать блок ниже и import
+  // выше при восстановлении. Пять колонок в live_snapshots ждут своих данных.
+  //
+  // КАК ВКЛЮЧИТЬ: раскомментировать import вверху файла + блок ниже:
+  // ─────────────────────────────────────────────────────────────────────────────
+  // let stratzMap = new Map<number, StratzLiveDetail | null>();
+  // let stratzEnriched = 0;
+  // try {
+  //   stratzMap = await fetchLiveMatchDetailBatch(changed.map(m => m.match_id!), 4);
+  //   stratzEnriched = [...stratzMap.values()].filter(v => v !== null).length;
+  //   logger.info({ tag: 'stratz-live', requested: changed.length, enriched: stratzEnriched },
+  //     '[LiveWorker] Stratz enrichment');
+  // } catch (err) {
+  //   logger.warn({ tag: 'stratz-live', err: String(err) }, '[LiveWorker] Stratz batch failed');
+  // }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Сохраняем снапшоты только для изменившихся матчей.
   try {
     const rows = changed.map(m => {
-      const sz = stratzMap.get(m.match_id!) ?? null;
       return {
         matchId: m.match_id!,
         gameTimeSec: m.game_time ?? null,
@@ -232,11 +257,13 @@ async function pollOnce(): Promise<void> {
         radiantLead: m.radiant_lead ?? null,
         buildingState: m.building_state ?? null,
         rawPayload: m as unknown as Record<string, unknown>,
-        stratzMatchMeta: sz?.meta ?? null,
-        stratzPlayers: sz?.players ?? null,
-        xpAdvantage: sz?.xpAdvantage ?? null,
-        networthAdvantage: sz?.networthAdvantage ?? null,
-        stratzFetchedAt: sz ? new Date() : null,
+        // DORMANT Stratz fields — остаются null пока upstream не восстановится.
+        // При включении: sz?.meta, sz?.players, sz?.xpAdvantage, sz?.networthAdvantage
+        stratzMatchMeta: null,
+        stratzPlayers: null,
+        xpAdvantage: null,
+        networthAdvantage: null,
+        stratzFetchedAt: null,
       };
     });
     await db.insert(liveSnapshotsTable).values(rows);

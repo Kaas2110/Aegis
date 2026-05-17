@@ -48,6 +48,19 @@ step 5 6 "compute:h2h (365d)" \
 step 6 6 "compute:team-extended (snapshots)" \
   pnpm --filter @workspace/scripts run compute:team-extended
 
+# ── E0 Premium OD steps (добавлены 2026-05-17) ─────────────────────────────
+# Три новых источника данных из OpenDota premium endpoints.
+# Fail-soft: каждый шаг продолжает пайплайн даже при ошибке.
+# Описание фичей: docs/ml-feature-audit.md, план: .local/session_plan.md §E0.
+step 7 9 "ingest:od-scenarios (hero item-timing / lane-role winrates, OD premium)" \
+  pnpm --filter @workspace/scripts run ingest:od-scenarios
+
+step 8 9 "ingest:od-player-peers (pro-player peer winrates, 7-day freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-player-peers
+
+step 9 9 "ingest:od-distributions (hero durations + meta distributions, 7-day freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-distributions
+
 echo
 echo "[$(ts)] ============================="
 echo "[$(ts)] DATA ENRICHMENT PIPELINE DONE"
