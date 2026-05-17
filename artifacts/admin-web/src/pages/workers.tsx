@@ -38,22 +38,59 @@ function fmtMs(ms: number) {
 
 // ─── preset scripts ──────────────────────────────────────────────────────────
 
-const PRESETS: { label: string; script: string; args?: string[]; description: string }[] = [
-  { label: "ingest:matches 3", script: "ingest:matches", args: ["3"], description: "~300 свежих матчей" },
-  { label: "ingest:teams", script: "ingest:teams", description: "Рейтинги команд" },
-  { label: "ingest:drafts", script: "ingest:drafts", description: "Последние пики/баны" },
-  { label: "ingest:players-heroes", script: "ingest:players-heroes", description: "Статы игроков (7d fresh)" },
-  { label: "ingest:hero-stats", script: "ingest:hero-stats", description: "Мета: winrate/pickrate героев" },
-  { label: "ingest:hero-matchups", script: "ingest:hero-matchups", description: "Hero-vs-hero матрица" },
-  { label: "ingest:leagues", script: "ingest:leagues", description: "Названия лиг" },
-  { label: "compute:recent-form", script: "compute:recent-form", description: "Форма команд 30/90d" },
-  { label: "compute:h2h", script: "compute:h2h", description: "Личные встречи 365d" },
-  { label: "compute:player-glicko", script: "compute:player-glicko", description: "Glicko-1 рейтинги" },
-  { label: "compute:team-extended", script: "compute:team-extended", description: "Extended snapshot фичи" },
-  { label: "compute:bo3-series", script: "compute:bo3-series", description: "BO3/BO5 агрегаты" },
-  { label: "parse:request", script: "parse:request", args: ["--", "--limit", "200"], description: "Поставить матчи в очередь OD-парсера" },
-  { label: "ingest:parsed", script: "ingest:parsed", args: ["--", "--limit", "200"], description: "Сохранить разобранные матчи" },
-  { label: "backfill:live-snapshots", script: "backfill:live-snapshots", description: "Backfill live snapshots из OD" },
+type Preset = {
+  label: string;
+  script: string;
+  args?: string[];
+  description: string;
+  phase: string;
+};
+
+const PRESETS: Preset[] = [
+  { phase: "1. Foundation (независимы, можно параллельно)",
+    label: "01 · ingest:teams",         script: "ingest:teams",         description: "Рейтинги команд (~1000)" },
+  { phase: "1. Foundation (независимы, можно параллельно)",
+    label: "02 · ingest:leagues",       script: "ingest:leagues",       description: "Названия лиг" },
+  { phase: "1. Foundation (независимы, можно параллельно)",
+    label: "03 · ingest:hero-stats",    script: "ingest:hero-stats",    description: "Мета: winrate/pickrate героев" },
+  { phase: "1. Foundation (независимы, можно параллельно)",
+    label: "04 · ingest:hero-matchups", script: "ingest:hero-matchups", description: "Hero-vs-hero матрица (Stratz)" },
+  { phase: "1. Foundation (независимы, можно параллельно)",
+    label: "05 · ingest:hero-synergy",  script: "ingest:hero-synergy",  description: "Hero pair synergy" },
+  { phase: "1. Foundation (независимы, можно параллельно)",
+    label: "06 · ingest:matches 3",     script: "ingest:matches", args: ["3"], description: "~300 свежих pro matches (фундамент для всего ниже)" },
+
+  { phase: "2. Per-match (после ingest:matches)",
+    label: "07 · ingest:drafts",        script: "ingest:drafts",        description: "Picks/bans + account_ids" },
+  { phase: "2. Per-match (после ingest:matches)",
+    label: "08 · parse:request",        script: "parse:request",        args: ["--", "--limit", "200"], description: "Поставить матчи в очередь OD-парсера" },
+
+  { phase: "3. Per-player (после ingest:drafts)",
+    label: "09 · ingest:players-heroes",  script: "ingest:players-heroes",  description: "Стати игроков (7d fresh)" },
+  { phase: "3. Per-player (после ingest:drafts)",
+    label: "10 · ingest:od-player-peers", script: "ingest:od-player-peers", description: "Peer winrates pro-игроков (OD premium)" },
+
+  { phase: "4. OD premium hero-level (независимы)",
+    label: "11 · ingest:od-scenarios",     script: "ingest:od-scenarios",     description: "Item-timing / lane-role winrates (OD)" },
+  { phase: "4. OD premium hero-level (независимы)",
+    label: "12 · ingest:od-distributions", script: "ingest:od-distributions", description: "Hero durations + meta distributions (OD)" },
+
+  { phase: "5. Parsed results (через 90+ сек после parse:request)",
+    label: "13 · ingest:parsed", script: "ingest:parsed", args: ["--", "--limit", "200"], description: "Сохранить разобранные матчи (objectives/teamfights)" },
+
+  { phase: "6. Snapshots (опционально)",
+    label: "14 · backfill:live-snapshots", script: "backfill:live-snapshots", description: "Backfill live snapshots из OD" },
+
+  { phase: "7. Compute features (после всех ingest)",
+    label: "15 · compute:recent-form",   script: "compute:recent-form",   description: "Форма команд 30/90d" },
+  { phase: "7. Compute features (после всех ingest)",
+    label: "16 · compute:h2h",           script: "compute:h2h",           description: "Личные встречи 365d" },
+  { phase: "7. Compute features (после всех ingest)",
+    label: "17 · compute:player-glicko", script: "compute:player-glicko", description: "Glicko-1 рейтинги игроков" },
+  { phase: "7. Compute features (после всех ingest)",
+    label: "18 · compute:team-extended", script: "compute:team-extended", description: "Extended snapshot фичи команд" },
+  { phase: "7. Compute features (после всех ingest)",
+    label: "19 · compute:bo3-series",    script: "compute:bo3-series",    description: "BO3/BO5 агрегаты" },
 ];
 
 // ─── Worker Flags (F2) ───────────────────────────────────────────────────────
@@ -339,32 +376,46 @@ function ScriptRunnerPanel() {
             )}
           </div>
 
-          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {PRESETS.map((p) => (
-              <div
-                key={p.script + (p.args ?? []).join()}
-                className={`border p-3 cursor-pointer transition-colors space-y-1 ${selectedPreset?.label === p.label ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-card hover:border-border/80"}`}
-                onClick={() => setSelectedPreset(p.label === selectedPreset?.label ? null : p)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-mono text-xs font-bold truncate">{p.label}</p>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="rounded-none font-mono text-[10px] h-6 px-2 uppercase flex-shrink-0 hover:bg-primary/10 hover:text-primary"
-                    disabled={runJob.isPending}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRun(p.script, p.args ?? [], p.label);
-                    }}
+          {Array.from(
+            PRESETS.reduce((acc, p) => {
+              const arr = acc.get(p.phase) ?? [];
+              arr.push(p);
+              acc.set(p.phase, arr);
+              return acc;
+            }, new Map<string, Preset[]>()),
+          ).map(([phase, items]) => (
+            <div key={phase} className="space-y-2">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-primary border-b border-primary/20 pb-1">
+                {phase}
+              </p>
+              <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {items.map((p) => (
+                  <div
+                    key={p.script + (p.args ?? []).join()}
+                    className={`border p-3 cursor-pointer transition-colors space-y-1 ${selectedPreset?.label === p.label ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-card hover:border-border/80"}`}
+                    onClick={() => setSelectedPreset(p.label === selectedPreset?.label ? null : p)}
                   >
-                    ▶
-                  </Button>
-                </div>
-                <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{p.description}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-mono text-xs font-bold truncate">{p.label}</p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="rounded-none font-mono text-[10px] h-6 px-2 uppercase flex-shrink-0 hover:bg-primary/10 hover:text-primary"
+                        disabled={runJob.isPending}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRun(p.script, p.args ?? [], p.label);
+                        }}
+                      >
+                        ▶
+                      </Button>
+                    </div>
+                    <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{p.description}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
 
           {allowedScripts.length > 0 && (
             <details className="font-mono text-[10px] text-muted-foreground">
