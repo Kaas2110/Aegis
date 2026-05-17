@@ -15,6 +15,8 @@
  *   GET  /api/admin/integrations     — список внешних API-интеграций + статус ключей
  *   PUT  /api/admin/integrations     — задать/очистить override ENV-ключа
  *   POST /api/admin/bookmakers/probe — diagnostic: live-probe букмекерских адаптеров
+ *   GET  /api/admin/coverage          — покрытие БД: drafts/parsed/player stats/team features
+ *   GET  /api/admin/od-usage          — расход OpenDota API (in-memory, $0.0001/req)
  */
 
 import { Router, type IRouter } from 'express';
@@ -32,8 +34,23 @@ import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey
 import { requireAdminSession } from './adminAuth';
 import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, type SourceProbeResult } from './bookmakers';
 import { clearResponseCache } from '../lib/responseCache';
-import { db, modelVersionsTable, matchParseQueueTable, matchParsedTable, proMatchesTable } from '@workspace/db';
+import {
+  db,
+  modelVersionsTable,
+  matchParseQueueTable,
+  matchParsedTable,
+  proMatchesTable,
+  matchDraftsTable,
+  playerHeroStatsTable,
+  playerRatingsTable,
+  teamRecentFormTable,
+  teamExtendedFeaturesTable,
+  teamH2HTable,
+  liveSnapshotsTable,
+  prematchOutcomesTable,
+} from '@workspace/db';
 import { desc, eq, sql } from 'drizzle-orm';
+import { getOdUsageStats } from '../lib/openDotaUrl';
 
 const router: IRouter = Router();
 
@@ -280,6 +297,158 @@ router.get('/models', async (_req, res) => {
     .where(eq(modelVersionsTable.isActive, true))
     .orderBy(desc(modelVersionsTable.createdAt));
   res.json({ models: rows });
+});
+
+/**
+ * GET /api/admin/od-usage
+ * Расход OpenDota API-ключа (in-memory счётчик, сбрасывается при рестарте).
+ * Точный счёт — на api.opendota.com/dashboard.
+ */
+router.get('/od-usage', (_req, res) => {
+  res.json(getOdUsageStats());
+});
+
+/**
+ * GET /api/admin/coverage
+ * Покрытие БД: drafts %, parsed %, player stats, team features, live snapshots.
+ * Используется для принятия решений о переходе к крейсерскому режиму и тренировке моделей.
+ */
+router.get('/coverage', async (_req, res) => {
+  const now = new Date();
+  const epoch30d = Math.floor(now.getTime() / 1000) - 30 * 86400;
+  const epoch60d = Math.floor(now.getTime() / 1000) - 60 * 86400;
+  const epoch90d = Math.floor(now.getTime() / 1000) - 90 * 86400;
+  const epoch180d = Math.floor(now.getTime() / 1000) - 180 * 86400;
+  const epoch365d = Math.floor(now.getTime() / 1000) - 365 * 86400;
+  const ts24hAgo = new Date(now.getTime() - 86400_000);
+
+  const [
+    draftsCoverage,
+    parsedCoverage,
+    playerStats,
+    teamStats,
+    liveStats,
+    outcomeStats,
+  ] = await Promise.all([
+    // Drafts coverage за 30/90/365d
+    db.select({
+      total365d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch365d})::int`,
+      drafted365d: sql<number>`COUNT(DISTINCT ${matchDraftsTable.matchId})
+        FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch365d})::int`,
+      total90d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch90d})::int`,
+      drafted90d: sql<number>`COUNT(DISTINCT ${matchDraftsTable.matchId})
+        FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch90d})::int`,
+      total30d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch30d})::int`,
+      drafted30d: sql<number>`COUNT(DISTINCT ${matchDraftsTable.matchId})
+        FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch30d})::int`,
+    })
+      .from(proMatchesTable)
+      .leftJoin(matchDraftsTable, eq(proMatchesTable.matchId, matchDraftsTable.matchId)),
+
+    // Parsed coverage за 60/180d
+    db.select({
+      total60d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch60d})::int`,
+      parsed60d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch60d} AND ${proMatchesTable.isParsed} = true)::int`,
+      total180d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch180d})::int`,
+      parsed180d: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.startTime} >= ${epoch180d} AND ${proMatchesTable.isParsed} = true)::int`,
+      parsedTotal: sql<number>`COUNT(*) FILTER (WHERE ${proMatchesTable.isParsed} = true)::int`,
+    })
+      .from(proMatchesTable),
+
+    // Player stats
+    db.select({
+      playerHeroRows: sql<number>`(SELECT COUNT(*)::int FROM ${playerHeroStatsTable})`,
+      playerRatingRows: sql<number>`(SELECT COUNT(*)::int FROM ${playerRatingsTable})`,
+    })
+      .from(playerHeroStatsTable)
+      .limit(1),
+
+    // Team features
+    db.select({
+      recentFormRows: sql<number>`(SELECT COUNT(*)::int FROM ${teamRecentFormTable})`,
+      recentFormLastAt: sql<Date | null>`(SELECT MAX(computed_at) FROM ${teamRecentFormTable})`,
+      extendedRows: sql<number>`(SELECT COUNT(*)::int FROM ${teamExtendedFeaturesTable})`,
+      extendedLastAt: sql<Date | null>`(SELECT MAX(computed_at) FROM ${teamExtendedFeaturesTable})`,
+      h2hRows: sql<number>`(SELECT COUNT(*)::int FROM ${teamH2HTable})`,
+    })
+      .from(teamRecentFormTable)
+      .limit(1),
+
+    // Live snapshots last 24h
+    db.select({
+      snapshotsLast24h: sql<number>`COUNT(*)::int`,
+      withStratz: sql<number>`COUNT(*) FILTER (WHERE ${liveSnapshotsTable.stratzFetchedAt} IS NOT NULL)::int`,
+      lastCapturedAt: sql<Date | null>`MAX(${liveSnapshotsTable.capturedAt})`,
+    })
+      .from(liveSnapshotsTable)
+      .where(sql`${liveSnapshotsTable.capturedAt} >= ${ts24hAgo}`),
+
+    // Prematch outcomes (для разблокировки live-train)
+    db.select({
+      total: sql<number>`COUNT(*)::int`,
+      last30d: sql<number>`COUNT(*) FILTER (WHERE ${prematchOutcomesTable.predictedAt} >= ${ts24hAgo})::int`,
+    })
+      .from(prematchOutcomesTable),
+  ]);
+
+  const dc = draftsCoverage[0] ?? {};
+  const pc = parsedCoverage[0] ?? {};
+  const ps = playerStats[0] ?? {};
+  const ts = teamStats[0] ?? {};
+  const ls = liveStats[0] ?? {};
+  const os = outcomeStats[0] ?? {};
+
+  const pct = (a: number, b: number) =>
+    b > 0 ? Math.round((a / b) * 1000) / 10 : 0;
+
+  res.json({
+    drafts: {
+      covered30d: dc.drafted30d,
+      total30d: dc.total30d,
+      pct30d: pct(dc.drafted30d, dc.total30d),
+      covered90d: dc.drafted90d,
+      total90d: dc.total90d,
+      pct90d: pct(dc.drafted90d, dc.total90d),
+      covered365d: dc.drafted365d,
+      total365d: dc.total365d,
+      pct365d: pct(dc.drafted365d, dc.total365d),
+    },
+    parsed: {
+      parsed60d: pc.parsed60d,
+      total60d: pc.total60d,
+      pct60d: pct(pc.parsed60d, pc.total60d),
+      parsed180d: pc.parsed180d,
+      total180d: pc.total180d,
+      pct180d: pct(pc.parsed180d, pc.total180d),
+      parsedTotal: pc.parsedTotal,
+      cruiseReadyThreshold: 80,
+      cruiseReady60d: pct(pc.parsed60d, pc.total60d) >= 80,
+    },
+    playerStats: {
+      playerHeroRows: ps.playerHeroRows ?? 0,
+      playerRatingRows: ps.playerRatingRows ?? 0,
+    },
+    teamFeatures: {
+      recentFormRows: ts.recentFormRows ?? 0,
+      recentFormLastAt: ts.recentFormLastAt ?? null,
+      extendedRows: ts.extendedRows ?? 0,
+      extendedLastAt: ts.extendedLastAt ?? null,
+      h2hRows: ts.h2hRows ?? 0,
+    },
+    liveSnapshots: {
+      last24h: ls.snapshotsLast24h ?? 0,
+      withStratzEnrichment: ls.withStratz ?? 0,
+      stratzPct: pct(ls.withStratz ?? 0, ls.snapshotsLast24h ?? 0),
+      lastCapturedAt: ls.lastCapturedAt ?? null,
+    },
+    prematchOutcomes: {
+      total: os.total ?? 0,
+      last30d: os.last30d ?? 0,
+      liveTrainReadyThreshold: 200,
+      liveTrainReady: (os.total ?? 0) >= 200,
+    },
+    generatedAt: now.toISOString(),
+  });
 });
 
 // T0.7 visibility — статус очереди replay-парсинга.
