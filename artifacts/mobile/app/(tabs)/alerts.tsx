@@ -30,6 +30,10 @@ const MARKET_OPTIONS: Array<{ id: MarketType; label: string }> = [
   { id: 'correct_score',  label: 'Точный счёт' },
 ];
 const CONFIDENCE_OPTIONS = [60, 65, 70, 75, 80, 85, 90] as const;
+// M3 (Phase 2): опциональные доп-фильтры для правил.
+// «—» = не применять фильтр (правило сработает по minConfidence).
+const MIN_EDGE_OPTIONS = [undefined, 3, 5, 8, 12, 20] as const;
+const MIN_ODDS_OPTIONS = [undefined, 1.5, 1.8, 2.0, 2.5, 3.0] as const;
 
 export default function AlertsScreen() {
   const colors = useColors();
@@ -45,6 +49,8 @@ export default function AlertsScreen() {
   const [newMode, setNewMode] = useState<'live' | 'prematch' | 'any'>('any');
   const [newMarketTypes, setNewMarketTypes] = useState<MarketType[]>([]);
   const [newOnlyFavs, setNewOnlyFavs] = useState(false);
+  const [newMinEdge, setNewMinEdge] = useState<number | undefined>(undefined);
+  const [newMinOdds, setNewMinOdds] = useState<number | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'triggered' | 'rules'>('triggered');
 
   const [alertsEnabled, setAlertsEnabled] = useState(true);
@@ -124,6 +130,8 @@ export default function AlertsScreen() {
       id: generateId(),
       label: newLabel.trim(),
       minConfidence: newMinConf,
+      ...(typeof newMinEdge === 'number' ? { minEdge: newMinEdge } : {}),
+      ...(typeof newMinOdds === 'number' ? { minOdds: newMinOdds } : {}),
       marketTypes: newMarketTypes,
       onlyFavoriteTeams: newOnlyFavs,
       mode: newMode,
@@ -136,6 +144,8 @@ export default function AlertsScreen() {
     setNewLabel('');
     setNewMarketTypes([]);
     setNewOnlyFavs(false);
+    setNewMinEdge(undefined);
+    setNewMinOdds(undefined);
   }
 
   async function handleDelete(id: string) {
@@ -335,7 +345,10 @@ export default function AlertsScreen() {
                 </TouchableOpacity>
               </View>
               <Text style={[styles.ruleMeta, { color: colors.mutedForeground }]}>
-                Уверенность ≥ {item.minConfidence}% · {item.mode === 'any' ? 'все матчи' : item.mode === 'live' ? 'только лайв' : 'только до матча'}
+                Уверенность ≥ {item.minConfidence}%
+                {typeof item.minEdge === 'number' ? ` · перевес ≥ +${item.minEdge}%` : ''}
+                {typeof item.minOdds === 'number' ? ` · коэф ≥ ${item.minOdds.toFixed(1)}` : ''}
+                {' · '}{item.mode === 'any' ? 'все матчи' : item.mode === 'live' ? 'только лайв' : 'только до матча'}
               </Text>
               <View style={styles.ruleTags}>
                 {item.marketTypes.length === 0 ? (
@@ -393,6 +406,34 @@ export default function AlertsScreen() {
           <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
             {CONFIDENCE_OPTIONS.map(v => (
               <ChipBtn key={v} label={`${v}%`} active={newMinConf === v} onPress={() => setNewMinConf(v)} colors={colors} small />
+            ))}
+          </View>
+
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Мин. перевес модели vs БК (опц.)</Text>
+          <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+            {MIN_EDGE_OPTIONS.map(v => (
+              <ChipBtn
+                key={String(v)}
+                label={v === undefined ? '—' : `+${v}%`}
+                active={newMinEdge === v}
+                onPress={() => setNewMinEdge(v)}
+                colors={colors}
+                small
+              />
+            ))}
+          </View>
+
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Мин. коэф. букмекера (опц.)</Text>
+          <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+            {MIN_ODDS_OPTIONS.map(v => (
+              <ChipBtn
+                key={String(v)}
+                label={v === undefined ? '—' : `≥${v.toFixed(v < 2 ? 1 : 1)}`}
+                active={newMinOdds === v}
+                onPress={() => setNewMinOdds(v)}
+                colors={colors}
+                small
+              />
             ))}
           </View>
 

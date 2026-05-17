@@ -3,6 +3,29 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-17 — Phase 2 Mobile UI: M3 (alerts +minEdge/minOdds) + M5 (getFieldState)
+
+- **M3 (Phase 2)**: вернул `minEdge` / `minOdds` в правила алертов как опциональные
+  фильтры. `types/index.ts::Alert` получил `minEdge?: number` (порог перевеса в %)
+  и `minOdds?: number` (минимальный bookmaker odds). `alerts.tsx` модал — две
+  новых строки чипов (`MIN_EDGE_OPTIONS` 3/5/8/12/20% + `MIN_ODDS_OPTIONS`
+  1.5/1.8/2.0/2.5/3.0), значение `undefined` = «—» = фильтр не применять.
+  Карточка правила отображает их в ruleMeta (`перевес ≥ +X% · коэф ≥ Y`).
+  `NotificationService.checkAndNotify` после проверки `minConfidence` дополнительно
+  пропускает срабатывание если у side есть реальные odds (>0) и `sideOdds < minOdds`
+  или `(winnerProb × sideOdds − 1) × 100 < minEdge`. Если odds нет (Bovada не
+  покрыла рынок) — фильтр пропускается, правило работает по уверенности.
+- **M5 (Phase 2)**: `MatchCard` теперь использует существующий `lib/availability.ts::getFieldState`
+  для свежести live-снапшота (`snap.snapshotAge` секунды). При `stale-hard` (>3 мин)
+  счёт `K/K + game_time` скрывается, на его месте — плашка «обновляется…» (warning
+  цвет). При `stale-soft` (90s-3min) — рядом с game time появляется значок ⟳.
+  Между картами всё ещё показываем `team1MapsWon · team2MapsWon` (отдельный ветка
+  `isBetweenMaps`). Помогает избежать «застывших» счётов при потере апстрима.
+- **M1/M2/M4/M6**: было уже сделано ранее (`marketsMap` + `BookmakerDropdown` в
+  header через `filters.bookmaker`, match/[id].tsx использует тот же global
+  picker, backtest tab раскрыт, прогрессивный скоринг через
+  `predictionStatus pending/ready/unavailable` уже в `MatchCard`).
+
 ## 2026-05-17 — A2 daily-ingest button (фасад над shell-пайплайнами)
 
 - **A2 (Фаза 5)**: admin job runner расширен — `POST /api/admin/jobs/run` теперь

@@ -158,6 +158,25 @@ class NotificationService {
         for (const m of matchedRules) {
           if (conf < m.minConf || winnerProb < m.minConf) continue;
 
+          // M3 (Phase 2): опциональные фильтры minEdge / minOdds.
+          // Применяются ТОЛЬКО если у рынка реальные bookmaker odds (>0) —
+          // иначе пропускаем фильтр, чтобы правило сработало по minConfidence.
+          const rule = m.rule;
+          if (rule) {
+            const sideOdds = winnerSide === 'team1'
+              ? mkt.bestOdds.oddsTeam1
+              : mkt.bestOdds.oddsTeam2;
+            const hasRealOdds = sideOdds > 0;
+            if (hasRealOdds) {
+              if (typeof rule.minOdds === 'number' && sideOdds < rule.minOdds) continue;
+              if (typeof rule.minEdge === 'number') {
+                // edge в %: (modelProb_side × odds_side) − 1
+                const edgePct = (winnerProb * sideOdds - 1) * 100;
+                if (edgePct < rule.minEdge) continue;
+              }
+            }
+          }
+
           const ruleSuffix = m.rule?.id ?? 'default';
           const key = `${em.match.id}::${mkt.type}::${winnerSide}::${ruleSuffix}`;
           const lastSent = this.sentAlerts.get(key) ?? 0;

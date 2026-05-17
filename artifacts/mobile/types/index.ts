@@ -218,11 +218,21 @@ export interface Alert {
    */
   marketTypes: MarketType[];
   /**
-   * Минимальная уверенность модели в %. Единственный численный фильтр —
-   * minOdds/minEdge убраны до подключения платных букмекерских кэфов
-   * (см. replit.md → Bookmakers roadmap).
+   * Минимальная уверенность модели в %.
    */
   minConfidence: number;
+  /**
+   * Минимальный edge (модель vs букмекер) в %. Опционально.
+   * Применяется только если у matched market есть bookmaker odds — иначе фильтр
+   * пропускается (правило срабатывает по minConfidence).
+   * См. Phase 2 M3 (мастер-план): возвращён после восстановления Bovada wiring.
+   */
+  minEdge?: number;
+  /**
+   * Минимальный bookmaker odds (≥). Опционально. Применяется к bestOdds.oddsTeam{1,2}
+   * выбранной стороны. Пропускается если нет реальных кэфов.
+   */
+  minOdds?: number;
   /**
    * Только матчи любимых команд (favoriteTeamIds из настроек).
    */

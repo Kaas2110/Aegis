@@ -6,6 +6,7 @@ import type { Match, Market } from '@/types';
 import { OddsTilesPair } from './OddsTile';
 import { OrnateCorners } from './OrnateFrame';
 import { HexBadge } from './HexBadge';
+import { getFieldState, shouldShowStalePlaceholder, needsRefreshIndicator } from '@/lib/availability';
 
 interface Props {
   match: Match;
@@ -44,6 +45,18 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
   const isFinished = match.status === 'finished';
   const snap = match.liveSnapshot;
   const hasPositiveEV = bestMarket && bestMarket.prediction.ev > 0.08;
+
+  // M5 (Phase 2): свежесть live-снапшота через единый getFieldState (7 состояний).
+  // snap.snapshotAge — секунды с момента сервера. Между картами все live-поля
+  // скрываются (отдельный режим UI «ПЕРЕРЫВ»).
+  const snapState = snap
+    ? getFieldState({
+        ageSeconds: snap.snapshotAge,
+        betweenMaps: isBetweenMaps,
+      })
+    : null;
+  const snapIsStaleHard = snapState ? shouldShowStalePlaceholder(snapState) : false;
+  const snapNeedsRefresh = snapState ? needsRefreshIndicator(snapState) : false;
 
   const timeUntil = isPrematch
     ? (() => {
@@ -136,16 +149,24 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
           {/* Center score */}
           <View style={styles.centerBlock}>
             {isLive && snap ? (
-              <>
-                <Text style={[styles.liveScore, { color: colors.foreground }]}>
-                  {snap.radiantKills}
-                  <Text style={{ color: colors.mutedForeground }}> · </Text>
-                  {snap.direKills}
+              snapIsStaleHard ? (
+                /* M5: live-данные старше 3 мин → не показываем счёт (вводит в
+                   заблуждение), вместо этого — плашка «обновляется». */
+                <Text style={[styles.gameTime, { color: colors.warning, textAlign: 'center' }]}>
+                  обновляется…
                 </Text>
-                <Text style={[styles.gameTime, { color: colors.mutedForeground }]}>
-                  {formatGameTime(snap.gameTimeSeconds)}
-                </Text>
-              </>
+              ) : (
+                <>
+                  <Text style={[styles.liveScore, { color: colors.foreground }]}>
+                    {snap.radiantKills}
+                    <Text style={{ color: colors.mutedForeground }}> · </Text>
+                    {snap.direKills}
+                  </Text>
+                  <Text style={[styles.gameTime, { color: snapNeedsRefresh ? colors.warning : colors.mutedForeground }]}>
+                    {formatGameTime(snap.gameTimeSeconds)}{snapNeedsRefresh ? ' ⟳' : ''}
+                  </Text>
+                </>
+              )
             ) : isBetweenMaps ? (
               <>
                 <Text style={[styles.liveScore, { color: colors.foreground }]}>
