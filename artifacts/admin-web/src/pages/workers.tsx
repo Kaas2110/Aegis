@@ -47,6 +47,15 @@ type Preset = {
 };
 
 const PRESETS: Preset[] = [
+  // ── Replay Parse (отдельная группа, запускается вручную при наполнении БД) ──
+  { phase: "0. Replay Parse — один цикл (parse:request → 90s → ingest:parsed)",
+    label: "00 · parse:cycle",   script: "parse:cycle",   description: "Ставит 500 матчей в очередь OD, ждёт 90s, сохраняет разобранные. ~6 мин. Запускать повторно пока match_parsed растёт." },
+  { phase: "0. Replay Parse — один цикл (parse:request → 90s → ingest:parsed)",
+    label: "00а · parse:request", script: "parse:request", args: ["--", "--limit", "500"], description: "Только шаг 1: поставить до 500 матчей в очередь OD-парсера" },
+  { phase: "0. Replay Parse — один цикл (parse:request → 90s → ingest:parsed)",
+    label: "00б · ingest:parsed", script: "ingest:parsed", args: ["--", "--limit", "500"], description: "Только шаг 2: сохранить до 500 разобранных матчей (запускать через 90+ сек после 00а)" },
+
+  // ── Полный pipeline наполнения БД (порядок строгий) ──
   { phase: "1. Фундамент (независимы, можно параллельно)",
     label: "01 · ingest:teams",         script: "ingest:teams",         description: "Рейтинги команд (~1000)" },
   { phase: "1. Фундамент (независимы, можно параллельно)",
@@ -62,8 +71,6 @@ const PRESETS: Preset[] = [
 
   { phase: "2. Данные матчей (после 06 · ingest:matches)",
     label: "07 · ingest:drafts",        script: "ingest:drafts",        description: "Пики/баны + account_id игроков" },
-  { phase: "2. Данные матчей (после 06 · ingest:matches)",
-    label: "08 · parse:request",        script: "parse:request",        args: ["--", "--limit", "200"], description: "Поставить матчи в очередь парсера OD" },
 
   { phase: "3. Данные игроков (после 07 · ingest:drafts)",
     label: "09 · ingest:players-heroes",  script: "ingest:players-heroes",  description: "Статистика игроков по героям (свежесть 7d)" },
@@ -75,21 +82,18 @@ const PRESETS: Preset[] = [
   { phase: "4. OD Премиум — фичи героев (независимы)",
     label: "12 · ingest:od-distributions", script: "ingest:od-distributions", description: "Длительности матчей + мета-распределения (OD)" },
 
-  { phase: "5. Разобранные матчи (через 90+ сек после 08 · parse:request)",
-    label: "13 · ingest:parsed", script: "ingest:parsed", args: ["--", "--limit", "200"], description: "Сохранить разобранные матчи (цели/командные бои)" },
-
-  { phase: "6. Снапшоты (опционально)",
+  { phase: "5. Снапшоты (опционально)",
     label: "14 · backfill:live-snapshots", script: "backfill:live-snapshots", description: "Восстановить live-снапшоты из OD" },
 
-  { phase: "7. Вычисление признаков (после всех ingest)",
+  { phase: "6. Вычисление признаков (после всех ingest)",
     label: "15 · compute:recent-form",   script: "compute:recent-form",   description: "Форма команд за 30/90 дней" },
-  { phase: "7. Вычисление признаков (после всех ingest)",
+  { phase: "6. Вычисление признаков (после всех ingest)",
     label: "16 · compute:h2h",           script: "compute:h2h",           description: "Личные встречи команд за 365 дней" },
-  { phase: "7. Вычисление признаков (после всех ingest)",
+  { phase: "6. Вычисление признаков (после всех ingest)",
     label: "17 · compute:player-glicko", script: "compute:player-glicko", description: "Рейтинги игроков по Glicko-1" },
-  { phase: "7. Вычисление признаков (после всех ingest)",
+  { phase: "6. Вычисление признаков (после всех ingest)",
     label: "18 · compute:team-extended", script: "compute:team-extended", description: "Расширенный снапшот признаков команды" },
-  { phase: "7. Вычисление признаков (после всех ingest)",
+  { phase: "6. Вычисление признаков (после всех ingest)",
     label: "19 · compute:bo3-series",    script: "compute:bo3-series",    description: "Агрегаты серий BO3/BO5" },
 ];
 

@@ -78,7 +78,7 @@ const ALLOWED_RUN_SCRIPTS = new Set([
   'ingest:od-player-peers', 'ingest:od-distributions',
   'compute:recent-form', 'compute:h2h', 'compute:player-glicko',
   'compute:team-extended', 'compute:bo3-series',
-  'parse:request', 'ingest:parsed',
+  'parse:request', 'ingest:parsed', 'parse:cycle',
   'backfill:live-snapshots',
 ]);
 

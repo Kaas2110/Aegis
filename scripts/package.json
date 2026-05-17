@@ -26,6 +26,7 @@
     "backfill:live-snapshots": "tsx ./src/backfill-live-snapshots.ts",
     "parse:request": "tsx ./src/parse-request.ts",
     "ingest:parsed": "tsx ./src/ingest-parsed.ts",
+    "parse:cycle": "tsx ./src/parse-request.ts -- --limit 500 && echo '[parse:cycle] Ждём 90s пока OD обработает запросы...' && sleep 90 && tsx ./src/ingest-parsed.ts -- --limit 500",
     "import:snapshot": "tsx ./src/import-snapshot.ts",
     "test:stratz": "tsx ./src/test-stratz.ts",
     "ingest:od-scenarios": "tsx ./src/ingest-od-scenarios.ts",
