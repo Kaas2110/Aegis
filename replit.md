@@ -195,15 +195,14 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 > infra) — `docs/changelog.md`. Подробный список баг-фиксов Phase 9 (F1-F9) —
 > `.local/session_plan.md`. Здесь только текущее активное.
 
-- **E1 OD-расширение (2026-05-18):**
-  - Schema (8 таблиц) + ingest скрипты + admin триггеры + автозаливка через
-    workflow Data Enrichment — DONE. Карта датасетов моделей и список фичей —
-    в `scripts/src/lib/e1-features.ts` (header + per-bucket секции).
-  - Stage 1: библиотека `scripts/src/lib/e1-features.ts` (7 loaders + 6 builders,
-    36 новых фичей через 6 бакетов) — DONE 2026-05-18. Pure, ничем не вызвана.
-  - **Stage 2 PENDING:** mirror в `artifacts/api-server/src/lib/e1-features.ts`,
-    bump `FEATURE_VIEW`, wire в 4 trainer'а + 3 inference класса. Ретрейн —
-    ТОЛЬКО после явного «да» И полной первичной заливки таблиц.
+- **E1 OD-расширение — DONE 2026-05-18.** Schema (8 таблиц) + ingest + Data
+  Enrichment workflow + `scripts/src/lib/e1-features.ts` (mirror в api-server) +
+  prematch v4 cascade (v4→v3→v2→v1). См. `docs/changelog.md`.
+- **3-tier markets/live `_with_draft` — DONE 2026-05-18.** `MarketLgbm`
+  пытается `_with_draft` если есть валидные 5+5 picks + оба `team_id`, иначе
+  pure. Активны 5 prematch (`first_blood/total_kills/total_duration[/_q25/_q75]_with_draft`)
+  + 2 live (`live_total_kills_with_draft`, `live_total_duration_with_draft`).
+  Trainer/inference team-фичи синхронизированы (elo `/200`, exp `log(g+1)−log(g+1)`).
 - **Mobile/UI задачи без ML-зависимости:**
   - Backtest UI скрыт (`href: null` в `app/(tabs)/_layout.tsx`) — раскроем когда
     `prematch_outcomes` накопит ≥200 строк и UX будет готов.

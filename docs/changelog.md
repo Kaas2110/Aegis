@@ -3,6 +3,43 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-18 — 3-tier markets / live `_with_draft`
+
+`MarketLgbm` (`predictMarketsFor`, `predictLiveTotalsFor`) теперь цепляет
+`_with_draft` вариант когда есть валидные 5+5 picks + оба `team_id`, иначе
+откатывается на pure tier (per-bucket кеш с draft fingerprint, 15-минутный
+E1Maps TTL с inflight-дедупом).
+
+Активированы и прошли typecheck:
+
+| Семья | Pure (fdim) | With-draft (fdim) | Test метрика |
+|---|---|---|---|
+| `first_blood` | 5 (acc 55.2%) | 7 (acc 55.8%) | +0.6 pp |
+| `total_kills` | 5 (r²=0.095) | 7 (r²=0.098) | ≈ |
+| `total_duration` | 5 (r²=0.139) | 9 (r²=0.154) | +0.015 |
+| `total_duration_q25` | 5 (r²=-0.48) | 9 (r²=-0.38) | +0.10 |
+| `total_duration_q75` | 5 (r²=0.103) | 9 (r²=0.067) | -0.04 |
+| `live_total_kills` | 7 (r²=0.084) | 13 (r²=0.057) | -0.03 |
+| `live_total_duration` | 7 (r²=0.198) | 13 (r²=-0.32) | -0.52 ⚠ |
+
+⚠ `live_total_duration_with_draft` пока хуже pure на 73-sample test split —
+датасет с раскрытым драфтом на live тонкий (n=580/76/73). Cascade всё равно
+оставлен включённым: на проде с большим N E1-фичи (`elo_diff`, `winrate_diff`,
+`hero_late_item_pop_share_total`) уже доминируют в IMPORTANCE, что говорит о
+сигнале. Переоценить после ≥2×N data в live.
+
+`LiveWorker` передаёт `extractDraftFromLive` + `team_id_radiant/dire` в
+`predictLiveTotalsFor`. `analytics.ts::totals-ladder` грузит `match_drafts`
+по `matchId` и передаёт `draftHint` в `predictMarketsFor`; `/explain` без
+`matchId` остаётся на pure cascade.
+
+**Архитект-фиксы:** (a) `train-live-totals.ts::buildTeamFeatures4`
+синхронизирован с `MarketLgbm.buildTeamFeatures` (elo `/200`, exp
+`log(rG+1)−log(dG+1)`); раньше тренер шёл на `/100` и `/2` — модель
+училась бы на одной шкале, инференс на другой. (b) В `train-market-models.ts`
+добавлен per-family runtime-ассерт (`featureNames.length` + `samples[0].features.length`
+vs expected dim) — регрессии в feature-builders падают сразу.
+
 ## 2026-05-18 — E1 OD-расширение Stage 1 + trim replit.md round 2
 
 **E1 Stage 1 — feature library `scripts/src/lib/e1-features.ts`** (~450 строк):
