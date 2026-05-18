@@ -824,6 +824,30 @@ router.get('/totals-ladder', async (req, res) => {
   }
 
   if (!lgbLogN) {
+    // F9 (Phase 9): диагностический reason. predictMarketsFor возвращает null
+    // в нескольких разных случаях — раньше всем выдавали один общий текст,
+    // что мешало понять что чинить. Теперь раскрываем причину.
+    const { teamRatingDiag } = await import('../services/MarketLgbm');
+    const diag = teamRatingDiag(radiantId, direId);
+    const marketName = type === 'kills' ? 'total_kills' : 'total_duration';
+    let unavailableReason: string;
+    if (diag.modelsLoaded === 0) {
+      unavailableReason = `LightGBM модели ещё не загружены (api-server только стартовал)`;
+    } else if (diag.radiantRating == null && diag.direRating == null) {
+      unavailableReason = `Обе команды не найдены в нашей базе (нужен ingest:teams)`;
+    } else if (diag.radiantRating == null) {
+      unavailableReason = `Команда radiant (id=${radiantId}) не найдена в нашей базе`;
+    } else if (diag.direRating == null) {
+      unavailableReason = `Команда dire (id=${direId}) не найдена в нашей базе`;
+    } else if (diag.radiantGames < 3 || diag.direGames < 3) {
+      unavailableReason = `Мало истории команд: radiant=${diag.radiantGames}, dire=${diag.direGames} игр (нужно ≥3)`;
+    } else {
+      unavailableReason = `LightGBM ${marketName} модель не отвечает (circuit breaker или нет _with_draft/pure для этой пары)`;
+    }
+    req.log.info(
+      { tag: 'totals-ladder', radiantId, direId, type, diag, unavailableReason },
+      'totals-ladder unavailable',
+    );
     res.json({
       type,
       expectedValue: Number(center.toFixed(2)),
@@ -834,9 +858,7 @@ router.get('/totals-ladder', async (req, res) => {
       confidence: 0,
       modelVersion: 'unavailable',
       unavailable: true,
-      unavailableReason: type === 'kills'
-        ? 'LightGBM total_kills модель не обучена для этой пары команд'
-        : 'LightGBM total_duration модель не обучена для этой пары команд',
+      unavailableReason,
       generatedAt: new Date().toISOString(),
     });
     return;

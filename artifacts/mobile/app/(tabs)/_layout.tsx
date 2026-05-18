@@ -89,11 +89,12 @@ function ClassicTabLayout({ isAdmin }: { isAdmin: boolean }) {
             ),
         }}
       />
-      {/* M4 DONE 2026-05-17: backtest вкладка раскрыта (prematch_outcomes ≥ 7391,
-          порог ≥200 перевыполнен в 37 раз; endpoint /api/analytics/backtest готов). */}
+      {/* F3 (Phase 9, 2026-05-18): hidden — endpoint живой, UI ещё не готов.
+          Раскроем когда UX будет согласован. M4-историю смотреть в changelog. */}
       <Tabs.Screen
         name="backtest"
         options={{
+          href: null,
           title: 'Бэктест',
         }}
       />

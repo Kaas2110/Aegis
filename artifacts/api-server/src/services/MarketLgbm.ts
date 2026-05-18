@@ -310,7 +310,11 @@ function buildTeamFeatures(rId: number, dId: number): number[] | null {
   if (!r || !d) return null;
   const rG = r.wins + r.losses;
   const dG = d.wins + d.losses;
-  if (rG < 5 || dG < 5) return null;
+  // F9 (Phase 9): порог снижен с 5 до 3 игр. На <3 играх winrate-фича чистый шум,
+  // но elo-разница и сама шкала log(g+1) остаются информативными. Это вытаскивает
+  // tier-3 пары из вечного "unavailable" в UI без существенной потери качества
+  // (модель обучалась на >=5 игр, но фичи graceful degrade).
+  if (rG < 3 || dG < 3) return null;
   return [
     1,
     (r.rating - d.rating) / 200,
@@ -318,6 +322,29 @@ function buildTeamFeatures(rId: number, dId: number): number[] | null {
     Math.log(rG + 1) - Math.log(dG + 1),
     rG >= 50 && dG >= 50 ? 1 : 0,
   ];
+}
+
+/**
+ * F9: диагностика, почему `predictMarketsFor` мог вернуть null —
+ * для построения честного `unavailableReason` в API. Не вызывает refreshTeams,
+ * читает из in-memory кеша (totals-ladder уже вызвал predictMarketsFor → кеш свежий).
+ */
+export function teamRatingDiag(rId: number, dId: number): {
+  radiantRating: number | null;
+  direRating: number | null;
+  radiantGames: number;
+  direGames: number;
+  modelsLoaded: number;
+} {
+  const r = teamRatings.get(rId);
+  const d = teamRatings.get(dId);
+  return {
+    radiantRating: r?.rating ?? null,
+    direRating: d?.rating ?? null,
+    radiantGames: r ? r.wins + r.losses : 0,
+    direGames: d ? d.wins + d.losses : 0,
+    modelsLoaded: cached.size,
+  };
 }
 
 async function callMlPredict(blobB64: string, features: number[]): Promise<PredictResp | null> {

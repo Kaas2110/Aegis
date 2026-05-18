@@ -114,6 +114,42 @@ export default function HomeScreen() {
   const allLive = enrichedLive.map(e => e.match);
   const allPrematch = enrichedPrematch.map(e => e.match);
 
+  // F1 (Phase 9): аккордеон «Завершённые матчи» — collapsed по умолчанию.
+  const [finishedExpanded, setFinishedExpanded] = useState(false);
+
+  // F2 (Phase 9): карта `matchId -> {hasSelectedBk, maxOdds}` для фильтра minOdds.
+  // ВАЖНО: maxOdds считается ТОЛЬКО для выбранного букмекера (filters.bookmaker),
+  // а не для произвольного — иначе фильтр будет отсеивать по «чужим» котировкам.
+  // hasSelectedBk=false → фильтр становится no-op (нет данных = не отсеиваем).
+  // Для filters.bookmaker==='none' карта не нужна (фильтр не применяется).
+  const oddsMap = useMemo(() => {
+    const m = new Map<string, { hasSelectedBk: boolean; maxOdds: number }>();
+    if (filters.bookmaker === 'none') return m;
+    for (const em of [...enrichedLive, ...enrichedPrematch]) {
+      // Ищем выбранного букмекера среди доступных по матчу. Если не найден —
+      // селектед-кэфов нет, фильтр будет no-op.
+      const selected = em.availableBookmakers.find(b => b.bookmakerId === filters.bookmaker);
+      if (!selected) {
+        m.set(em.match.id, { hasSelectedBk: false, maxOdds: 0 });
+        continue;
+      }
+      // Пересобираем маркеты под выбранного букмекера (как делает экран матча),
+      // чтобы bestOdds на всех маркетах принадлежали именно ему.
+      const rebuilt = rebuildMarketsForBookmaker(em, filters.bookmaker);
+      let maxOdds = 0;
+      for (const mk of rebuilt) {
+        const o1 = mk.bestOdds?.oddsTeam1 ?? 0;
+        const o2 = mk.bestOdds?.oddsTeam2 ?? 0;
+        if (o1 > maxOdds) maxOdds = o1;
+        if (o2 > maxOdds) maxOdds = o2;
+      }
+      // Если у выбранного букмекера на матче нет ни одной валидной котировки
+      // (>0), трактуем как «данных нет» → no-op.
+      m.set(em.match.id, { hasSelectedBk: maxOdds > 0, maxOdds });
+    }
+    return m;
+  }, [enrichedLive, enrichedPrematch, filters.bookmaker]);
+
   function applyFilters(arr: Match[]): Match[] {
     return arr.filter(m => {
       if (filters.mode !== 'all') {
@@ -123,11 +159,25 @@ export default function HomeScreen() {
         const effectiveStatus = m.status === 'between_maps' ? 'live' : m.status;
         if (effectiveStatus !== filters.mode) return false;
       }
+      // F2: minOdds — применяется только когда выбран реальный букмекер и порог > 1.0,
+      // и ТОЛЬКО против котировок выбранного букмекера (см. oddsMap выше).
+      // Если у выбранного бука на этом матче нет котировок (hasSelectedBk=false) —
+      // фильтр no-op (иначе лента будет пустой).
+      if (filters.bookmaker !== 'none' && filters.minOdds > 1.0) {
+        const info = oddsMap.get(m.id);
+        if (info && info.hasSelectedBk && info.maxOdds < filters.minOdds) return false;
+      }
       return true;
     });
   }
 
-  const liveMatches = applyFilters(allLive);
+  // F1 (Phase 9): finished отделяем ДО applyFilters, чтобы аккордеон
+  // показывался независимо от filters.mode (иначе при mode='live'/'prematch'
+  // завершённые матчи вообще исчезали бы из ленты). minOdds к finished тоже
+  // не применяем — там нет активных рынков для ставки.
+  const finishedMatches = allLive.filter(m => m.status === 'finished');
+  const activeLive = allLive.filter(m => m.status !== 'finished');
+  const liveMatches = applyFilters(activeLive);
   const prematchMatches = applyFilters(allPrematch);
 
   /**
@@ -192,7 +242,8 @@ export default function HomeScreen() {
   type SectionItem =
     | { type: 'source_bar'; id: string }
     | { type: 'header'; label: string; id: string; isLive?: boolean; subtitle?: string }
-    | { type: 'match'; match: Match; id: string };
+    | { type: 'match'; match: Match; id: string }
+    | { type: 'finished_accordion'; id: string; count: number; expanded: boolean };
 
   // Группировка по турниру. Внутри групп — сортировка по startTime asc.
   // Порядок групп: сначала LIVE-секция (одна большая), затем PREMATCH секции по
@@ -233,6 +284,14 @@ export default function HomeScreen() {
 
   const sections: SectionItem[] = [
     { type: 'source_bar', id: 'source_bar' },
+    // F1 (Phase 9): завершённые матчи — collapsed accordion сверху ленты.
+    // Внутри — те же MatchCard, но без плиток прогнозов (см. MatchCard.isFinished).
+    ...(finishedMatches.length > 0
+      ? [{ type: 'finished_accordion' as const, id: 'finished_accordion', count: finishedMatches.length, expanded: finishedExpanded }]
+      : []),
+    ...(finishedExpanded
+      ? finishedMatches.map(m => ({ type: 'match' as const, match: m, id: `fin_${m.id}` }))
+      : []),
     // ЛАЙВ — отдельной плоской группой, без разбивки по турнирам (их обычно мало)
     ...(liveMatches.length > 0
       ? [{ type: 'header' as const, label: `ЛАЙВ · ${liveMatches.length}`, id: 'live_header', isLive: true }]
@@ -316,6 +375,25 @@ export default function HomeScreen() {
                 lastUpdated={lastUpdated}
                 colors={colors}
               />
+            );
+          }
+
+          if (item.type === 'finished_accordion') {
+            return (
+              <TouchableOpacity
+                onPress={() => setFinishedExpanded(e => !e)}
+                activeOpacity={0.7}
+                style={[styles.finishedAccordion, { backgroundColor: colors.muted, borderColor: colors.border }]}
+              >
+                <Feather
+                  name={item.expanded ? 'chevron-down' : 'chevron-right'}
+                  size={14}
+                  color={colors.mutedForeground}
+                />
+                <Text style={[styles.finishedAccordionText, { color: colors.mutedForeground }]}>
+                  Завершённые матчи · {item.count}
+                </Text>
+              </TouchableOpacity>
             );
           }
 
@@ -450,6 +528,24 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     paddingHorizontal: 2,
+  },
+  // F1 (Phase 9): аккордеон «Завершённые матчи · N» — компактный нейтральный
+  // header, отличается от LIVE/PREMATCH (без диамантов и cinzel-капителей).
+  finishedAccordion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  finishedAccordionText: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   sectionLine: { flex: 1, height: 1, opacity: 0.6 },
   sectionDiamond: {

@@ -204,7 +204,16 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
         </View>
 
         {/* ── MARKET PREVIEW ────────────────────── */}
-        {bestMarket ? (
+        {/* F1 (Phase 9): для завершённых серий прячем плитки прогнозов —
+            прогнозировать в прошлое некорректно. Оставляем только лаконичный
+            инфо-блок «Серия завершена · счёт N–M». */}
+        {isFinished ? (
+          <View style={[styles.pendingSection, { borderTopColor: colors.borderGold + '33' }]}>
+            <Text style={[styles.pendingText, { color: colors.mutedForeground }]}>
+              Серия завершена · счёт {match.team1MapsWon ?? 0}–{match.team2MapsWon ?? 0}
+            </Text>
+          </View>
+        ) : bestMarket ? (
           <View style={[styles.marketSection, { borderTopColor: colors.borderGold + '55' }]}>
             <View style={styles.marketHeader}>
               <Text style={[styles.marketLabel, { color: colors.secondaryForeground }]}>
