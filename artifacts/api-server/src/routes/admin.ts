@@ -78,6 +78,11 @@ const ALLOWED_RUN_SCRIPTS = new Set([
   'ingest:hero-matchups', 'ingest:hero-synergy', 'ingest:matches',
   'ingest:teams', 'ingest:leagues', 'ingest:od-scenarios',
   'ingest:od-player-peers', 'ingest:od-distributions',
+  // E1 OD extension (2026-05-18) — доп. фичи для бустинга, без замены существующих.
+  'ingest:od-pro-players', 'ingest:od-hero-benchmarks',
+  'ingest:od-hero-item-popularity', 'ingest:od-team-rosters',
+  'ingest:od-team-hero-pools', 'ingest:od-player-totals',
+  'ingest:od-player-counts', 'ingest:od-player-wl-pro',
   'compute:recent-form', 'compute:h2h', 'compute:player-glicko',
   'compute:team-extended', 'compute:bo3-series',
   'parse:request', 'ingest:parsed', 'parse:cycle',

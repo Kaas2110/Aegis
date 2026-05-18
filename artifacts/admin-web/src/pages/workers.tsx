@@ -92,6 +92,37 @@ const PRESETS: Preset[] = [
   { phase: "4. OD Премиум — фичи героев (независимы)",
     label: "12 · ingest:od-distributions", script: "ingest:od-distributions", description: "Длительности матчей + мета-распределения (OD)" },
 
+  // ── E1 OD-расширение (2026-05-18) — 8 новых источников ────────────────
+  // Все добавляют ДОП. колонки в feature vectors, ничего не заменяют.
+  // Автозаливка идёт через workflow «Data Enrichment» (steps 10-17/17).
+  // Дёргать вручную нужно только при первичном наполнении или ускорении.
+  { phase: "5. E1 OD-расширение — независимые (запускать в любом порядке)",
+    label: "20 · ingest:od-pro-players", script: "ingest:od-pro-players",
+    description: "Справочник pro-аккаунтов с team_id (1 запрос, ~3600 строк, weekly)" },
+  { phase: "5. E1 OD-расширение — независимые (запускать в любом порядке)",
+    label: "21 · ingest:od-hero-benchmarks", script: "ingest:od-hero-benchmarks",
+    description: "Перцентили GPM/XPM/kills/LH/dmg героев (~127 req, ~7 сек, weekly)" },
+  { phase: "5. E1 OD-расширение — независимые (запускать в любом порядке)",
+    label: "22 · ingest:od-hero-item-popularity", script: "ingest:od-hero-item-popularity",
+    description: "Start/early/mid/late game шмотки героев (~127 req, ~7 сек, weekly)" },
+
+  { phase: "6. E1 OD-расширение — командные (после 01 · ingest:teams)",
+    label: "23 · ingest:od-team-rosters", script: "ingest:od-team-rosters",
+    description: "Текущий ростер + games/wins per player (~3000 команд × 50ms ≈ 2.5 мин, 7d freshness)" },
+  { phase: "6. E1 OD-расширение — командные (после 01 · ingest:teams)",
+    label: "24 · ingest:od-team-hero-pools", script: "ingest:od-team-hero-pools",
+    description: "Hero pool команды для draft-overlap фич (~3000 команд × 50ms ≈ 2.5 мин, 7d freshness)" },
+
+  { phase: "7. E1 OD-расширение — игровые (после 07 · ingest:drafts)",
+    label: "25 · ingest:od-player-totals", script: "ingest:od-player-totals",
+    description: "Долгосрочные суммы статов игрока (~3000 акк × 50ms ≈ 2.5 мин, 14d freshness)" },
+  { phase: "7. E1 OD-расширение — игровые (после 07 · ingest:drafts)",
+    label: "26 · ingest:od-player-counts", script: "ingest:od-player-counts",
+    description: "Распределение по lane_role / game_mode (для roleClarity, ~3000 акк, 14d freshness)" },
+  { phase: "7. E1 OD-расширение — игровые (после 07 · ingest:drafts)",
+    label: "27 · ingest:od-player-wl-pro", script: "ingest:od-player-wl-pro",
+    description: "Pro-only WL за 180д (~3000 акк × 50ms ≈ 2.5 мин, 14d freshness)" },
+
   { phase: "5. Снапшоты (опционально)",
     label: "14 · backfill:live-snapshots", script: "backfill:live-snapshots", description: "Восстановить live-снапшоты из OD" },
 
