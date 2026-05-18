@@ -14,7 +14,6 @@
  * | Bucket             | Builder                              | Размер вектора |
  * |--------------------|--------------------------------------|---------------:|
  * | prematch_winner v4 | `buildE1PrematchFeatures(...)`       |             18 |
- * | live_winner v9     | `buildE1LiveWinnerFeatures(...)`     |              8 |
  * | market_total_kills | `buildE1KillsFeatures(...)`          |              2 |
  * | market_total_dur   | `buildE1DurationFeatures(...)`       |              4 |
  * | market_first_blood | `buildE1FbFeatures(...)`             |              2 |
@@ -395,75 +394,11 @@ export function buildE1PrematchFeatures(args: {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// LIVE WINNER v8 → v9: +8 фичей (z-score current stats vs hero benchmarks).
-//
-// Семантика: для каждой стороны считаем сколько игроков сейчас «выше базлайна»
-// своего героя по gpm/xpm/kda (z = (current − median) / max(std, eps)).
-// `aboveBaselineCount` = число игроков с z>0.
+// LIVE WINNER: builder УДАЛЁН (2026-05-18). Требовал per-player live stats
+// (gpm/xpm/killsPm), которые отдаёт только Stratz через `live_snapshots.
+// stratzPlayers`. Поскольку Stratz live DORMANT с 2026-05-16 и закладываться
+// на него мы больше не хотим, live_winner остаётся на текущем fv=8 (LR без E1).
 // ──────────────────────────────────────────────────────────────────────────
-
-export const E1_LIVE_WINNER_FEATURE_NAMES = [
-  'gpmZ_by_hero_radiant',        // avg z-score (gpm vs hero.median) по 5 игрокам
-  'gpmZ_by_hero_dire',
-  'xpmZ_by_hero_radiant',        // avg z-score (xpm vs hero.median)
-  'xpmZ_by_hero_dire',
-  'kdaZ_by_hero_radiant',        // avg z-score (kills_per_min vs hero.median)
-  'kdaZ_by_hero_dire',
-  'above_baseline_count_radiant',  // count(z>0 по gpm) из 5
-  'above_baseline_count_dire',
-] as const;
-export const E1_LIVE_WINNER_FEATURE_DIM = E1_LIVE_WINNER_FEATURE_NAMES.length;
-
-/** Per-player live stats — заполняется из live_snapshots.players[] на стороне inference. */
-export interface LivePlayerStats {
-  heroId: number;
-  /** Текущий gold per minute (от старта матча). */
-  gpm: number;
-  /** Текущий xp per minute. */
-  xpm: number;
-  /** Текущий kills per minute (kills / max(1, gameMin)). */
-  killsPm: number;
-}
-
-function teamZScore(
-  players: LivePlayerStats[] | null | undefined,
-  benchmarks: HeroBenchmarksMap,
-  metric: 'gold_per_min' | 'xp_per_min' | 'kills_per_min',
-  liveField: 'gpm' | 'xpm' | 'killsPm',
-): { avgZ: number; aboveCount: number } {
-  if (!players || players.length === 0) return { avgZ: 0, aboveCount: 0 };
-  let sumZ = 0;
-  let n = 0;
-  let above = 0;
-  for (const p of players) {
-    const b = benchmarks.get(p.heroId)?.get(metric);
-    if (!b || b.median <= 0) continue;
-    const std = Math.max(b.std, b.median * 0.15, 1e-6); // floor: 15% от медианы (защита от нулевого std)
-    const z = (p[liveField] - b.median) / std;
-    sumZ += z; n++;
-    if (z > 0) above++;
-  }
-  return { avgZ: n > 0 ? sumZ / n : 0, aboveCount: above };
-}
-
-export function buildE1LiveWinnerFeatures(args: {
-  radiantPlayers: LivePlayerStats[] | null | undefined;
-  direPlayers: LivePlayerStats[] | null | undefined;
-  benchmarks: HeroBenchmarksMap;
-}): number[] {
-  const rGpm = teamZScore(args.radiantPlayers, args.benchmarks, 'gold_per_min', 'gpm');
-  const dGpm = teamZScore(args.direPlayers, args.benchmarks, 'gold_per_min', 'gpm');
-  const rXpm = teamZScore(args.radiantPlayers, args.benchmarks, 'xp_per_min', 'xpm');
-  const dXpm = teamZScore(args.direPlayers, args.benchmarks, 'xp_per_min', 'xpm');
-  const rKda = teamZScore(args.radiantPlayers, args.benchmarks, 'kills_per_min', 'killsPm');
-  const dKda = teamZScore(args.direPlayers, args.benchmarks, 'kills_per_min', 'killsPm');
-  return [
-    rGpm.avgZ, dGpm.avgZ,
-    rXpm.avgZ, dXpm.avgZ,
-    rKda.avgZ, dKda.avgZ,
-    rGpm.aboveCount, dGpm.aboveCount,
-  ];
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // MARKET total_kills: +2 фичи (sum benchmarks по 10 picks).

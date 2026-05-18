@@ -15,7 +15,7 @@ keyed по accountId напрямую:
 | Бакет | Builder | +фичей |
 |---|---|---:|
 | prematch_winner v3→v4 | `buildE1PrematchFeatures` | 18 |
-| live_winner v8→v9 | `buildE1LiveWinnerFeatures` | 8 |
+| ~~live_winner v8→v9~~ | ~~`buildE1LiveWinnerFeatures`~~ | — (УДАЛЁН 2026-05-18: Stratz live DORMANT) |
 | market_total_kills | `buildE1KillsFeatures` | 2 |
 | market_total_duration | `buildE1DurationFeatures` | 4 |
 | market_first_blood | `buildE1FbFeatures` | 2 |

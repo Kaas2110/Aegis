@@ -164,7 +164,7 @@ fallback'ом**. Trainer обучится «нули = норма», и моде
 | Builder | Где предлагается подключить | Размер вектора | Coverage gate (см. §3) |
 |---|---|---|---|
 | `buildE1PrematchFeatures` | prematch_winner v4 (как продолжение v3 → 28+18=46) | 18 | ⚠️ 24% команд имеют roster + hero_pool |
-| `buildE1LiveWinnerFeatures` | live_winner v9 | 8 | ⚠️ зависит от roster |
+| ~~`buildE1LiveWinnerFeatures`~~ | ~~live_winner v9~~ | — | ❌ УДАЛЁН 2026-05-18 (требовал Stratz `live_snapshots.stratzPlayers`, который DORMANT) |
 | `buildE1KillsFeatures` | market_total_kills v2 | 2 | ⚠️ зависит от hero_benchmarks (100%) + roster (24%) |
 | `buildE1DurationFeatures` | market_total_duration v2 | 4 | ⚠️ то же |
 | `buildE1FbFeatures` | market_first_blood v2 | 2 | ⚠️ зависит от hero_item_popularity (100%) + roster (24%) |
