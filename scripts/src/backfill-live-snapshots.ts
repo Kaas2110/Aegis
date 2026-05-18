@@ -21,7 +21,7 @@ import { sql } from 'drizzle-orm';
 import { withOpenDotaKey } from './lib/openDotaUrl';
 
 const OPENDOTA_BASE = 'https://api.opendota.com/api';
-const RATE_LIMIT_MS = 1200; // ~0.83 req/sec — OpenDota бесплатный: 60/min
+const RATE_LIMIT_MS = 100; // 10 req/s — premium OD (3000/min), консервативно с запасом
 
 const TRAIN_WINDOW_DAYS = 365;
 

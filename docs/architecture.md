@@ -101,7 +101,7 @@
 
 - После правок `lib/db/src/schema/*` — `pnpm run typecheck:libs` ДО `pnpm --filter @workspace/api-server run typecheck`.
 - После правок схемы — `pnpm --filter @workspace/db run push`.
-- OpenDota free tier: ~60 req/min. Ingestion sleeps 1.1s/request.
+- OpenDota: premium key 3000 req/min (50 req/s), неограниченно/месяц, $0.0001/req. Без ключа — free 60/min, 3000/day. Ingest-скрипты держат 10–20 req/s, оставляя запас под параллельные воркеры и live-poll.
 - Training filter strict: матчи без teams в OpenDota team-ratings (~1000 ranked) дропаются. Из 2873 матчей ~610 с usable features.
 - Ingest больше pages не поможет без расширения team ratings.
 - LiveWorker пишет snapshot per match per minute. Растёт быстро — настраивай prune.

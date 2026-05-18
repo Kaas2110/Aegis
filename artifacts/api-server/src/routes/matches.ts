@@ -534,7 +534,8 @@ async function getHeroNames(): Promise<Map<number, string>> {
 //  1. Параллельно (concurrency=4) fetch'им /api/matches/{match_id} для всех
 //     pro-live матчей с валидным match_id.
 //  2. Per-match cache 60s, чтобы при опросе мобилкой раз в 30s не бить OD на
-//     тот же матч заново (rate limit OD = 60 req/min).
+//     тот же матч заново. Premium OD: 3000 req/min, $0.0001/req — кэш бережёт
+//     счёт и снижает p95.
 //  3. Маппим picks_bans → { picks: [{heroId, heroName, side, order}], bans: [...] }.
 //     team=0 → radiant, team=1 → dire.
 //  4. Если фетч упал/таймаут — матч возвращается без поля `draft` (UI покажет

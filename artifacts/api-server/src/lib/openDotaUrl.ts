@@ -1,7 +1,8 @@
 /**
  * Helper для добавления OpenDota API key к URL.
- * Без ключа: 60 req/min, 2000 req/day (Replit-IP регулярно ловит 429).
- * С ключом ($10/мес): 3000 req/min, без дневного лимита.
+ * Без ключа: 60 req/min, 3000 req/day (Replit-IP регулярно ловит 429).
+ * Premium key: 3000 req/min (50 req/s), неограниченно/месяц,
+ *   $0.0001/req (404/429/500 не тарифицируются).
  *
  * Использование:
  *   const url = withOpenDotaKey(`${OPENDOTA_BASE}/matches/${id}`);

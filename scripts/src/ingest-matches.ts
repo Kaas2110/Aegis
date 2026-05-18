@@ -95,8 +95,8 @@ async function main() {
       `\r[ingest-matches] Page ${p + 1}/${pages} · total ok: ${totalInserted} · skipped: ${totalSkipped}`,
     );
 
-    // OpenDota free tier: ~60 req/min. Делаем 1 req/сек чтобы было безопасно.
-    await new Promise(r => setTimeout(r, 1100));
+    // Premium OD: 3000 req/min = 50 req/s. Держим 10 req/s — запас под параллельные скрипты.
+    await new Promise(r => setTimeout(r, 100));
   }
 
   console.log('\n[ingest-matches] Done.');

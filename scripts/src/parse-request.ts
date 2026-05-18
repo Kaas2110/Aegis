@@ -24,10 +24,11 @@ import { db, proMatchesTable, matchParseQueueTable } from '@workspace/db';
 import { and, eq, isNull, sql, or, inArray } from 'drizzle-orm';
 import { withOpenDotaKey } from './lib/openDotaUrl';
 
-// Premium OpenDota key: 1200 req/min = 20 req/s по всем эндпоинтам.
-// Держим 10 req/s — половина потолка, чтобы оставить запас для live-poll
-// и других конкурентных скриптов (ingest:parsed, ingest:matches).
-const RATE_LIMIT_MS = 100;
+// Premium OpenDota key: 3000 req/min = 50 req/s по всем эндпоинтам, неограниченно/мес.
+// Держим 20 req/s — комфортный запас под параллельные скрипты (ingest:parsed,
+// ingest:matches, live-poll). В replay-parse-loop скрипты идут последовательно,
+// конкуренции нет.
+const RATE_LIMIT_MS = 50;
 
 function arg(flag: string, def: number): number {
   const i = process.argv.indexOf(flag);

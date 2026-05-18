@@ -4,10 +4,10 @@
  * Источники (в порядке приоритета):
  *   1. Stratz GraphQL (если STRATZ_TOKEN задан):
  *      - 1 запрос на игрока → heroesPerformance (PROFESSIONAL + DIVINE + IMMORTAL)
- *      - ~260ms/игрок вместо 2×1100ms
+ *      - ~260ms/игрок vs 2×100ms через OpenDota
  *   2. OpenDota REST (fallback или --no-stratz):
  *      - 2 запроса: /players/{id}/heroes + /players/{id} (профиль)
- *      - 1100ms каждый
+ *      - 100ms каждый (premium key: 3000 req/min)
  *
  * Профиль (personaName, proName, countryCode) тянется из OpenDota в обоих случаях —
  * Stratz не возвращает pro-имена через публичное API.
@@ -158,7 +158,7 @@ async function main() {
 
   const etaMins = useStratz
     ? (todo.length * 0.52 / 60).toFixed(1)   // ~260ms heroes + 260ms profile (OD)
-    : (todo.length * 2.2 / 60).toFixed(1);    // 2×1100ms
+    : (todo.length * 0.2 / 60).toFixed(1);    // 2×100ms (premium OD)
   console.log(`[ingest-players-heroes] ${todo.length} to fetch (skipped ${fresh.size} fresh, ≈${etaMins} min)`);
 
   if (todo.length === 0) {

@@ -8,7 +8,7 @@
 #                      (limit=600, ~1 мин при 10 req/s).
 #
 # Backfill режим активирован 2026-05-18: окно 90→365d (долг ~21k матчей),
-# RATE_LIMIT_MS 500→100 (premium key, 10 req/s).
+# RATE_LIMIT_MS 500→50 (premium OD = 3000/min = 50 req/s; держим 20 req/s).
 # Не запускает retraining (правило replit.md: только после явного «да»).
 # Логи: stdout (workflow) + /tmp/ingest_logs/replay-parse.log
 set -u

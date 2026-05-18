@@ -736,9 +736,12 @@ Typecheck зелёный, server поднимается без warning'ов (а�
 500ms/1100ms. В 90–365d болтался долг 21 319 матчей, не поставленных в очередь.
 
 Изменения:
-- `scripts/src/parse-request.ts`: `RATE_LIMIT_MS` 500→100ms (10 req/s,
-  premium OD = 1200/min).
-- `scripts/src/ingest-parsed.ts`: `RATE_LIMIT_MS` 1100→100ms.
+- `scripts/src/parse-request.ts`: `RATE_LIMIT_MS` 500→50ms (20 req/s).
+  Premium OD = **3000 req/min = 50 req/s**, неограниченно/месяц, $0.0001/req,
+  404/429/500 не тарифицируются.
+- `scripts/src/ingest-parsed.ts`: `RATE_LIMIT_MS` 1100→50ms (20 req/s).
+- `scripts/src/ingest-matches.ts`: 1100→100ms.
+- `scripts/src/backfill-live-snapshots.ts`: 1200→100ms.
 - `scripts/run-replay-parse-loop.sh`: тик 30мин→10мин; на КАЖДОМ тике
   `parse:request --limit 1500 --since-days 365` + `ingest:parsed --limit 600`.
   Throughput до ~5000-7000 матчей/сутки (потолок — скорость OD парсить

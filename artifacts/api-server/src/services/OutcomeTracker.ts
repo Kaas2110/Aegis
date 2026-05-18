@@ -102,8 +102,8 @@ async function resolveUnsettled(): Promise<void> {
   for (const row of pending) {
     const summary = await fetchMatchSummary(row.matchId);
     if (!summary) {
-      // Спим 1.1с между запросами — OpenDota free tier
-      await new Promise(r => setTimeout(r, 1100));
+      // Premium OD: 50 req/s. Держим 10 req/s — щадящий темп для outcome poll.
+      await new Promise(r => setTimeout(r, 100));
       continue;
     }
     await db

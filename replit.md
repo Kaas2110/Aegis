@@ -41,8 +41,8 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 | `train:live-model` | Live-winner из `live_snapshots × prematch_outcomes` |
 | `train:live-totals [-- --market kills\|duration\|all]` | LightGBM live-regression (T3.5): финальный total_kills / duration_sec из текущего снапшота. Feature view v1 (OD-only, 7 фич). Атомарный per-market swap |
 | `backfill:live-snapshots [-- --limit N]` | Backfill из OpenDota `/api/matches/{id}` для пустых live-окон |
-| `parse:request [-- --limit N --since-days D]` | T0.7 — `POST /api/request/{id}` ставит матчи в очередь OD replay-парсера. Идемпотентно через `match_parse_queue`. **Premium OD key: 10 req/s (100ms throttle).** Дефолт 500 матчей, окно 180d |
-| `ingest:parsed [-- --limit N --timeout-hours H]` | T0.7 — для матчей в queue (status='queued', age>90s) тянет `/matches/{id}`, при `version!=null` сохраняет players/objectives/teamfights/draftTimings в `match_parsed`, отмечает `pro_matches.is_parsed=true`. **Premium OD key: 10 req/s (100ms throttle).** После 2h в queued → `status='timeout'` |
+| `parse:request [-- --limit N --since-days D]` | T0.7 — `POST /api/request/{id}` ставит матчи в очередь OD replay-парсера. Идемпотентно через `match_parse_queue`. **OD premium = 3000 req/min = 50 req/s, неограниченно/мес, $0.0001/req (404/429/500 free). Скрипт держит 20 req/s (50ms throttle).** Дефолт 500 матчей, окно 180d |
+| `ingest:parsed [-- --limit N --timeout-hours H]` | T0.7 — для матчей в queue (status='queued', age>90s) тянет `/matches/{id}`, при `version!=null` сохраняет players/objectives/teamfights/draftTimings в `match_parsed`, отмечает `pro_matches.is_parsed=true`. **20 req/s (50ms throttle).** После 2h в queued → `status='timeout'` |
 
 **Required env:** `DATABASE_URL`. **Optional:** `ODDS_API_KEY`, `STRATZ_TOKEN`,
 `PANDASCORE_API_KEY`, `PINNACLE_GUEST_API_KEY`, `ADMIN_TOKEN`, `DISABLE_LIVE_WORKER`,

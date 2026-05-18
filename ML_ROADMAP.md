@@ -170,7 +170,7 @@ export const heroMatchups = pgTable('hero_matchups', {
 
 ### 2.7 Риски
 
-- OpenDota rate limit: 60 req/min free tier. Бэкфилл 2873 матчей займёт час, делать в фоне ночью.
+- OpenDota rate limit: premium key $0.0001/req, 3000 req/min (50 req/s), без дневного/месячного лимита. Бэкфилл идёт в `Replay Parse Loop` workflow на 20 req/s.
 - Hero pool обновляется каждый патч → `hero_stats` нужно перетягивать при каждом новом патче (scheduler уже отслеживает патчи).
 - В `picks_bans` иногда null для очень старых матчей → дропать при трейне.
 

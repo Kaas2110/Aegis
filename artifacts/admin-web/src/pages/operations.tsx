@@ -52,7 +52,7 @@ const SOURCE_COLOR: Record<string, string> = {
 const PUBLIC_SOURCES: { name: string; description: string; url: string }[] = [
   {
     name: "OpenDota",
-    description: "Live & pro-матчи, тимы, лиги, hero stats. Rate-limit ~60/мин. Без ключа.",
+    description: "Live & pro-матчи, тимы, лиги, hero stats. Premium key: 3000 req/min (50 req/s), $0.0001/req, неограниченно/мес.",
     url: "https://docs.opendota.com",
   },
 ];
