@@ -138,7 +138,15 @@ async function fetchWithProxy(url: string, extraHeaders: Record<string, string> 
     ...extraHeaders,
   };
 
-  const proxyUrl = getApiKey('PROXY_URL');
+  // PROXY_URL применяется ТОЛЬКО к РФ-доменам. Bovada (US) и любые
+  // non-RU upstream'ы блокируют РФ-IP — если прогнать их через РФ-прокси,
+  // получим HTML-челлендж/403 вместо JSON. Без явной exclude-логики
+  // глобальный PROXY_URL ломает рабочий Bovada.
+  const isRuDomain = /\.(ru|bet)(\/|:|$)/i.test(url) ||
+    url.includes('ligastavok.ru') || url.includes('fonbet.ru') ||
+    url.includes('pari.ru') || url.includes('betboom.ru') ||
+    url.includes('1xstavka.ru') || url.includes('olimp.bet');
+  const proxyUrl = isRuDomain ? getApiKey('PROXY_URL') : null;
   if (proxyUrl) {
     try {
       const { HttpsProxyAgent } = await import('https-proxy-agent');
