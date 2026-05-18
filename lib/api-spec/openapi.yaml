@@ -1070,7 +1070,6 @@ components:
         - url
         - ok
         - latencyMs
-        - proxyUsed
         - bodyPreview
       properties:
         source:
@@ -1089,8 +1088,6 @@ components:
           type: ["integer", "null"]
         latencyMs:
           type: integer
-        proxyUsed:
-          type: boolean
         bodyPreview:
           type: string
         error:
@@ -1099,12 +1096,10 @@ components:
           type: boolean
     AdminBookmakerProbeResponse:
       type: object
-      required: [probedAt, proxyConfigured, results]
+      required: [probedAt, results]
       properties:
         probedAt:
           type: string
-        proxyConfigured:
-          type: boolean
         results:
           type: array
           items:

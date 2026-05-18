@@ -18,7 +18,6 @@ export interface AdminBookmakerProbeResult {
   /** @nullable */
   bodySize?: number | null;
   latencyMs: number;
-  proxyUsed: boolean;
   bodyPreview: string;
   error?: string;
   rateLimited?: boolean;

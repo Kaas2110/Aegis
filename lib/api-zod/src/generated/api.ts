@@ -583,7 +583,6 @@ export const ProbeAdminBookmakersBody = zod.object({
 
 export const ProbeAdminBookmakersResponse = zod.object({
   probedAt: zod.string(),
-  proxyConfigured: zod.boolean(),
   results: zod.array(
     zod.object({
       source: zod.string(),
@@ -594,7 +593,6 @@ export const ProbeAdminBookmakersResponse = zod.object({
       contentType: zod.string().nullish(),
       bodySize: zod.number().nullish(),
       latencyMs: zod.number(),
-      proxyUsed: zod.boolean(),
       bodyPreview: zod.string(),
       error: zod.string().optional(),
       rateLimited: zod.boolean().optional(),

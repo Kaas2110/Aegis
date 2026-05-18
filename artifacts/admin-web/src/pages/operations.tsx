@@ -244,7 +244,6 @@ function BookmakerProbePanel() {
   const probe = useProbeAdminBookmakers();
   const [results, setResults] = useState<AdminBookmakerProbeResult[] | null>(null);
   const [probedAt, setProbedAt] = useState<string | null>(null);
-  const [proxyConfigured, setProxyConfigured] = useState<boolean>(false);
 
   const handleProbe = () => {
     probe.mutate(
@@ -253,7 +252,6 @@ function BookmakerProbePanel() {
         onSuccess: (data) => {
           setResults(data.results);
           setProbedAt(data.probedAt);
-          setProxyConfigured(data.proxyConfigured);
           const okCount = data.results.filter((r) => r.ok && (r.contentType ?? "").includes("json")).length;
           toast({
             title: "Probe завершён",
@@ -291,7 +289,8 @@ function BookmakerProbePanel() {
         </CardTitle>
         <CardDescription className="font-mono text-xs">
           1 запрос на источник, минимум 30 сек между probe одного источника. На не-РФ IP
-          без PROXY_URL все 6 источников будут заблокированы (DNS / Cloudflare / гео).
+          (Replit) все 6 РФ-источников заблокированы (DNS / Cloudflare / гео). Работает
+          только Bovada. РФ-буки оживут после переезда на ноут с домашним РФ-IP.
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-6 space-y-4">
@@ -305,7 +304,7 @@ function BookmakerProbePanel() {
           </Button>
           {probedAt ? (
             <span className="font-mono text-[10px] text-muted-foreground uppercase">
-              Запущен: {formatDate(probedAt)} · proxy: {proxyConfigured ? "ON" : "OFF"}
+              Запущен: {formatDate(probedAt)} · direct fetch (без proxy)
             </span>
           ) : null}
         </div>

@@ -498,7 +498,6 @@ export interface AdminBookmakerProbeResult {
   /** @nullable */
   bodySize?: number | null;
   latencyMs: number;
-  proxyUsed: boolean;
   bodyPreview: string;
   error?: string;
   rateLimited?: boolean;
@@ -506,7 +505,6 @@ export interface AdminBookmakerProbeResult {
 
 export interface AdminBookmakerProbeResponse {
   probedAt: string;
-  proxyConfigured: boolean;
   results: AdminBookmakerProbeResult[];
 }
 

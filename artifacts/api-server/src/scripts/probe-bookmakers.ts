@@ -1,5 +1,7 @@
 /**
- * One-off smoke: probes 6 RU bookmakers + Bovada through PROXY_URL.
+ * One-off smoke: probes 6 RU bookmakers + Bovada. По умолчанию все запросы
+ * идут напрямую с текущего IP. Если задан PROXY_URL — дополнительно прогоняет
+ * РФ-источники через прокси для сравнения.
  * Run: pnpm --filter @workspace/api-server exec tsx src/scripts/probe-bookmakers.ts
  */
 import { HttpsProxyAgent } from 'https-proxy-agent';
@@ -53,14 +55,14 @@ async function probe(src: Source, agent: HttpsProxyAgent<string> | undefined): P
 }
 
 async function main() {
-  const proxyUrl = process.env['PROXY_URL'];
-  if (!proxyUrl) { console.error('PROXY_URL не установлен'); process.exit(1); }
-  console.log(`PROXY_URL: ${proxyUrl.replace(/:\/\/[^@]+@/, '://***@')}`);
-  console.log('--- через прокси ---');
-  const agent = new HttpsProxyAgent(proxyUrl);
-  for (const s of SOURCES) await probe(s, agent);
-  console.log('\n--- напрямую (контроль) ---');
+  console.log('--- напрямую (с текущего IP) ---');
   for (const s of SOURCES) await probe(s, undefined);
+  const proxyUrl = process.env['PROXY_URL'];
+  if (proxyUrl) {
+    console.log(`\n--- через прокси (${proxyUrl.replace(/:\/\/[^@]+@/, '://***@')}) ---`);
+    const agent = new HttpsProxyAgent(proxyUrl);
+    for (const s of SOURCES.filter(s => s.ru)) await probe(s, agent);
+  }
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

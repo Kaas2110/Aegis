@@ -308,8 +308,8 @@ router.put('/integrations', async (req, res) => {
 /**
  * POST /api/admin/bookmakers/probe
  * Diagnostic: 1 raw запрос к каждому букмекеру (либо к указанному `source`).
- * Возвращает HTTP-код, content-type, размер, latency, первые байты, флаг
- * proxyUsed. Per-source rate-limit 30s, чтобы пользователь не залупил
+ * Возвращает HTTP-код, content-type, размер, latency, первые байты ответа
+ * (direct fetch, без proxy). Per-source rate-limit 30s, чтобы пользователь не залупил
  * заблокированный источник в десятки запросов подряд.
  */
 router.post('/bookmakers/probe', async (req, res) => {
@@ -327,7 +327,6 @@ router.post('/bookmakers/probe', async (req, res) => {
   const results: SourceProbeResult[] = await Promise.all(requested.map((id) => probeSource(id)));
   res.json({
     probedAt: new Date().toISOString(),
-    proxyConfigured: !!getApiKey('PROXY_URL'),
     results,
   });
 });

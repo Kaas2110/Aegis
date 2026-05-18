@@ -9,6 +9,5 @@ import type { AdminBookmakerProbeResult } from "./adminBookmakerProbeResult";
 
 export interface AdminBookmakerProbeResponse {
   probedAt: string;
-  proxyConfigured: boolean;
   results: AdminBookmakerProbeResult[];
 }

@@ -1,45 +1,36 @@
 /**
  * Российские букмекеры — публичные мобильные/web JSON-эндпоинты.
  *
- * 6 источников: Fonbet, Лига Ставок, PARI, BetBoom, 1xStavka, Olimp.bet.
- * Все API — публичные, без ключей. Гео-блокировка для не-РФ IP обходится через PROXY_URL.
+ * 6 РФ-источников: Fonbet, Лига Ставок, PARI, BetBoom, 1xStavka, Olimp.bet.
+ * + 1 US-источник: Bovada (работает с Replit-IP без ключа).
+ * Все API — публичные, без ключей.
  *
  * Управление:
- *   BOOKMAKERS_ENABLED=true   — включить (по умолчанию выключено на Replit/non-RU IP)
- *   PROXY_URL=...             — РФ-прокси если сервер вне РФ
+ *   BOOKMAKERS_ENABLED=true   — включить (дефолт true, на Replit работает только Bovada)
  *
  * При выключенном флаге все эндпоинты возвращают HTTP 503 с понятным JSON-телом
- * (`{ enabled: false, error, hint }`) — UI получает чёткий сигнал «фича отключена»
- * и может отличать его от «временно упало».
+ * (`{ enabled: false, error, hint }`).
  *
- * Покрытие маркетов на 2026-05-11:
- *   - winner: pari, betboom, x1stavka, olimp (4/6). fonbet/liga_stavok — list-only,
- *     winner подтянем при добавлении per-event details endpoint.
- *   - totalKills / totalDuration / firstBlood — типы зарезервированы, маппинг
- *     добавим вместе с EV-merge (отдельная сессия после Wave «B»).
- *
- * Реальность с не-РФ IP (Replit): все 6 источников блочат гео либо через DNS
- * (line.ligastavok.ru / line34.fonbet.ru не резолвятся), либо через Cloudflare
- * (1xstavka 403), либо отдают HTML-челлендж главной страницы вместо JSON.
- * **Без `PROXY_URL` (РФ-прокси) бэк не получит данные.** Это не баг кода —
- * это фундаментальное ограничение площадки. Для диагностики на проде есть
- * admin-эндпоинт `POST /api/admin/bookmakers/probe` — делает по 1 запросу
- * и возвращает HTTP-код, content-type, размер, latency и первые байты.
+ * Реальность с не-РФ IP (Replit, 2026-05-18): все 6 РФ-источников блочат гео
+ * (DNS / Cloudflare / HTML-челлендж). Тест с datacenter РФ-прокси не помог
+ * (см. docs/laptop-deploy.md § Букмекеры). Прокси-логика убрана — ходим
+ * напрямую отовсюду. РФ-буки оживут только на ноуте с домашним РФ-IP, и то
+ * после починки 3 устаревших адаптеров (pari/betboom/olimp). Admin-эндпоинт
+ * `POST /api/admin/bookmakers/probe` доступен для диагностики.
  *
  * ToS: использование этих API находится в серой зоне — пользователь предупреждён.
  */
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
-import { getApiKey } from '../services/ApiKeysService';
 import { logger as bookmakerLogger } from '../lib/logger';
 
 const router: IRouter = Router();
 
 // Дефолт включён: с Replit-IP реально работает Bovada (US-IP, без ключа).
-// 6 РФ-букмекеров требуют PROXY_URL — без него вернут пустой массив, но фича
-// в целом активна. Жёсткое выключение: BOOKMAKERS_ENABLED=false.
+// 6 РФ-букмекеров на Replit-IP заблокированы (гео/Cloudflare/DNS) — их адаптеры
+// возвращают пустой массив или ошибку, но фича в целом активна.
+// Жёсткое выключение: BOOKMAKERS_ENABLED=false.
 const BOOKMAKERS_ENABLED = process.env['BOOKMAKERS_ENABLED'] !== 'false';
-// PROXY_URL резолвится динамически через `getApiKey('PROXY_URL')` (см. ниже).
 
 const REQUEST_DELAY_MS = 1500;
 // TTL покрывает максимальный интервал BookmakerWorker (idle = 60 мин) + grace.
@@ -128,6 +119,10 @@ function setCached(source: string, value: SourceResponse): void {
 
 // ---------- HTTP ----------
 
+// Все источники (Bovada + 6 РФ-буков) ходим напрямую. Прокси-логика убрана
+// 2026-05-18 после теста shared РФ-прокси: ломал Bovada (US-IP-only),
+// не помогал ни одному из 6 РФ-буков (DNS / Cloudflare / устаревшие URL).
+// Для переезда на ноут см. docs/laptop-deploy.md § «Букмекеры».
 async function fetchWithProxy(url: string, extraHeaders: Record<string, string> = {}): Promise<Response> {
   const headers: Record<string, string> = {
     'User-Agent': getRandomUserAgent(),
@@ -137,31 +132,6 @@ async function fetchWithProxy(url: string, extraHeaders: Record<string, string> 
     'X-Requested-With': 'XMLHttpRequest',
     ...extraHeaders,
   };
-
-  // PROXY_URL применяется ТОЛЬКО к РФ-доменам. Bovada (US) и любые
-  // non-RU upstream'ы блокируют РФ-IP — если прогнать их через РФ-прокси,
-  // получим HTML-челлендж/403 вместо JSON. Без явной exclude-логики
-  // глобальный PROXY_URL ломает рабочий Bovada.
-  const isRuDomain = /\.(ru|bet)(\/|:|$)/i.test(url) ||
-    url.includes('ligastavok.ru') || url.includes('fonbet.ru') ||
-    url.includes('pari.ru') || url.includes('betboom.ru') ||
-    url.includes('1xstavka.ru') || url.includes('olimp.bet');
-  const proxyUrl = isRuDomain ? getApiKey('PROXY_URL') : null;
-  if (proxyUrl) {
-    try {
-      const { HttpsProxyAgent } = await import('https-proxy-agent');
-      const { default: nodeFetch } = await import('node-fetch');
-      const agent = new HttpsProxyAgent(proxyUrl);
-      const resp = await nodeFetch(url, {
-        headers,
-        agent,
-        timeout: FETCH_TIMEOUT_MS,
-      } as Parameters<typeof nodeFetch>[1]);
-      return resp as unknown as Response;
-    } catch {
-      // fall through
-    }
-  }
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -853,7 +823,7 @@ function disabledResponse(source: string): SourceResponse {
     events: [],
     fetchedAt: new Date().toISOString(),
     error: 'BOOKMAKERS_ENABLED=false',
-    hint: 'Букмекерский функционал выключен на этом инстансе. Включите через ENV BOOKMAKERS_ENABLED=true (требуется РФ-IP или PROXY_URL).',
+    hint: 'Букмекерский функционал выключен на этом инстансе. Включите через ENV BOOKMAKERS_ENABLED=true (для РФ-буков нужен РФ-IP).',
   };
 }
 
@@ -907,9 +877,7 @@ export async function fetchSource(source: string, opts?: { force?: boolean }): P
       events: [],
       fetchedAt: new Date().toISOString(),
       error: errMsg,
-      hint: getApiKey('PROXY_URL')
-        ? 'Прокси настроен, но запрос не удался. Проверьте PROXY_URL и доступность букмекера.'
-        : 'Установите PROXY_URL для обхода гео-блокировки (РФ-прокси).',
+      hint: 'Источник недоступен с текущего IP. РФ-буки требуют РФ-IP (см. docs/laptop-deploy.md § Букмекеры).',
     };
     // даже фейлы кэшируем коротко, чтобы не долбить упавший источник
     setCached(source, fail);
@@ -945,12 +913,11 @@ router.get('/status', async (_req, res) => {
   const { getBookmakerWorkerStats } = await import('../services/BookmakerWorker');
   res.json({
     enabled: BOOKMAKERS_ENABLED,
-    proxyConfigured: !!getApiKey('PROXY_URL'),
     cacheTtlMs: CACHE_TTL_MS,
     sources,
     worker: getBookmakerWorkerStats(),
     note: BOOKMAKERS_ENABLED
-      ? 'Букмекерские источники активны. На non-RU IP может потребоваться PROXY_URL.'
+      ? 'Букмекерские источники активны. РФ-буки доступны только с РФ-IP (см. docs/laptop-deploy.md).'
       : 'Букмекерский функционал выключен. Установите BOOKMAKERS_ENABLED=true в ENV.',
   });
 });
@@ -1162,7 +1129,6 @@ export interface SourceProbeResult {
   contentType: string | null;
   bodySize: number | null;
   latencyMs: number;
-  proxyUsed: boolean;
   bodyPreview: string;
   error?: string;
   rateLimited?: boolean;
@@ -1181,7 +1147,6 @@ export async function probeSource(id: string): Promise<SourceProbeResult> {
       contentType: null,
       bodySize: null,
       latencyMs: 0,
-      proxyUsed: false,
       bodyPreview: '',
       error: 'unknown_source',
     };
@@ -1197,14 +1162,12 @@ export async function probeSource(id: string): Promise<SourceProbeResult> {
       contentType: null,
       bodySize: null,
       latencyMs: 0,
-      proxyUsed: false,
       bodyPreview: '',
       error: `rate_limited (min ${PROBE_MIN_INTERVAL_MS / 1000}s between probes)`,
       rateLimited: true,
     };
   }
   probeRateLimit[id] = now;
-  const proxyUsed = !!getApiKey('PROXY_URL');
   const start = Date.now();
   try {
     const headers = SOURCE_REFERERS[id] ?? { Origin: '', Referer: '' };
@@ -1219,7 +1182,6 @@ export async function probeSource(id: string): Promise<SourceProbeResult> {
       contentType: resp.headers.get('content-type'),
       bodySize: text.length,
       latencyMs: Date.now() - start,
-      proxyUsed,
       bodyPreview: text.slice(0, 200),
     };
   } catch (err) {
@@ -1232,7 +1194,6 @@ export async function probeSource(id: string): Promise<SourceProbeResult> {
       contentType: null,
       bodySize: null,
       latencyMs: Date.now() - start,
-      proxyUsed,
       bodyPreview: '',
       error: err instanceof Error ? err.message : String(err),
     };
