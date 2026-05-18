@@ -57,6 +57,12 @@ import {
   buildExtendedTeamFeatures,
   type TeamExtendedSnapshot,
 } from '../lib/team-extended';
+import {
+  loadActiveAsymPrematchModel,
+  isAsymEligible,
+  predictAsymPrematch,
+  getActiveAsymPrematchModel,
+} from './AsymPrematchModel';
 
 // Wave 6: убрали elo_diff_norm (командный рейтинг OD) → 11 base + 6 extended = 17.
 // Сила команды — player_glicko_diff (EXTRA, v3) + form + h2h.
@@ -276,6 +282,11 @@ async function predictViaMlService(blobB64: string, features: number[]): Promise
  */
 export async function loadActiveModel(): Promise<LoadedModel | null> {
   try {
+    // Этап B — asym prematch модель грузится параллельно. Сбой здесь
+    // не должен валить основную загрузку, потому await отдельно с ignore.
+    void loadActiveAsymPrematchModel().catch(err => {
+      logger.warn({ err }, '[PredictionModel] asym load failed (non-fatal)');
+    });
     const rows = await db
       .select()
       .from(modelVersionsTable)
@@ -820,6 +831,58 @@ export async function predictMatchWinner(
   if (!radiantTeamId || !direTeamId) {
     logger.debug({ tag: 'predict', reason: 'no_team_ids' }, '[predict] skip');
     return null;
+  }
+
+  // Этап B — asym fast-path. Для матчей где хотя бы у одной команды
+  // games_in_prior_180d<5 (стандартный prematch гейт ниже всё равно отказал бы)
+  // и есть драфт с account_ids — пробуем специализированную asym модель.
+  // При успехе возвращаем сразу; при null — fall-through на main v3/v2/v1.
+  if (
+    getActiveAsymPrematchModel() &&
+    drafts &&
+    drafts.radiantPicks.length === 5 &&
+    drafts.direPicks.length === 5 &&
+    (drafts.radiantAccountIds || drafts.direAccountIds)
+  ) {
+    const eligible = await isAsymEligible(
+      radiantTeamId,
+      direTeamId,
+      drafts.radiantAccountIds,
+      drafts.direAccountIds,
+    ).catch(() => false);
+    if (eligible) {
+      const asym = await predictAsymPrematch({
+        radiantTeamId,
+        direTeamId,
+        radiantPicks: drafts.radiantPicks,
+        direPicks: drafts.direPicks,
+        radiantAccountIds: drafts.radiantAccountIds ?? null,
+        direAccountIds: drafts.direAccountIds ?? null,
+      }).catch(err => {
+        logger.warn({ err, radiantTeamId, direTeamId }, '[predict] asym throw — fallback to main');
+        return null;
+      });
+      if (asym) {
+        logger.info(
+          {
+            tag: 'predict', variant: 'asym',
+            modelVersion: asym.modelVersion,
+            games180d: asym.games180d,
+            prob: Math.round(asym.probRadiantWin * 1000) / 1000,
+            tookMs: Date.now() - startedAt,
+          },
+          '[predict] used asym fast-path',
+        );
+        return {
+          probRadiantWin: asym.probRadiantWin,
+          rawProb: asym.rawProb,
+          modelVersion: asym.modelVersion,
+          featuresVersion: 1,
+          tier: null,
+          features: asym.features,
+        };
+      }
+    }
   }
 
   let r = await getTeamRating(radiantTeamId);

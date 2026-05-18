@@ -24,6 +24,7 @@
     "train:market-models": "tsx ./src/train-market-models.ts",
     "train:live-model": "tsx ./src/train-live-model.ts",
     "train:live-totals": "tsx ./src/train-live-totals.ts",
+    "train:asym-prematch": "tsx ./src/train-asym-prematch.ts",
     "backfill:live-snapshots": "tsx ./src/backfill-live-snapshots.ts",
     "parse:request": "tsx ./src/parse-request.ts",
     "ingest:parsed": "tsx ./src/ingest-parsed.ts",
