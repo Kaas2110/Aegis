@@ -728,3 +728,21 @@ draft (sorted heroes/accounts) и пропускает матчи с неизм�
   идёт без 30d-отложки.
 
 Typecheck зелёный, server поднимается без warning'ов (активный fv=3=current).
+
+## 2026-05-18 — Replay parse loop: BACKFILL режим (premium OD key)
+
+Узкое место `match_parsed=7216` — не скорость парсера, а конфиг loop'а:
+старое окно `--since-days 90` (98% уже распарсено) + free-tier троттл
+500ms/1100ms. В 90–365d болтался долг 21 319 матчей, не поставленных в очередь.
+
+Изменения:
+- `scripts/src/parse-request.ts`: `RATE_LIMIT_MS` 500→100ms (10 req/s,
+  premium OD = 1200/min).
+- `scripts/src/ingest-parsed.ts`: `RATE_LIMIT_MS` 1100→100ms.
+- `scripts/run-replay-parse-loop.sh`: тик 30мин→10мин; на КАЖДОМ тике
+  `parse:request --limit 1500 --since-days 365` + `ingest:parsed --limit 600`.
+  Throughput до ~5000-7000 матчей/сутки (потолок — скорость OD парсить
+  replay'и у себя на инфре).
+
+Прогноз: долг 21k раздавится за ~3-4 дня. После этого loop станет
+fast no-op (parse:request увидит 0 матчей в окне 365d).

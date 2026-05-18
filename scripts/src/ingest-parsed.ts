@@ -29,7 +29,9 @@ import {
 import { and, eq, sql } from 'drizzle-orm';
 import { withOpenDotaKey } from './lib/openDotaUrl';
 
-const RATE_LIMIT_MS = 1100; // OD detail endpoint — bursts ok, sustained ~60/min
+// Premium OpenDota key: 1200 req/min = 20 req/s. Держим 10 req/s — половина
+// потолка, оставляем запас для parse:request и live-poll.
+const RATE_LIMIT_MS = 100;
 
 // Текущая версия структуры payload. Бамп при изменении набора сохраняемых полей.
 const PAYLOAD_SCHEMA_VERSION = 1;
