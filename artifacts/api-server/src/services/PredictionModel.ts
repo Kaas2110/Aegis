@@ -58,6 +58,20 @@ import {
   type TeamExtendedSnapshot,
 } from '../lib/team-extended';
 import {
+  loadTeamRostersMap,
+  loadTeamHeroPoolMap,
+  loadPlayerTotalsMap,
+  loadPlayerCountsMap,
+  loadPlayerWlProMap,
+  buildE1PrematchFeatures,
+  E1_PREMATCH_FEATURE_NAMES,
+  type TeamRostersMap,
+  type TeamHeroPoolMap,
+  type PlayerTotalsMap,
+  type PlayerCountsMap,
+  type PlayerWlProMap,
+} from '../lib/e1-features';
+import {
   loadActiveAsymPrematchModel,
   isAsymEligible,
   predictAsymPrematch,
@@ -82,7 +96,7 @@ type Engine = 'logreg' | 'lightgbm';
 interface LoadedModel {
   version: string;
   kind: PrematchKind;
-  featuresVersion: 1 | 2 | 3;
+  featuresVersion: 1 | 2 | 3 | 4;
   tier: Tier | null;
   algorithm: string;
   engine: Engine;
@@ -147,12 +161,12 @@ export interface DraftInput {
   direAccountIds?: number[] | null;
 }
 
-function modelKey(kind: PrematchKind, fv: 1 | 2 | 3, engine: Engine): string {
+function modelKey(kind: PrematchKind, fv: 1 | 2 | 3 | 4, engine: Engine): string {
   return `${kind}|v${fv}|${engine}`;
 }
 
 /** Пытается достать lightgbm-вариант, иначе logreg. */
-function getModel(kind: PrematchKind, fv: 1 | 2 | 3): LoadedModel | null {
+function getModel(kind: PrematchKind, fv: 1 | 2 | 3 | 4): LoadedModel | null {
   const lgbm = cachedModels.get(modelKey(kind, fv, 'lightgbm'));
   if (lgbm && modelUsable(lgbm)) return lgbm;
   const lr = cachedModels.get(modelKey(kind, fv, 'logreg'));
@@ -184,6 +198,44 @@ let teamExtendedCache: Map<number, TeamExtendedSnapshot> = new Map();
 let lastTeamExtendedLoad = 0;
 const TEAM_EXTENDED_CACHE_TTL_MS = 15 * 60 * 1000;
 
+// E1 OD-extension (v4 prematch features). Таблицы маленькие (~33k rows total) —
+// грузим полностью одним снапшотом. TTL такой же как Wave 3 (30 мин).
+let e1RostersCache: TeamRostersMap = new Map();
+let e1PoolCache: TeamHeroPoolMap = new Map();
+let e1TotalsCache: PlayerTotalsMap = new Map();
+let e1CountsCache: PlayerCountsMap = new Map();
+let e1WlProCache: PlayerWlProMap = new Map();
+let lastE1Load = 0;
+let e1FullyLoaded = false;
+const E1_CACHE_TTL_MS = 30 * 60 * 1000;
+
+async function refreshE1Data(): Promise<void> {
+  const expired = Date.now() - lastE1Load >= E1_CACHE_TTL_MS;
+  if (e1FullyLoaded && !expired) return;
+  try {
+    const [rosters, pool, totals, counts, wlPro] = await Promise.all([
+      loadTeamRostersMap(),
+      loadTeamHeroPoolMap(),
+      loadPlayerTotalsMap({ fields: ['gold_per_min', 'xp_per_min', 'kills', 'assists', 'deaths'] }),
+      loadPlayerCountsMap(),
+      loadPlayerWlProMap(),
+    ]);
+    e1RostersCache = rosters;
+    e1PoolCache = pool;
+    e1TotalsCache = totals;
+    e1CountsCache = counts;
+    e1WlProCache = wlPro;
+    lastE1Load = Date.now();
+    e1FullyLoaded = true;
+    logger.info(
+      { rosters: rosters.size, pool: pool.size, totals: totals.size, counts: counts.size, wlPro: wlPro.size },
+      '[PredictionModel] E1 data refreshed',
+    );
+  } catch (err) {
+    logger.error({ err }, '[PredictionModel] Failed to load E1 data');
+  }
+}
+
 function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
   const wRaw = (m.weights ?? {}) as Record<string, number>;
   const meta = (m.metadata ?? {}) as Record<string, unknown>;
@@ -194,7 +246,7 @@ function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
       : null;
   const tierRaw = meta['tier'];
   const tier: Tier | null = tierRaw === 't1' || tierRaw === 't2' || tierRaw === 't3' ? tierRaw : null;
-  const fv = (m.featuresVersion ?? 1) as 1 | 2 | 3;
+  const fv = (m.featuresVersion ?? 1) as 1 | 2 | 3 | 4;
   const engine: Engine = m.engine === 'lightgbm' ? 'lightgbm' : 'logreg';
 
   // logreg: веса в jsonb { w0, w1, ... }
@@ -315,9 +367,11 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
     cachedModels = next;
     lastModelLoad = Date.now();
 
-    // Fallback display: prefer лучшие фичи (v3) и LightGBM, чтобы model-status
+    // Fallback display: prefer лучшие фичи (v4) и LightGBM, чтобы model-status
     // показывал реально маршрутизируемую модель, а не худший v1 baseline.
     const surface =
+      next.get(modelKey('prematch_winner', 4, 'lightgbm')) ??
+      next.get(modelKey('prematch_winner', 4, 'logreg')) ??
       next.get(modelKey('prematch_winner', 3, 'lightgbm')) ??
       next.get(modelKey('prematch_winner', 3, 'logreg')) ??
       next.get(modelKey('prematch_winner', 2, 'lightgbm')) ??
@@ -353,9 +407,11 @@ export async function loadActiveModel(): Promise<LoadedModel | null> {
   }
 }
 
-/** Backward-compat: возвращает лучшую активную prematch модель (v3 > v2 > v1, lightgbm > logreg). */
+/** Backward-compat: возвращает лучшую активную prematch модель (v4 > v3 > v2 > v1, lightgbm > logreg). */
 export function getActiveModel(): LoadedModel | null {
   return (
+    cachedModels.get(modelKey('prematch_winner', 4, 'lightgbm')) ??
+    cachedModels.get(modelKey('prematch_winner', 4, 'logreg')) ??
     cachedModels.get(modelKey('prematch_winner', 3, 'lightgbm')) ??
     cachedModels.get(modelKey('prematch_winner', 3, 'logreg')) ??
     cachedModels.get(modelKey('prematch_winner', 2, 'lightgbm')) ??
@@ -743,7 +799,7 @@ function buildTeamFeatures(
   ];
 }
 
-function pickModel(tier: Tier | null, fv: 1 | 2 | 3): LoadedModel | null {
+function pickModel(tier: Tier | null, fv: 1 | 2 | 3 | 4): LoadedModel | null {
   if (tier) {
     const tm = getModel(tierKind(tier), fv);
     if (tm) return tm;
@@ -770,7 +826,7 @@ function modelUsable(m: LoadedModel): boolean {
  */
 function findLogregFallback(
   kind: PrematchKind,
-  fv: 1 | 2 | 3,
+  fv: 1 | 2 | 3 | 4,
   dim: number,
 ): LoadedModel | null {
   // exact lineage
@@ -819,7 +875,7 @@ export async function predictMatchWinner(
   probRadiantWin: number;
   rawProb: number;
   modelVersion: string;
-  featuresVersion: 1 | 2 | 3;
+  featuresVersion: 1 | 2 | 3 | 4;
   tier: Tier | null;
   features: Record<string, number>;
 } | null> {
@@ -959,7 +1015,8 @@ export async function predictMatchWinner(
   let features = teamFeats;
   let heroFeats: number[] | null = null;
   let extraFeats: number[] | null = null;
-  let usedFv: 1 | 2 | 3 = 1;
+  let e1Feats: number[] | null = null;
+  let usedFv: 1 | 2 | 3 | 4 = 1;
 
   // Сначала готовим hero-фичи, если есть драфт.
   if (
@@ -1005,13 +1062,50 @@ export async function predictMatchWinner(
       h2h: h2hCache,
       playerGlicko: playerGlickoCache,
     });
+
+    // v4 (E1 OD-extension) пробуем ПЕРЕД v3 — те же входные условия (драфт +
+    // хотя бы один массив account_ids). buildE1PrematchFeatures BC-нейтрален:
+    // отсутствие данных → 0, размерность фиксирована (18).
+    await refreshE1Data();
+    e1Feats = buildE1PrematchFeatures({
+      radiantTeamId,
+      direTeamId,
+      radiantPicks: drafts.radiantPicks,
+      direPicks: drafts.direPicks,
+      radiantAccountIds: drafts.radiantAccountIds ?? null,
+      direAccountIds: drafts.direAccountIds ?? null,
+      rosters: e1RostersCache,
+      pool: e1PoolCache,
+      totals: e1TotalsCache,
+      counts: e1CountsCache,
+      wlPro: e1WlProCache,
+    });
+    const v4Dim = teamFeats.length + heroFeats.length + extraFeats.length + e1Feats.length;
+    const v4Model = pickModel(tier, 4);
+    if (v4Model && v4Model.featureDim === v4Dim) {
+      model = v4Model;
+      features = [...teamFeats, ...heroFeats, ...extraFeats, ...e1Feats];
+      usedFv = 4;
+    } else if (v4Model && v4Model.engine === 'lightgbm') {
+      const v4LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 4, v4Dim);
+      if (v4LR) {
+        logger.info(
+          { lgbmVersion: v4Model.version, lgbmDim: v4Model.featureDim, lrVersion: v4LR.version, lrDim: v4LR.weights.length },
+          '[PredictionModel] v4 LightGBM dim mismatch, falling back to v4 LR',
+        );
+        model = v4LR;
+        features = [...teamFeats, ...heroFeats, ...extraFeats, ...e1Feats];
+        usedFv = 4;
+      }
+    }
+
     const v3Dim = teamFeats.length + heroFeats.length + extraFeats.length;
-    const v3Model = pickModel(tier, 3);
-    if (v3Model && v3Model.featureDim === v3Dim) {
+    const v3Model = !model ? pickModel(tier, 3) : null;
+    if (!model && v3Model && v3Model.featureDim === v3Dim) {
       model = v3Model;
       features = [...teamFeats, ...heroFeats, ...extraFeats];
       usedFv = 3;
-    } else if (v3Model && v3Model.engine === 'lightgbm') {
+    } else if (!model && v3Model && v3Model.engine === 'lightgbm') {
       // LightGBM v3 устарел (другая dim) — пробуем v3 LR того же tier/generic перед v2 fallback.
       const v3LR = findLogregFallback(tier ? tierKind(tier) : 'prematch_winner', 3, v3Dim);
       if (v3LR) {
@@ -1069,9 +1163,36 @@ export async function predictMatchWinner(
   if (model.engine === 'lightgbm' && model.blobB64) {
     const mlProb = await predictViaMlService(model.blobB64, features);
     if (mlProb == null) {
-      // Fallback: предпочитаем LR с тем же (kind, fv) lineage,
-      // чтобы не сбить tier-routing при сбое ml-service (см. findLogregFallback).
-      const fb = findLogregFallback(model.kind, model.featuresVersion, features.length);
+      // Fallback chain при сбое ml-service:
+      //  1) LR с тем же (kind, fv) lineage (сохраняет tier-routing).
+      //  2) Degrade: LR на меньшем fv (v4→v3→v2→v1) с пересборкой features,
+      //     чтобы не возвращать null и сохранить бесперебойный inference.
+      let fb = findLogregFallback(model.kind, model.featuresVersion, features.length);
+      if (!fb) {
+        const startFv = (model.featuresVersion - 1) as 3 | 2 | 1 | 0;
+        for (let tryFv = startFv; tryFv >= 1; tryFv = (tryFv - 1) as 3 | 2 | 1 | 0) {
+          let tryFeats: number[] | null = null;
+          if (tryFv === 3 && heroFeats && extraFeats) {
+            tryFeats = [...teamFeats, ...heroFeats, ...extraFeats];
+          } else if (tryFv === 2 && heroFeats) {
+            tryFeats = [...teamFeats, ...heroFeats];
+          } else if (tryFv === 1) {
+            tryFeats = teamFeats;
+          }
+          if (!tryFeats) continue;
+          const tryLR = findLogregFallback(model.kind, tryFv as 1 | 2 | 3, tryFeats.length);
+          if (tryLR) {
+            logger.warn(
+              { kind: model.kind, fromFv: model.featuresVersion, toFv: tryFv, lrVersion: tryLR.version },
+              '[PredictionModel] ml-service down, degrading fv for LR fallback',
+            );
+            fb = tryLR;
+            features = tryFeats;
+            usedFv = tryFv as 1 | 2 | 3;
+            break;
+          }
+        }
+      }
       if (!fb) return null;
       model = fb;
       let z = 0;
@@ -1098,9 +1219,19 @@ export async function predictMatchWinner(
       featureRecord[HERO_FEATURE_NAMES[i]] = heroFeats[i];
     }
   }
-  if (extraFeats && usedFv === 3) {
+  if (heroFeats && usedFv === 4) {
+    for (let i = 0; i < HERO_FEATURE_NAMES.length; i++) {
+      featureRecord[HERO_FEATURE_NAMES[i]] = heroFeats[i];
+    }
+  }
+  if (extraFeats && (usedFv === 3 || usedFv === 4)) {
     for (let i = 0; i < EXTRA_FEATURE_NAMES.length; i++) {
       featureRecord[EXTRA_FEATURE_NAMES[i]] = extraFeats[i];
+    }
+  }
+  if (e1Feats && usedFv === 4) {
+    for (let i = 0; i < E1_PREMATCH_FEATURE_NAMES.length; i++) {
+      featureRecord[E1_PREMATCH_FEATURE_NAMES[i]] = e1Feats[i];
     }
   }
 

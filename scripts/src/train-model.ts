@@ -243,7 +243,7 @@ function evaluate(samples: Sample[], w: number[], calib: CalibrationModel | null
 
 interface BucketResult {
   kind: typeof ALL_PREMATCH_KINDS[number];
-  featuresVersion: 1 | 2 | 3;
+  featuresVersion: 1 | 2 | 3 | 4;
   tier: Tier | null;
   weights: number[];
   calibration: CalibrationModel;
@@ -261,7 +261,7 @@ interface BucketResult {
 function trainBucket(
   samples: Sample[],
   kind: typeof ALL_PREMATCH_KINDS[number],
-  featuresVersion: 1 | 2 | 3,
+  featuresVersion: 1 | 2 | 3 | 4,
   tier: Tier | null,
   dim: number,
 ): BucketResult | null {

@@ -62,6 +62,15 @@ import {
   type TeamRollingState,
   type TeamExtendedSnapshot,
 } from './lib/team-extended';
+import {
+  loadTeamRostersMap,
+  loadTeamHeroPoolMap,
+  loadPlayerTotalsMap,
+  loadPlayerCountsMap,
+  loadPlayerWlProMap,
+  buildE1PrematchFeatures,
+  E1_PREMATCH_FEATURE_NAMES,
+} from './lib/e1-features';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES_PER_BUCKET = 80;  // LightGBM нужно чуть больше чем LR
@@ -369,8 +378,19 @@ async function main() {
   const playerGlicko: PlayerGlickoMap = new Map();
   for (const r of prRows) playerGlicko.set(r.accountId, { rating: r.rating, rd: r.rd });
 
+  // E1 OD-extension loaders (v4 prematch features). Все builders BC-нейтральны:
+  // отсутствие данных в map → фичи=0, модель не ломается.
+  console.log('[train-lightgbm] Loading E1 maps …');
+  const e1Rosters = await loadTeamRostersMap();
+  const e1Pool = await loadTeamHeroPoolMap();
+  const e1Totals = await loadPlayerTotalsMap({
+    fields: ['gold_per_min', 'xp_per_min', 'kills', 'assists', 'deaths'],
+  });
+  const e1Counts = await loadPlayerCountsMap();
+  const e1WlPro = await loadPlayerWlProMap();
   console.log(
-    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} synergy=${synergyRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size}`,
+    `[train-lightgbm] drafts=${drafts.size} hero=${heroStats.size} matchups=${matchupsRows.length} synergy=${synergyRows.length} phs=${playerHeroStats.size} form=${recentForm.size} h2h=${h2h.size} glicko=${playerGlicko.size} ` +
+    `e1.rosters=${e1Rosters.size} e1.pool=${e1Pool.size} e1.totals=${e1Totals.size} e1.counts=${e1Counts.size} e1.wlPro=${e1WlPro.size}`,
   );
 
   // ── Предвычисление контекста для расширенных командных фичей ───────────
@@ -457,6 +477,9 @@ async function main() {
   const v2Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
   const v3All: Sample[] = [];
   const v3Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
+  // v4 = v3 + E1 OD-extension (roster/pool/baseline, +18 features).
+  const v4All: Sample[] = [];
+  const v4Bucket: Record<Tier, Sample[]> = { t1: [], t2: [], t3: [] };
 
   for (const m of matches) {
     if (!m.radiantTeamId || !m.direTeamId) continue;
@@ -500,17 +523,37 @@ async function main() {
     });
     const v3S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats], label };
     v3All.push(v3S); if (tier) v3Bucket[tier].push(v3S);
+
+    // v4: добавляем E1 фичи. Loaders нейтральны (нет данных → 0), поэтому
+    // v4 покрывает то же множество матчей что v3 (account_ids известны).
+    const e1Feats = buildE1PrematchFeatures({
+      radiantTeamId: m.radiantTeamId,
+      direTeamId: m.direTeamId,
+      radiantPicks: draft.radiantPicks,
+      direPicks: draft.direPicks,
+      radiantAccountIds: draft.radiantAccountIds,
+      direAccountIds: draft.direAccountIds,
+      rosters: e1Rosters,
+      pool: e1Pool,
+      totals: e1Totals,
+      counts: e1Counts,
+      wlPro: e1WlPro,
+    });
+    const v4S: Sample = { features: [...teamFeats, ...heroFeats, ...extraFeats, ...e1Feats], label };
+    v4All.push(v4S); if (tier) v4Bucket[tier].push(v4S);
   }
 
   console.log(
     `[train-lightgbm] v1=${v1All.length} (t1=${v1Bucket.t1.length}/t2=${v1Bucket.t2.length}/t3=${v1Bucket.t3.length}) ` +
     `v2=${v2All.length} (t1=${v2Bucket.t1.length}/t2=${v2Bucket.t2.length}/t3=${v2Bucket.t3.length}) ` +
-    `v3=${v3All.length} (t1=${v3Bucket.t1.length}/t2=${v3Bucket.t2.length}/t3=${v3Bucket.t3.length})`,
+    `v3=${v3All.length} (t1=${v3Bucket.t1.length}/t2=${v3Bucket.t2.length}/t3=${v3Bucket.t3.length}) ` +
+    `v4=${v4All.length} (t1=${v4Bucket.t1.length}/t2=${v4Bucket.t2.length}/t3=${v4Bucket.t3.length})`,
   );
 
   const v1Names = [...TEAM_FEATURE_NAMES];
   const v2Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES];
   const v3Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES];
+  const v4Names = [...TEAM_FEATURE_NAMES, ...HERO_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES, ...E1_PREMATCH_FEATURE_NAMES];
 
   // Фильтрация по меткам бакетов: env LIGHTGBM_KINDS (comma-separated)
   // и/или CLI `--label v3/t1` (можно повторять). Whitelist валидируется
@@ -532,7 +575,7 @@ async function main() {
 
   type Job = {
     label: string;
-    fv: 1 | 2 | 3;
+    fv: 1 | 2 | 3 | 4;
     kind: typeof ALL_PREMATCH_KINDS[number];
     tier: Tier | null;
     samples: Sample[];
@@ -552,6 +595,10 @@ async function main() {
     { label: 'v3/t1',       fv: 3 as const, kind: tierKind('t1'),              tier: 't1' as const, samples: v3Bucket.t1, names: v3Names },
     { label: 'v3/t2',       fv: 3 as const, kind: tierKind('t2'),              tier: 't2' as const, samples: v3Bucket.t2, names: v3Names },
     { label: 'v3/t3',       fv: 3 as const, kind: tierKind('t3'),              tier: 't3' as const, samples: v3Bucket.t3, names: v3Names },
+    { label: 'v4/fallback', fv: 4 as const, kind: 'prematch_winner' as const, tier: null, samples: v4All,       names: v4Names },
+    { label: 'v4/t1',       fv: 4 as const, kind: tierKind('t1'),              tier: 't1' as const, samples: v4Bucket.t1, names: v4Names },
+    { label: 'v4/t2',       fv: 4 as const, kind: tierKind('t2'),              tier: 't2' as const, samples: v4Bucket.t2, names: v4Names },
+    { label: 'v4/t3',       fv: 4 as const, kind: tierKind('t3'),              tier: 't3' as const, samples: v4Bucket.t3, names: v4Names },
   ] as Job[]).filter(j => include(j.label));
 
   const versionStem = `lgbm-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
