@@ -28,6 +28,11 @@ export interface AdminSettingsInput {
    * @maximum 100000
    */
   trainMinSamples?: number;
+  /**
+   * @minimum 0
+   * @maximum 2000
+   */
+  minTeamRating?: number;
   /** @nullable */
   notes?: string | null;
 }

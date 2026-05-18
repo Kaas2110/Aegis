@@ -16,6 +16,7 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   trainWindowDays: 365,
   trainMaxPatches: 4,
   trainMinSamples: 1000,
+  minTeamRating: 1200,
   notes: null,
   monetizationMode: null,
   featureFlags: null,
@@ -54,6 +55,7 @@ export async function updateAppSettings(
     | 'trainWindowDays'
     | 'trainMaxPatches'
     | 'trainMinSamples'
+    | 'minTeamRating'
     | 'notes'
   >>,
 ): Promise<AppSettings> {

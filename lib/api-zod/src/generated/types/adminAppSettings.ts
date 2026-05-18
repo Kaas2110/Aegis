@@ -28,6 +28,12 @@ export interface AdminAppSettings {
    * @maximum 100000
    */
   trainMinSamples: number;
+  /**
+   * Мин. Glicko-рейтинг OpenDota команды для показа матча в мобильной ленте (max двух команд ≥ порога). 0 — выключить фильтр.
+   * @minimum 0
+   * @maximum 2000
+   */
+  minTeamRating: number;
   /** @nullable */
   notes?: string | null;
   /** ISO-8601 timestamp */

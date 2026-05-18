@@ -550,6 +550,12 @@ export const appSettingsTable = pgTable('app_settings', {
   trainWindowDays: integer('train_window_days').notNull().default(365),
   trainMaxPatches: integer('train_max_patches').notNull().default(4),
   trainMinSamples: integer('train_min_samples').notNull().default(1000),
+  // Минимальный OpenDota Glicko-rating команды, при котором матч показывается
+  // в мобильной ленте. Логика «хотя бы у одной»: max(radiantRating, direRating)
+  // >= minTeamRating. Команды без рейтинга (NULL) считаются как 0. Дефолт 1200
+  // отсекает tier-3/4 регионалки, но оставляет квалификации tier-1 vs noname.
+  // 0 = фильтр выключен (показать всё). Конфигурируется из админки.
+  minTeamRating: integer('min_team_rating').notNull().default(1200),
   notes: text('notes'),
   // ── Legacy monetization (зарезервировано под платную модель: $4/нед, $15/мес) ──
   // Колонки физически есть в БД, кодом сейчас не читаются, но сохраняем как

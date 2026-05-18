@@ -118,6 +118,7 @@ router.post('/settings', async (req, res) => {
     trainWindowDays?: number;
     trainMaxPatches?: number;
     trainMinSamples?: number;
+    minTeamRating?: number;
     notes?: string | null;
   };
   const patch: Parameters<typeof updateAppSettings>[0] = {};
@@ -133,6 +134,9 @@ router.post('/settings', async (req, res) => {
   }
   if (typeof body.trainMinSamples === 'number' && body.trainMinSamples >= 50 && body.trainMinSamples <= 100000) {
     patch.trainMinSamples = body.trainMinSamples;
+  }
+  if (typeof body.minTeamRating === 'number' && Number.isFinite(body.minTeamRating) && body.minTeamRating >= 0 && body.minTeamRating <= 2000) {
+    patch.minTeamRating = Math.floor(body.minTeamRating);
   }
   if (typeof body.notes === 'string' || body.notes === null) patch.notes = body.notes;
 

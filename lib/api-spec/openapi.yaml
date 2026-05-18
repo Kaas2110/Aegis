@@ -517,6 +517,7 @@ components:
         - trainWindowDays
         - trainMaxPatches
         - trainMinSamples
+        - minTeamRating
         - updatedAt
       properties:
         id:
@@ -540,6 +541,11 @@ components:
           description: Минимальное число сэмплов для запуска обучения
           minimum: 50
           maximum: 100000
+        minTeamRating:
+          type: integer
+          description: Мин. Glicko-рейтинг OpenDota команды для показа матча в мобильной ленте (max двух команд ≥ порога). 0 — выключить фильтр.
+          minimum: 0
+          maximum: 2000
         notes:
           type: ["string", "null"]
         updatedAt:
@@ -580,6 +586,10 @@ components:
           type: integer
           minimum: 50
           maximum: 100000
+        minTeamRating:
+          type: integer
+          minimum: 0
+          maximum: 2000
         notes:
           type: ["string", "null"]
 

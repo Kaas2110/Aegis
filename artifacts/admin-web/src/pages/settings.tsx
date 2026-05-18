@@ -22,6 +22,7 @@ export default function Settings() {
   const [trainWindowDays, setTrainWindowDays] = useState("365");
   const [trainMaxPatches, setTrainMaxPatches] = useState("4");
   const [trainMinSamples, setTrainMinSamples] = useState("1000");
+  const [minTeamRating, setMinTeamRating] = useState("1200");
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function Settings() {
       setTrainWindowDays(data.settings.trainWindowDays.toString());
       setTrainMaxPatches(data.settings.trainMaxPatches.toString());
       setTrainMinSamples(data.settings.trainMinSamples.toString());
+      setMinTeamRating(data.settings.minTeamRating.toString());
       setNotes(data.settings.notes || "");
     }
   }, [data?.settings]);
@@ -56,6 +58,11 @@ export default function Settings() {
       toast({ variant: "destructive", title: "Ошибка", description: "Минимум сэмплов: 50–100000" });
       return;
     }
+    const minRating = parseInt(minTeamRating, 10);
+    if (isNaN(minRating) || minRating < 0 || minRating > 2000) {
+      toast({ variant: "destructive", title: "Ошибка", description: "Мин. рейтинг команды: 0–2000 (0 — выключить фильтр)" });
+      return;
+    }
 
     updateSettings.mutate({
       data: {
@@ -64,6 +71,7 @@ export default function Settings() {
         trainWindowDays: window,
         trainMaxPatches: patches,
         trainMinSamples: minSamples,
+        minTeamRating: minRating,
         notes: notes || null
       }
     }, {
@@ -161,6 +169,22 @@ export default function Settings() {
               value={trainMinSamples} onChange={e => setTrainMinSamples(e.target.value)}
             />
           </div>
+        </div>
+
+        <div className="h-px bg-border w-full" />
+
+        <div className="space-y-3">
+          <Label className="text-sm font-bold uppercase tracking-wider">Мин. рейтинг команды для показа матча</Label>
+          <p className="text-xs text-muted-foreground font-mono mb-2">
+            OpenDota Glicko-рейтинг. Матч показывается в мобильной ленте, если у хотя бы одной команды рейтинг ≥ порога.
+            Команды без рейтинга считаются как 0. <b>0</b> — выключить фильтр (показать все). <b>1200</b> — отсекает tier-3/4 регионалки,
+            оставляет квалификации tier-1 vs noname. Ориентиры: Spirit ≈1480, Tundra ≈1350, PlayTime ≈1325, нижний tier-3 ≈1000–1100.
+          </p>
+          <Input
+            type="number" min={0} max={2000} step={50}
+            className="font-mono rounded-none max-w-[200px]"
+            value={minTeamRating} onChange={e => setMinTeamRating(e.target.value)}
+          />
         </div>
 
         <div className="h-px bg-border w-full" />

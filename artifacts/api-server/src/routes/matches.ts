@@ -4,6 +4,7 @@ import { inArray } from 'drizzle-orm';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
 import { getApiKey, getStratzToken } from '../services/ApiKeysService';
+import { getAppSettings } from '../services/AppSettings';
 import { withOpenDotaKey } from '../lib/openDotaUrl';
 
 const router: IRouter = Router();
@@ -131,16 +132,22 @@ function namesMatch(a: string, b: string): boolean {
 // Если обе команды нам неизвестны (нет в `teams`) — тоже скрываем: ML-предикт
 // для них всё равно вернёт null, мобилка покажет «Данные собираются...» вечно.
 //
-// Конфигурируется через env `MIN_TEAM_RATING`. Установите `0`, чтобы выключить
-// фильтр (показывать все матчи).
+// Конфигурируется из админки (app_settings.min_team_rating, дефолт 1200).
+// ENV `MIN_TEAM_RATING` имеет приоритет если задан (override для отладки).
+// Установите `0` (в БД или env), чтобы выключить фильтр.
 
-const MIN_TEAM_RATING_DEFAULT = 0;
-
-function getMinTeamRating(): number {
+async function getMinTeamRating(): Promise<number> {
   const raw = process.env.MIN_TEAM_RATING;
-  if (raw === undefined || raw === '') return MIN_TEAM_RATING_DEFAULT;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? n : MIN_TEAM_RATING_DEFAULT;
+  if (raw !== undefined && raw !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  try {
+    const s = await getAppSettings();
+    return s.minTeamRating ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 interface TeamRatingMaps {
@@ -217,7 +224,7 @@ async function filterMatchesByMinRating<T>(
   matches: T[],
   extract: (m: T) => { idR: unknown; idD: unknown; nameR: unknown; nameD: unknown },
 ): Promise<T[]> {
-  const min = getMinTeamRating();
+  const min = await getMinTeamRating();
   if (min <= 0 || matches.length === 0) return matches;
   const ids: number[] = [];
   const names: string[] = [];
@@ -774,7 +781,7 @@ router.get('/live', async (req, res) => {
       const afterN = Array.isArray(filtered) ? filtered.length : 0;
       if (beforeN > afterN) {
         req.log.info(
-          { tag: 'rating-filter', source: 'opendota', kept: afterN, dropped: beforeN - afterN, minRating: getMinTeamRating() },
+          { tag: 'rating-filter', source: 'opendota', kept: afterN, dropped: beforeN - afterN, minRating: await getMinTeamRating() },
           '[matches/live] filtered low-tier matches',
         );
       }

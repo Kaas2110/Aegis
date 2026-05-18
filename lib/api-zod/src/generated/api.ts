@@ -57,6 +57,9 @@ export const getAdminSettingsResponseSettingsTrainMaxPatchesMax = 20;
 export const getAdminSettingsResponseSettingsTrainMinSamplesMin = 50;
 export const getAdminSettingsResponseSettingsTrainMinSamplesMax = 100000;
 
+export const getAdminSettingsResponseSettingsMinTeamRatingMin = 0;
+export const getAdminSettingsResponseSettingsMinTeamRatingMax = 2000;
+
 export const GetAdminSettingsResponse = zod.object({
   settings: zod.object({
     id: zod.number(),
@@ -77,6 +80,13 @@ export const GetAdminSettingsResponse = zod.object({
       .min(getAdminSettingsResponseSettingsTrainMinSamplesMin)
       .max(getAdminSettingsResponseSettingsTrainMinSamplesMax)
       .describe("Минимальное число сэмплов для запуска обучения"),
+    minTeamRating: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsMinTeamRatingMin)
+      .max(getAdminSettingsResponseSettingsMinTeamRatingMax)
+      .describe(
+        "Мин. Glicko-рейтинг OpenDota команды для показа матча в мобильной ленте (max двух команд ≥ порога). 0 — выключить фильтр.",
+      ),
     notes: zod.string().nullish(),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),
@@ -95,6 +105,9 @@ export const updateAdminSettingsBodyTrainMaxPatchesMax = 20;
 
 export const updateAdminSettingsBodyTrainMinSamplesMin = 50;
 export const updateAdminSettingsBodyTrainMinSamplesMax = 100000;
+
+export const updateAdminSettingsBodyMinTeamRatingMin = 0;
+export const updateAdminSettingsBodyMinTeamRatingMax = 2000;
 
 export const UpdateAdminSettingsBody = zod.object({
   useBookmakerOdds: zod.boolean().optional(),
@@ -118,6 +131,11 @@ export const UpdateAdminSettingsBody = zod.object({
     .min(updateAdminSettingsBodyTrainMinSamplesMin)
     .max(updateAdminSettingsBodyTrainMinSamplesMax)
     .optional(),
+  minTeamRating: zod
+    .number()
+    .min(updateAdminSettingsBodyMinTeamRatingMin)
+    .max(updateAdminSettingsBodyMinTeamRatingMax)
+    .optional(),
   notes: zod.string().nullish(),
 });
 
@@ -128,6 +146,9 @@ export const updateAdminSettingsResponseSettingsTrainMaxPatchesMax = 20;
 
 export const updateAdminSettingsResponseSettingsTrainMinSamplesMin = 50;
 export const updateAdminSettingsResponseSettingsTrainMinSamplesMax = 100000;
+
+export const updateAdminSettingsResponseSettingsMinTeamRatingMin = 0;
+export const updateAdminSettingsResponseSettingsMinTeamRatingMax = 2000;
 
 export const UpdateAdminSettingsResponse = zod.object({
   settings: zod.object({
@@ -149,6 +170,13 @@ export const UpdateAdminSettingsResponse = zod.object({
       .min(updateAdminSettingsResponseSettingsTrainMinSamplesMin)
       .max(updateAdminSettingsResponseSettingsTrainMinSamplesMax)
       .describe("Минимальное число сэмплов для запуска обучения"),
+    minTeamRating: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsMinTeamRatingMin)
+      .max(updateAdminSettingsResponseSettingsMinTeamRatingMax)
+      .describe(
+        "Мин. Glicko-рейтинг OpenDota команды для показа матча в мобильной ленте (max двух команд ≥ порога). 0 — выключить фильтр.",
+      ),
     notes: zod.string().nullish(),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),
