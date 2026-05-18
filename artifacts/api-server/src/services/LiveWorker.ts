@@ -283,13 +283,22 @@ async function pollOnce(): Promise<void> {
   for (const m of changed) {
     if ((m.game_time ?? -1) < 60) continue;
     try {
+      // 3-tier: если у нас раскрытый драфт (10 героев) + оба team_id известны —
+      // предпочитаем live_total_*_with_draft (snapshot7 + team4 + e1_live2).
+      // Иначе MarketLgbm упадёт на pure live_total_* (snapshot7).
+      const draft = extractDraftFromLive(m);
+      const rTid = m.team_id_radiant;
+      const dTid = m.team_id_dire;
+      const draftHint = (draft && rTid && dTid)
+        ? { radiantPicks: draft.radiantPicks, direPicks: draft.direPicks, radiantTeamId: rTid, direTeamId: dTid }
+        : undefined;
       const lt = await predictLiveTotalsFor({
         gameTimeSec: m.game_time ?? 0,
         radiantScore: m.radiant_score ?? null,
         direScore: m.dire_score ?? null,
         radiantLead: m.radiant_lead ?? null,
         buildingState: m.building_state ?? null,
-      });
+      }, draftHint);
       if (lt.totalKillsLogN && lt.modelVersions.kills) {
         await db.insert(predictionsTable).values({
           matchId: m.match_id!,

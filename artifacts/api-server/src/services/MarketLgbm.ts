@@ -26,12 +26,23 @@
 import { db, modelVersionsTable, teamsTable } from '@workspace/db';
 import { eq, and, inArray } from 'drizzle-orm';
 import { logger } from '../lib/logger';
+import {
+  loadTeamRostersMap, loadTeamHeroPoolMap, loadHeroBenchmarksMap,
+  loadHeroItemPopularityMap, loadPlayerTotalsMap, loadPlayerCountsMap,
+  loadPlayerWlProMap,
+  buildE1KillsFeatures, buildE1DurationFeatures, buildE1FbFeatures,
+  buildE1LiveTotalsFeatures,
+  type TeamRostersMap, type TeamHeroPoolMap, type HeroBenchmarksMap,
+  type HeroItemPopularityMap, type PlayerTotalsMap, type PlayerCountsMap,
+  type PlayerWlProMap,
+} from '../lib/e1-features';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 
 const TEAM_CACHE_TTL_MS = 15 * 60 * 1000;
+const E1_CACHE_TTL_MS = 15 * 60 * 1000;
 const PREDICT_CACHE_TTL_MS = 60 * 1000;
 const CIRCUIT_BACKOFF_MS = 60_000;
 
@@ -41,11 +52,24 @@ export type MarketKind =
   | 'market_total_duration'
   | 'market_total_duration_q25'
   | 'market_total_duration_q75'
+  // 3-tier (pure → with_draft → live). Когда caller передаёт picks И
+  // соответствующая _with_draft модель загружена, используем её; иначе fallback
+  // на pure-вариант (team-only features). Tier'ы тренируются отдельно через
+  // train-market-models --market <name>_with_draft.
+  | 'market_first_blood_with_draft'
+  | 'market_total_kills_with_draft'
+  | 'market_total_duration_with_draft'
+  | 'market_total_duration_q25_with_draft'
+  | 'market_total_duration_q75_with_draft'
   // T3.5 — live regression: смотрят на текущий снапшот матча, предсказывают
   // финальный total_kills / duration_sec. Используют 7-фичей feature view
   // (см. buildLiveTotalsFeatures ниже + scripts/src/train-live-totals.ts).
   | 'live_total_kills'
-  | 'live_total_duration';
+  | 'live_total_duration'
+  // Live + draft (фичи 13: snapshot7 + team4 + e1_live2). Активируется когда
+  // picks известны (OpenDota /api/live раскрыл драфт) И модель загружена.
+  | 'live_total_kills_with_draft'
+  | 'live_total_duration_with_draft';
 
 const ALL_MARKET_KINDS: MarketKind[] = [
   'market_first_blood',
@@ -53,9 +77,26 @@ const ALL_MARKET_KINDS: MarketKind[] = [
   'market_total_duration',
   'market_total_duration_q25',
   'market_total_duration_q75',
+  'market_first_blood_with_draft',
+  'market_total_kills_with_draft',
+  'market_total_duration_with_draft',
+  'market_total_duration_q25_with_draft',
+  'market_total_duration_q75_with_draft',
   'live_total_kills',
   'live_total_duration',
+  'live_total_kills_with_draft',
+  'live_total_duration_with_draft',
 ];
+
+const WITH_DRAFT_KINDS: ReadonlySet<MarketKind> = new Set<MarketKind>([
+  'market_first_blood_with_draft',
+  'market_total_kills_with_draft',
+  'market_total_duration_with_draft',
+  'market_total_duration_q25_with_draft',
+  'market_total_duration_q75_with_draft',
+  'live_total_kills_with_draft',
+  'live_total_duration_with_draft',
+]);
 
 /**
  * T3.5 live totals feature view (v1, 7 фич, OD-only). ОБЯЗАТЕЛЬНО должна
@@ -112,6 +153,54 @@ type PredictResp = ClassificationResp | RegressionResp;
 let cached: Map<MarketKind, LoadedMarket> = new Map();
 let teamRatings: Map<number, { rating: number; wins: number; losses: number }> = new Map();
 let lastTeamLoad = 0;
+
+// E1 maps — загружаются лениво ТОЛЬКО если есть хотя бы одна _with_draft модель.
+// Иначе нет смысла тащить десятки тысяч строк в RAM.
+interface E1Maps {
+  rosters: TeamRostersMap;
+  pool: TeamHeroPoolMap;
+  benchmarks: HeroBenchmarksMap;
+  itemPop: HeroItemPopularityMap;
+  totals: PlayerTotalsMap;
+  counts: PlayerCountsMap;
+  wlPro: PlayerWlProMap;
+}
+let e1Maps: E1Maps | null = null;
+let lastE1Load = 0;
+let e1LoadInFlight: Promise<E1Maps> | null = null;
+
+async function refreshE1Maps(): Promise<E1Maps | null> {
+  // Нужны ли E1 фичи вообще?
+  let hasWithDraft = false;
+  for (const k of cached.keys()) {
+    if (WITH_DRAFT_KINDS.has(k)) { hasWithDraft = true; break; }
+  }
+  if (!hasWithDraft) return null;
+
+  if (e1Maps && Date.now() - lastE1Load < E1_CACHE_TTL_MS) return e1Maps;
+  if (e1LoadInFlight) return e1LoadInFlight;
+
+  e1LoadInFlight = (async () => {
+    const [rosters, pool, benchmarks, itemPop, totals, counts, wlPro] = await Promise.all([
+      loadTeamRostersMap(),
+      loadTeamHeroPoolMap(),
+      loadHeroBenchmarksMap(),
+      loadHeroItemPopularityMap(),
+      loadPlayerTotalsMap({ fields: ['gold_per_min', 'xp_per_min', 'kills', 'assists', 'deaths'] }),
+      loadPlayerCountsMap(),
+      loadPlayerWlProMap(),
+    ]);
+    e1Maps = { rosters, pool, benchmarks, itemPop, totals, counts, wlPro };
+    lastE1Load = Date.now();
+    logger.info({
+      rosters: rosters.size, pool: pool.size, benchmarks: benchmarks.size,
+      itemPop: itemPop.size, totals: totals.size, counts: counts.size, wlPro: wlPro.size,
+    }, '[MarketLgbm] E1 maps refreshed');
+    return e1Maps;
+  })();
+  try { return await e1LoadInFlight; }
+  finally { e1LoadInFlight = null; }
+}
 
 let circuitOpen = false;
 let circuitOpenUntil = 0;
@@ -294,11 +383,64 @@ interface CachedPrediction {
   // в totals-ladder. Если модели нет в БД — null.
   totalDurationLogQ25: number | null;
   totalDurationLogQ75: number | null;
+  // Какой tier реально использовался для каждого маркета: 'with_draft' (E1)
+  // или 'pure' (team-only). null если модель не сработала.
+  tier: {
+    firstBlood: 'pure' | 'with_draft' | null;
+    totalKills: 'pure' | 'with_draft' | null;
+    totalDuration: 'pure' | 'with_draft' | null;
+    totalDurationQ25: 'pure' | 'with_draft' | null;
+    totalDurationQ75: 'pure' | 'with_draft' | null;
+  };
 }
 const predictCache: Map<string, CachedPrediction> = new Map();
 
-function cacheKey(rId: number, dId: number): string {
-  return `${rId}|${dId}`;
+function cacheKey(rId: number, dId: number, draftHint?: DraftHint): string {
+  if (!draftHint) return `${rId}|${dId}|nodraft`;
+  // Sort picks для стабильного fingerprint при том же составе.
+  const r = [...draftHint.radiantPicks].sort((a, b) => a - b).join(',');
+  const d = [...draftHint.direPicks].sort((a, b) => a - b).join(',');
+  return `${rId}|${dId}|${r}|${d}`;
+}
+
+/** Draft hint, общий для prematch markets и live totals. */
+export interface DraftHint {
+  radiantPicks: number[];
+  direPicks: number[];
+}
+
+function emptyTier(): CachedPrediction['tier'] {
+  return {
+    firstBlood: null,
+    totalKills: null,
+    totalDuration: null,
+    totalDurationQ25: null,
+    totalDurationQ75: null,
+  };
+}
+
+/**
+ * Каскад per-market: пробуем with_draft если есть picks И модель загружена,
+ * иначе pure. Возвращает (response, kind, tier) или null.
+ */
+async function predictMarketCascade(
+  pureKind: MarketKind,
+  withDraftKind: MarketKind,
+  pureFeatures: number[],
+  withDraftFeatures: number[] | null,
+): Promise<{ resp: PredictResp; tier: 'pure' | 'with_draft' } | null> {
+  if (withDraftFeatures) {
+    const wd = cached.get(withDraftKind);
+    if (wd) {
+      const r = await callMlPredict(wd.blobB64, withDraftFeatures);
+      if (r) return { resp: r, tier: 'with_draft' };
+    }
+  }
+  const pure = cached.get(pureKind);
+  if (!pure) return null;
+  const r = await callMlPredict(pure.blobB64, pureFeatures);
+  if (!r) return null;
+  return { resp: r, tier: 'pure' };
 }
 
 /**
@@ -311,6 +453,7 @@ function cacheKey(rId: number, dId: number): string {
 export async function predictMarketsFor(
   radiantTeamId: number,
   direTeamId: number,
+  draftHint?: DraftHint,
 ): Promise<CachedPrediction> {
   const empty: CachedPrediction = {
     ts: Date.now(),
@@ -319,45 +462,77 @@ export async function predictMarketsFor(
     totalDurationLogN: null,
     totalDurationLogQ25: null,
     totalDurationLogQ75: null,
+    tier: emptyTier(),
   };
   if (cached.size === 0) return empty;
 
-  const key = cacheKey(radiantTeamId, direTeamId);
+  // Валидируем picks: должно быть ровно 5+5 уникальных. Иначе draftHint не пригоден.
+  const hasValidDraft = !!draftHint
+    && draftHint.radiantPicks.length === 5 && draftHint.direPicks.length === 5
+    && new Set(draftHint.radiantPicks).size === 5 && new Set(draftHint.direPicks).size === 5;
+  const dh = hasValidDraft ? draftHint! : undefined;
+
+  const key = cacheKey(radiantTeamId, direTeamId, dh);
   const hit = predictCache.get(key);
   if (hit && Date.now() - hit.ts < PREDICT_CACHE_TTL_MS) return hit;
 
   await refreshTeams();
-  const features = buildTeamFeatures(radiantTeamId, direTeamId);
-  if (!features) {
+  const teamFeats = buildTeamFeatures(radiantTeamId, direTeamId);
+  if (!teamFeats) {
     predictCache.set(key, empty);
     return empty;
   }
 
-  const fb = cached.get('market_first_blood');
-  const tk = cached.get('market_total_kills');
-  const td = cached.get('market_total_duration');
-  const tdQ25 = cached.get('market_total_duration_q25');
-  const tdQ75 = cached.get('market_total_duration_q75');
+  // E1 фичи для with_draft tier'а. Если e1Maps не нужны (нет _with_draft моделей)
+  // или ни одного hero pick нет — wdFeats остаётся null и каскад уйдёт в pure.
+  let wdFb: number[] | null = null;
+  let wdKills: number[] | null = null;
+  let wdDur: number[] | null = null;
+  if (dh) {
+    const e1 = await refreshE1Maps();
+    if (e1) {
+      const e1Kills = buildE1KillsFeatures({
+        radiantPicks: dh.radiantPicks, direPicks: dh.direPicks, benchmarks: e1.benchmarks,
+      });
+      const e1Dur = buildE1DurationFeatures({
+        radiantPicks: dh.radiantPicks, direPicks: dh.direPicks, itemPop: e1.itemPop,
+      });
+      const e1Fb = buildE1FbFeatures({
+        radiantPicks: dh.radiantPicks, direPicks: dh.direPicks,
+        benchmarks: e1.benchmarks, itemPop: e1.itemPop,
+      });
+      wdKills = [...teamFeats, ...e1Kills];
+      wdDur = [...teamFeats, ...e1Dur];
+      wdFb = [...teamFeats, ...e1Fb];
+    }
+  }
 
   const [fbR, tkR, tdR, tdQ25R, tdQ75R] = await Promise.all([
-    fb ? callMlPredict(fb.blobB64, features) : Promise.resolve(null),
-    tk ? callMlPredict(tk.blobB64, features) : Promise.resolve(null),
-    td ? callMlPredict(td.blobB64, features) : Promise.resolve(null),
-    tdQ25 ? callMlPredict(tdQ25.blobB64, features) : Promise.resolve(null),
-    tdQ75 ? callMlPredict(tdQ75.blobB64, features) : Promise.resolve(null),
+    predictMarketCascade('market_first_blood', 'market_first_blood_with_draft', teamFeats, wdFb),
+    predictMarketCascade('market_total_kills', 'market_total_kills_with_draft', teamFeats, wdKills),
+    predictMarketCascade('market_total_duration', 'market_total_duration_with_draft', teamFeats, wdDur),
+    predictMarketCascade('market_total_duration_q25', 'market_total_duration_q25_with_draft', teamFeats, wdDur),
+    predictMarketCascade('market_total_duration_q75', 'market_total_duration_q75_with_draft', teamFeats, wdDur),
   ]);
 
   const out: CachedPrediction = {
     ts: Date.now(),
-    firstBloodP: fbR && fbR.task_type === 'classification' ? fbR.calibrated_prob : null,
-    totalKillsLogN: tkR && tkR.task_type === 'regression'
-      ? { mean: tkR.mean, std: Math.max(1e-3, tkR.std) }
+    firstBloodP: fbR && fbR.resp.task_type === 'classification' ? fbR.resp.calibrated_prob : null,
+    totalKillsLogN: tkR && tkR.resp.task_type === 'regression'
+      ? { mean: tkR.resp.mean, std: Math.max(1e-3, tkR.resp.std) }
       : null,
-    totalDurationLogN: tdR && tdR.task_type === 'regression'
-      ? { mean: tdR.mean, std: Math.max(1e-3, tdR.std) }
+    totalDurationLogN: tdR && tdR.resp.task_type === 'regression'
+      ? { mean: tdR.resp.mean, std: Math.max(1e-3, tdR.resp.std) }
       : null,
-    totalDurationLogQ25: tdQ25R && tdQ25R.task_type === 'quantile' ? tdQ25R.mean : null,
-    totalDurationLogQ75: tdQ75R && tdQ75R.task_type === 'quantile' ? tdQ75R.mean : null,
+    totalDurationLogQ25: tdQ25R && tdQ25R.resp.task_type === 'quantile' ? tdQ25R.resp.mean : null,
+    totalDurationLogQ75: tdQ75R && tdQ75R.resp.task_type === 'quantile' ? tdQ75R.resp.mean : null,
+    tier: {
+      firstBlood: fbR?.tier ?? null,
+      totalKills: tkR?.tier ?? null,
+      totalDuration: tdR?.tier ?? null,
+      totalDurationQ25: tdQ25R?.tier ?? null,
+      totalDurationQ75: tdQ75R?.tier ?? null,
+    },
   };
   predictCache.set(key, out);
   return out;
@@ -407,41 +582,110 @@ export interface LiveTotalsPrediction {
   totalKillsLogN: { mean: number; std: number } | null;
   totalDurationLogN: { mean: number; std: number } | null;
   modelVersions: { kills: string | null; duration: string | null };
+  tier: {
+    kills: 'pure' | 'with_draft' | null;
+    duration: 'pure' | 'with_draft' | null;
+  };
 }
 
-export async function predictLiveTotalsFor(snapshot: {
-  gameTimeSec: number;
-  radiantScore: number | null;
-  direScore: number | null;
-  radiantLead: number | null;
-  buildingState: number | null;
-}): Promise<LiveTotalsPrediction> {
+/**
+ * Live totals (T3.5 + 3-tier).
+ *
+ * Каскад:
+ *   1. picks + teamIds переданы И live_total_*_with_draft модель загружена →
+ *      13-фич view (snapshot7 + team4_no_bias + e1_live2).
+ *   2. Иначе pure live (7-фич, только snapshot).
+ *
+ * При выборе with_draft modelVersion в ответе указывает на with_draft-блоб,
+ * чтобы LiveWorker записал правильную версию в predictions.
+ */
+export async function predictLiveTotalsFor(
+  snapshot: {
+    gameTimeSec: number;
+    radiantScore: number | null;
+    direScore: number | null;
+    radiantLead: number | null;
+    buildingState: number | null;
+  },
+  draftHint?: DraftHint & { radiantTeamId: number; direTeamId: number },
+): Promise<LiveTotalsPrediction> {
   const lk = cached.get('live_total_kills');
   const ld = cached.get('live_total_duration');
-  const modelVersions = {
-    kills: lk?.version ?? null,
-    duration: ld?.version ?? null,
-  };
+  const lkWd = cached.get('live_total_kills_with_draft');
+  const ldWd = cached.get('live_total_duration_with_draft');
+
   const empty: LiveTotalsPrediction = {
     totalKillsLogN: null,
     totalDurationLogN: null,
-    modelVersions,
+    modelVersions: { kills: null, duration: null },
+    tier: { kills: null, duration: null },
   };
   if (cached.size === 0) return empty;
   if (snapshot.gameTimeSec < 60) return empty; // pre-laning, фичи бессмысленны
-  if (!lk && !ld) return empty;
+  if (!lk && !ld && !lkWd && !ldWd) return empty;
 
-  const features = buildLiveTotalsFeatures(snapshot);
-  const [lkR, ldR] = await Promise.all([
-    lk ? callMlPredict(lk.blobB64, features) : Promise.resolve(null),
-    ld ? callMlPredict(ld.blobB64, features) : Promise.resolve(null),
+  // Pure features (всегда вычисляем — fallback).
+  const pureFeats = buildLiveTotalsFeatures(snapshot);
+
+  // With-draft features (если возможно).
+  let wdFeats: number[] | null = null;
+  const hasValidDraft = !!draftHint
+    && draftHint.radiantPicks.length === 5 && draftHint.direPicks.length === 5
+    && new Set(draftHint.radiantPicks).size === 5 && new Set(draftHint.direPicks).size === 5;
+  if (hasValidDraft) {
+    await refreshTeams();
+    const tf = buildTeamFeatures(draftHint!.radiantTeamId, draftHint!.direTeamId);
+    if (tf) {
+      const e1 = await refreshE1Maps();
+      if (e1) {
+        const e1Live = buildE1LiveTotalsFeatures({
+          radiantPicks: draftHint!.radiantPicks,
+          direPicks: draftHint!.direPicks,
+          benchmarks: e1.benchmarks,
+          itemPop: e1.itemPop,
+        });
+        // team4 без bias (snapshot7 уже несёт его).
+        const team4 = tf.slice(1);
+        wdFeats = [...pureFeats, ...team4, ...e1Live];
+      }
+    }
+  }
+
+  const [killsRes, durRes] = await Promise.all([
+    (async () => {
+      if (wdFeats && lkWd) {
+        const r = await callMlPredict(lkWd.blobB64, wdFeats);
+        if (r) return { resp: r, tier: 'with_draft' as const, version: lkWd.version };
+      }
+      if (!lk) return null;
+      const r = await callMlPredict(lk.blobB64, pureFeats);
+      if (!r) return null;
+      return { resp: r, tier: 'pure' as const, version: lk.version };
+    })(),
+    (async () => {
+      if (wdFeats && ldWd) {
+        const r = await callMlPredict(ldWd.blobB64, wdFeats);
+        if (r) return { resp: r, tier: 'with_draft' as const, version: ldWd.version };
+      }
+      if (!ld) return null;
+      const r = await callMlPredict(ld.blobB64, pureFeats);
+      if (!r) return null;
+      return { resp: r, tier: 'pure' as const, version: ld.version };
+    })(),
   ]);
 
   return {
-    totalKillsLogN: lkR && lkR.task_type === 'regression'
-      ? { mean: lkR.mean, std: Math.max(1e-3, lkR.std) } : null,
-    totalDurationLogN: ldR && ldR.task_type === 'regression'
-      ? { mean: ldR.mean, std: Math.max(1e-3, ldR.std) } : null,
-    modelVersions,
+    totalKillsLogN: killsRes && killsRes.resp.task_type === 'regression'
+      ? { mean: killsRes.resp.mean, std: Math.max(1e-3, killsRes.resp.std) } : null,
+    totalDurationLogN: durRes && durRes.resp.task_type === 'regression'
+      ? { mean: durRes.resp.mean, std: Math.max(1e-3, durRes.resp.std) } : null,
+    modelVersions: {
+      kills: killsRes?.version ?? null,
+      duration: durRes?.version ?? null,
+    },
+    tier: {
+      kills: killsRes?.tier ?? null,
+      duration: durRes?.tier ?? null,
+    },
   };
 }

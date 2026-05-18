@@ -30,10 +30,20 @@ import {
   proMatchesTable,
   teamsTable,
   modelVersionsTable,
+  matchDraftsTable,
 } from '@workspace/db';
-import { gte, and, eq } from 'drizzle-orm';
+import { gte, and, eq, inArray } from 'drizzle-orm';
 import { asc } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import {
+  loadTeamRostersMap, loadTeamHeroPoolMap, loadHeroBenchmarksMap,
+  loadHeroItemPopularityMap, loadPlayerTotalsMap, loadPlayerCountsMap,
+  loadPlayerWlProMap,
+  buildE1KillsFeatures, buildE1DurationFeatures, buildE1FbFeatures,
+  E1_MARKET_KILLS_FEATURE_NAMES, E1_MARKET_DURATION_FEATURE_NAMES,
+  E1_MARKET_FB_FEATURE_NAMES,
+  type HeroBenchmarksMap, type HeroItemPopularityMap,
+} from './lib/e1-features';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES = 60;
@@ -71,8 +81,19 @@ interface MatchRow {
 
 interface TeamRating { rating: number; wins: number; losses: number; }
 
-type MarketKey = 'first_blood' | 'total_kills' | 'total_duration' | 'total_duration_q25' | 'total_duration_q75';
-const ALL_MARKETS: MarketKey[] = ['first_blood', 'total_kills', 'total_duration', 'total_duration_q25', 'total_duration_q75'];
+type MarketKey =
+  | 'first_blood' | 'total_kills' | 'total_duration' | 'total_duration_q25' | 'total_duration_q75'
+  | 'first_blood_with_draft' | 'total_kills_with_draft' | 'total_duration_with_draft'
+  | 'total_duration_q25_with_draft' | 'total_duration_q75_with_draft';
+
+const PURE_MARKETS: MarketKey[] = [
+  'first_blood', 'total_kills', 'total_duration', 'total_duration_q25', 'total_duration_q75',
+];
+const WITH_DRAFT_MARKETS: MarketKey[] = [
+  'first_blood_with_draft', 'total_kills_with_draft', 'total_duration_with_draft',
+  'total_duration_q25_with_draft', 'total_duration_q75_with_draft',
+];
+const ALL_MARKETS: MarketKey[] = [...PURE_MARKETS, ...WITH_DRAFT_MARKETS];
 
 const KIND_BY_MARKET: Record<MarketKey, string> = {
   first_blood: 'market_first_blood',
@@ -80,9 +101,21 @@ const KIND_BY_MARKET: Record<MarketKey, string> = {
   total_duration: 'market_total_duration',
   total_duration_q25: 'market_total_duration_q25',
   total_duration_q75: 'market_total_duration_q75',
+  first_blood_with_draft: 'market_first_blood_with_draft',
+  total_kills_with_draft: 'market_total_kills_with_draft',
+  total_duration_with_draft: 'market_total_duration_with_draft',
+  total_duration_q25_with_draft: 'market_total_duration_q25_with_draft',
+  total_duration_q75_with_draft: 'market_total_duration_q75_with_draft',
 };
 
-const TASK_BY_MARKET: Record<MarketKey, 'classification' | 'regression' | 'quantile'> = {
+function isWithDraft(m: MarketKey): boolean {
+  return m.endsWith('_with_draft');
+}
+function pureFamily(m: MarketKey): 'first_blood' | 'total_kills' | 'total_duration' | 'total_duration_q25' | 'total_duration_q75' {
+  return (isWithDraft(m) ? m.slice(0, -'_with_draft'.length) : m) as ReturnType<typeof pureFamily>;
+}
+
+const TASK_BY_FAMILY: Record<ReturnType<typeof pureFamily>, 'classification' | 'regression' | 'quantile'> = {
   first_blood: 'classification',
   total_kills: 'regression',
   total_duration: 'regression',
@@ -90,7 +123,7 @@ const TASK_BY_MARKET: Record<MarketKey, 'classification' | 'regression' | 'quant
   total_duration_q75: 'quantile',
 };
 
-const QUANTILE_ALPHA_BY_MARKET: Record<MarketKey, number> = {
+const QUANTILE_ALPHA_BY_FAMILY: Record<ReturnType<typeof pureFamily>, number> = {
   first_blood: 0.5,
   total_kills: 0.5,
   total_duration: 0.5,
@@ -141,9 +174,13 @@ function buildTeamFeatures(
   ];
 }
 
+interface DraftRow {
+  radiantPicks: number[];
+  direPicks: number[];
+}
+
 async function loadData() {
   const sinceTs = parseSinceUnix();
-  const effectiveMinSamples = parseMinSamples();
   const matches = await db
     .select({
       matchId: proMatchesTable.matchId,
@@ -171,30 +208,90 @@ async function loadData() {
   return { matches: matches.filter((r): r is MatchRow => r.duration != null), teams };
 }
 
-function buildSamples(market: MarketKey, matches: MatchRow[], teams: Map<number, TeamRating>): Sample[] {
+async function loadDraftsForMatches(matchIds: number[]): Promise<Map<number, DraftRow>> {
+  const out = new Map<number, DraftRow>();
+  if (matchIds.length === 0) return out;
+  const CHUNK = 5000;
+  for (let i = 0; i < matchIds.length; i += CHUNK) {
+    const chunk = matchIds.slice(i, i + CHUNK);
+    const rows = await db.select({
+      matchId: matchDraftsTable.matchId,
+      radiantPicks: matchDraftsTable.radiantPicks,
+      direPicks: matchDraftsTable.direPicks,
+    }).from(matchDraftsTable).where(inArray(matchDraftsTable.matchId, chunk));
+    for (const r of rows) {
+      if (!Array.isArray(r.radiantPicks) || !Array.isArray(r.direPicks)) continue;
+      if (r.radiantPicks.length !== 5 || r.direPicks.length !== 5) continue;
+      if (new Set(r.radiantPicks).size !== 5 || new Set(r.direPicks).size !== 5) continue;
+      out.set(r.matchId, { radiantPicks: r.radiantPicks, direPicks: r.direPicks });
+    }
+  }
+  return out;
+}
+
+interface BuildContext {
+  teams: Map<number, TeamRating>;
+  drafts: Map<number, DraftRow>;
+  benchmarks: HeroBenchmarksMap;
+  itemPop: HeroItemPopularityMap;
+}
+
+function buildSamples(market: MarketKey, matches: MatchRow[], ctx: BuildContext): Sample[] {
   const out: Sample[] = [];
+  const withDraft = isWithDraft(market);
+  const fam = pureFamily(market);
   for (const m of matches) {
     if (!m.radiantTeamId || !m.direTeamId) continue;
-    const feats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, teams);
-    if (!feats) continue;
+    const teamFeats = buildTeamFeatures(m.radiantTeamId, m.direTeamId, ctx.teams);
+    if (!teamFeats) continue;
 
-    if (market === 'first_blood') {
-      // Прокси-метка: radiantWin. Настоящая FB-команда (players[].firstblood_claimed)
-      // требует per-match detail fetch — дорого; radiantWin коррелирует ≈53%.
+    let feats: number[];
+    if (withDraft) {
+      const d = ctx.drafts.get(m.matchId);
+      if (!d) continue; // sample только если есть полный draft
+      let e1: number[];
+      if (fam === 'first_blood') {
+        e1 = buildE1FbFeatures({
+          radiantPicks: d.radiantPicks, direPicks: d.direPicks,
+          benchmarks: ctx.benchmarks, itemPop: ctx.itemPop,
+        });
+      } else if (fam === 'total_kills') {
+        e1 = buildE1KillsFeatures({
+          radiantPicks: d.radiantPicks, direPicks: d.direPicks, benchmarks: ctx.benchmarks,
+        });
+      } else {
+        // total_duration + quantiles
+        e1 = buildE1DurationFeatures({
+          radiantPicks: d.radiantPicks, direPicks: d.direPicks, itemPop: ctx.itemPop,
+        });
+      }
+      feats = [...teamFeats, ...e1];
+    } else {
+      feats = teamFeats;
+    }
+
+    if (fam === 'first_blood') {
       if (m.radiantWin == null) continue;
       out.push({ features: feats, label: m.radiantWin ? 1 : 0 });
-    } else if (market === 'total_kills') {
+    } else if (fam === 'total_kills') {
       if (m.radiantScore == null || m.direScore == null) continue;
       const total = m.radiantScore + m.direScore;
       if (total <= 0) continue;
       out.push({ features: feats, label: Math.log(total) });
     } else {
-      // total_duration, total_duration_q25, total_duration_q75 — same label, different model objective
       if (m.duration <= 0) continue;
       out.push({ features: feats, label: Math.log(m.duration) });
     }
   }
   return out;
+}
+
+function featureNamesFor(market: MarketKey): readonly string[] {
+  if (!isWithDraft(market)) return TEAM_FEATURE_NAMES;
+  const fam = pureFamily(market);
+  if (fam === 'first_blood') return [...TEAM_FEATURE_NAMES, ...E1_MARKET_FB_FEATURE_NAMES];
+  if (fam === 'total_kills') return [...TEAM_FEATURE_NAMES, ...E1_MARKET_KILLS_FEATURE_NAMES];
+  return [...TEAM_FEATURE_NAMES, ...E1_MARKET_DURATION_FEATURE_NAMES];
 }
 
 async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainResponse | null> {
@@ -210,9 +307,22 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
   const train = samples.slice(0, trainEnd);
   const calib = samples.slice(trainEnd, calibEnd);
   const test = samples.slice(calibEnd);
-  const taskType = TASK_BY_MARKET[market];
-  const alpha = QUANTILE_ALPHA_BY_MARKET[market];
-  console.log(`  [${label}] training task=${taskType}${taskType === 'quantile' ? `(α=${alpha})` : ''} n=${train.length}/calib=${calib.length}/test=${test.length}`);
+  const taskType = TASK_BY_FAMILY[pureFamily(market)];
+  const alpha = QUANTILE_ALPHA_BY_FAMILY[pureFamily(market)];
+  const featureNames = featureNamesFor(market);
+  // Контракт: pure=3 (TEAM_FEATURE_NAMES), fb_with_draft=3+4=7, kills_with_draft=3+4=7, duration*=3+6=9
+  const fam = pureFamily(market);
+  const expectedDim = !isWithDraft(market) ? TEAM_FEATURE_NAMES.length
+    : (fam === 'first_blood' ? TEAM_FEATURE_NAMES.length + E1_MARKET_FB_FEATURE_NAMES.length
+      : fam === 'total_kills' ? TEAM_FEATURE_NAMES.length + E1_MARKET_KILLS_FEATURE_NAMES.length
+      : TEAM_FEATURE_NAMES.length + E1_MARKET_DURATION_FEATURE_NAMES.length);
+  if (featureNames.length !== expectedDim) {
+    throw new Error(`[${label}] feature-name dim mismatch: got ${featureNames.length} expected ${expectedDim}`);
+  }
+  if (samples[0].features.length !== expectedDim) {
+    throw new Error(`[${label}] sample features dim mismatch: got ${samples[0].features.length} expected ${expectedDim}`);
+  }
+  console.log(`  [${label}] training task=${taskType}${taskType === 'quantile' ? `(α=${alpha})` : ''} n=${train.length}/calib=${calib.length}/test=${test.length} fdim=${featureNames.length}`);
 
   const token = mlServiceToken();
   if (!token) {
@@ -228,7 +338,7 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
       headers: { 'content-type': 'application/json', 'x-ml-token': token },
       body: JSON.stringify({
         label,
-        feature_names: TEAM_FEATURE_NAMES,
+        feature_names: featureNames,
         task_type: taskType,
         alpha,
         train, calib, test,
@@ -259,7 +369,7 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
 async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise<void> {
   const kind = KIND_BY_MARKET[market];
   const blob = Buffer.from(r.blob_b64, 'base64');
-  const taskType = TASK_BY_MARKET[market];
+  const taskType = TASK_BY_FAMILY[pureFamily(market)];
   const versionStem = `lgbm-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
 
   await db.transaction(async (tx) => {
@@ -339,10 +449,27 @@ async function main(): Promise<void> {
     return;
   }
 
+  // E1 + drafts только если хоть один with_draft target есть.
+  const needsDraft = targets.some(isWithDraft);
+  let drafts = new Map<number, DraftRow>();
+  let benchmarks: HeroBenchmarksMap = new Map();
+  let itemPop: HeroItemPopularityMap = new Map();
+  if (needsDraft) {
+    console.log('[train-market-models] loading match_drafts + E1 (benchmarks, itemPop)…');
+    const matchIds = matches.map(m => m.matchId);
+    [drafts, benchmarks, itemPop] = await Promise.all([
+      loadDraftsForMatches(matchIds),
+      loadHeroBenchmarksMap(),
+      loadHeroItemPopularityMap(),
+    ]);
+    console.log(`[train-market-models] drafts=${drafts.size}/${matchIds.length} benchmarks=${benchmarks.size} itemPop=${itemPop.size}`);
+  }
+  const ctx: BuildContext = { teams, drafts, benchmarks, itemPop };
+
   let trained = 0;
   for (const market of targets) {
     console.log(`\n[train-market-models] === ${market} ===`);
-    const samples = buildSamples(market, matches, teams);
+    const samples = buildSamples(market, matches, ctx);
     const r = await trainMarket(market, samples);
     if (!r) continue;
     await activateMarketModel(market, r);

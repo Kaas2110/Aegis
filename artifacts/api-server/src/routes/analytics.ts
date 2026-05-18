@@ -13,7 +13,7 @@ import {
   getSchedulerState,
   triggerManualRetrain,
 } from '../services/SchedulerWorker';
-import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable, heroSynergyTable, heroMatchupsTable, heroStatsTable } from '@workspace/db';
+import { db, predictionsTable, modelVersionsTable, prematchOutcomesTable, teamsTable, heroSynergyTable, heroMatchupsTable, heroStatsTable, matchDraftsTable } from '@workspace/db';
 import { getTeamProfile } from '../services/features/teamProfile';
 import { requireAdminSession } from './adminAuth';
 import { eq, desc, sql, and, gte, isNotNull, inArray, or, ilike } from 'drizzle-orm';
@@ -756,7 +756,26 @@ router.get('/totals-ladder', async (req, res) => {
   // log-normal распределение вокруг базового μ — это фейк, не зависящий от
   // реальных команд. Если LGB не обучен для пары — возвращаем unavailable.
   const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
-  const lgb = await predictMarketsFor(radiantId, direId).catch(() => null);
+  // 3-tier: если у этого matchId уже есть зафиксированный драфт в БД —
+  // передаём 5+5 picks, MarketLgbm цепочкой попробует _with_draft → pure.
+  let draftHint: { radiantPicks: number[]; direPicks: number[]; radiantTeamId: number; direTeamId: number } | undefined;
+  if (matchId != null) {
+    try {
+      const drow = await db
+        .select({ rp: matchDraftsTable.radiantPicks, dp: matchDraftsTable.direPicks })
+        .from(matchDraftsTable)
+        .where(eq(matchDraftsTable.matchId, matchId))
+        .limit(1);
+      const rp = drow[0]?.rp as number[] | null | undefined;
+      const dp = drow[0]?.dp as number[] | null | undefined;
+      if (rp && dp && rp.length === 5 && dp.length === 5) {
+        draftHint = { radiantPicks: rp, direPicks: dp, radiantTeamId: radiantId, direTeamId: direId };
+      }
+    } catch (err) {
+      req.log.warn({ err, matchId }, 'totals-ladder: match_drafts lookup failed');
+    }
+  }
+  const lgb = await predictMarketsFor(radiantId, direId, draftHint).catch(() => null);
   let lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
   const lgbQ25 = type === 'duration' ? lgb?.totalDurationLogQ25 ?? null : null;
   const lgbQ75 = type === 'duration' ? lgb?.totalDurationLogQ75 ?? null : null;
@@ -1008,6 +1027,7 @@ router.get('/explain', async (req, res) => {
   // Тотал убийств / длительность — LightGBM market-модели (Wave 4/5).
   // Если модели не загружены или ml-service недоступен — фолбэк на грубую эвристику.
   const { predictMarketsFor } = await import('../services/MarketLgbm');
+  // /explain — без matchId, поэтому без draft hint (упадёт в pure tier).
   const mkt = await predictMarketsFor(radiantId, direId).catch(() => null);
 
   // log-normal (mean=μ, std=σ): медиана = exp(μ), 90% CI = exp(μ ± 1.645σ)

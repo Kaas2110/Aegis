@@ -36,9 +36,16 @@ import {
   liveSnapshotsTable,
   proMatchesTable,
   modelVersionsTable,
+  matchDraftsTable,
+  teamsTable,
 } from '@workspace/db';
-import { sql, and, eq } from 'drizzle-orm';
+import { sql, and, eq, inArray } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import {
+  loadHeroBenchmarksMap, loadHeroItemPopularityMap,
+  buildE1LiveTotalsFeatures, E1_LIVE_TOTALS_FEATURE_NAMES,
+  type HeroBenchmarksMap, type HeroItemPopularityMap,
+} from './lib/e1-features';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
@@ -58,13 +65,26 @@ const FEATURE_NAMES = [
   'building_state_norm',
 ] as const;
 
-type LiveMarket = 'kills' | 'duration';
-const ALL_MARKETS: LiveMarket[] = ['kills', 'duration'];
+type LiveMarket = 'kills' | 'duration' | 'kills_with_draft' | 'duration_with_draft';
+const ALL_MARKETS: LiveMarket[] = ['kills', 'duration', 'kills_with_draft', 'duration_with_draft'];
+const VALID_MARKET_ARGS: ReadonlySet<string> = new Set<string>([
+  'kills', 'duration', 'all', 'pure', 'with_draft',
+  'kills_with_draft', 'duration_with_draft',
+]);
 
 const KIND_BY_MARKET: Record<LiveMarket, string> = {
   kills: 'live_total_kills',
   duration: 'live_total_duration',
+  kills_with_draft: 'live_total_kills_with_draft',
+  duration_with_draft: 'live_total_duration_with_draft',
 };
+
+function isWithDraft(m: LiveMarket): boolean {
+  return m.endsWith('_with_draft');
+}
+function pureFamily(m: LiveMarket): 'kills' | 'duration' {
+  return (isWithDraft(m) ? m.slice(0, -'_with_draft'.length) : m) as 'kills' | 'duration';
+}
 
 interface JoinRow {
   matchId: number;
@@ -75,7 +95,12 @@ interface JoinRow {
   buildingState: number | null;
   finalKills: number;
   finalDurationSec: number;
+  radiantTeamId: number | null;
+  direTeamId: number | null;
 }
+
+interface DraftRow { radiantPicks: number[]; direPicks: number[]; }
+interface TeamRating { rating: number; wins: number; losses: number; }
 
 interface Sample { features: number[]; label: number; }
 
@@ -104,10 +129,14 @@ function arg(name: string): string | undefined {
 
 function parseMarkets(): LiveMarket[] {
   const v = arg('market') ?? 'all';
+  if (!VALID_MARKET_ARGS.has(v)) {
+    console.error(`[train-live-totals] unknown --market: ${v} (valid: ${[...VALID_MARKET_ARGS].join(', ')})`);
+    process.exit(1);
+  }
   if (v === 'all') return ALL_MARKETS;
-  if (v === 'kills' || v === 'duration') return [v];
-  console.error(`[train-live-totals] unknown --market: ${v}`);
-  process.exit(1);
+  if (v === 'pure') return ['kills', 'duration'];
+  if (v === 'with_draft') return ['kills_with_draft', 'duration_with_draft'];
+  return [v as LiveMarket];
 }
 
 function mlServiceToken(): string | null {
@@ -155,6 +184,8 @@ async function loadJoinedRows(sinceUnixMs: number): Promise<JoinRow[]> {
       finalRScore: proMatchesTable.radiantScore,
       finalDScore: proMatchesTable.direScore,
       finalDuration: proMatchesTable.duration,
+      radiantTeamId: proMatchesTable.radiantTeamId,
+      direTeamId: proMatchesTable.direTeamId,
     })
     .from(liveSnapshotsTable)
     .innerJoin(proMatchesTable, eq(proMatchesTable.matchId, liveSnapshotsTable.matchId))
@@ -180,9 +211,81 @@ async function loadJoinedRows(sinceUnixMs: number): Promise<JoinRow[]> {
       buildingState: r.buildingState,
       finalKills: r.finalRScore + r.finalDScore,
       finalDurationSec: r.finalDuration,
+      radiantTeamId: r.radiantTeamId,
+      direTeamId: r.direTeamId,
     });
   }
   return out;
+}
+
+async function loadDraftsForMatches(matchIds: number[]): Promise<Map<number, DraftRow>> {
+  const out = new Map<number, DraftRow>();
+  if (matchIds.length === 0) return out;
+  const CHUNK = 5000;
+  for (let i = 0; i < matchIds.length; i += CHUNK) {
+    const chunk = matchIds.slice(i, i + CHUNK);
+    const rows = await db.select({
+      matchId: matchDraftsTable.matchId,
+      radiantPicks: matchDraftsTable.radiantPicks,
+      direPicks: matchDraftsTable.direPicks,
+    }).from(matchDraftsTable).where(inArray(matchDraftsTable.matchId, chunk));
+    for (const r of rows) {
+      if (!Array.isArray(r.radiantPicks) || !Array.isArray(r.direPicks)) continue;
+      if (r.radiantPicks.length !== 5 || r.direPicks.length !== 5) continue;
+      if (new Set(r.radiantPicks).size !== 5 || new Set(r.direPicks).size !== 5) continue;
+      out.set(r.matchId, { radiantPicks: r.radiantPicks, direPicks: r.direPicks });
+    }
+  }
+  return out;
+}
+
+async function loadTeams(): Promise<Map<number, TeamRating>> {
+  const rows = await db.select({
+    teamId: teamsTable.teamId, rating: teamsTable.rating,
+    wins: teamsTable.wins, losses: teamsTable.losses,
+  }).from(teamsTable);
+  const map = new Map<number, TeamRating>();
+  for (const t of rows) {
+    if (t.rating != null) {
+      map.set(t.teamId, { rating: t.rating, wins: t.wins ?? 0, losses: t.losses ?? 0 });
+    }
+  }
+  return map;
+}
+
+/**
+ * team4 без bias: [elo_diff_norm, winrate_diff, experience_diff, is_high_tier].
+ * Идентично логике в train-market-models.ts::buildTeamFeatures, но без 1-го bias-фитчи
+ * (snapshot7 уже несёт bias).
+ */
+function buildTeamFeatures4(rId: number, dId: number, teams: Map<number, TeamRating>): number[] | null {
+  const r = teams.get(rId); const d = teams.get(dId);
+  if (!r || !d) return null;
+  // ВАЖНО: формулы должны совпадать с MarketLgbm.buildTeamFeatures (минус
+  // первый bias=1), иначе trainer/inference расходятся.
+  const rG = r.wins + r.losses;
+  const dG = d.wins + d.losses;
+  if (rG < 5 || dG < 5) return null;
+  const eloDiff = (r.rating - d.rating) / 200;
+  const wrDiff = r.wins / rG - d.wins / dG;
+  const expDiff = Math.log(rG + 1) - Math.log(dG + 1);
+  return [eloDiff, wrDiff, expDiff, rG >= 50 && dG >= 50 ? 1 : 0];
+}
+
+const TEAM4_FEATURE_NAMES = [
+  'elo_diff_norm', 'winrate_diff', 'experience_diff', 'is_high_tier',
+] as const;
+
+function featureNamesFor(market: LiveMarket): readonly string[] {
+  if (!isWithDraft(market)) return FEATURE_NAMES;
+  return [...FEATURE_NAMES, ...TEAM4_FEATURE_NAMES, ...E1_LIVE_TOTALS_FEATURE_NAMES];
+}
+
+interface BuildCtx {
+  teams: Map<number, TeamRating>;
+  drafts: Map<number, DraftRow>;
+  benchmarks: HeroBenchmarksMap;
+  itemPop: HeroItemPopularityMap;
 }
 
 /**
@@ -216,11 +319,28 @@ function subsampleByBuckets(rows: JoinRow[]): JoinRow[] {
   return out;
 }
 
-function buildSamples(market: LiveMarket, rows: JoinRow[]): Array<Sample & { matchId: number }> {
+function buildSamples(market: LiveMarket, rows: JoinRow[], ctx: BuildCtx): Array<Sample & { matchId: number }> {
   const out: Array<Sample & { matchId: number }> = [];
+  const withDraft = isWithDraft(market);
+  const fam = pureFamily(market);
   for (const r of rows) {
-    const feats = buildLiveTotalsFeatures(r);
-    if (market === 'kills') {
+    const pure = buildLiveTotalsFeatures(r);
+    let feats: number[];
+    if (withDraft) {
+      if (!r.radiantTeamId || !r.direTeamId) continue;
+      const team4 = buildTeamFeatures4(r.radiantTeamId, r.direTeamId, ctx.teams);
+      if (!team4) continue;
+      const d = ctx.drafts.get(r.matchId);
+      if (!d) continue;
+      const e1 = buildE1LiveTotalsFeatures({
+        radiantPicks: d.radiantPicks, direPicks: d.direPicks,
+        benchmarks: ctx.benchmarks, itemPop: ctx.itemPop,
+      });
+      feats = [...pure, ...team4, ...e1];
+    } else {
+      feats = pure;
+    }
+    if (fam === 'kills') {
       if (r.finalKills < 0) continue;
       out.push({ features: feats, label: Math.log(r.finalKills + 1), matchId: r.matchId });
     } else {
@@ -263,7 +383,8 @@ async function trainMarket(market: LiveMarket, samples: Array<Sample & { matchId
     return null;
   }
   const { train, calib, test } = splitByMatch(samples);
-  console.log(`  [${label}] training task=regression n=${train.length}/calib=${calib.length}/test=${test.length}`);
+  const featureNames = featureNamesFor(market);
+  console.log(`  [${label}] training task=regression n=${train.length}/calib=${calib.length}/test=${test.length} fdim=${featureNames.length}`);
 
   const token = mlServiceToken();
   if (!token) {
@@ -278,7 +399,7 @@ async function trainMarket(market: LiveMarket, samples: Array<Sample & { matchId
       headers: { 'content-type': 'application/json', 'x-ml-token': token },
       body: JSON.stringify({
         label,
-        feature_names: FEATURE_NAMES,
+        feature_names: featureNames,
         task_type: 'regression',
         train, calib, test,
       }),
@@ -344,7 +465,7 @@ async function activate(market: LiveMarket, r: TrainResponse, sinceDays: number)
         windowDays: sinceDays,
         trainSeconds: r.train_seconds,
         blobBytes: blob.length,
-        featureNames: FEATURE_NAMES,
+        featureNames: featureNamesFor(market),
       },
       isActive: true,
     });
@@ -372,10 +493,29 @@ async function main(): Promise<void> {
   const matchCount = new Set(sampled.map(r => r.matchId)).size;
   console.log(`[train-live-totals] joined rows=${raw.length} → subsampled=${sampled.length} (matches=${matchCount})`);
 
+  // E1 + drafts + teams только если хоть один with_draft target есть.
+  const needsDraft = targets.some(isWithDraft);
+  let drafts = new Map<number, DraftRow>();
+  let teams = new Map<number, TeamRating>();
+  let benchmarks: HeroBenchmarksMap = new Map();
+  let itemPop: HeroItemPopularityMap = new Map();
+  if (needsDraft) {
+    console.log('[train-live-totals] loading match_drafts + teams + E1 (benchmarks, itemPop)…');
+    const matchIds = Array.from(new Set(sampled.map(r => r.matchId)));
+    [drafts, teams, benchmarks, itemPop] = await Promise.all([
+      loadDraftsForMatches(matchIds),
+      loadTeams(),
+      loadHeroBenchmarksMap(),
+      loadHeroItemPopularityMap(),
+    ]);
+    console.log(`[train-live-totals] drafts=${drafts.size}/${matchIds.length} teams=${teams.size} benchmarks=${benchmarks.size} itemPop=${itemPop.size}`);
+  }
+  const ctx: BuildCtx = { teams, drafts, benchmarks, itemPop };
+
   let trained = 0;
   for (const market of targets) {
     console.log(`\n[train-live-totals] === ${market} ===`);
-    const samples = buildSamples(market, sampled);
+    const samples = buildSamples(market, sampled, ctx);
     const r = await trainMarket(market, samples, minSamples);
     if (!r) continue;
     await activate(market, r, sinceDays);
