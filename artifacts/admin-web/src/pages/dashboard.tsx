@@ -128,7 +128,7 @@ export default function Dashboard() {
             <StatusCard 
               title="Версия патча" 
               value={schedulerState?.lastPatchSeen as string || "—"} 
-              subtitle={`Детект: ${formatDate(schedulerState?.lastPatchDetectedAt as string)}`}
+              subtitle={`Релиз: ${formatDate(schedulerState?.lastPatchDetectedAt as string)} · Проверено: ${formatDate((schedulerState as { lastCheckAt?: string } | undefined)?.lastCheckAt)}`}
               icon={Settings2}
             />
           </>
