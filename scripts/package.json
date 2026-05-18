@@ -32,6 +32,14 @@
     "ingest:od-scenarios": "tsx ./src/ingest-od-scenarios.ts",
     "ingest:od-player-peers": "tsx ./src/ingest-od-player-peers.ts",
     "ingest:od-distributions": "tsx ./src/ingest-od-distributions.ts",
+    "ingest:od-team-rosters": "tsx ./src/ingest-od-team-rosters.ts",
+    "ingest:od-team-hero-pools": "tsx ./src/ingest-od-team-hero-pools.ts",
+    "ingest:od-hero-benchmarks": "tsx ./src/ingest-od-hero-benchmarks.ts",
+    "ingest:od-hero-item-popularity": "tsx ./src/ingest-od-hero-item-popularity.ts",
+    "ingest:od-pro-players": "tsx ./src/ingest-od-pro-players.ts",
+    "ingest:od-player-totals": "tsx ./src/ingest-od-player-totals.ts",
+    "ingest:od-player-counts": "tsx ./src/ingest-od-player-counts.ts",
+    "ingest:od-player-wl-pro": "tsx ./src/ingest-od-player-wl-pro.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

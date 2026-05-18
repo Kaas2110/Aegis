@@ -668,6 +668,152 @@ export const metaDistributionsTable = pgTable('meta_distributions', {
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── E1 OD: расширение данных для бустинга (rosters / hero pool / benchmarks /
+// item popularity / pro players / player totals / counts / pro WL) ───────
+// Все эти таблицы наполняются скриптами ingest:od-* и НЕ заменяют существующие
+// фичи — добавляются столбцами в feature vector'ы при следующем ретрейне.
+
+/**
+ * team_rosters — текущий ростер команды + история per-player играм.
+ * Источник: /teams/{team_id}/players
+ * is_current копируется из OD-флага is_current_team_member.
+ * Снимок раз в неделю (ingest:od-team-rosters).
+ */
+export const teamRostersTable = pgTable('team_rosters', {
+  id: serial('id').primaryKey(),
+  teamId: bigint('team_id', { mode: 'number' }).notNull(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull(),
+  playerName: text('player_name'),
+  gamesPlayed: integer('games_played').notNull(),
+  wins: integer('wins').notNull(),
+  isCurrent: boolean('is_current').notNull().default(false),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  teamPlayerUniq: uniqueIndex('team_rosters_team_player_uniq').on(t.teamId, t.accountId),
+  teamIdx: index('team_rosters_team_idx').on(t.teamId),
+  currentIdx: index('team_rosters_current_idx').on(t.teamId, t.isCurrent),
+}));
+
+/**
+ * team_hero_pool — статистика выбора героев командой.
+ * Источник: /teams/{team_id}/heroes
+ * Используется для фич prematch: teamPoolOverlap, teamPoolWinrate.
+ */
+export const teamHeroPoolTable = pgTable('team_hero_pool', {
+  id: serial('id').primaryKey(),
+  teamId: bigint('team_id', { mode: 'number' }).notNull(),
+  heroId: integer('hero_id').notNull(),
+  gamesPlayed: integer('games_played').notNull(),
+  wins: integer('wins').notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  teamHeroUniq: uniqueIndex('team_hero_pool_team_hero_uniq').on(t.teamId, t.heroId),
+  teamIdx: index('team_hero_pool_team_idx').on(t.teamId),
+}));
+
+/**
+ * hero_benchmarks — перцентили статов героя из /benchmarks?hero_id=.
+ * data: { gold_per_min: [{percentile, value}, ...], xp_per_min: [...],
+ *         kills_per_min, last_hits_per_min, hero_damage_per_min,
+ *         hero_healing_per_min, tower_damage }
+ * Используется для z-score нормализации в live winner / market models.
+ * Обновляется раз в неделю.
+ */
+export const heroBenchmarksTable = pgTable('hero_benchmarks', {
+  id: serial('id').primaryKey(),
+  heroId: integer('hero_id').notNull().unique(),
+  data: jsonb('data').$type<Record<string, Array<{ percentile: number; value: number }>>>().notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * hero_item_popularity — start/early/mid/late game шмотки героя в pro.
+ * Источник: /heroes/{id}/itemPopularity
+ * Каждое поле — словарь {item_name: count}. Сумма по словарю даёт общее число.
+ * Используется в market models (FB, duration).
+ */
+export const heroItemPopularityTable = pgTable('hero_item_popularity', {
+  id: serial('id').primaryKey(),
+  heroId: integer('hero_id').notNull().unique(),
+  startGameItems: jsonb('start_game_items').$type<Record<string, number>>().notNull(),
+  earlyGameItems: jsonb('early_game_items').$type<Record<string, number>>().notNull(),
+  midGameItems: jsonb('mid_game_items').$type<Record<string, number>>().notNull(),
+  lateGameItems: jsonb('late_game_items').$type<Record<string, number>>().notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * pro_players — справочник актуальных pro-аккаунтов из /proPlayers.
+ * Раз в неделю синхронизация: team_id, team_name, fantasy_role, persona.
+ * Заменит/дополнит row в `players` (но не дропает существующие записи).
+ */
+export const proPlayersTable = pgTable('pro_players', {
+  accountId: bigint('account_id', { mode: 'number' }).primaryKey(),
+  steamid: text('steamid'),
+  personaname: text('personaname'),
+  name: text('name'),
+  countryCode: text('country_code'),
+  fantasyRole: integer('fantasy_role'),
+  teamId: bigint('team_id', { mode: 'number' }),
+  teamName: text('team_name'),
+  teamTag: text('team_tag'),
+  isLocked: boolean('is_locked'),
+  lockedUntil: integer('locked_until'),
+  fhUnavailable: boolean('fh_unavailable'),
+  fullHistoryTime: timestamp('full_history_time', { withTimezone: true }),
+  lastLogin: timestamp('last_login', { withTimezone: true }),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  teamIdx: index('pro_players_team_idx').on(t.teamId),
+}));
+
+/**
+ * player_totals — долгосрочные суммы статистик игрока.
+ * Источник: /players/{id}/totals — массив {field, n, sum}.
+ * Храним каждую метрику отдельной строкой + кеш avg=sum/n для удобства.
+ * Используется для baseline-сравнения в prematch (rosterAvgGpm/Xpm/Kda).
+ * Freshness: 14 дней.
+ */
+export const playerTotalsTable = pgTable('player_totals', {
+  id: serial('id').primaryKey(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull(),
+  field: text('field').notNull(),
+  n: integer('n').notNull(),
+  sum: real('sum').notNull(),
+  avg: real('avg').notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  acctFieldUniq: uniqueIndex('player_totals_acct_field_uniq').on(t.accountId, t.field),
+  acctIdx: index('player_totals_acct_idx').on(t.accountId),
+}));
+
+/**
+ * player_counts — распределение матчей игрока по lane_role / game_mode /
+ * region / patch / leaver_status. Источник: /players/{id}/counts.
+ * Используется для определения роли игрока (lane_role) → roleClarity feature.
+ * Freshness: 14 дней.
+ */
+export const playerCountsTable = pgTable('player_counts', {
+  id: serial('id').primaryKey(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull().unique(),
+  data: jsonb('data').$type<Record<string, Record<string, { games: number; win: number }>>>().notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * player_wl_pro — pro-only win/loss за окно (по умолчанию 180 дней).
+ * Источник: /players/{id}/wl?date=180&significant=1
+ * Используется в prematch как rosterAvgWlPro180.
+ * Freshness: 14 дней.
+ */
+export const playerWlProTable = pgTable('player_wl_pro', {
+  accountId: bigint('account_id', { mode: 'number' }).primaryKey(),
+  win: integer('win').notNull(),
+  lose: integer('lose').notNull(),
+  windowDays: integer('window_days').notNull().default(180),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ── Zod-схемы для вставки ────────────────────────────────────────────────
 export const insertProMatchSchema = createInsertSchema(proMatchesTable);
 export type InsertProMatch = z.infer<typeof insertProMatchSchema>;
@@ -750,4 +896,29 @@ export type InsertHeroDuration = typeof heroDurationsTable.$inferInsert;
 
 export type MetaDistribution = typeof metaDistributionsTable.$inferSelect;
 export type InsertMetaDistribution = typeof metaDistributionsTable.$inferInsert;
+
+// ── E1 типы ──────────────────────────────────────────────────────────────
+export type TeamRoster = typeof teamRostersTable.$inferSelect;
+export type InsertTeamRoster = typeof teamRostersTable.$inferInsert;
+
+export type TeamHeroPool = typeof teamHeroPoolTable.$inferSelect;
+export type InsertTeamHeroPool = typeof teamHeroPoolTable.$inferInsert;
+
+export type HeroBenchmark = typeof heroBenchmarksTable.$inferSelect;
+export type InsertHeroBenchmark = typeof heroBenchmarksTable.$inferInsert;
+
+export type HeroItemPopularity = typeof heroItemPopularityTable.$inferSelect;
+export type InsertHeroItemPopularity = typeof heroItemPopularityTable.$inferInsert;
+
+export type ProPlayer = typeof proPlayersTable.$inferSelect;
+export type InsertProPlayer = typeof proPlayersTable.$inferInsert;
+
+export type PlayerTotals = typeof playerTotalsTable.$inferSelect;
+export type InsertPlayerTotals = typeof playerTotalsTable.$inferInsert;
+
+export type PlayerCounts = typeof playerCountsTable.$inferSelect;
+export type InsertPlayerCounts = typeof playerCountsTable.$inferInsert;
+
+export type PlayerWlPro = typeof playerWlProTable.$inferSelect;
+export type InsertPlayerWlPro = typeof playerWlProTable.$inferInsert;
 export type InsertLeague = typeof leaguesTable.$inferInsert;

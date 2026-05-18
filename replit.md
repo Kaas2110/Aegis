@@ -26,6 +26,14 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 | `ingest:matches [pages=20]` | Pro matches (~100/page, 1.1s/req) |
 | `ingest:leagues` | League names → `leagues` table |
 | `ingest:hero-stats` | Hero meta winrates / pickrates. Stratz-supplemented если есть `STRATZ_TOKEN` |
+| `ingest:od-team-rosters` | E1: текущий ростер команды + games_played/wins per-player (`/teams/{id}/players`). 7d freshness. Активные команды (last_match_time<365d), ~3000 запросов |
+| `ingest:od-team-hero-pools` | E1: hero pool команды (`/teams/{id}/heroes`). 7d freshness, ~3000 запросов |
+| `ingest:od-hero-benchmarks` | E1: перцентили GPM/XPM/kills/LH/heroDmg/healing/tower (`/benchmarks?hero_id=`). 138 запросов, раз в неделю |
+| `ingest:od-hero-item-popularity` | E1: start/early/mid/late game items per hero (`/heroes/{id}/itemPopularity`). 138 запросов, раз в неделю |
+| `ingest:od-pro-players` | E1: справочник pro-аккаунтов с актуальным team_id (`/proPlayers`). 1 запрос, раз в неделю |
+| `ingest:od-player-totals` | E1: долгосрочные суммы статов игрока (`/players/{id}/totals`). 14d freshness, ~3000 запросов |
+| `ingest:od-player-counts` | E1: распределение по lane_role / game_mode / patch (`/players/{id}/counts`). 14d freshness |
+| `ingest:od-player-wl-pro` | E1: pro-only win/loss за 180d (`/players/{id}/wl?date=180&significant=1`). 14d freshness |
 | `ingest:hero-matchups` | Hero-vs-hero матрица. Stratz-primary (1 запрос, ~3.5s, ~16k пар, бракет DIVINE_IMMORTAL) с OpenDota fallback. Флаги `--no-stratz` / `--no-fallback`. ⚠️ matchCount шкала ≠ OpenDota — после смены источника требует `train:lightgbm` |
 | `ingest:hero-synergy` | Hero pair synergy table |
 | `ingest:drafts [limit]` | Picks/bans + radiant/dire account_ids. Stratz-primary с `STRATZ_TOKEN` (4× быстрее) |
@@ -179,6 +187,24 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   `BookmakerDropdown` подключить к header'у. Полный охват маркетов
   (winner/totals/firstBlood) для всех 6 букмекеров.
 - **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
+- **E1 OD-расширение (наполнение 2026-05-18):** 8 новых OD-ingest скриптов
+  + 8 новых таблиц (`team_rosters`, `team_hero_pool`, `hero_benchmarks`,
+  `hero_item_popularity`, `pro_players`, `player_totals`, `player_counts`,
+  `player_wl_pro`). Throttle 20 req/s через `scripts/src/lib/odPace.ts`.
+  Все добавляются **дополнительными колонками** в feature vectors —
+  существующие фичи НЕ заменяются. Ретрейн только когда таблицы наполнятся
+  (отдельный «да» от пользователя). Датасеты моделей после внедрения:
+  - **prematch_winner v3**: + rosterKnown(A/B), rosterContinuity(A/B),
+    teamPoolOverlap(A/B), teamPoolWinrate(A/B), rosterAvgGpm/Xpm/Kda(A/B),
+    rosterAvgWlPro180(A/B), rosterRoleClarity(A/B). НЕ блокировано match_parsed.
+  - **live_winner v8**: + gpmZ/xpmZ/kdaZ ByHero(R/D), aboveBaselineCount(R/D).
+  - **market total_kills**: + heroBenchmarkKillsPmSumDraft, HeroDmgPmSumDraft.
+  - **market total_duration ± q25/q75**: + heroDurationBinMean(R/D)
+    (подключение существующей `hero_durations`), heroLateItemPopShare(R/D),
+    heroEarlyItemAggression(R/D).
+  - **market first_blood**: + heroFbProxy(R/D).
+  - **live_totals**: + heroKillsPmBenchmarkSum, rosterPaceProxy,
+    heroLateItemPopShareTotal.
 - **Большая ML-итерация (план T0→T12):**
   T0 аудит DONE, T0.5a Stratz live DORMANT (код сохранён, вызовы закомментированы), T1 ml-contract DONE,
   T2 data-availability-rules DONE, T3.5 live totals DONE, T12 trim replit.md DONE.

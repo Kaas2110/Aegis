@@ -58,8 +58,36 @@ step 7 9 "ingest:od-scenarios (hero item-timing / lane-role winrates, OD premium
 step 8 9 "ingest:od-player-peers (pro-player peer winrates, 7-day freshness)" \
   pnpm --filter @workspace/scripts run ingest:od-player-peers
 
-step 9 9 "ingest:od-distributions (hero durations + meta distributions, 7-day freshness)" \
+step 9 17 "ingest:od-distributions (hero durations + meta distributions, 7-day freshness)" \
   pnpm --filter @workspace/scripts run ingest:od-distributions
+
+# ── E1 OD extension (добавлены 2026-05-18) ────────────────────────────────
+# 8 новых OD ingest скриптов — дополнительные фичи для бустинг-моделей.
+# План: replit.md «E1 OD-расширение», датасеты — там же.
+# Throttle 20 req/s через scripts/src/lib/odPace.ts.
+step 10 17 "ingest:od-pro-players (справочник pro-аккаунтов, 1 запрос, weekly)" \
+  pnpm --filter @workspace/scripts run ingest:od-pro-players
+
+step 11 17 "ingest:od-hero-benchmarks (перцентили GPM/XPM/kills, 138 req, weekly)" \
+  pnpm --filter @workspace/scripts run ingest:od-hero-benchmarks
+
+step 12 17 "ingest:od-hero-item-popularity (start/early/mid/late items, 138 req, weekly)" \
+  pnpm --filter @workspace/scripts run ingest:od-hero-item-popularity
+
+step 13 17 "ingest:od-team-rosters (текущий ростер команды, ~3000 req, 7d freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-team-rosters
+
+step 14 17 "ingest:od-team-hero-pools (hero pool команды, ~3000 req, 7d freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-team-hero-pools
+
+step 15 17 "ingest:od-player-totals (долгосрочные суммы статов, ~3000 req, 14d freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-player-totals
+
+step 16 17 "ingest:od-player-counts (lane_role/game_mode распределение, ~3000 req, 14d freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-player-counts
+
+step 17 17 "ingest:od-player-wl-pro (pro-only WL 180d, ~3000 req, 14d freshness)" \
+  pnpm --filter @workspace/scripts run ingest:od-player-wl-pro
 
 echo
 echo "[$(ts)] ============================="
