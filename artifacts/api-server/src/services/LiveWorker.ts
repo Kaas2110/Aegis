@@ -29,6 +29,8 @@ import { db, liveSnapshotsTable, predictionsTable } from '@workspace/db';
 import { logger } from '../lib/logger';
 import { predictMatchWinner, loadActiveModel, getActiveModel, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
+import { loadActiveAsymLiveModel, getActiveAsymLiveModel, predictAsymLiveWinner } from './AsymLiveModel';
+import { isAsymEligible } from './AsymPrematchModel';
 import { recordPrematchPrediction } from './OutcomeTracker';
 // DORMANT — Stratz live upstream пуст. Раскомментировать при восстановлении:
 // import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
@@ -376,6 +378,50 @@ async function pollOnce(): Promise<void> {
         }
       }
 
+      // Этап C — asym live-winner. Параллельная запись marketType='live_match_winner_asym'
+      // ТОЛЬКО для asym-eligible матчей (как в Этапе B для prematch). Не заменяет
+      // main live, а накапливается отдельно для сравнения out-of-sample acc.
+      const asymLiveModel = getActiveAsymLiveModel();
+      if (asymLiveModel && (m.game_time ?? -1) >= 60 && draft && m.team_id_radiant && m.team_id_dire) {
+        const rAcc = (draft.radiantAccountIds ?? null) as number[] | null;
+        const dAcc = (draft.direAccountIds ?? null) as number[] | null;
+        if (rAcc?.length || dAcc?.length) {
+          const eligible = await isAsymEligible(
+            m.team_id_radiant, m.team_id_dire, rAcc, dAcc,
+          ).catch(() => false);
+          if (eligible) {
+            const asymPred = predictAsymLiveWinner(
+              {
+                gameTimeSec: m.game_time ?? null,
+                radiantLead: m.radiant_lead ?? null,
+                radiantScore: m.radiant_score ?? null,
+                direScore: m.dire_score ?? null,
+                buildingState: m.building_state ?? null,
+                isRealLive: 1,
+                hasDraft: 1,
+                recencyDaysNorm: 0.0,
+              },
+              pred.probRadiantWin,
+            );
+            if (asymPred) {
+              try {
+                await db.insert(predictionsTable).values({
+                  matchId: m.match_id!,
+                  modelVersion: asymPred.modelVersion,
+                  marketType: 'live_match_winner_asym',
+                  modelProbTeam1: asymPred.probRadiantWin,
+                  modelProbTeam2: 1 - asymPred.probRadiantWin,
+                  confidence: 0.7,
+                  features: asymPred.features,
+                });
+              } catch (err) {
+                logger.warn({ err, matchId: m.match_id }, '[LiveWorker] asym-live prediction insert failed');
+              }
+            }
+          }
+        }
+      }
+
       // Записываем прематч-прогноз в персистентный ledger.
       // Идемпотентно благодаря UNIQUE(match_id) + onConflictDoNothing —
       // поэтому пишем при ЛЮБОМ первом виде матча (отрицательное game_time =
@@ -457,6 +503,7 @@ export function startLiveWorker(): void {
   logger.info({ intervalMs: POLL_INTERVAL_MS }, '[LiveWorker] starting');
   loadActiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial model load failed'));
   loadActiveLiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial live model load failed'));
+  loadActiveAsymLiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial asym-live model load failed'));
   void scheduleNextPoll(5_000);
 
   // Wire shutdown hooks (один раз; повторные вызовы start() безвредны — node склеит).
@@ -479,11 +526,14 @@ export function stopLiveWorker(): void {
 
 export function getWorkerStats() {
   const live = getActiveLiveModel();
+  const asymLive = getActiveAsymLiveModel();
   return {
     ...stats,
     modelLoaded: !!getActiveModel(),
     modelVersion: getActiveModel()?.version ?? null,
     liveModelLoaded: !!live,
     liveModelVersion: live?.version ?? null,
+    asymLiveModelLoaded: !!asymLive,
+    asymLiveModelVersion: asymLive?.version ?? null,
   };
 }

@@ -49,6 +49,7 @@ export type FeatureViewKey = keyof typeof FEATURE_VIEW;
  */
 export function currentFeatureViewFor(kind: string): number | null {
   if (kind === 'live_winner' || kind === 'live_winner_lgbm') return FEATURE_VIEW.LIVE_WINNER;
+  if (kind === 'live_winner_asym') return FEATURE_VIEW.LIVE_WINNER_ASYM;
   if (kind.startsWith('live_total_')) return FEATURE_VIEW.LIVE_TOTALS;
   if (kind.startsWith('market_')) return FEATURE_VIEW.MARKET;
   if (kind === 'prematch_winner_asym') return FEATURE_VIEW.PREMATCH_ASYM;

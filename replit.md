@@ -130,6 +130,19 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   (crontab пример с интервалами TICK_SEC=1800 для parse-loop, ежечасно для hourly,
   раз в сутки для daily, раз в неделю для enrichment); (в) НЕ нужно переносить parse:cycle
   в SchedulerWorker (Фаза 4 B5) — на ноуте отдельные workflows проще ребутить и логировать.**
+- **Финальное расписание ноута (TZ=Europe/Moscow, см. `docs/laptop-deploy.md`):**
+  Hourly = `5 * * * *`, Daily = **`30 0 * * *`** (00:30 МСК — ночная досборка БД
+  за прошедший день), Enrichment = `0 2 * * 0` (вс 02:00 МСК), Auto-retrain =
+  in-process SchedulerWorker (24ч интервал, gate `AUTO_RETRAIN_CRON_HOUR_UTC=4`
+  ≡ 07:00 МСК). Триггеры обучения уже в коде: новый патч (включая буквенные
+  `7.41 → 7.41a → 7.41b` — сравнение по полной строке `patch.name`) + 7 дней,
+  ИЛИ плановый рефреш раз в 30 дней. На Replit остаётся killswitch
+  `DISABLE_AUTO_RETRAIN=true`.
+- **Polling мобилки:** `artifacts/mobile/app/(tabs)/index.tsx` крутит flat
+  `setInterval(loadData, 60_000)` — без адаптации «есть live / нет live».
+  Mobile ходит ТОЛЬКО на наш api-server, api-server отвечает ТОЛЬКО из БД +
+  in-memory cache (TTL 30s live / 60s upcoming). Все upstream-вызовы — в
+  фоновых воркерах (LiveWorker 30s in-process; Hourly/Daily/Enrichment в cron).
 - Не платить за The Odds API на этом этапе
 - Букмекерский UI включён через **Bovada** (200 OK с Replit-IP, без ключа). Все 6 РФ-буков с
   Replit заблокированы (DNS / Cloudflare / 404), Pinnacle требует guest API key (нет).

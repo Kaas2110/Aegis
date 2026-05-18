@@ -402,6 +402,11 @@ export interface AsymResult {
 /**
  * Должны ли мы предпочесть asym модель: хотя бы одна сторона имеет
  * games_180d<5 И передан хоть один из account_ids драфта.
+ *
+ * Eligibility — это data-driven свойство матча (games_180d + наличие
+ * account_ids); НЕ зависит от того, какие asym-модели сейчас загружены.
+ * Это важно, потому что Этап C (asym-live) вызывает тот же helper — его
+ * работа не должна гаситься отсутствием asym-prematch модели.
  */
 export async function isAsymEligible(
   radiantTeamId: number,
@@ -409,7 +414,6 @@ export async function isAsymEligible(
   radiantAccountIds: number[] | null | undefined,
   direAccountIds: number[] | null | undefined,
 ): Promise<boolean> {
-  if (!cachedModel) return false;
   if (!radiantAccountIds && !direAccountIds) return false;
   const g = await getTeamGames180d([radiantTeamId, direTeamId]);
   const r = g.get(radiantTeamId) ?? 0;

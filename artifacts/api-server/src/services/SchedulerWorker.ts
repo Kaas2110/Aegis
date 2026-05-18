@@ -27,6 +27,7 @@ import { logger } from '../lib/logger';
 import { loadActiveModel } from './PredictionModel';
 import { loadActiveMarketModels } from './MarketLgbm';
 import { loadActiveLiveModel } from './LiveWinnerModel';
+import { loadActiveAsymLiveModel } from './AsymLiveModel';
 import { pruneLiveSnapshots } from './OutcomeTracker';
 import { getAppSettings } from './AppSettings';
 import { withOpenDotaKey } from '../lib/openDotaUrl';
@@ -439,6 +440,14 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
       }
     }
 
+    // train:asym-live — non-fatal (Этап C, asym live-winner для tier-3 матчей)
+    stepResults['train:asym-live'] = await runScriptSafe('train:asym-live', 'train:asym-live', trainArgs, { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
+    if (stepResults['train:asym-live']) {
+      try { await loadActiveAsymLiveModel(); } catch (err) {
+        logger.warn({ err: String(err) }, '[Scheduler] reload after train:asym-live failed');
+      }
+    }
+
     stats.totalRetrainSuccess++;
     stats.lastRetrainAt = startedAt;
     stats.lastRetrainResult = 'success';
@@ -711,8 +720,9 @@ export const TRAIN_SCRIPT_WHITELIST: Record<string, { args: readonly string[] }>
   'train:market-models': { args: ['--market', '--since-unix', '--min-samples'] },
   'train:live-model':    { args: ['--since-unix', '--min-samples'] },
   'train:live-totals':   { args: ['--market', '--since-unix', '--min-samples'] },
+  'train:asym-live':     { args: ['--since-unix', '--min-samples'] },
 };
-export type TrainScriptName = 'train:model' | 'train:lightgbm' | 'train:market-models' | 'train:live-model' | 'train:live-totals';
+export type TrainScriptName = 'train:model' | 'train:lightgbm' | 'train:market-models' | 'train:live-model' | 'train:live-totals' | 'train:asym-live';
 
 /**
  * Запускает один тренировочный скрипт в фоне с whitelist'ом аргументов.
@@ -764,6 +774,9 @@ export async function runTrainScriptManual(
           }
           if (script === 'train:live-model') {
             await loadActiveLiveModel();
+          }
+          if (script === 'train:asym-live') {
+            await loadActiveAsymLiveModel();
           }
         } catch (e) {
           logger.warn({ err: String(e) }, `[Scheduler] hot-reload after ${script} failed`);

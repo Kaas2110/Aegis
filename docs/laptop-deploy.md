@@ -82,20 +82,67 @@ bash scripts/run-replay-parse-loop.sh  # ставит первую итерац�
 
 ```cron
 # Aegis — фоновые ingest/compute задачи
+# ⚠️ ВРЕМЯ В CRON — ЛОКАЛЬНОЕ (TZ ноута = Europe/Moscow).
+#     Проверить: `timedatectl` → "Time zone: Europe/Moscow (MSK, +0300)".
+#     Если ноут на UTC — добавить `CRON_TZ=Europe/Moscow` первой строкой.
 # .env подгружается per-job через bash -lc
 PATH=/usr/local/bin:/usr/bin:/bin
 AEGIS=/home/$USER/aegis
 LOGDIR=/var/log/aegis
 
+# ── Свежесть мобилки: ingest:matches 3 + recent-form + bo3 (~3-5 мин)
+#    Mobile НЕ ходит в апстрим — она читает только нашу БД, поэтому БД должна
+#    наполняться независимо от трафика мобилки. См. секцию «Polling мобилки» ниже.
 # Hourly Live — каждые 60 минут на 5-й минуте
-5 * * * * cd $AEGIS && bash -lc 'set -a; source .env; set +a; bash scripts/run-hourly.sh >> $LOGDIR/hourly.log 2>&1'
+5 * * * *    cd $AEGIS && bash -lc 'set -a; source .env; set +a; bash scripts/run-hourly.sh >> $LOGDIR/hourly.log 2>&1'
 
-# Daily Ingest — ежедневно в 04:00
-0 4 * * * cd $AEGIS && bash -lc 'set -a; source .env; set +a; bash scripts/run-daily.sh >> $LOGDIR/daily.log 2>&1'
+# ── Ночная досборка БД за прошедший день (~25-40 мин)
+#    12 шагов: teams, matches, hero-stats/matchups/synergy, recent-form, h2h,
+#    player-glicko, team-extended (peerSynergy), bo3.
+# Daily Ingest — 00:30 МСК ежедневно
+30 0 * * *   cd $AEGIS && bash -lc 'set -a; source .env; set +a; bash scripts/run-daily.sh >> $LOGDIR/daily.log 2>&1'
 
-# Weekly Enrichment — воскресенье 03:00 (~1.7 часа)
-0 3 * * 0 cd $AEGIS && bash -lc 'set -a; source .env; set +a; bash scripts/run-enrichment-pipeline.sh >> $LOGDIR/enrichment.log 2>&1'
+# ── Тяжёлая weekly заливка (~2-3 ч): drafts, players-heroes, 8 E1 OD-скриптов.
+#    Не пересекается с Daily; запускается через 1.5ч после её окончания.
+# Weekly Enrichment — воскресенье 02:00 МСК
+0 2 * * 0    cd $AEGIS && bash -lc 'set -a; source .env; set +a; bash scripts/run-enrichment-pipeline.sh >> $LOGDIR/enrichment.log 2>&1'
+
+# ── Auto-retrain SchedulerWorker крутится внутри api-server (in-process,
+#    интервал 24ч). Cron-задачи под него НЕ нужны — нужно только дать gate
+#    в .env (см. ниже): DISABLE_AUTO_RETRAIN=false и AUTO_RETRAIN_CRON_HOUR_UTC=4.
+#    Час «4 UTC» = 07:00 МСК — тихое окно, Daily + Enrichment уже закончились,
+#    live-трафик минимальный. Триггеры обучения:
+#      • новый патч (включая буквенные: 7.41 → 7.41a → 7.41b) + 7 дней
+#      • плановый рефреш раз в 30 дней
 ```
+
+## Polling мобилки (для справки — чтобы не путать с cron)
+
+Mobile ходит **только** на наш api-server (`/api/matches/live`, `/upcoming`)
+по простому таймеру:
+
+```ts
+// artifacts/mobile/app/(tabs)/index.tsx:20,101
+const REFRESH_INTERVAL_MS = 60_000;
+intervalRef.current = setInterval(() => loadData(true), REFRESH_INTERVAL_MS);
+```
+
+Это **flat 60s polling** — без адаптации «есть live / нет live». Пока экран
+ленты открыт, мобилка раз в минуту тянет обогащённые матчи. Плюс pull-to-refresh.
+
+API-server отвечает **только из БД и in-memory cache** (TTL 30s для `matches:live`,
+60s для `matches:upcoming`). Никаких апстрим-вызовов в request-handler'ах.
+
+Все апстрим-походы (OpenDota / Stratz / PandaScore) — это **фоновые воркеры**:
+
+| Воркер | Где живёт | Когда | Что делает |
+|---|---|---|---|
+| `LiveWorker` | in-process в api-server | каждые 30s | опрашивает OD `/live` + PandaScore `/running` → пишет `live_snapshots` |
+| `Hourly Live` | cron (этот файл) | каждый час | освежает `pro_matches` + recent-form |
+| `Daily Ingest` | cron | 00:30 МСК | team-level фичи за день |
+| `Data Enrichment` | cron | вс 02:00 МСК | E1/drafts/players-heroes (weekly) |
+| `Replay Parse Loop` | systemd / screen | непрерывно (TICK_SEC=1800) | OD replay parse, post-mortem поля |
+| `SchedulerWorker` | in-process | раз в 24ч | patch-check + auto-retrain (gated env) |
 
 **Replay Parse Loop** — это long-running процесс (внутри него уже свой
 `TICK_SEC=1800` тикер с обработкой SIGTERM), поэтому через cron его не
