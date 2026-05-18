@@ -249,6 +249,68 @@ sudo systemctl list-timers '*aegis*'
 - [ ] (опционально) Cloudflare Tunnel / Tailscale Funnel для публичного HTTPS
       доступа к api-server, если мобилка ходит снаружи
 
+## Букмекеры — диагностика после переезда (важно)
+
+На Replit-IP реально работала только **Bovada** (US, без ключа). Все 6 РФ-буков
+заблокированы по DNS / Cloudflare / гео. Тест с datacenter РФ-прокси (proxy6.net,
+2026-05-18) показал что прокси решает проблему только частично, см. ниже.
+
+На РФ-IP ноута картина изменится — нужно **передиагностировать каждый источник**:
+
+### 1. Сам факт переезда — Bovada сломается
+
+Bovada (US-licensed) скорее всего вернёт **HTML/403 на РФ-IP** — то же что
+proxy-тест показал когда мы пытались прогнать Bovada через РФ-прокси.
+
+**Что делать:** либо отключить Bovada в `routes/bookmakers.ts` (убрать `bovada` из
+`SOURCES_TO_PROBE`), либо использовать BroVPN со сплит-туннелингом (RU-трафик
+напрямую, US-трафик через VPN). Второе сложнее, рекомендую первое — пока не
+сделаем РФ-буков, букмекерский UI вообще пропадёт всё равно.
+
+### 2. РФ-буки — 3 из 6 имеют устаревшие адаптеры (нужна починка в браузере)
+
+Smoke 2026-05-18 (`artifacts/api-server/src/scripts/probe-bookmakers.ts`,
+запуск: `pnpm --filter @workspace/scripts exec tsx /<абс_путь>/probe-bookmakers.ts`)
+показал по адаптерам:
+
+| Источник | Что отдаёт | Что чинить |
+|---|---|---|
+| **fonbet** `line34.fonbet.ru/api/v1/line/sport/events?sport=12` | DNS ENOTFOUND с Replit | Проверить на РФ-IP резолвится ли поддомен. Если нет — заменить на `https://line.fonbet.ru` или базовый домен |
+| **ligastavok** `line.ligastavok.ru/lsbets/api/v3/...` | DNS ENOTFOUND | То же — открыть в браузере на ноуте, посмотреть реальный домен через DevTools → Network |
+| **pari** `pari.ru/api/v3/line/events?sportId=33` | 200 **HTML** вместо JSON | Адаптер бьёт устаревший URL и получает фронт. Открыть `https://pari.ru/cybersport/dota-2`, DevTools → Network → XHR → найти запрос с list событий, прислать URL |
+| **betboom** `betboom.ru/api/v3/sports/40/line` | **404 JSON** | Эндпоинт сменился. Тот же recipe — браузер + DevTools |
+| **1xstavka** `1xstavka.ru/LineFeed/Get1x2_VZip?sports=1620` | 403 Cloudflare | Cloudflare палит даже datacenter РФ-IP. На residential / домашнем IP **может** пройти — проверить с ноута |
+| **olimp** `olimp.bet/ru/api/lines/get_events` | 200 **HTML** вместо JSON | Тот же recipe что pari |
+
+### 3. Recipe «починить адаптер» (3-5 минут на источник)
+
+1. Открыть сайт буки на ноуте: например `https://pari.ru/cybersport/dota-2`.
+2. F12 → **Network** → фильтр **XHR/Fetch** → перезагрузить страницу.
+3. Найти запрос с JSON-ответом, содержащим события Dota 2 (обычно 10-50KB JSON).
+4. Скопировать **URL** запроса (включая query params) и **Origin/Referer** headers.
+5. Прислать мне в чат — обновлю `routes/bookmakers.ts::adapter*` функции.
+
+### 4. Smoke-команда
+
+После переезда первый прогон, чтобы зафиксировать baseline:
+
+```bash
+cd <repo>
+pnpm --filter @workspace/scripts exec tsx \
+  $(pwd)/artifacts/api-server/src/scripts/probe-bookmakers.ts
+```
+
+Сравни вывод с тестом 2026-05-18 — какие источники ожили на РФ-IP без правок,
+какие требуют новый URL. Бери в работу только те, которые отдают **JSON**
+(HTTP 200 + `ct=application/json`). HTML / 403 / 404 — отдельный пайплайн.
+
+### 5. PROXY_URL после переезда
+
+На ноуте секрет **не нужен** — у тебя свой РФ-IP. Перед запуском убедись что
+`PROXY_URL` отсутствует в `.env`. Если оставишь — код увидит его и для РФ-доменов
+поломает Bovada не сломает (whitelist в `fetchWithProxy`), но добавит ненужный
+hop через 7-рублёвый shared прокси. Чище удалить.
+
 ## Что НЕ переносим
 
 - `parse:cycle` НЕ интегрируется в SchedulerWorker (см. user prefs в

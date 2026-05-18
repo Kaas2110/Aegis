@@ -27,7 +27,11 @@ async function fetchWithProxy(url: string, options: RequestInit = {}): Promise<R
     ...(options.headers as Record<string, string> ?? {}),
   };
 
-  const proxyUrl = getApiKey('PROXY_URL');
+  // PROXY_URL зарезервирован под РФ-домены (см. routes/bookmakers.ts).
+  // The Odds API хостится в US — гонять через РФ-прокси вернёт 403/HTML
+  // вместо JSON. На non-RU upstream'ы всегда ходим напрямую.
+  const isRuDomain = /\.(ru|bet)(\/|:|$)/i.test(url);
+  const proxyUrl = isRuDomain ? getApiKey('PROXY_URL') : null;
   if (proxyUrl) {
     try {
       const { HttpsProxyAgent } = await import('https-proxy-agent');
