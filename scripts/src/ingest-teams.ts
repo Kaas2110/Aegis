@@ -3,7 +3,7 @@
  * Один запрос — весь список топ-команд по рейтингу Glicko.
  */
 
-import { db, teamsTable } from '@workspace/db';
+import { db, teamsTable, teamRatingSnapshotsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
 
 interface OpenDotaTeam {
@@ -62,7 +62,27 @@ async function main() {
     inserted += chunk.length;
     process.stdout.write(`\r[ingest-teams] Inserted ${inserted}/${valid.length}`);
   }
-  console.log('\n[ingest-teams] Done.');
+  console.log('');
+
+  // Дневной снапшот рейтинга для фич rating_growth_{7d,14d,30d,90d}.
+  // PK(team_id, captured_at) + ON CONFLICT DO NOTHING — повторный прогон
+  // в те же сутки идемпотентен.
+  const today = new Date().toISOString().slice(0, 10);
+  const withRating = valid.filter(t => t.rating != null);
+  let snapshotted = 0;
+  for (let i = 0; i < withRating.length; i += BATCH) {
+    const chunk = withRating.slice(i, i + BATCH).map(t => ({
+      teamId: t.team_id,
+      capturedAt: today,
+      rating: t.rating as number,
+      wins: t.wins ?? 0,
+      losses: t.losses ?? 0,
+    }));
+    await db.insert(teamRatingSnapshotsTable).values(chunk).onConflictDoNothing();
+    snapshotted += chunk.length;
+  }
+  console.log(`[ingest-teams] Snapshotted ratings: ${snapshotted}/${withRating.length} for ${today}`);
+  console.log('[ingest-teams] Done.');
   process.exit(0);
 }
 

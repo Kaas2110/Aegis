@@ -30,18 +30,19 @@ step() {
   else echo "[$(ts)] ⚠️  FAILED rc=$? (continuing)"; fi
 }
 
-TOTAL=11
-step  1 $TOTAL "ingest:teams"          pnpm --filter @workspace/scripts run ingest:teams
-step  2 $TOTAL "ingest:matches 5"      pnpm --filter @workspace/scripts run ingest:matches 5
-step  3 $TOTAL "ingest:leagues"        pnpm --filter @workspace/scripts run ingest:leagues
-step  4 $TOTAL "ingest:hero-stats"     pnpm --filter @workspace/scripts run ingest:hero-stats
-step  5 $TOTAL "ingest:hero-matchups"  pnpm --filter @workspace/scripts run ingest:hero-matchups
-step  6 $TOTAL "ingest:hero-synergy"   pnpm --filter @workspace/scripts run ingest:hero-synergy
-step  7 $TOTAL "compute:recent-form"   pnpm --filter @workspace/scripts run compute:recent-form
-step  8 $TOTAL "compute:h2h"           pnpm --filter @workspace/scripts run compute:h2h
-step  9 $TOTAL "compute:player-glicko" pnpm --filter @workspace/scripts run compute:player-glicko
-step 10 $TOTAL "compute:team-extended" pnpm --filter @workspace/scripts run compute:team-extended
-step 11 $TOTAL "compute:bo3-series"    pnpm --filter @workspace/scripts run compute:bo3-series
+TOTAL=12
+step  1 $TOTAL "ingest:teams"           pnpm --filter @workspace/scripts run ingest:teams
+step  2 $TOTAL "ingest:missing-teams"   pnpm --filter @workspace/scripts run ingest:missing-teams
+step  3 $TOTAL "ingest:matches 5"       pnpm --filter @workspace/scripts run ingest:matches 5
+step  4 $TOTAL "ingest:leagues"         pnpm --filter @workspace/scripts run ingest:leagues
+step  5 $TOTAL "ingest:hero-stats"      pnpm --filter @workspace/scripts run ingest:hero-stats
+step  6 $TOTAL "ingest:hero-matchups"   pnpm --filter @workspace/scripts run ingest:hero-matchups
+step  7 $TOTAL "ingest:hero-synergy"    pnpm --filter @workspace/scripts run ingest:hero-synergy
+step  8 $TOTAL "compute:recent-form"    pnpm --filter @workspace/scripts run compute:recent-form
+step  9 $TOTAL "compute:h2h"            pnpm --filter @workspace/scripts run compute:h2h
+step 10 $TOTAL "compute:player-glicko"  pnpm --filter @workspace/scripts run compute:player-glicko
+step 11 $TOTAL "compute:team-extended"  pnpm --filter @workspace/scripts run compute:team-extended
+step 12 $TOTAL "compute:bo3-series"     pnpm --filter @workspace/scripts run compute:bo3-series
 
 echo
 echo "[$(ts)] ===== DAILY BATCH DONE ====="

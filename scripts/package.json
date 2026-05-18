@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "ingest:teams": "tsx ./src/ingest-teams.ts",
+    "ingest:missing-teams": "tsx ./src/ingest-missing-teams.ts",
     "train:lightgbm": "tsx ./src/train-lightgbm.ts",
     "ingest:leagues": "tsx ./src/ingest-leagues.ts",
     "ingest:matches": "tsx ./src/ingest-matches.ts",

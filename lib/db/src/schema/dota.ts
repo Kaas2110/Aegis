@@ -9,11 +9,13 @@ import {
   real,
   text,
   timestamp,
+  date,
   jsonb,
   serial,
   boolean,
   index,
   uniqueIndex,
+  primaryKey,
   customType,
 } from 'drizzle-orm/pg-core';
 
@@ -40,6 +42,25 @@ export const teamsTable = pgTable('teams', {
   lastMatchTime: bigint('last_match_time', { mode: 'number' }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── ДНЕВНЫЕ СНАПШОТЫ РЕЙТИНГА КОМАНД ─────────────────────────────────────
+// Для фич rating_growth_{7d,14d,30d,90d}: одна точка на (team_id, date),
+// заполняется в ingest:teams и ingest:missing-teams. PRIMARY KEY (team_id,
+// captured_at) с ON CONFLICT DO NOTHING — повторный прогон в течение суток
+// не плодит дубликаты. Используется trainer'ами prematch_winner_asym /
+// live_winner_asym и любыми будущими моделями, желающими видеть тренд
+// рейтинга.
+export const teamRatingSnapshotsTable = pgTable(
+  'team_rating_snapshots',
+  {
+    teamId: bigint('team_id', { mode: 'number' }).notNull(),
+    capturedAt: date('captured_at').notNull(),
+    rating: real('rating').notNull(),
+    wins: integer('wins').notNull().default(0),
+    losses: integer('losses').notNull().default(0),
+  },
+  table => [primaryKey({ columns: [table.teamId, table.capturedAt] })],
+);
 
 // ── ЛИГИ (snapshot из OpenDota /api/leagues) ─────────────────────────────
 // Используется для обогащения live/upcoming матчей человеческими названиями
