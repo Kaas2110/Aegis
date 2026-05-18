@@ -178,66 +178,31 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 
 ## Roadmap (active)
 
-- **Backtest UI скрыт.** `app/(tabs)/backtest.tsx` оставлен, маршрут спрятан
-  (`href: null`). Эндпоинт `/api/analytics/backtest` доступен — UI вернётся, когда
-  `prematch_outcomes` накопит ≥200 строк.
+> Полная история (Phase 0-8, T0→T12 milestones, retrain'ы, mobile UI waves,
+> infra) — `docs/changelog.md`. Подробный список баг-фиксов Phase 9 (F1-F9) —
+> `.local/session_plan.md`. Здесь только текущее активное.
+
+- **E1 OD-расширение (2026-05-18):**
+  - Schema (8 таблиц) + ingest скрипты + admin триггеры + автозаливка через
+    workflow Data Enrichment — DONE. Карта датасетов моделей и список фичей —
+    в `scripts/src/lib/e1-features.ts` (header + per-bucket секции).
+  - Stage 1: библиотека `scripts/src/lib/e1-features.ts` (7 loaders + 6 builders,
+    36 новых фичей через 6 бакетов) — DONE 2026-05-18. Pure, ничем не вызвана.
+  - **Stage 2 PENDING:** mirror в `artifacts/api-server/src/lib/e1-features.ts`,
+    bump `FEATURE_VIEW`, wire в 4 trainer'а + 3 inference класса. Ретрейн —
+    ТОЛЬКО после явного «да» И полной первичной заливки таблиц.
+- **Mobile/UI задачи без ML-зависимости:**
+  - Backtest UI скрыт (`href: null` в `app/(tabs)/_layout.tsx`) — раскроем когда
+    `prematch_outcomes` накопит ≥200 строк и UX будет готов.
+  - EV-merge на фронте — matching событий букмекеров к `pro_matches`, реальное
+    использование `filters.bookmaker` в `app/(tabs)/index.tsx::applyFilters`.
+    Полный охват маркетов (winner/totals/firstBlood) для всех букмекеров.
+  - Возврат `minEdge`/`minOdds` в алерты (UI + валидация в админ-настройках) —
+    разблокируется вместе с букмекерским UI.
 - **Live-winner на LightGBM** — перенести когда `live_snapshots × prematch_outcomes` ≥ 200.
-- **EV-merge на фронте** — matching events букмекеров к `pro_matches`, фактическое
-  использование `filters.bookmaker` в `app/(tabs)/index.tsx::applyFilters`,
-  `BookmakerDropdown` подключить к header'у. Полный охват маркетов
-  (winner/totals/firstBlood) для всех 6 букмекеров.
-- **Возврат `minEdge`/`minOdds` в алерты** — UI и валидация в админ-настройках.
-- **E1 OD-расширение (наполнение 2026-05-18):** 8 новых OD-ingest скриптов
-  + 8 новых таблиц (`team_rosters`, `team_hero_pool`, `hero_benchmarks`,
-  `hero_item_popularity`, `pro_players`, `player_totals`, `player_counts`,
-  `player_wl_pro`). Throttle 20 req/s через `scripts/src/lib/odPace.ts`.
-  Все добавляются **дополнительными колонками** в feature vectors —
-  существующие фичи НЕ заменяются. Ретрейн только когда таблицы наполнятся
-  (отдельный «да» от пользователя). Датасеты моделей после внедрения:
-  - **prematch_winner v3**: + rosterKnown(A/B), rosterContinuity(A/B),
-    teamPoolOverlap(A/B), teamPoolWinrate(A/B), rosterAvgGpm/Xpm/Kda(A/B),
-    rosterAvgWlPro180(A/B), rosterRoleClarity(A/B). НЕ блокировано match_parsed.
-  - **live_winner v8**: + gpmZ/xpmZ/kdaZ ByHero(R/D), aboveBaselineCount(R/D).
-  - **market total_kills**: + heroBenchmarkKillsPmSumDraft, HeroDmgPmSumDraft.
-  - **market total_duration ± q25/q75**: + heroDurationBinMean(R/D)
-    (подключение существующей `hero_durations`), heroLateItemPopShare(R/D),
-    heroEarlyItemAggression(R/D).
-  - **market first_blood**: + heroFbProxy(R/D).
-  - **live_totals**: + heroKillsPmBenchmarkSum, rosterPaceProxy,
-    heroLateItemPopShareTotal.
-- **Большая ML-итерация (план T0→T12):**
-  T0 аудит DONE, T0.5a Stratz live DORMANT (код сохранён, вызовы закомментированы), T1 ml-contract DONE,
-  T2 data-availability-rules DONE, T3.5 live totals DONE, T12 trim replit.md DONE.
-  T3/T4/T5/T6/T7 feature-services DONE 2026-05-16 как `services/features/teamProfile.ts`
-  + endpoint `/api/analytics/team-profile?teamId=N`. T8 A-vs-B DONE как
-  `/api/analytics/team-compare?teamAId=&teamBId=` (двойной profile + h2h + diff).
-  T9 итоги DONE как `/api/analytics/match-summary?matchId=N` (prematch_outcome +
-  calibration + market predictions + live snapshots). T10 Bovada wiring уже
-  работает в mobile (BookmakerDropdown в header, `filters.bookmaker`).
-  T11 cleanup частично (удалены PinnacleScraper.ts, TheOddsApiAdapter.ts, hello.ts).
-  T0.7 OD replay-parse — отложен, OD 429 на Replit-IP блокирует ingest.
-  **Дальше — audit + UI mobile screens поверх endpoints + тренировка моделей
-  (ТОЛЬКО после явного «да» от пользователя после проверки датасета).**
-  **Принципы:** новые фичи не катим в прод сразу — сначала наполняем БД до ~100%,
-  потом одна выборка 365d, потом обучение. Никаких фейк-данных. Каждая фаза —
-  явный «да» от пользователя.
-- **Фаза 9 — баг-фиксы после live-теста 2026-05-17** (полный список в
-  `.local/session_plan.md`, запускаем ПОСЛЕ Фазы 3 ML):
-  - F1 [P0] завершённые матчи висят в «Лайв» с прогнозами — нужно свернуть
-    в аккордеон сверху и убрать плитки прогнозов (оставить только счёт серии).
-  - F2 [P0] фильтр «Коэф. 1.2+/1.5+» не работает — `filters.minOdds` чипы
-    рендерятся, но `applyFilters` в `app/(tabs)/index.tsx` его не учитывает.
-  - F3 [P0] вкладка «Бэктест» снова видна — Phase 2 M4 раскрыл, пользователь
-    хочет вернуть `href: null` (UX ещё не готов).
-  - F4 [P1] «Сравнение коэффициентов» в табе «Длительность O/U N мин» рендерит
-    имена команд вместо «ТБ/ТМ» — нужен mapper `marketTypeToSideLabels`.
-  - F5 [P1] «Сводка матча» отдаёт «Некорректный ID» — `matchId` не пробрасывается
-    из карточки. Endpoint `/api/analytics/match-summary` живой (T9 DONE).
-  - F6 [P1] «Сравнение команд» показывает все «—» — проверить эталонными
-    командами (Spirit/OG) vs мелкими, добавить стейт «Данные накапливаются».
-  - F7 [P2] Bovada events=0 — диагностический скрипт по сырому JSON.
-  - F8 [P2] End-to-end smoke алертов.
-  - F9 [P0] ТБ/ТМ ladder пуст — «0 линий вокруг 53.2» / «0 линий вокруг 40 мин»,
-    центр есть, линии не сгенерированы. Endpoint `/api/analytics/totals-ladder`
-    должен раскрывать центр в ±3σ ладдер; сейчас два самых больших блока экрана
-    «Прогнозы» показывают «Прогноз недоступен».
+- **Фаза 9 баг-фиксы** (F1-F9, после live-теста 2026-05-17) — PENDING, запускаем
+  ПОСЛЕ Фазы 3 ML. Полный приоритезированный список — `.local/session_plan.md`.
+  Самые болезненные: F9 (ТБ/ТМ ladder пуст), F1 (завершённые матчи висят в Live),
+  F2 (`filters.minOdds` не работает).
+- **Принципы каждой фазы:** ingest до ~100% покрытия → одна выборка 365d →
+  обучение → активация. Никаких фейк-данных в UI. Каждая фаза — явный «да».

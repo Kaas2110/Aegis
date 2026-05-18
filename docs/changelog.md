@@ -3,6 +3,48 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-18 — E1 OD-расширение Stage 1 + trim replit.md round 2
+
+**E1 Stage 1 — feature library `scripts/src/lib/e1-features.ts`** (~450 строк):
+7 DB loaders для E1-таблиц (`team_rosters`, `team_hero_pool`, `hero_benchmarks`,
+`hero_item_popularity`, `player_totals`, `player_counts`, `player_wl_pro`) +
+6 builders на 36 новых фичей через 6 бакетов. Таблица `pro_players` отдельным
+loader'ом не оборачивается — `player_totals`/`player_counts`/`player_wl_pro`
+keyed по accountId напрямую:
+
+| Бакет | Builder | +фичей |
+|---|---|---:|
+| prematch_winner v3→v4 | `buildE1PrematchFeatures` | 18 |
+| live_winner v8→v9 | `buildE1LiveWinnerFeatures` | 8 |
+| market_total_kills | `buildE1KillsFeatures` | 2 |
+| market_total_duration | `buildE1DurationFeatures` | 4 |
+| market_first_blood | `buildE1FbFeatures` | 2 |
+| live_totals | `buildE1LiveTotalsFeatures` | 2 |
+
+Все builders pure, дают нейтральные дефолты (0 / 0.5) при пустых данных.
+Никем не вызывается → активные модели не задеты. Stage 2 (mirror в api-server +
+bump `FEATURE_VIEW` + wire в 4 trainer'а + 3 inference) — PENDING, запускается
+после полной заливки таблиц и явного «да».
+
+Architect-review фиксы: `findClosest` для перцентилей (вместо первого попадания
+в окно), `Math.max(1, length)` в `rosterKnown`/`rosterContinuity`, SQL-уровневый
+`inArray` в `loadPlayerTotalsMap({fields})`. CRITICAL про `player_counts.data`
+оказался ложным — структура `Record<lane_role, Record<role, {games,win}>>`
+действительно даёт `data.lane_role`.
+
+**Trim replit.md round 2** (после T12 в мае 2026):
+- Убран блок «Большая ML-итерация T0→T12» — все 13 milestone-номеров уже
+  отражены в этом changelog (см. записи 2026-05-16 и 2026-05-17).
+- Убран детальный список F1-F9 Фазы 9 — это полный дубль
+  `.local/session_plan.md` (SoT). В roadmap осталась ссылка + 3 самых
+  болезненных бага одной строкой.
+- Карта датасетов моделей E1 (бакеты, фичи) больше не дублируется в
+  replit.md — она в коде `scripts/src/lib/e1-features.ts` и в этой записи.
+
+Активный roadmap в `replit.md` теперь содержит только: E1 Stage 2 wiring,
+Mobile/UI без ML-зависимости (backtest hide / EV-merge / minEdge alerts),
+Live-winner LightGBM миграция, и pointer на Фазу 9.
+
 ## 2026-05-17 — Phase 5 A3 Model Management UI DONE
 
 Закрыли отложенный пункт админки — раздел `/models` в `artifacts/admin-web`.
