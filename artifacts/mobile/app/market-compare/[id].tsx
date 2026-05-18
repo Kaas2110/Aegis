@@ -6,9 +6,58 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { getCachedMatch, getCachedMarkets } from '@/services/LiveDataService';
 import { logProductEvent } from '@/services/logging/EventLogger';
-import type { Market, BookmakerOdds } from '@/types';
+import type { Market, MarketType, BookmakerOdds } from '@/types';
 
 type SortKey = 'ev' | 'edge' | 'odds' | 'confidence';
+
+/**
+ * F4 (Phase 9): семантика двух сторон коэффициента зависит от типа рынка.
+ * До этого фикса экран рендерил `team1.name / team2.name` для всех рынков,
+ * из-за чего на табе «Длительность O/U 42мин» вместо «ТБ / ТМ» показывались
+ * имена команд (скрин image_1779059280859). Маппер возвращает локализованные
+ * подписи для side1 (= oddsTeam1) и side2 (= oddsTeam2).
+ *
+ * Линия для тоталов извлекается из строки `market.label` регуляркой —
+ * сервер форматирует её как «Тотал убийств · O/U 52.5» / «Длительность · O/U 42.5 мин».
+ * Если линия не найдена — показываем без числа.
+ */
+function marketSideLabels(
+  market: Market,
+  team1Short: string,
+  team2Short: string,
+): { side1: string; side2: string } {
+  // Извлекаем число после "O/U" / "О/У" (кириллица) / "ТБ" / "ТМ".
+  // Поддерживаем десятичную запятую (52,5) — встречается в РФ-форматах.
+  const lineMatch = market.label.match(/(?:O\/U|О\/У|ТБ|ТМ)\s*(\d+(?:[.,]\d+)?)/i);
+  const line = lineMatch?.[1].replace(',', '.') ?? '';
+  const lineSuffix = line ? ` ${line}` : '';
+
+  const type: MarketType = market.type;
+  switch (type) {
+    case 'total_kills':
+    case 'total_duration':
+    case 'over_under_maps':
+      return { side1: `ТБ${lineSuffix}`, side2: `ТМ${lineSuffix}` };
+    case 'first_blood':
+      return { side1: `${team1Short} · FB`, side2: `${team2Short} · FB` };
+    case 'first_tower':
+      return { side1: `${team1Short} · 1-я башня`, side2: `${team2Short} · 1-я башня` };
+    case 'first_roshan':
+      return { side1: `${team1Short} · 1-й Рош`, side2: `${team2Short} · 1-й Рош` };
+    case 'first_barracks':
+      return { side1: `${team1Short} · 1-я казарма`, side2: `${team2Short} · 1-я казарма` };
+    case 'match_winner':
+    case 'map_winner':
+    case 'kills_handicap':
+    case 'map_handicap':
+    case 'correct_score':
+    case 'net_worth_lead':
+    case 'comeback':
+    case 'draft_advantage':
+    default:
+      return { side1: team1Short, side2: team2Short };
+  }
+}
 
 export default function MarketCompareScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -77,6 +126,13 @@ export default function MarketCompareScreen() {
   });
 
   const modelProb = selectedMarket.prediction.modelProbability;
+  // F4: подписи сторон под текущий тип рынка.
+  const sideLabels = marketSideLabels(selectedMarket, match.team1.shortName, match.team2.shortName);
+  // Для тоталов side1=ТБ → коэф «больше» обычно ниже; цвет primary всё равно подходит.
+  // Для winner-маркетов side1=team1 (radiant-ассоциация по бренду).
+  const isTotal = selectedMarket.type === 'total_kills'
+    || selectedMarket.type === 'total_duration'
+    || selectedMarket.type === 'over_under_maps';
 
   function getEV(odds: BookmakerOdds): number {
     return modelProb * (odds.oddsTeam1 - 1) - (1 - modelProb);
@@ -123,12 +179,13 @@ export default function MarketCompareScreen() {
           <View style={styles.modelProbRow}>
             <View style={styles.modelProbBlock}>
               <Text style={[styles.modelProbValue, { color: colors.primary }]}>{Math.round(modelProb * 100)}%</Text>
-              <Text style={[styles.modelProbLabel, { color: colors.mutedForeground }]}>{match.team1.name}</Text>
+              {/* F4: подпись зависит от типа рынка — для тоталов «ТБ N», для FB «Team · FB» и т.д. */}
+              <Text style={[styles.modelProbLabel, { color: colors.mutedForeground }]}>{sideLabels.side1}</Text>
             </View>
             <View style={[styles.modelDivider, { backgroundColor: colors.border }]} />
             <View style={styles.modelProbBlock}>
-              <Text style={[styles.modelProbValue, { color: colors.dire }]}>{Math.round((1 - modelProb) * 100)}%</Text>
-              <Text style={[styles.modelProbLabel, { color: colors.mutedForeground }]}>{match.team2.name}</Text>
+              <Text style={[styles.modelProbValue, { color: isTotal ? colors.foreground : colors.dire }]}>{Math.round((1 - modelProb) * 100)}%</Text>
+              <Text style={[styles.modelProbLabel, { color: colors.mutedForeground }]}>{sideLabels.side2}</Text>
             </View>
           </View>
           <Text style={[styles.modelMeta, { color: colors.mutedForeground }]}>
@@ -157,7 +214,11 @@ export default function MarketCompareScreen() {
         <View style={[styles.tableCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.th, { color: colors.mutedForeground, flex: 1.5 }]}>Букмекер</Text>
-            <Text style={[styles.th, { color: colors.mutedForeground }]}>Коэф.</Text>
+            {/* F4: явно показываем, что 4 правые колонки считаются для стороны side1
+                выбранного рынка (для тоталов это «ТБ», для FB — «П1 FB», и т.д.).
+                Без этой подписи цифры выглядели как «коэф на team1», что вводит
+                в заблуждение на тоталах. */}
+            <Text style={[styles.th, { color: colors.mutedForeground }]} numberOfLines={1}>Коэф. {sideLabels.side1}</Text>
             <Text style={[styles.th, { color: colors.mutedForeground }]}>Рынок</Text>
             <Text style={[styles.th, { color: colors.mutedForeground }]}>Перевес</Text>
             <Text style={[styles.th, { color: colors.mutedForeground }]}>Ценность</Text>

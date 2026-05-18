@@ -201,7 +201,11 @@ function openDotaToMatch(raw: OpenDotaLiveMatch): Match {
     : undefined;
 
   return {
-    id: `od_${raw.match_id ?? raw.lobby_id ?? Date.now()}`,
+    // F5 (Phase 9): синтетический fallback должен быть НЕЧИСЛОВЫМ, иначе
+    // `extractNumericMatchId` (lib/matchId.ts) пропустит его как валидный OD
+    // match_id и summary-кнопка покажется для матча, для которого в БД нет
+    // prematch_outcomes. Префикс `synth-` ломает строгий regex намеренно.
+    id: `od_${raw.match_id ?? raw.lobby_id ?? `synth-${Date.now()}`}`,
     team1,
     team2,
     team1Side: 'radiant',

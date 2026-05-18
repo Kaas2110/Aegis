@@ -16,6 +16,7 @@ import { TotalsLadder } from '@/components/TotalsLadder';
 import { ProbabilityBar } from '@/components/ProbabilityBar';
 import { FreshnessIndicator } from '@/components/FreshnessIndicator';
 import { logProductEvent } from '@/services/logging/EventLogger';
+import { extractNumericMatchId } from '@/lib/matchId';
 import type { Match, Market } from '@/types';
 
 
@@ -363,9 +364,18 @@ export default function MatchDetailScreen() {
               </TouchableOpacity>
             );
           })()}
-          {/* Сводка матча (T9) */}
+          {/* Сводка матча (T9). F5 (Phase 9): кнопка показывается только если
+              у матча есть канонический числовой match_id. Для fallback-
+              синтетики (`up_TeamA_TeamB_ts`, `od_<Date.now()>` и т.п.) данных
+              в `prematch_outcomes` всё равно нет — нечего показывать. */}
+          {(() => {
+            const numericId = extractNumericMatchId(match.id);
+            if (numericId == null) return null;
+            return (
           <TouchableOpacity
-            onPress={() => router.push({ pathname: '/match/summary/[id]', params: { id: match.id } })}
+            onPress={() => {
+              router.push({ pathname: '/match/summary/[id]', params: { id: String(numericId) } });
+            }}
             style={styles.compareBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
@@ -374,6 +384,8 @@ export default function MatchDetailScreen() {
           >
             <Feather name="file-text" size={18} color={colors.primary} />
           </TouchableOpacity>
+            );
+          })()}
           {/* Сравнение коэффициентов */}
           <TouchableOpacity
             onPress={() => router.push({ pathname: '/market-compare/[id]', params: { id: match.id } })}

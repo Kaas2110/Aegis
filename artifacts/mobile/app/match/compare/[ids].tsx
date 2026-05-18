@@ -73,6 +73,21 @@ function paceRu(p: string | null | undefined): string {
   return '—';
 }
 
+// F6 (Phase 9): «накапливаются» — секция считается пустой, если ни одно из
+// числовых/строковых полей не заполнено. Тогда вместо пяти строк «— vs —»
+// показываем одну явную подсказку, что данные ещё не набраны.
+function isAllEmpty(obj: Record<string, unknown> | null | undefined, keys: string[]): boolean {
+  if (!obj) return true;
+  return keys.every(k => {
+    const v = (obj as Record<string, unknown>)[k];
+    return v == null || (typeof v === 'number' && !Number.isFinite(v));
+  });
+}
+// Только истинно-nullable поля. winStreak/knownPlayers сервер отдаёт как 0
+// даже для пустого профиля (см. teamProfile.ts) — это шум, не сигнал.
+const FORM_KEYS = ['winRate30d', 'winRate90d', 'weightedWinRate'];
+const ELO_KEYS = ['avgPlayerRating', 'tierLevel'];
+
 export default function TeamCompareScreen() {
   const { ids } = useLocalSearchParams<{ ids: string }>();
   const colors = useColors();
@@ -169,6 +184,31 @@ export default function TeamCompareScreen() {
               </Text>
             </View>
           </View>
+
+          {/* F6 (Phase 9): баннер «данные накапливаются», если у одной из
+              команд критические секции пустые. По API подтверждено: мелкие/
+              новые tier-3 команды (например 128329, 137885) дают полностью
+              null TeamProfile. Без баннера экран выглядит сломанным. */}
+          {(() => {
+            const aEmpty = isAllEmpty(data.teamA.dynamicForm as Record<string, unknown> | null, FORM_KEYS)
+              && isAllEmpty(data.teamA.eloDecomp as Record<string, unknown> | null, ELO_KEYS);
+            const bEmpty = isAllEmpty(data.teamB.dynamicForm as Record<string, unknown> | null, FORM_KEYS)
+              && isAllEmpty(data.teamB.eloDecomp as Record<string, unknown> | null, ELO_KEYS);
+            if (!aEmpty && !bEmpty) return null;
+            const who = aEmpty && bEmpty ? 'обеих команд' : aEmpty
+              ? (data.teamA.teamName ?? `#${data.teamA.teamId}`)
+              : (data.teamB.teamName ?? `#${data.teamB.teamId}`);
+            return (
+              <View style={[styles.section, { backgroundColor: colors.muted, borderColor: colors.border, flexDirection: 'row', gap: 8, alignItems: 'flex-start' }]}>
+                <Feather name="clock" size={14} color={colors.mutedForeground} style={{ marginTop: 2 }} />
+                <Text style={[styles.hint, { color: colors.mutedForeground, flex: 1, lineHeight: 17 }]}>
+                  Для {who} ещё накапливаются данные — это обычно мелкая/новая команда
+                  без достаточной истории pro-матчей. Прочерки в строках ниже означают
+                  «пока нечего показать», а не «данные сломаны».
+                </Text>
+              </View>
+            );
+          })()}
 
           {/* H2H */}
           {data.h2h ? (

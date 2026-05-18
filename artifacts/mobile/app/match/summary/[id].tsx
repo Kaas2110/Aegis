@@ -10,6 +10,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { logProductEvent } from '@/services/logging/EventLogger';
+import { extractNumericMatchId } from '@/lib/matchId';
 
 const API_BASE = '/api';
 
@@ -73,14 +74,20 @@ export default function MatchSummaryScreen() {
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
-  const matchId = Number(id);
+  // F5 (Phase 9): id из роутера может прийти как канонический `od_NNN`/`up_NNN`
+  // (от MatchCard caller) или уже как чистое число (от стрипа в caller).
+  // Helper принимает оба формата и отсеивает фолбэк-синтетику.
+  const matchId = extractNumericMatchId(id) ?? (() => {
+    const n = Number(id);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
   const [data, setData] = useState<SummaryResp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!Number.isFinite(matchId) || matchId <= 0) {
-      setError('Некорректный ID матча');
+    if (matchId == null) {
+      setError(`Некорректный ID матча (получено: ${String(id)})`);
       setLoading(false);
       return;
     }
@@ -135,6 +142,25 @@ export default function MatchSummaryScreen() {
 
       {!loading && !error && data && (
         <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40, gap: 14 }}>
+          {/* F5 (Phase 9): короткий онбординг-блок — что показывает этот экран.
+              Без него секции «Прогноз до матча / Факт / Калибровка / Live» выглядят
+              как разрозненный отчёт. */}
+          <View style={[styles.section, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Feather name="info" size={14} color={colors.mutedForeground} />
+              <Text style={[styles.sectionTitle, { color: colors.foreground, fontSize: 14 }]}>
+                О чём эта сводка
+              </Text>
+            </View>
+            <Text style={[styles.hint, { color: colors.mutedForeground, lineHeight: 18 }]}>
+              Здесь собран post-mortem по матчу: что предсказывала модель ДО старта,
+              чем матч закончился на самом деле, насколько модель ошиблась
+              (калибровка), какие маркеты были на момент прогноза и сколько
+              live-снапшотов удалось снять. Полезно, чтобы понять — почему
+              модель промахнулась, или наоборот, на чём она выиграла.
+            </Text>
+          </View>
+
           {/* Prematch outcome */}
           {data.outcome ? (
             <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
