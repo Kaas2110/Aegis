@@ -14,9 +14,9 @@
  * (это σ log-нормали).
  *
  * Inference:
- *   - 200ms timeout, общий circuit-breaker делит с PredictionModel через
- *     `lightgbmAvailable`/`tripLightgbm` нет — здесь свой локальный, чтобы
- *     не валить prematch при недоступности market-моделей.
+ *   - 1500ms timeout (F9 Phase 9, поднят с 200ms из-за конфликта totals-ladder
+ *     × LiveWorker). Локальный circuit-breaker (НЕ общий с PredictionModel) —
+ *     trip только на сетевых/5xx/bad-payload, timeout retryable без trip'а.
  *   - Per-(rId,dId,market) кэш на 60s (одни и те же запросы внутри минуты
  *     повторяются часто — popular-markets + analytics route).
  *   - При любой ошибке возвращаем null → caller использует свой эвристический
@@ -38,7 +38,11 @@ import {
 } from '../lib/e1-features';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
-const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
+// F9 (Phase 9): timeout поднят с 200 → 1500ms. 200ms систематически не успевал,
+// когда totals-ladder (5 parallel /predict) пересекался с тиком LiveWorker
+// (~43 predict-вызовов/poll). Каждый AbortError раньше открывал circuit на 60s,
+// что давало пользователю «модель не отвечает» в течение минуты подряд.
+const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 1500);
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 
 const TEAM_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -390,10 +394,15 @@ async function callMlPredict(blobB64: string, features: number[]): Promise<Predi
       calibrated_prob: data.calibrated_prob,
     };
   } catch (e) {
-    const reason = (e as Error).name === 'AbortError'
-      ? `timeout ${ML_PREDICT_TIMEOUT_MS}ms`
-      : (e as Error).message;
-    tripCircuit(reason);
+    // F9 (Phase 9): timeout НЕ открывает circuit. Это retryable single-request
+    // failure (часто ловится при пересечении totals-ladder с тиком LiveWorker),
+    // а circuit — про устойчивую недоступность ml-service. Раньше один timeout
+    // отрубал ВСЕ market predictions на 60s. Сетевые/connect ошибки по-прежнему trip.
+    if ((e as Error).name === 'AbortError') {
+      logger.debug({ timeoutMs: ML_PREDICT_TIMEOUT_MS }, '[MarketLgbm] /predict timeout (no trip)');
+      return null;
+    }
+    tripCircuit((e as Error).message);
     return null;
   } finally {
     clearTimeout(timer);

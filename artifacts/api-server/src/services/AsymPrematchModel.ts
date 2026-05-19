@@ -36,7 +36,8 @@ import { eq, and, gte, or, inArray, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
-const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
+// F9 (Phase 9): timeout 200 → 1500ms. См. комментарий в `MarketLgbm.ts`.
+const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 1500);
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -172,10 +173,12 @@ async function callMlPredict(blobB64: string, features: number[]): Promise<numbe
     }
     return data.calibrated_prob;
   } catch (e) {
-    const reason = (e as Error).name === 'AbortError'
-      ? `timeout ${ML_PREDICT_TIMEOUT_MS}ms`
-      : (e as Error).message;
-    tripCircuit(reason);
+    // F9 (Phase 9): timeout НЕ открывает circuit. См. `MarketLgbm.ts`.
+    if ((e as Error).name === 'AbortError') {
+      logger.debug({ timeoutMs: ML_PREDICT_TIMEOUT_MS }, '[AsymPrematch] /predict timeout (no trip)');
+      return null;
+    }
+    tripCircuit((e as Error).message);
     return null;
   } finally {
     clearTimeout(timer);

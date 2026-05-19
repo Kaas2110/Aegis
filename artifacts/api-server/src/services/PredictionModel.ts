@@ -113,7 +113,8 @@ interface LoadedModel {
 }
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
-const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 200);
+// F9 (Phase 9): timeout 200 → 1500ms. См. комментарий в `MarketLgbm.ts`.
+const ML_PREDICT_TIMEOUT_MS = Number(process.env.ML_PREDICT_TIMEOUT_MS ?? 1500);
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
 
 let lightgbmDisabled = false;  // выставляется при долгих сбоях ml-service
@@ -318,10 +319,12 @@ async function predictViaMlService(blobB64: string, features: number[]): Promise
     }
     return data.calibrated_prob;
   } catch (e) {
-    const reason = (e as Error).name === 'AbortError'
-      ? `timeout ${ML_PREDICT_TIMEOUT_MS}ms`
-      : (e as Error).message;
-    tripLightgbm(reason);
+    // F9 (Phase 9): timeout НЕ открывает circuit. См. `MarketLgbm.ts`.
+    if ((e as Error).name === 'AbortError') {
+      logger.debug({ timeoutMs: ML_PREDICT_TIMEOUT_MS }, '[PredictionModel] /predict timeout (no trip)');
+      return null;
+    }
+    tripLightgbm((e as Error).message);
     return null;
   } finally {
     clearTimeout(timer);

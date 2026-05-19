@@ -192,40 +192,21 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 
 ## Roadmap (active)
 
-> Полная история (Phase 0-8, T0→T12 milestones, retrain'ы, mobile UI waves,
-> infra) — `docs/changelog.md`. Подробный список баг-фиксов Phase 9 (F1-F9) —
-> `.local/session_plan.md`. Здесь только текущее активное.
+> Полная история (Phase 0-10, T0→T12 milestones, retrain'ы, mobile UI waves,
+> infra) — `docs/changelog.md`. Здесь только PENDING.
 
-- **Phase 10 adaptive polling — DONE 2026-05-19.** 9 новых int-полей в
-  `app_settings` (LiveWorker live/idle/upcomingWindow, Bookmaker
-  live/upcoming/idle, schedulerTickHours, mobilePoll live/idle), hot-reload
-  на каждом тике без рестарта api-server. Admin UI: `/admin-web/workers` →
-  карточка «Интервалы поллинга» (9 input'ов с min/max guards). Мобилка
-  пуллит `GET /api/client-config` (public, cache 60s) раз в 5 мин и
-  подменяет setInterval hot, дополнительно переключаясь live↔idle по
-  `enrichedLive.length`. 429-backoff LiveWorker остался отдельной осью
-  поверх adaptive интервала.
-
-- **E1 OD-расширение — DONE 2026-05-18.** Schema (8 таблиц) + ingest + Data
-  Enrichment workflow + `scripts/src/lib/e1-features.ts` (mirror в api-server) +
-  prematch v4 cascade (v4→v3→v2→v1). См. `docs/changelog.md`.
-- **3-tier markets/live `_with_draft` — DONE 2026-05-18.** `MarketLgbm`
-  пытается `_with_draft` если есть валидные 5+5 picks + оба `team_id`, иначе
-  pure. Активны 5 prematch (`first_blood/total_kills/total_duration[/_q25/_q75]_with_draft`)
-  + 2 live (`live_total_kills_with_draft`, `live_total_duration_with_draft`).
-  Trainer/inference team-фичи синхронизированы (elo `/200`, exp `log(g+1)−log(g+1)`).
-- **Mobile/UI задачи без ML-зависимости:**
-  - Backtest UI скрыт (`href: null` в `app/(tabs)/_layout.tsx`) — раскроем когда
-    `prematch_outcomes` накопит ≥200 строк и UX будет готов.
-  - EV-merge на фронте — matching событий букмекеров к `pro_matches`, реальное
-    использование `filters.bookmaker` в `app/(tabs)/index.tsx::applyFilters`.
-    Полный охват маркетов (winner/totals/firstBlood) для всех букмекеров.
-  - Возврат `minEdge`/`minOdds` в алерты (UI + валидация в админ-настройках) —
-    разблокируется вместе с букмекерским UI.
+- **Фаза 9 баг-фиксы (in progress).** P0: F7 (Bovada events=0), F8 (e2e
+  алертов). F1/F2/F3 уже в коде (см. комментарии «F1/F2 (Phase 9)» в
+  `(tabs)/index.tsx` + `href: null` для backtest в `(tabs)/_layout.tsx`) —
+  нужно прогнать e2e на эмуляторе. **F9 DONE 2026-05-19** — `MarketLgbm`
+  timeout 200 → 1500ms + AbortError не trip'ает circuit (см. `docs/changelog.md`).
+  Средние (P1): F4 (Сравнение коэф. рендерит имена вместо ТБ/ТМ), F5 (matchId
+  не доходит до match-summary), F6 (team-compare все «—»).
+- **Mobile/UI без ML-зависимости:**
+  - EV-merge на фронте — matching событий букмекеров к `pro_matches`, полный
+    охват маркетов (winner/totals/firstBlood) для всех букмекеров.
+  - Backtest UI скрыт (`href: null`) — раскроем когда `prematch_outcomes` ≥ 200
+    и UX будет готов.
 - **Live-winner на LightGBM** — перенести когда `live_snapshots × prematch_outcomes` ≥ 200.
-- **Фаза 9 баг-фиксы** (F1-F9, после live-теста 2026-05-17) — PENDING, запускаем
-  ПОСЛЕ Фазы 3 ML. Полный приоритезированный список — `.local/session_plan.md`.
-  Самые болезненные: F9 (ТБ/ТМ ladder пуст), F1 (завершённые матчи висят в Live),
-  F2 (`filters.minOdds` не работает).
 - **Принципы каждой фазы:** ingest до ~100% покрытия → одна выборка 365d →
   обучение → активация. Никаких фейк-данных в UI. Каждая фаза — явный «да».

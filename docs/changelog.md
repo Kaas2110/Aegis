@@ -3,6 +3,26 @@
 Историческая хронология крупных изменений. Свежее — сверху. Актуальный snapshot
 проекта см. в `replit.md`. Подробная архитектура — `docs/architecture.md`.
 
+## 2026-05-19 — F9 fix: ТБ/ТМ ladder больше не «unavailable»
+
+`services/MarketLgbm.ts`, `services/PredictionModel.ts`,
+`services/AsymPrematchModel.ts` — два синхронных изменения в `callMlPredict`
+каждого:
+
+1. `ML_PREDICT_TIMEOUT_MS` дефолт 200 → **1500ms**. 200ms систематически не
+   успевал, когда totals-ladder (5 parallel `/predict`) пересекался с тиком
+   LiveWorker (~43 предсказаний/poll → uvicorn очередь забивается).
+2. Timeout (`AbortError`) **больше НЕ открывает circuit-breaker**. Это retryable
+   single-request failure, а breaker — про устойчивую недоступность ml-service.
+   Сетевые / connect / bad-payload ошибки по-прежнему trip'ают на 60s.
+
+**Симптом до фикса:** 4 trip'а circuit за час в `MarketLgbm` → каждый
+блокировал ВСЕ market predictions на 60s → пользователь видел «LightGBM модель
+не отвечает». Те же 200ms+trip-on-timeout жили в `PredictionModel` и
+`AsymPrematchModel` — синхронизировали ради консистентности под нагрузкой.
+Проверено: тест с Falcons (9247354) vs CyberBonch (7412785) теперь возвращает
+7 линий ladder с реальными вероятностями, 5 parallel запросов ~7ms.
+
 ## 2026-05-18 — 3-tier markets / live `_with_draft`
 
 `MarketLgbm` (`predictMarketsFor`, `predictLiveTotalsFor`) теперь цепляет
