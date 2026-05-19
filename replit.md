@@ -115,6 +115,7 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 - `POST /api/auth/register|login|logout`, `GET /api/auth/me Authorization: Bearer <token>` — email/password auth, scrypt N=16384, stateless токен с HMAC SESSION_SECRET, TTL 30 дней. Per-IP throttle 20/15min.
 - `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/whoami` — HttpOnly session cookie `aegis_admin_session` против `ADMIN_TOKEN`. Все `/api/admin/*` и `POST /api/analytics/retrain` требуют этой сессии.
 - `POST /api/admin/refresh-all` — сбрасывает все withCache (matches:live/upcoming/heroes), workaround для застрявшего TTL.
+- `GET /api/client-config` (public, cache 60s) — динамический конфиг polling-интервалов для мобилки (`pollLiveSec` / `pollIdleSec` / `version`). Меняется из `/admin-web/workers` без рестарта.
 
 ## User preferences
 
@@ -194,6 +195,16 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 > Полная история (Phase 0-8, T0→T12 milestones, retrain'ы, mobile UI waves,
 > infra) — `docs/changelog.md`. Подробный список баг-фиксов Phase 9 (F1-F9) —
 > `.local/session_plan.md`. Здесь только текущее активное.
+
+- **Phase 10 adaptive polling — DONE 2026-05-19.** 9 новых int-полей в
+  `app_settings` (LiveWorker live/idle/upcomingWindow, Bookmaker
+  live/upcoming/idle, schedulerTickHours, mobilePoll live/idle), hot-reload
+  на каждом тике без рестарта api-server. Admin UI: `/admin-web/workers` →
+  карточка «Интервалы поллинга» (9 input'ов с min/max guards). Мобилка
+  пуллит `GET /api/client-config` (public, cache 60s) раз в 5 мин и
+  подменяет setInterval hot, дополнительно переключаясь live↔idle по
+  `enrichedLive.length`. 429-backoff LiveWorker остался отдельной осью
+  поверх adaptive интервала.
 
 - **E1 OD-расширение — DONE 2026-05-18.** Schema (8 таблиц) + ingest + Data
   Enrichment workflow + `scripts/src/lib/e1-features.ts` (mirror в api-server) +
