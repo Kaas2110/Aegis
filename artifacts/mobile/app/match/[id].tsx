@@ -372,18 +372,16 @@ export default function MatchDetailScreen() {
             const numericId = extractNumericMatchId(match.id);
             if (numericId == null) return null;
             return (
-          <TouchableOpacity
-            onPress={() => {
-              router.push({ pathname: '/match/summary/[id]', params: { id: String(numericId) } });
-            }}
-            style={styles.compareBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Сводка матча"
-            accessibilityHint="Показать прогноз, факт и калибровку модели"
-          >
-            <Feather name="file-text" size={18} color={colors.primary} />
-          </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/match/summary/[id]', params: { id: String(numericId) } })}
+                style={styles.compareBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Сводка матча"
+                accessibilityHint="Показать прогноз, факт и калибровку модели"
+              >
+                <Feather name="file-text" size={18} color={colors.primary} />
+              </TouchableOpacity>
             );
           })()}
           {/* Сравнение коэффициентов */}
