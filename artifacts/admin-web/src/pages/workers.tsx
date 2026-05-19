@@ -5,13 +5,18 @@ import {
   useGetAdminJobs,
   useRunAdminJob,
   useGetAdminJobStatus,
+  useGetAdminSettings,
+  useUpdateAdminSettings,
   getGetAdminJobsQueryKey,
   getGetAdminWorkersConfigQueryKey,
   getGetAdminJobStatusQueryKey,
+  getGetAdminSettingsQueryKey,
   type AdminJobSummary,
   type AdminWorkersConfig,
   type AdminJobsListResponse,
   type AdminJobStatusResponse,
+  type AdminAppSettings,
+  type AdminSettingsInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -309,6 +314,204 @@ function WorkerFlagsPanel() {
   );
 }
 
+// ─── Polling Intervals (Phase 10) ───────────────────────────────────────────
+// Hot-reload интервалов воркеров без рестарта api-server. Каждый воркер на
+// своём тике читает app_settings — изменения подхватываются на следующем тике.
+// Mobile-поля отдаются через GET /api/client-config (мобилка пуллит раз в 5 мин).
+
+type IntervalField = {
+  key: keyof Pick<AdminAppSettings,
+    | 'liveWorkerLiveSec' | 'liveWorkerIdleSec' | 'liveWorkerUpcomingWindowMin'
+    | 'bookmakerLiveSec' | 'bookmakerUpcomingSec' | 'bookmakerIdleSec'
+    | 'schedulerTickHours' | 'mobilePollLiveSec' | 'mobilePollIdleSec'>;
+  label: string;
+  hint: string;
+  min: number;
+  max: number;
+  unit: string;
+};
+
+type IntervalGroup = { title: string; description: string; fields: IntervalField[] };
+
+const INTERVAL_GROUPS: IntervalGroup[] = [
+  {
+    title: "LiveWorker (OpenDota /api/live)",
+    description: "Адаптив: live = есть валидные live-матчи, idle = их нет. 429/5xx даёт отдельный экспоненциальный backoff поверх.",
+    fields: [
+      { key: 'liveWorkerLiveSec',           label: 'Live interval',  hint: 'Tick когда есть live матчи',         min: 5,  max: 3600,  unit: 'сек' },
+      { key: 'liveWorkerIdleSec',           label: 'Idle interval',  hint: 'Tick когда live матчей нет',         min: 30, max: 86400, unit: 'сек' },
+      { key: 'liveWorkerUpcomingWindowMin', label: 'Upcoming window', hint: 'Резерв для будущего 3-режима',     min: 0,  max: 240,   unit: 'мин' },
+    ],
+  },
+  {
+    title: "BookmakerWorker",
+    description: "Три режима: live (есть live), wake_for_start (upcoming близко), idle. Loopback-сбой даёт фиксированный 3-мин fallback.",
+    fields: [
+      { key: 'bookmakerLiveSec',     label: 'Live interval',     hint: 'Tick когда есть live матчи',     min: 30, max: 3600,  unit: 'сек' },
+      { key: 'bookmakerUpcomingSec', label: 'Wake buffer',       hint: 'Буфер после begin_at (wake_for_start)', min: 10, max: 600, unit: 'сек' },
+      { key: 'bookmakerIdleSec',     label: 'Idle interval',     hint: 'Tick когда live=0 и upcoming далеко', min: 60, max: 86400, unit: 'сек' },
+    ],
+  },
+  {
+    title: "SchedulerWorker",
+    description: "Период daily-check (патчи / retrain decision / lightweight ingest). Если задан ENV AUTO_RETRAIN_CRON_HOUR_UTC — он перекрывает это значение wall-clock'ом.",
+    fields: [
+      { key: 'schedulerTickHours', label: 'Tick interval', hint: 'Период daily-check', min: 1, max: 168, unit: 'час' },
+    ],
+  },
+  {
+    title: "Mobile polling (/api/client-config)",
+    description: "Мобилка пуллит /api/client-config раз в 5 минут и подменяет setInterval. Изменения видны мобилке через 0-5 мин + 60s in-memory TTL.",
+    fields: [
+      { key: 'mobilePollLiveSec', label: 'Live interval', hint: 'Polling когда у пользователя есть live матчи', min: 15, max: 600,  unit: 'сек' },
+      { key: 'mobilePollIdleSec', label: 'Idle interval', hint: 'Polling в idle',                                min: 30, max: 3600, unit: 'сек' },
+    ],
+  },
+];
+
+function IntervalsPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetAdminSettings();
+  const update = useUpdateAdminSettings();
+  const [draft, setDraft] = useState<Partial<AdminSettingsInput>>({});
+
+  const settings = (data as { settings?: AdminAppSettings } | undefined)?.settings;
+
+  useEffect(() => {
+    setDraft({});
+  }, [settings?.updatedAt]);
+
+  function currentValue(key: IntervalField['key']): number | '' {
+    const v = draft[key] ?? settings?.[key];
+    return typeof v === 'number' ? v : '';
+  }
+
+  function isDirty(): boolean {
+    return Object.keys(draft).length > 0;
+  }
+
+  function handleSave() {
+    if (!isDirty()) return;
+    update.mutate(
+      { data: draft },
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: getGetAdminSettingsQueryKey() });
+          toast({
+            title: "Сохранено",
+            description: "Воркеры подхватят новые интервалы на следующем тике (без рестарта).",
+          });
+          setDraft({});
+        },
+        onError: (err: unknown) => {
+          toast({
+            variant: "destructive",
+            title: "Ошибка",
+            description: err instanceof Error ? err.message : "Не удалось сохранить",
+          });
+        },
+      },
+    );
+  }
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="border-b border-border pb-4">
+        <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">
+          Интервалы поллинга
+        </CardTitle>
+        <CardDescription className="font-mono text-xs">
+          Hot-reload без рестарта api-server. Каждый воркер на своём тике читает app_settings.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-6 space-y-6">
+        {isLoading || !settings ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+          </div>
+        ) : (
+          <>
+            {INTERVAL_GROUPS.map((group) => (
+              <div key={group.title} className="space-y-2">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-primary border-b border-primary/20 pb-1">
+                    {group.title}
+                  </p>
+                  <p className="font-mono text-[10px] text-muted-foreground leading-relaxed mt-1">
+                    {group.description}
+                  </p>
+                </div>
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {group.fields.map((f) => {
+                    const val = currentValue(f.key);
+                    const dirty = draft[f.key] !== undefined && draft[f.key] !== settings[f.key];
+                    return (
+                      <div key={f.key} className={`border p-3 space-y-1 ${dirty ? 'border-primary bg-primary/5' : 'border-border bg-background'}`}>
+                        <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {f.label}
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min={f.min}
+                            max={f.max}
+                            value={val}
+                            onChange={(e) => {
+                              const n = e.target.value === '' ? NaN : Number(e.target.value);
+                              if (Number.isFinite(n)) {
+                                setDraft((d) => ({ ...d, [f.key]: Math.floor(n) }));
+                              } else {
+                                setDraft((d) => {
+                                  const { [f.key]: _, ...rest } = d;
+                                  return rest;
+                                });
+                              }
+                            }}
+                            className="rounded-none font-mono text-xs h-8 w-24"
+                          />
+                          <span className="font-mono text-[10px] text-muted-foreground uppercase">{f.unit}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground ml-auto">
+                            {f.min}–{f.max}
+                          </span>
+                        </div>
+                        <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+                          {f.hint}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center gap-3 border-t border-border pt-4">
+              <Button
+                onClick={handleSave}
+                disabled={!isDirty() || update.isPending}
+                className="rounded-none font-mono text-xs uppercase tracking-wider h-9"
+              >
+                {update.isPending ? 'СОХРАНЕНИЕ...' : isDirty() ? `▶ Сохранить (${Object.keys(draft).length})` : 'Сохранить'}
+              </Button>
+              {isDirty() && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setDraft({})}
+                  className="rounded-none font-mono text-xs uppercase tracking-wider h-9"
+                >
+                  Отменить
+                </Button>
+              )}
+              <span className="font-mono text-[10px] text-muted-foreground ml-auto">
+                Обновлено: {settings.updatedAt ? formatDate(settings.updatedAt) : '—'}
+              </span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Job Log Modal ──────────────────────────────────────────────────────────
 
 function JobLogPanel({ jobId, onClose }: { jobId: string; onClose: () => void }) {
@@ -573,6 +776,7 @@ export default function Workers() {
       </div>
 
       <WorkerFlagsPanel />
+      <IntervalsPanel />
       <ScriptRunnerPanel />
     </div>
   );

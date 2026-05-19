@@ -16,6 +16,20 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * Публичный эндпоинт, in-memory кеш 60s. Мобилка пуллит раз в 5 минут и подменяет свой setInterval.
+ * @summary Динамический конфиг для мобильного клиента (polling intervals)
+ */
+export const GetClientConfigResponse = zod.object({
+  pollLiveSec: zod
+    .number()
+    .describe("Polling-интервал мобилки когда есть live матчи (сек)"),
+  pollIdleSec: zod.number().describe("Polling-интервал мобилки в idle (сек)"),
+  version: zod
+    .number()
+    .describe("Версия конфига (на будущее, для push-обновлений)"),
+});
+
+/**
  * @summary Exchange admin token for an HttpOnly session cookie
  */
 
@@ -60,6 +74,32 @@ export const getAdminSettingsResponseSettingsTrainMinSamplesMax = 100000;
 export const getAdminSettingsResponseSettingsMinTeamRatingMin = 0;
 export const getAdminSettingsResponseSettingsMinTeamRatingMax = 2000;
 
+export const getAdminSettingsResponseSettingsLiveWorkerLiveSecMin = 5;
+export const getAdminSettingsResponseSettingsLiveWorkerLiveSecMax = 3600;
+
+export const getAdminSettingsResponseSettingsLiveWorkerIdleSecMin = 30;
+export const getAdminSettingsResponseSettingsLiveWorkerIdleSecMax = 86400;
+
+export const getAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMin = 0;
+export const getAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMax = 240;
+
+export const getAdminSettingsResponseSettingsBookmakerLiveSecMin = 30;
+export const getAdminSettingsResponseSettingsBookmakerLiveSecMax = 3600;
+
+export const getAdminSettingsResponseSettingsBookmakerUpcomingSecMin = 10;
+export const getAdminSettingsResponseSettingsBookmakerUpcomingSecMax = 600;
+
+export const getAdminSettingsResponseSettingsBookmakerIdleSecMin = 60;
+export const getAdminSettingsResponseSettingsBookmakerIdleSecMax = 86400;
+
+export const getAdminSettingsResponseSettingsSchedulerTickHoursMax = 168;
+
+export const getAdminSettingsResponseSettingsMobilePollLiveSecMin = 15;
+export const getAdminSettingsResponseSettingsMobilePollLiveSecMax = 600;
+
+export const getAdminSettingsResponseSettingsMobilePollIdleSecMin = 30;
+export const getAdminSettingsResponseSettingsMobilePollIdleSecMax = 3600;
+
 export const GetAdminSettingsResponse = zod.object({
   settings: zod.object({
     id: zod.number(),
@@ -87,6 +127,62 @@ export const GetAdminSettingsResponse = zod.object({
       .describe(
         "Мин. Glicko-рейтинг OpenDota команды для показа матча в мобильной ленте (max двух команд ≥ порога). 0 — выключить фильтр.",
       ),
+    liveWorkerLiveSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsLiveWorkerLiveSecMin)
+      .max(getAdminSettingsResponseSettingsLiveWorkerLiveSecMax)
+      .optional()
+      .describe("LiveWorker tick interval когда есть live матчи (сек)"),
+    liveWorkerIdleSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsLiveWorkerIdleSecMin)
+      .max(getAdminSettingsResponseSettingsLiveWorkerIdleSecMax)
+      .optional()
+      .describe("LiveWorker tick interval когда live матчей нет (сек)"),
+    liveWorkerUpcomingWindowMin: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMin)
+      .max(getAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMax)
+      .optional()
+      .describe(
+        "Окно «скоро начнётся» (минуты) — резерв для будущей 3-режимной адаптации",
+      ),
+    bookmakerLiveSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsBookmakerLiveSecMin)
+      .max(getAdminSettingsResponseSettingsBookmakerLiveSecMax)
+      .optional()
+      .describe("BookmakerWorker tick interval в live-режиме (сек)"),
+    bookmakerUpcomingSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsBookmakerUpcomingSecMin)
+      .max(getAdminSettingsResponseSettingsBookmakerUpcomingSecMax)
+      .optional()
+      .describe("BookmakerWorker tick interval перед началом матча (сек)"),
+    bookmakerIdleSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsBookmakerIdleSecMin)
+      .max(getAdminSettingsResponseSettingsBookmakerIdleSecMax)
+      .optional()
+      .describe("BookmakerWorker tick interval в idle (сек)"),
+    schedulerTickHours: zod
+      .number()
+      .min(1)
+      .max(getAdminSettingsResponseSettingsSchedulerTickHoursMax)
+      .optional()
+      .describe("SchedulerWorker период daily-check (часы)"),
+    mobilePollLiveSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsMobilePollLiveSecMin)
+      .max(getAdminSettingsResponseSettingsMobilePollLiveSecMax)
+      .optional()
+      .describe("Мобильный polling интервал когда есть live матчи (сек)"),
+    mobilePollIdleSec: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsMobilePollIdleSecMin)
+      .max(getAdminSettingsResponseSettingsMobilePollIdleSecMax)
+      .optional()
+      .describe("Мобильный polling интервал когда live матчей нет (сек)"),
     notes: zod.string().nullish(),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),
@@ -108,6 +204,32 @@ export const updateAdminSettingsBodyTrainMinSamplesMax = 100000;
 
 export const updateAdminSettingsBodyMinTeamRatingMin = 0;
 export const updateAdminSettingsBodyMinTeamRatingMax = 2000;
+
+export const updateAdminSettingsBodyLiveWorkerLiveSecMin = 5;
+export const updateAdminSettingsBodyLiveWorkerLiveSecMax = 3600;
+
+export const updateAdminSettingsBodyLiveWorkerIdleSecMin = 30;
+export const updateAdminSettingsBodyLiveWorkerIdleSecMax = 86400;
+
+export const updateAdminSettingsBodyLiveWorkerUpcomingWindowMinMin = 0;
+export const updateAdminSettingsBodyLiveWorkerUpcomingWindowMinMax = 240;
+
+export const updateAdminSettingsBodyBookmakerLiveSecMin = 30;
+export const updateAdminSettingsBodyBookmakerLiveSecMax = 3600;
+
+export const updateAdminSettingsBodyBookmakerUpcomingSecMin = 10;
+export const updateAdminSettingsBodyBookmakerUpcomingSecMax = 600;
+
+export const updateAdminSettingsBodyBookmakerIdleSecMin = 60;
+export const updateAdminSettingsBodyBookmakerIdleSecMax = 86400;
+
+export const updateAdminSettingsBodySchedulerTickHoursMax = 168;
+
+export const updateAdminSettingsBodyMobilePollLiveSecMin = 15;
+export const updateAdminSettingsBodyMobilePollLiveSecMax = 600;
+
+export const updateAdminSettingsBodyMobilePollIdleSecMin = 30;
+export const updateAdminSettingsBodyMobilePollIdleSecMax = 3600;
 
 export const UpdateAdminSettingsBody = zod.object({
   useBookmakerOdds: zod.boolean().optional(),
@@ -136,6 +258,51 @@ export const UpdateAdminSettingsBody = zod.object({
     .min(updateAdminSettingsBodyMinTeamRatingMin)
     .max(updateAdminSettingsBodyMinTeamRatingMax)
     .optional(),
+  liveWorkerLiveSec: zod
+    .number()
+    .min(updateAdminSettingsBodyLiveWorkerLiveSecMin)
+    .max(updateAdminSettingsBodyLiveWorkerLiveSecMax)
+    .optional(),
+  liveWorkerIdleSec: zod
+    .number()
+    .min(updateAdminSettingsBodyLiveWorkerIdleSecMin)
+    .max(updateAdminSettingsBodyLiveWorkerIdleSecMax)
+    .optional(),
+  liveWorkerUpcomingWindowMin: zod
+    .number()
+    .min(updateAdminSettingsBodyLiveWorkerUpcomingWindowMinMin)
+    .max(updateAdminSettingsBodyLiveWorkerUpcomingWindowMinMax)
+    .optional(),
+  bookmakerLiveSec: zod
+    .number()
+    .min(updateAdminSettingsBodyBookmakerLiveSecMin)
+    .max(updateAdminSettingsBodyBookmakerLiveSecMax)
+    .optional(),
+  bookmakerUpcomingSec: zod
+    .number()
+    .min(updateAdminSettingsBodyBookmakerUpcomingSecMin)
+    .max(updateAdminSettingsBodyBookmakerUpcomingSecMax)
+    .optional(),
+  bookmakerIdleSec: zod
+    .number()
+    .min(updateAdminSettingsBodyBookmakerIdleSecMin)
+    .max(updateAdminSettingsBodyBookmakerIdleSecMax)
+    .optional(),
+  schedulerTickHours: zod
+    .number()
+    .min(1)
+    .max(updateAdminSettingsBodySchedulerTickHoursMax)
+    .optional(),
+  mobilePollLiveSec: zod
+    .number()
+    .min(updateAdminSettingsBodyMobilePollLiveSecMin)
+    .max(updateAdminSettingsBodyMobilePollLiveSecMax)
+    .optional(),
+  mobilePollIdleSec: zod
+    .number()
+    .min(updateAdminSettingsBodyMobilePollIdleSecMin)
+    .max(updateAdminSettingsBodyMobilePollIdleSecMax)
+    .optional(),
   notes: zod.string().nullish(),
 });
 
@@ -149,6 +316,32 @@ export const updateAdminSettingsResponseSettingsTrainMinSamplesMax = 100000;
 
 export const updateAdminSettingsResponseSettingsMinTeamRatingMin = 0;
 export const updateAdminSettingsResponseSettingsMinTeamRatingMax = 2000;
+
+export const updateAdminSettingsResponseSettingsLiveWorkerLiveSecMin = 5;
+export const updateAdminSettingsResponseSettingsLiveWorkerLiveSecMax = 3600;
+
+export const updateAdminSettingsResponseSettingsLiveWorkerIdleSecMin = 30;
+export const updateAdminSettingsResponseSettingsLiveWorkerIdleSecMax = 86400;
+
+export const updateAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMin = 0;
+export const updateAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMax = 240;
+
+export const updateAdminSettingsResponseSettingsBookmakerLiveSecMin = 30;
+export const updateAdminSettingsResponseSettingsBookmakerLiveSecMax = 3600;
+
+export const updateAdminSettingsResponseSettingsBookmakerUpcomingSecMin = 10;
+export const updateAdminSettingsResponseSettingsBookmakerUpcomingSecMax = 600;
+
+export const updateAdminSettingsResponseSettingsBookmakerIdleSecMin = 60;
+export const updateAdminSettingsResponseSettingsBookmakerIdleSecMax = 86400;
+
+export const updateAdminSettingsResponseSettingsSchedulerTickHoursMax = 168;
+
+export const updateAdminSettingsResponseSettingsMobilePollLiveSecMin = 15;
+export const updateAdminSettingsResponseSettingsMobilePollLiveSecMax = 600;
+
+export const updateAdminSettingsResponseSettingsMobilePollIdleSecMin = 30;
+export const updateAdminSettingsResponseSettingsMobilePollIdleSecMax = 3600;
 
 export const UpdateAdminSettingsResponse = zod.object({
   settings: zod.object({
@@ -177,6 +370,62 @@ export const UpdateAdminSettingsResponse = zod.object({
       .describe(
         "Мин. Glicko-рейтинг OpenDota команды для показа матча в мобильной ленте (max двух команд ≥ порога). 0 — выключить фильтр.",
       ),
+    liveWorkerLiveSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsLiveWorkerLiveSecMin)
+      .max(updateAdminSettingsResponseSettingsLiveWorkerLiveSecMax)
+      .optional()
+      .describe("LiveWorker tick interval когда есть live матчи (сек)"),
+    liveWorkerIdleSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsLiveWorkerIdleSecMin)
+      .max(updateAdminSettingsResponseSettingsLiveWorkerIdleSecMax)
+      .optional()
+      .describe("LiveWorker tick interval когда live матчей нет (сек)"),
+    liveWorkerUpcomingWindowMin: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMin)
+      .max(updateAdminSettingsResponseSettingsLiveWorkerUpcomingWindowMinMax)
+      .optional()
+      .describe(
+        "Окно «скоро начнётся» (минуты) — резерв для будущей 3-режимной адаптации",
+      ),
+    bookmakerLiveSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsBookmakerLiveSecMin)
+      .max(updateAdminSettingsResponseSettingsBookmakerLiveSecMax)
+      .optional()
+      .describe("BookmakerWorker tick interval в live-режиме (сек)"),
+    bookmakerUpcomingSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsBookmakerUpcomingSecMin)
+      .max(updateAdminSettingsResponseSettingsBookmakerUpcomingSecMax)
+      .optional()
+      .describe("BookmakerWorker tick interval перед началом матча (сек)"),
+    bookmakerIdleSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsBookmakerIdleSecMin)
+      .max(updateAdminSettingsResponseSettingsBookmakerIdleSecMax)
+      .optional()
+      .describe("BookmakerWorker tick interval в idle (сек)"),
+    schedulerTickHours: zod
+      .number()
+      .min(1)
+      .max(updateAdminSettingsResponseSettingsSchedulerTickHoursMax)
+      .optional()
+      .describe("SchedulerWorker период daily-check (часы)"),
+    mobilePollLiveSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsMobilePollLiveSecMin)
+      .max(updateAdminSettingsResponseSettingsMobilePollLiveSecMax)
+      .optional()
+      .describe("Мобильный polling интервал когда есть live матчи (сек)"),
+    mobilePollIdleSec: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsMobilePollIdleSecMin)
+      .max(updateAdminSettingsResponseSettingsMobilePollIdleSecMax)
+      .optional()
+      .describe("Мобильный polling интервал когда live матчей нет (сек)"),
     notes: zod.string().nullish(),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),

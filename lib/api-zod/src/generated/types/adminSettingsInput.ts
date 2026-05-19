@@ -33,6 +33,51 @@ export interface AdminSettingsInput {
    * @maximum 2000
    */
   minTeamRating?: number;
+  /**
+   * @minimum 5
+   * @maximum 3600
+   */
+  liveWorkerLiveSec?: number;
+  /**
+   * @minimum 30
+   * @maximum 86400
+   */
+  liveWorkerIdleSec?: number;
+  /**
+   * @minimum 0
+   * @maximum 240
+   */
+  liveWorkerUpcomingWindowMin?: number;
+  /**
+   * @minimum 30
+   * @maximum 3600
+   */
+  bookmakerLiveSec?: number;
+  /**
+   * @minimum 10
+   * @maximum 600
+   */
+  bookmakerUpcomingSec?: number;
+  /**
+   * @minimum 60
+   * @maximum 86400
+   */
+  bookmakerIdleSec?: number;
+  /**
+   * @minimum 1
+   * @maximum 168
+   */
+  schedulerTickHours?: number;
+  /**
+   * @minimum 15
+   * @maximum 600
+   */
+  mobilePollLiveSec?: number;
+  /**
+   * @minimum 30
+   * @maximum 3600
+   */
+  mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
 }

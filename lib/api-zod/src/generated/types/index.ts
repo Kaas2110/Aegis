@@ -60,6 +60,7 @@ export * from "./adminWhoami";
 export * from "./adminWorkersConfig";
 export * from "./adminWorkersConfigHeartbeats";
 export * from "./adminWorkersConfigInput";
+export * from "./clientConfig";
 export * from "./getAdminJobStatus404";
 export * from "./healthStatus";
 export * from "./workerHeartbeat";

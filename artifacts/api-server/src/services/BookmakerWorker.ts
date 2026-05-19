@@ -22,9 +22,12 @@
  */
 import { logger } from '../lib/logger';
 import { fetchSource, getAllSourceIds, isBookmakersEnabled } from '../routes/bookmakers';
+import { getAppSettings } from './AppSettings';
 
-const POLL_INTERVAL_LIVE_MS = 3 * 60_000;
-const POLL_INTERVAL_IDLE_MS = 60 * 60_000;
+// Дефолты (используются если БД недоступна). app_settings hot-reloadятся на каждом tick'е —
+// admin может править интервалы из /admin-web/workers без рестарта.
+const DEFAULT_POLL_INTERVAL_LIVE_MS = 3 * 60_000;
+const DEFAULT_POLL_INTERVAL_IDLE_MS = 60 * 60_000;
 const MIN_DELAY_MS = 60_000;
 // Если loopback fetch к /matches/live или /matches/upcoming упал (внутренний 5xx,
 // timeout, IPv4/v6 mismatch и т.п.), не уходим в idle на час — возвращаемся
@@ -165,18 +168,40 @@ async function fetchNextUpcomingStartMs(): Promise<{ ms: number | null } | { err
  *                    msToStart<60min, так что обычно не сработает).
  *   idle           → POLL_INTERVAL_IDLE_MS (60 мин).
  */
-function computeNextDelay(mode: WorkerMode, nextStartMs: number | null): number {
-  if (mode === 'live') return POLL_INTERVAL_LIVE_MS;
+function computeNextDelay(
+  mode: WorkerMode,
+  nextStartMs: number | null,
+  intervals: { liveMs: number; idleMs: number; wakeBufferMs: number },
+): number {
+  if (mode === 'live') return intervals.liveMs;
   if (mode === 'wake_for_start' && nextStartMs !== null) {
-    const delay = nextStartMs - Date.now() + WAKE_BUFFER_MS;
-    return Math.max(MIN_DELAY_MS, Math.min(POLL_INTERVAL_IDLE_MS, delay));
+    const delay = nextStartMs - Date.now() + intervals.wakeBufferMs;
+    return Math.max(MIN_DELAY_MS, Math.min(intervals.idleMs, delay));
   }
-  return POLL_INTERVAL_IDLE_MS;
+  return intervals.idleMs;
 }
 
 async function tick(): Promise<void> {
   if (stopped) return;
   const t0 = Date.now();
+
+  // 0. Hot-reload интервалов из app_settings (admin может править из UI без рестарта).
+  // На сбое БД fallback к дефолтам — воркер не должен падать из-за конфига.
+  let intervals = {
+    liveMs: DEFAULT_POLL_INTERVAL_LIVE_MS,
+    idleMs: DEFAULT_POLL_INTERVAL_IDLE_MS,
+    wakeBufferMs: WAKE_BUFFER_MS,
+  };
+  try {
+    const s = await getAppSettings();
+    intervals = {
+      liveMs: s.bookmakerLiveSec * 1000,
+      idleMs: s.bookmakerIdleSec * 1000,
+      wakeBufferMs: s.bookmakerUpcomingSec * 1000,
+    };
+  } catch (err) {
+    logger.warn({ err, tag: 'bookmaker-worker' }, '[bookmaker-worker] failed to load settings, using defaults');
+  }
 
   // 1. Определяем режим: сначала live count, при необходимости — upcoming.
   // Если loopback fetch упал — выходим в специальный backoff (3 мин), не зависая
@@ -198,7 +223,7 @@ async function tick(): Promise<void> {
       mode = 'idle';
     } else {
       nextStartMs = upcomingResult.ms;
-      if (nextStartMs !== null && nextStartMs - Date.now() < POLL_INTERVAL_IDLE_MS) {
+      if (nextStartMs !== null && nextStartMs - Date.now() < intervals.idleMs) {
         mode = 'wake_for_start';
       } else {
         mode = 'idle';
@@ -231,7 +256,7 @@ async function tick(): Promise<void> {
   const durationMs = Date.now() - t0;
   const interval = loopbackFailed
     ? POLL_INTERVAL_LOOPBACK_FAIL_MS
-    : computeNextDelay(mode, nextStartMs);
+    : computeNextDelay(mode, nextStartMs, intervals);
 
   stats.lastTickAt = new Date().toISOString();
   stats.lastMode = mode;
@@ -272,7 +297,7 @@ function scheduleNext(ms: number): void {
       stats.errors += 1;
       logger.error({ err, tag: 'bookmaker-worker' }, '[bookmaker-worker] tick error');
       // Даже при ошибке планируем следующий tick (idle interval, чтобы не флудить).
-      scheduleNext(POLL_INTERVAL_IDLE_MS);
+      scheduleNext(DEFAULT_POLL_INTERVAL_IDLE_MS);
     });
   }, ms);
 }
@@ -290,10 +315,11 @@ export function startBookmakerWorker(): void {
   stats.startedAt = new Date().toISOString();
   logger.info(
     {
-      liveIntervalMs: POLL_INTERVAL_LIVE_MS,
-      idleIntervalMs: POLL_INTERVAL_IDLE_MS,
+      defaultLiveIntervalMs: DEFAULT_POLL_INTERVAL_LIVE_MS,
+      defaultIdleIntervalMs: DEFAULT_POLL_INTERVAL_IDLE_MS,
       wakeBufferMs: WAKE_BUFFER_MS,
       startupDelayMs: STARTUP_DELAY_MS,
+      note: 'intervals are hot-reloaded from app_settings on every tick',
     },
     '[bookmaker-worker] starting',
   );

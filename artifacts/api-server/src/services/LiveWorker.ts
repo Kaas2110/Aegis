@@ -37,17 +37,30 @@ import { recordPrematchPrediction } from './OutcomeTracker';
 import { predictLiveTotalsFor } from './MarketLgbm';
 import { withOpenDotaKey } from '../lib/openDotaUrl';
 import { recordHeartbeat } from './workerHeartbeats';
+import { getAppSettings } from './AppSettings';
 
-// E0.1: снижено с 60s до 30s — OD premium даёт 3000 req/min, бюджет позволяет.
-// Больше снапшотов на матч → лучше live-winner калибровка и более плавный winprob.
-const POLL_INTERVAL_MS = 30_000;
+// Дефолты live/idle (используются если БД недоступна). app_settings hot-reloadятся
+// каждым tick'ом — admin правит из /admin-web/workers без рестарта.
+// live = есть хотя бы 1 валидный live-матч; idle = ноль live-матчей.
+const DEFAULT_LIVE_INTERVAL_MS = 30_000;
+const DEFAULT_IDLE_INTERVAL_MS = 300_000;
 const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
 const OPENDOTA_LIVE_URL = 'https://api.opendota.com/api/live';
 
-// Текущая задержка следующего poll'а. При HTTP 429 удваивается до MAX_BACKOFF_MS,
-// при первом успешном ответе сбрасывается обратно к POLL_INTERVAL_MS. Без этого
-// мы каждые 60с гарантированно ловим 429 и впустую тратим квоту OpenDota.
-let currentBackoffMs = POLL_INTERVAL_MS;
+// Базовый интервал зависит от того, был ли валидный live на прошлом тике.
+// При 429/5xx удваивается до MAX_BACKOFF_MS. На любом успешном ответе
+// сбрасывается к актуальному `getBaseIntervalMs()`, который читает app_settings.
+let currentBackoffMs = DEFAULT_LIVE_INTERVAL_MS;
+let lastValidLiveCount = 0;
+
+async function getBaseIntervalMs(): Promise<number> {
+  try {
+    const s = await getAppSettings();
+    return (lastValidLiveCount > 0 ? s.liveWorkerLiveSec : s.liveWorkerIdleSec) * 1000;
+  } catch {
+    return lastValidLiveCount > 0 ? DEFAULT_LIVE_INTERVAL_MS : DEFAULT_IDLE_INTERVAL_MS;
+  }
+}
 
 interface LiveMatch {
   match_id?: number;
@@ -184,10 +197,14 @@ async function pollOnce(): Promise<void> {
       throw new Error(`HTTP ${resp.status}`);
     }
     matches = (await resp.json()) as LiveMatch[];
-    // Успешный ответ — сбрасываем backoff к нормальным 60s.
-    if (currentBackoffMs !== POLL_INTERVAL_MS) {
-      logger.info({ resetTo: POLL_INTERVAL_MS }, '[LiveWorker] backoff reset after success');
-      currentBackoffMs = POLL_INTERVAL_MS;
+    // Успешный ответ — сбрасываем backoff к актуальному базовому интервалу.
+    // Базовый интервал зависит от lastValidLiveCount (см. ниже) и hot-reloadится
+    // из app_settings, так что после первого валидного тика adaptive-режим активен.
+    const base = await getBaseIntervalMs();
+    if (currentBackoffMs !== base) {
+      logger.info({ resetTo: base, mode: lastValidLiveCount > 0 ? 'live' : 'idle' },
+        '[LiveWorker] backoff reset after success');
+      currentBackoffMs = base;
     }
   } catch (err) {
     stats.lastError = String(err);
@@ -195,10 +212,14 @@ async function pollOnce(): Promise<void> {
     return;
   }
 
-  if (!Array.isArray(matches) || matches.length === 0) return;
+  if (!Array.isArray(matches) || matches.length === 0) {
+    lastValidLiveCount = 0;
+    return;
+  }
 
   // Фильтруем матчи с командами и валидным id
   const valid = matches.filter(m => m.match_id && m.team_id_radiant && m.team_id_dire);
+  lastValidLiveCount = valid.length;
   if (valid.length === 0) return;
 
   // Чистим хеш-кэш от матчей, которых больше нет в эфире (закончились).
@@ -501,15 +522,28 @@ async function scheduleNextPoll(delayMs: number): Promise<void> {
       stats.lastPollDurationMs = Date.now() - startedAt;
       pollInFlight = false;
       recordHeartbeat('liveWorker', { ok: tickOk, durationMs: stats.lastPollDurationMs, error: tickErr });
-      // Используем динамический backoff: при 429/5xx будет 120s/240s/...
-      void scheduleNextPoll(currentBackoffMs);
+      // Если pollOnce кинул до сброса backoff'а — currentBackoffMs остаётся
+      // последним известным (или экспоненциальным от 429). Если успешно
+      // отработал — он уже выровнен по live/idle из app_settings.
+      // Дополнительно clamp'ом учитываем нижнюю границу базы (на случай если
+      // admin поменял настройки прямо сейчас — следующий тик возьмёт новое).
+      const base = await getBaseIntervalMs();
+      const next = Math.max(base, currentBackoffMs);
+      void scheduleNextPoll(next);
     }
   }, delayMs);
 }
 
 export function startLiveWorker(): void {
   if (timeoutId || stopRequested) return;
-  logger.info({ intervalMs: POLL_INTERVAL_MS }, '[LiveWorker] starting');
+  logger.info(
+    {
+      defaultLiveIntervalMs: DEFAULT_LIVE_INTERVAL_MS,
+      defaultIdleIntervalMs: DEFAULT_IDLE_INTERVAL_MS,
+      note: 'intervals are hot-reloaded from app_settings on every tick',
+    },
+    '[LiveWorker] starting',
+  );
   loadActiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial model load failed'));
   loadActiveLiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial live model load failed'));
   loadActiveAsymLiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial asym-live model load failed'));

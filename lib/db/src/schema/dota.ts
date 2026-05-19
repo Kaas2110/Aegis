@@ -577,6 +577,21 @@ export const appSettingsTable = pgTable('app_settings', {
   // отсекает tier-3/4 регионалки, но оставляет квалификации tier-1 vs noname.
   // 0 = фильтр выключен (показать всё). Конфигурируется из админки.
   minTeamRating: integer('min_team_rating').notNull().default(1200),
+  // ── Phase 10: адаптивный polling для всех воркеров ────────────────────
+  // Все интервалы hot-reload'ятся из app_settings на каждом тике без рестарта.
+  // LiveWorker: live (есть live матчи) vs idle (нет live).
+  liveWorkerLiveSec: integer('live_worker_live_sec').notNull().default(30),
+  liveWorkerIdleSec: integer('live_worker_idle_sec').notNull().default(300),
+  liveWorkerUpcomingWindowMin: integer('live_worker_upcoming_window_min').notNull().default(10),
+  // BookmakerWorker: live / wake_for_start / idle.
+  bookmakerLiveSec: integer('bookmaker_live_sec').notNull().default(180),
+  bookmakerUpcomingSec: integer('bookmaker_upcoming_sec').notNull().default(30),
+  bookmakerIdleSec: integer('bookmaker_idle_sec').notNull().default(3600),
+  // SchedulerWorker: периодичность daily-check (часы).
+  schedulerTickHours: integer('scheduler_tick_hours').notNull().default(24),
+  // Mobile polling (отдаётся через GET /api/client-config).
+  mobilePollLiveSec: integer('mobile_poll_live_sec').notNull().default(60),
+  mobilePollIdleSec: integer('mobile_poll_idle_sec').notNull().default(120),
   notes: text('notes'),
   // ── Legacy monetization (зарезервировано под платную модель: $4/нед, $15/мес) ──
   // Колонки физически есть в БД, кодом сейчас не читаются, но сохраняем как

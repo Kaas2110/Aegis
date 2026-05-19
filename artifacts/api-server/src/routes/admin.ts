@@ -119,6 +119,15 @@ router.post('/settings', async (req, res) => {
     trainMaxPatches?: number;
     trainMinSamples?: number;
     minTeamRating?: number;
+    liveWorkerLiveSec?: number;
+    liveWorkerIdleSec?: number;
+    liveWorkerUpcomingWindowMin?: number;
+    bookmakerLiveSec?: number;
+    bookmakerUpcomingSec?: number;
+    bookmakerIdleSec?: number;
+    schedulerTickHours?: number;
+    mobilePollLiveSec?: number;
+    mobilePollIdleSec?: number;
     notes?: string | null;
   };
   const patch: Parameters<typeof updateAppSettings>[0] = {};
@@ -137,6 +146,25 @@ router.post('/settings', async (req, res) => {
   }
   if (typeof body.minTeamRating === 'number' && Number.isFinite(body.minTeamRating) && body.minTeamRating >= 0 && body.minTeamRating <= 2000) {
     patch.minTeamRating = Math.floor(body.minTeamRating);
+  }
+  // ── Phase 10: интервалы воркеров (валидируем под те же min/max что в OpenAPI) ──
+  const intGuards: Array<[keyof typeof body, keyof typeof patch, number, number]> = [
+    ['liveWorkerLiveSec',           'liveWorkerLiveSec',           5,    3600],
+    ['liveWorkerIdleSec',           'liveWorkerIdleSec',           30,   86400],
+    ['liveWorkerUpcomingWindowMin', 'liveWorkerUpcomingWindowMin', 0,    240],
+    ['bookmakerLiveSec',            'bookmakerLiveSec',            30,   3600],
+    ['bookmakerUpcomingSec',        'bookmakerUpcomingSec',        10,   600],
+    ['bookmakerIdleSec',            'bookmakerIdleSec',            60,   86400],
+    ['schedulerTickHours',          'schedulerTickHours',          1,    168],
+    ['mobilePollLiveSec',           'mobilePollLiveSec',           15,   600],
+    ['mobilePollIdleSec',           'mobilePollIdleSec',           30,   3600],
+  ];
+  for (const [src, dst, min, max] of intGuards) {
+    const v = body[src];
+    if (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (patch as any)[dst] = Math.floor(v);
+    }
   }
   if (typeof body.notes === 'string' || body.notes === null) patch.notes = body.notes;
 

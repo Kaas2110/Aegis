@@ -57,10 +57,73 @@ export interface AdminAppSettings {
    * @maximum 2000
    */
   minTeamRating: number;
+  /**
+   * LiveWorker tick interval когда есть live матчи (сек)
+   * @minimum 5
+   * @maximum 3600
+   */
+  liveWorkerLiveSec?: number;
+  /**
+   * LiveWorker tick interval когда live матчей нет (сек)
+   * @minimum 30
+   * @maximum 86400
+   */
+  liveWorkerIdleSec?: number;
+  /**
+   * Окно «скоро начнётся» (минуты) — резерв для будущей 3-режимной адаптации
+   * @minimum 0
+   * @maximum 240
+   */
+  liveWorkerUpcomingWindowMin?: number;
+  /**
+   * BookmakerWorker tick interval в live-режиме (сек)
+   * @minimum 30
+   * @maximum 3600
+   */
+  bookmakerLiveSec?: number;
+  /**
+   * BookmakerWorker tick interval перед началом матча (сек)
+   * @minimum 10
+   * @maximum 600
+   */
+  bookmakerUpcomingSec?: number;
+  /**
+   * BookmakerWorker tick interval в idle (сек)
+   * @minimum 60
+   * @maximum 86400
+   */
+  bookmakerIdleSec?: number;
+  /**
+   * SchedulerWorker период daily-check (часы)
+   * @minimum 1
+   * @maximum 168
+   */
+  schedulerTickHours?: number;
+  /**
+   * Мобильный polling интервал когда есть live матчи (сек)
+   * @minimum 15
+   * @maximum 600
+   */
+  mobilePollLiveSec?: number;
+  /**
+   * Мобильный polling интервал когда live матчей нет (сек)
+   * @minimum 30
+   * @maximum 3600
+   */
+  mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
   /** ISO-8601 timestamp */
   updatedAt: string;
+}
+
+export interface ClientConfig {
+  /** Polling-интервал мобилки когда есть live матчи (сек) */
+  pollLiveSec: number;
+  /** Polling-интервал мобилки в idle (сек) */
+  pollIdleSec: number;
+  /** Версия конфига (на будущее, для push-обновлений) */
+  version: number;
 }
 
 export interface AdminSettingsResponse {
@@ -99,6 +162,51 @@ export interface AdminSettingsInput {
    * @maximum 2000
    */
   minTeamRating?: number;
+  /**
+   * @minimum 5
+   * @maximum 3600
+   */
+  liveWorkerLiveSec?: number;
+  /**
+   * @minimum 30
+   * @maximum 86400
+   */
+  liveWorkerIdleSec?: number;
+  /**
+   * @minimum 0
+   * @maximum 240
+   */
+  liveWorkerUpcomingWindowMin?: number;
+  /**
+   * @minimum 30
+   * @maximum 3600
+   */
+  bookmakerLiveSec?: number;
+  /**
+   * @minimum 10
+   * @maximum 600
+   */
+  bookmakerUpcomingSec?: number;
+  /**
+   * @minimum 60
+   * @maximum 86400
+   */
+  bookmakerIdleSec?: number;
+  /**
+   * @minimum 1
+   * @maximum 168
+   */
+  schedulerTickHours?: number;
+  /**
+   * @minimum 15
+   * @maximum 600
+   */
+  mobilePollLiveSec?: number;
+  /**
+   * @minimum 30
+   * @maximum 3600
+   */
+  mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
 }

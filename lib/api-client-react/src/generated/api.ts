@@ -47,6 +47,7 @@ import type {
   AdminWhoami,
   AdminWorkersConfig,
   AdminWorkersConfigInput,
+  ClientConfig,
   GetAdminJobStatus404,
   HealthStatus,
 } from "./api.schemas";
@@ -128,6 +129,82 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Публичный эндпоинт, in-memory кеш 60s. Мобилка пуллит раз в 5 минут и подменяет свой setInterval.
+ * @summary Динамический конфиг для мобильного клиента (polling intervals)
+ */
+export const getGetClientConfigUrl = () => {
+  return `/api/client-config`;
+};
+
+export const getClientConfig = async (
+  options?: RequestInit,
+): Promise<ClientConfig> => {
+  return customFetch<ClientConfig>(getGetClientConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClientConfigQueryKey = () => {
+  return [`/api/client-config`] as const;
+};
+
+export const getGetClientConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClientConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getClientConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetClientConfigQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientConfig>>> = ({
+    signal,
+  }) => getClientConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClientConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClientConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClientConfig>>
+>;
+export type GetClientConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Динамический конфиг для мобильного клиента (polling intervals)
+ */
+
+export function useGetClientConfig<
+  TData = Awaited<ReturnType<typeof getClientConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getClientConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClientConfigQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

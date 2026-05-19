@@ -17,6 +17,15 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   trainMaxPatches: 4,
   trainMinSamples: 1000,
   minTeamRating: 1200,
+  liveWorkerLiveSec: 30,
+  liveWorkerIdleSec: 300,
+  liveWorkerUpcomingWindowMin: 10,
+  bookmakerLiveSec: 180,
+  bookmakerUpcomingSec: 30,
+  bookmakerIdleSec: 3600,
+  schedulerTickHours: 24,
+  mobilePollLiveSec: 60,
+  mobilePollIdleSec: 120,
   notes: null,
   monetizationMode: null,
   featureFlags: null,
@@ -56,6 +65,15 @@ export async function updateAppSettings(
     | 'trainMaxPatches'
     | 'trainMinSamples'
     | 'minTeamRating'
+    | 'liveWorkerLiveSec'
+    | 'liveWorkerIdleSec'
+    | 'liveWorkerUpcomingWindowMin'
+    | 'bookmakerLiveSec'
+    | 'bookmakerUpcomingSec'
+    | 'bookmakerIdleSec'
+    | 'schedulerTickHours'
+    | 'mobilePollLiveSec'
+    | 'mobilePollIdleSec'
     | 'notes'
   >>,
 ): Promise<AppSettings> {

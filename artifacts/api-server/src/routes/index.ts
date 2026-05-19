@@ -8,6 +8,7 @@ import teamsRouter from "./teams";
 import adminRouter from "./admin";
 import adminAuthRouter from "./adminAuth";
 import clientLogsRouter from "./clientLogs";
+import clientConfigRouter from "./clientConfig";
 import userAuthRouter from "./userAuth";
 
 const router: IRouter = Router();
@@ -19,6 +20,7 @@ router.use("/bookmakers", bookmakersRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/teams", teamsRouter);
 router.use("/client-logs", clientLogsRouter);
+router.use("/client-config", clientConfigRouter);
 router.use("/auth", userAuthRouter);
 
 // Auth endpoints (login/logout/whoami) — public, mounted BEFORE admin router so

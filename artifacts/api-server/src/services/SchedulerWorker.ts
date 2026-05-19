@@ -32,7 +32,7 @@ import { pruneLiveSnapshots } from './OutcomeTracker';
 import { getAppSettings } from './AppSettings';
 import { withOpenDotaKey } from '../lib/openDotaUrl';
 
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
+const DEFAULT_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа — fallback если БД недоступна
 const PATCH_DELAY_DAYS = 7;                     // ждать 7 дней после нового патча
 const REGULAR_RETRAIN_DAYS = 30;                // плановое переобучение раз в месяц
 const TRAIN_WINDOW_DAYS = 365;                  // скользящее окно: храним и тренируем на матчах за 12 мес.
@@ -262,8 +262,12 @@ function delayToNextUtcHour(targetHour: number): number {
   return Math.max(1_000, target.getTime() - now.getTime());
 }
 
-/** Возвращает CHECK_INTERVAL_MS или wall-clock delay до cron-окна. */
-function nextTickDelay(): number {
+/**
+ * Возвращает wall-clock delay до cron-окна (если задан AUTO_RETRAIN_CRON_HOUR_UTC),
+ * иначе берёт `schedulerTickHours` из app_settings (hot-reload, admin правит из UI).
+ * На сбое БД fallback к DEFAULT_CHECK_INTERVAL_MS (24h).
+ */
+async function nextTickDelay(): Promise<number> {
   const hourRaw = process.env['AUTO_RETRAIN_CRON_HOUR_UTC'];
   if (hourRaw != null && hourRaw !== '') {
     const hour = Number(hourRaw);
@@ -271,7 +275,16 @@ function nextTickDelay(): number {
       return delayToNextUtcHour(hour);
     }
   }
-  return CHECK_INTERVAL_MS;
+  try {
+    const s = await getAppSettings();
+    const hours = s.schedulerTickHours;
+    if (Number.isInteger(hours) && hours >= 1 && hours <= 168) {
+      return hours * 60 * 60 * 1000;
+    }
+  } catch {
+    // fallthrough на дефолт
+  }
+  return DEFAULT_CHECK_INTERVAL_MS;
 }
 
 async function runRetrainPipeline(reason: string): Promise<boolean> {
@@ -651,7 +664,7 @@ async function scheduleNextTick(delayMs: number): Promise<void> {
       recordHeartbeat('scheduler', { ok: tickOk, durationMs: Date.now() - startedAt, error: tickErr });
       // P5 — при заданном AUTO_RETRAIN_CRON_HOUR_UTC выравниваемся на wall-clock,
       // чтобы 24h-дрейф не «проглатывал» 1-часовое retrain-окно (architect-review #5).
-      void scheduleNextTick(nextTickDelay());
+      void scheduleNextTick(await nextTickDelay());
     }
   }, delayMs);
 }

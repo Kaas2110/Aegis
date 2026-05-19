@@ -17,7 +17,15 @@ import { logProductEvent } from '@/services/logging/EventLogger';
 import { notificationService, notifyFavoriteTeamMatchStart } from '@/services/notifications/NotificationService';
 import type { Match, Market } from '@/types';
 
-const REFRESH_INTERVAL_MS = 60_000;
+// Phase 10: динамические интервалы. Дефолты используются до первого ответа
+// /api/client-config; затем мобилка раз в CONFIG_REFRESH_INTERVAL_MS пуллит
+// конфиг и подменяет polling-интервал hot (live/idle выбирается по
+// `enrichedLive.length > 0`). Админ правит интервалы из /admin-web/workers.
+const DEFAULT_LIVE_REFRESH_MS = 60_000;
+const DEFAULT_IDLE_REFRESH_MS = 300_000;
+const CONFIG_REFRESH_INTERVAL_MS = 5 * 60_000;
+
+type ClientConfig = { pollLiveSec: number; pollIdleSec: number; version: number };
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -32,6 +40,18 @@ export default function HomeScreen() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [unseenAlerts, setUnseenAlerts] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const configIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Текущий polling-интервал и режим (live/idle). Меняется когда либо
+  // (а) /api/client-config вернул новый конфиг, либо (б) переключился режим
+  // live↔idle по `enrichedLive.length`. Передаём через ref, чтобы избежать
+  // лишних ре-рендеров и проблем с stale closure в setInterval.
+  const pollConfigRef = useRef<ClientConfig>({
+    pollLiveSec: Math.round(DEFAULT_LIVE_REFRESH_MS / 1000),
+    pollIdleSec: Math.round(DEFAULT_IDLE_REFRESH_MS / 1000),
+    version: 0,
+  });
+  const lastLiveCountRef = useRef(0);
+  const currentIntervalMsRef = useRef<number>(DEFAULT_LIVE_REFRESH_MS);
   // Контроллер для отмены предыдущего загрузочного цикла, когда стартует новый
   // (interval + pull-to-refresh могут пересекаться). Без этого старые колбэки
   // могли бы перезаписать свежие данные — см. code review 2026-05-14.
@@ -94,15 +114,60 @@ export default function HomeScreen() {
     }
   }
 
+  // Phase 10: пересоздаём data-interval. Вызывается при первом монтировании,
+  // при каждом обновлении конфига и при смене live/idle режима. Никаких
+  // overlap'ов — старый interval всегда clear'ится первым.
+  const restartDataInterval = useCallback(() => {
+    const cfg = pollConfigRef.current;
+    const isLive = lastLiveCountRef.current > 0;
+    const nextMs = (isLive ? cfg.pollLiveSec : cfg.pollIdleSec) * 1000;
+    if (nextMs === currentIntervalMsRef.current && intervalRef.current) return;
+    currentIntervalMsRef.current = nextMs;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => loadData(true), nextMs);
+  }, []);
+
+  // Hot-reload polling-конфига с api-server. Не критично если упало — оставим
+  // дефолты / последний успешный конфиг.
+  const refreshClientConfig = useCallback(async () => {
+    try {
+      const resp = await fetch('/api/client-config');
+      if (!resp.ok) return;
+      const cfg = (await resp.json()) as Partial<ClientConfig>;
+      if (
+        typeof cfg.pollLiveSec === 'number' && cfg.pollLiveSec > 0 &&
+        typeof cfg.pollIdleSec === 'number' && cfg.pollIdleSec > 0
+      ) {
+        pollConfigRef.current = {
+          pollLiveSec: Math.floor(cfg.pollLiveSec),
+          pollIdleSec: Math.floor(cfg.pollIdleSec),
+          version: typeof cfg.version === 'number' ? cfg.version : 0,
+        };
+        restartDataInterval();
+      }
+    } catch {
+      // network/parse error — keep current config
+    }
+  }, [restartDataInterval]);
+
   useEffect(() => {
     notificationService.requestPermissions();
     loadData(true); // тихая загрузка при первом открытии — не показываем спиннер
     logProductEvent('match_list_viewed', 'home');
-    intervalRef.current = setInterval(() => loadData(true), REFRESH_INTERVAL_MS);
+    void refreshClientConfig();             // первый запрос конфига
+    restartDataInterval();                  // стартуем data-interval с дефолта
+    configIntervalRef.current = setInterval(() => void refreshClientConfig(), CONFIG_REFRESH_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (configIntervalRef.current) clearInterval(configIntervalRef.current);
     };
-  }, []);
+  }, [refreshClientConfig, restartDataInterval]);
+
+  // Реагируем на смену режима live↔idle (когда live матчи появились/исчезли).
+  useEffect(() => {
+    lastLiveCountRef.current = enrichedLive.length;
+    restartDataInterval();
+  }, [enrichedLive.length, restartDataInterval]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
