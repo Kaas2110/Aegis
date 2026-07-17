@@ -20,35 +20,75 @@
 - Гуманизированное объяснение — `artifacts/api-server/src/routes/analytics.ts` → GET `/api/analytics/explain` (factors на русском + ориентиры по тоталам).
 - Бэктест по реальным данным — `artifacts/api-server/src/routes/analytics.ts` → POST `/api/analytics/backtest` (читает `prematch_outcomes`, считает KPI, equity-кривую, бакеты по уверенности).
 
-## API endpoints (полный список)
+## API endpoints (полный список, контракт)
+
+Public:
 
 - `GET /api/healthz`
-- `GET /api/matches/live` — OpenDota + Stratz live matches, обогащено названиями лиг
-- `GET /api/matches/upcoming` — Pandascore upcoming, обогащено названиями лиг
+- `GET /api/matches/live` (cache 30s) — OpenDota + Stratz `/League/live` + PandaScore `/running` параллельно с 5s timeout, обогащено названиями лиг. Перерыв между картами помечается `between_maps:true`. Форма ответа: `{sources:[{source,data:[…]}]}`.
+- `GET /api/matches/upcoming` (cache 60s) — PandaScore, обогащено названиями лиг. Форма: `{noData,data}`.
+- `GET /api/matches/series-drafts?team1Id=&team2Id=[&currentMatchId=&currentMapNumber=]` (cache 60s, пустой не кэшируется) — драфты сыгранных карт live BO3-серии: live_snapshots ∪ pro_matches (12ч, dedupe) → match_drafts → OD fallback. Мобилка зовёт с вкладки «Драфт».
+- `GET /api/bookmakers/for-match?team1=&team2=[&team1Id=&team2Id=]` — in-memory lookup букмекерского кэша.
 - `GET /api/odds/dota2` — The Odds API (требует `ODDS_API_KEY`)
 - `GET /api/odds/pinnacle/dota2` — Pinnacle scraper (best-effort)
 - `POST /api/analytics/predict` — прогнозы по 15 рынкам
 - `GET /api/analytics/explain?radiantTeamId=&direTeamId=` — гуманизированный обзор + тоталы
+- `GET /api/analytics/totals-ladder?type=kills|duration&radiantTeamId=&direTeamId=&...` — ladder-линии ТБ/ТМ с вероятностью модели; на live центрируется вокруг проекции текущего темпа. Компонент мобилки `components/TotalsLadder.tsx`.
 - `POST /api/analytics/backtest` — реальный бэктест по `prematch_outcomes`
 - `GET /api/analytics/model-status` — активная ML-модель + статистика live-worker
 - `GET /api/analytics/ml-predict?radiantTeamId=X&direTeamId=Y` — прямой ML-инференс
 - `GET /api/analytics/scheduler-status`
-- `POST /api/analytics/retrain` (cookie-сессия админа)
 - `GET/POST /api/analytics/popular-markets`
-- Admin auth (public): `POST /api/admin/login { token }`, `POST /api/admin/logout`, `GET /api/admin/whoami`
-- Admin (cookie-сессия): `GET/POST /api/admin/settings`, `GET /api/admin/metrics`, `POST /api/admin/retrain`, `POST /api/admin/prune-snapshots`, `GET /api/admin/odds-status`, `GET /api/admin/scheduler/state`, `GET /api/admin/models`
 - `GET /api/teams/tier1?limit=50`, `GET /api/teams/search?q=`, `GET /api/teams/:id`
+- `GET /api/client-config` (public, cache 60s) — динамический конфиг мобилки (`pollLiveSec` / `pollIdleSec` / `promoFieldEnabled` / `version`). Меняется из админки без рестарта.
+- `GET /r/:code` (и `/api/r/:code`) — рефералки: 302 на `app_settings.ref_redirect_url` + лог клика в `ref_clicks`.
+
+User auth (public, per-IP throttle 20/15min):
+
+- `POST /api/auth/register|login|logout` — email/password, scrypt N=16384, stateless токен с HMAC `SESSION_SECRET`, TTL 30 дней. register принимает опц. `promoCode` (валидируется по `ref_codes`, невалидный молча игнорируется). Ответы register/login/me содержат `isAdmin`.
+- `GET /api/auth/me` — `Authorization: Bearer <token>`.
+
+Admin auth (public): `POST /api/admin/login { token }`, `POST /api/admin/logout`, `GET /api/admin/whoami`.
+
+Admin (cookie-сессия `aegis_admin_session`):
+
+- `GET/POST /api/admin/settings`, `GET /api/admin/metrics`, `POST /api/admin/retrain`, `POST /api/analytics/retrain`, `POST /api/admin/prune-snapshots`, `GET /api/admin/odds-status`, `GET /api/admin/scheduler/state`, `GET /api/admin/models`
+- `GET /api/admin/users?q=` + `POST /api/admin/users/:id/admin {isAdmin}` — выдача/отзыв «Режима админ» мобилки (страница «Пользователи» в админке; `app_users.is_admin`; мобилка гейтит секцию «РАЗРАБОТКА (АДМИН)» и экран `/admin` по `isAdmin`).
+- `POST /api/admin/refresh-all` — сбрасывает все withCache (matches:live/upcoming/heroes), workaround для застрявшего TTL.
+- Рефералки: CRUD `ref_codes` + статистика кликов/регистраций + CSV-экспорт (BOM+`;`) + тумблер промо-поля — страница `/admin-web/sources`. Связанные колонки: `app_users.tariff` (default `free`) + `app_users.ref_code`.
+
+## Логи (структурный JSON через pino) — реестр тэгов
+
+Каждая запись имеет `tag` для фильтрации (пример grep: `grep '"tag":"bookmaker"'`).
+
+| tag | где |
+|---|---|
+| `req`/`res` | `pino-http` middleware |
+| `bookmaker` / `bookmaker-worker` / `matched` | букмекерские пайплайны |
+| `cache` | `lib/responseCache.ts::withCache` |
+| `predict` | `services/PredictionModel.ts` |
+| `admin` | `routes/admin.ts` |
+| `mobile` | `POST /api/client-logs` (мобильные ивенты через `services/logging/EventLogger.ts`, очередь `@dea_log_upload_queue`, флаш каждые 30s, батч 50) |
+| `upstream` | `lib/loggedFetch.ts` (helper для будущих fetch'ей) |
 
 ## Admin & settings
 
 - Глобальные runtime-флаги хранятся в `app_settings` (single row). Кэш 5s в `AppSettings.ts`.
-  - `useBookmakerOdds` — пока всегда `false` (см. Bookmakers roadmap ниже).
+  - `useBookmakerOdds` — default `true` (букмекерский UI включён через Bovada, см. Bookmakers roadmap ниже).
   - `liveSnapshotPruneDays` — default 7. Scheduler чистит `live_snapshots` ежедневно.
-- Все `/api/admin/*` (кроме `/login`/`/logout`/`/whoami`) и `POST /api/analytics/retrain` требуют HttpOnly-сессию `aegis_admin_session`, выдаваемую `POST /api/admin/login { token }` (`timingSafeEqual` против `ADMIN_TOKEN`, брутфорс-троттл 10 попыток / 15 мин на IP, TTL 24h, in-memory store). Реализация — `routes/adminAuth.ts` (`requireAdminSession`). Legacy `X-Admin-Token` header удалён.
-- Web admin panel — артефакт `artifacts/admin-web` (React + Vite, slug `admin-web`, путь `/admin-web/`). Пять страниц: `/login`, `/` (scheduler-state + активные модели + общие метрики), `/settings`, `/metrics`, `/operations` (manual retrain + prune snapshots + odds-status). UI на русском, амбер на тёмном фоне. Все вызовы — через сгенерированные хуки `@workspace/api-client-react` (контракт в `lib/api-spec/openapi.yaml`); `customFetch` глобально шлёт `credentials: 'include'`. На 401 из любой защищённой query — редирект на `/admin-web/login` через `QueryCache.onError`.
+- Все `/api/admin/*` (кроме `/login`/`/logout`/`/whoami`) и `POST /api/analytics/retrain` требуют HttpOnly-сессию `aegis_admin_session`, выдаваемую `POST /api/admin/login { token }` (`timingSafeEqual` против `ADMIN_TOKEN`, брутфорс-троттл 10 попыток / 15 мин на IP, TTL 24h, in-memory store). Реализация — `routes/adminAuth.ts` (`requireAdminSession`). Legacy `X-Admin-Token` header удалён. В dev (NODE_ENV≠production) сессии дополнительно персистятся в `/tmp/aegis_admin_sessions.json` (mode 0600) и переживают рестарт dev-сервера; в prod — чисто in-memory.
+- Web admin panel — артефакт `artifacts/admin-web` (React + Vite, slug `admin-web`, путь `/admin-web/`). Страницы: `/login`, `/` (dashboard: scheduler-state + активные модели + общие метрики + тогл OpenDota free/premium), `/coverage`, `/settings`, `/metrics`, `/models`, `/operations` (manual retrain + prune snapshots + odds-status), `/workers`, `/sources` (рефералки), `/users` (выдача «Режима админ» мобилки). UI на русском, амбер на тёмном фоне. Все вызовы — через сгенерированные хуки `@workspace/api-client-react` (контракт в `lib/api-spec/openapi.yaml`); `customFetch` глобально шлёт `credentials: 'include'`. На 401 из любой защищённой query — редирект на `/admin-web/login` через `QueryCache.onError`.
 - `prematch_outcomes` — постоянный леджер прогнозов vs реальности. Не чистится — питает /admin/metrics и /api/analytics/backtest.
 
 ## Bookmakers roadmap
+
+> **Статус 2026-07: букмекерский UI ВКЛЮЧЁН через Bovada** (200 OK с Replit-IP, без ключа).
+> `BOOKMAKERS_ENABLED` дефолт = true. Маркеты Bovada: Moneyline (winner серии + Map 1/2),
+> Total Maps, Under/Over Kills, Correct Score, Asian Handicap. НЕ покрыто Bovada:
+> Total Duration, First Blood — для них только наш прогноз. 6 РФ-источников написаны
+> по документации, с Replit заблокированы (DNS / Cloudflare / 404) — активируются
+> автоматически с РФ-IP в проде (`PROXY_URL` — РФ-прокси). Pinnacle требует guest API key (нет).
+> Текст ниже — историческое решение до включения Bovada.
 
 Архитектурное решение, согласованное с пользователем: **до появления первых пользователей букмекерские кэфы НЕ подтягиваем и пикер букмекера в мобильном UI скрыт.**
 
@@ -99,6 +139,18 @@
 
 ## Gotchas
 
+- ⚠️ **Stratz live: DORMANT** — `fetchLiveMatchDetailBatch()` закомментирован в
+  `services/LiveWorker.ts` (upstream пуст с 2026-05-16: `live.matches`=[],
+  `live.match(id)`=null). Код сохранён в `lib/stratzLive.ts` целиком; 5 полей
+  `live_snapshots.stratz_*` остаются null. **Вернуть: раскомментировать блок `// DORMANT`**
+  в LiveWorker.ts когда Stratz восстановит live ingest. Buyback/aegis/vision/teamfights —
+  только через OD replay-parse (T0.7, post-mortem).
+- ⚠️ Сравнения accuracy между retrain'ами **некорректны без поправки** на
+  (a) drift test split (по времени), (b) LightGBM run-to-run variance ±2-3 п.п.
+  на маленьких bucket'ах.
+- **Quantile duration models** (LightGBM α=0.25/0.75) загружаются `MarketLgbm`
+  параллельно с regression-моделями и экспонируются как `totalDurationLogQ25`/
+  `totalDurationLogQ75` в `predictMarketsFor()` — непараметрический 50% interval.
 - После правок `lib/db/src/schema/*` — `pnpm run typecheck:libs` ДО `pnpm --filter @workspace/api-server run typecheck`.
 - После правок схемы — `pnpm --filter @workspace/db run push`.
 - OpenDota: premium key 3000 req/min (50 req/s), неограниченно/месяц, $0.0001/req. Без ключа — free 60/min, 3000/day. Ingest-скрипты держат 10–20 req/s, оставляя запас под параллельные воркеры и live-poll.
