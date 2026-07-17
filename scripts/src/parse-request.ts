@@ -96,10 +96,30 @@ async function main(): Promise<void> {
   }
 
   let ok = 0, failed = 0;
+  let consecutive429 = 0;
   for (let i = 0; i < todo.length; i++) {
     const matchId = todo[i].matchId;
     const { jobId, error } = await requestParse(matchId);
     const status = error ? 'failed' : 'queued';
+
+    // FREE MODE: при 429 не жжём квоту дальше — пауза 65s; после 3 подряд
+    // 429-пауз прерываем тик целиком (квота минуты/дня исчерпана, доберём позже).
+    // ВАЖНО: при 429 НЕ пишем строку в queue — иначе матч получит status='failed'
+    // и навсегда выпадет из дефолтного селектора (blackhole). Матч останется
+    // eligible и будет добран следующим тиком.
+    if (error && /429/.test(error)) {
+      consecutive429++;
+      if (consecutive429 >= 3) {
+        console.warn(`  [parse-request] 3× 429 подряд — квота исчерпана, прерываю тик (обработано ${i + 1}/${todo.length})`);
+        break;
+      }
+      console.warn(`  [parse-request] 429 — пауза 65s (попытка ${consecutive429}/3), матч ${matchId} не помечаю failed`);
+      await sleep(65_000);
+      i--; // повторить тот же матч после паузы
+      continue;
+    } else if (!error) {
+      consecutive429 = 0;
+    }
 
     await db.insert(matchParseQueueTable)
       .values({ matchId, status, jobId, lastError: error, attempts: 1 })

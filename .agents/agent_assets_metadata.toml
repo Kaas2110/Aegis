@@ -30,3 +30,21 @@ id = "jyak2oYllUMTxx1b812Ig"
 uri = "file://docs/ml-feature-audit.md"
 type = "text"
 title = "ML Feature Audit (T0)"
+
+[[outputs]]
+id = "0LG0QC5eIunfuuhxubRnK"
+uri = "file://backups/aegis-db.part-00.gz"
+type = "unspecified"
+title = "Бэкап БД — часть 1 из 3 (150 MB)"
+
+[[outputs]]
+id = "L3SZNDT_LA6FhuP5iPoT9"
+uri = "file://backups/aegis-db.part-01.gz"
+type = "unspecified"
+title = "Бэкап БД — часть 2 из 3 (150 MB)"
+
+[[outputs]]
+id = "5p5T8tyTCcP3WwP454cJv"
+uri = "file://backups/aegis-db.part-02.gz"
+type = "unspecified"
+title = "Бэкап БД — часть 3 из 3 (97 MB)"

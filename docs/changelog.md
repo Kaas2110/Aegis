@@ -848,3 +848,47 @@ Typecheck зелёный, server поднимается без warning'ов (а�
 
 Прогноз: долг 21k раздавится за ~3-4 дня. После этого loop станет
 fast no-op (parse:request увидит 0 матчей в окне 365d).
+
+## 2026-07-17 — Финальный мега-пакет: аудит, ретрейн, RuStore/миграция-доки, бэкап
+
+**Аудит (T101):** security_scan чисто (HoundDog 0; SAST path-traversal fix;
+dep-CVE закрыты pnpm overrides). Architect-аудит логики моделей нашёл 4 бага,
+все исправлены:
+
+1. **SEVERE** `routes/analytics.ts`: 50%-интервал длительности отдавал секунды
+   вместо минут (q25/q75 без `/60`).
+2. Прематч-центр ladder тоталов — теперь `exp(mean(log))/linesScale` из
+   активной модели вместо константной эвристики; после live-override центр и
+   линии пересобираются.
+3. `live_total_kills`: label модели = `log(kills+1)` — в `/predict`-override и
+   ladder линия должна передаваться как `line+1` (было `line`, систематическое
+   смещение вероятностей).
+4. `train-series-model.ts` — утечка данных: сплит был по сэмплам (одна серия
+   попадала и в train, и в test) + рейтинги «из будущего». Теперь сплит
+   80/10/10 по границам серий (сортировка по matchId первой карты), рейтинги
+   из `team_rating_snapshots` на дату серии.
+
+**Replay Parse Loop → OD FREE MODE:** limit 1500→100, окно 365→180d,
+TICK_SEC 600→1800, ingest:parsed 600→200 + quota-guard в `parse-request.ts`
+(429 → пауза 65s, 3 подряд → abort тика). Бюджет free-дня ~3000 req
+делится с Hourly/Daily.
+
+**Ретрейн (T102):** series-mid **acc=87.6% brier=0.0901 baseline=54.1%**
+(n=518 test, 5272 сэмплов, сплит по границам серий). ⚠️ Оговорка к 87.6%:
+остаточная утечка малой силы — (a) drop_rate считается leave-one-series-out
+по ВСЕМ сериям, включая хронологически будущие; (b) pick_strangeness берёт
+текущие player_hero_stats, а не as-of даты серии. Метрика слегка завышена;
+честный вариант — time-cutoff drop_rate (только серии до даты сэмпла) — TODO
+следующего ретрейна. live-totals 4/4 activated
+(kills_with_draft r2=0.075); market-модели 10/10 activated (FB acc≈58%,
+duration r2≈0.07-0.08; q25-квантили — отрицательный r2 ожидаем, метрика
+неинформативна для quantile loss).
+
+**Доки:** `.env.example` (полный шаблон env), `docs/rustore-release.md`
+(выкатка в RuStore), `docs/migration-replit.md` (перенос на другой
+Replit-аккаунт), `docs/laptop-deploy.md` (+Шаг 0 «чистая установка», фикс
+systemd-таймеров под финальное расписание, фикс запуска ml-service),
+`docs/business.md` обновлён (метрики, рефералки, roadmap).
+
+**Бэкап:** `backups/aegis-db.part-{00,01,02}.gz` (150+150+97MB) —
+pg_dump -Fc + gzip + split 150m. Восстановление: cat → gunzip → pg_restore.

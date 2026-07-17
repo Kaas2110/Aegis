@@ -34,6 +34,7 @@ import {
   bo3SeriesTable,
   proMatchesTable,
   teamsTable,
+  teamRatingSnapshotsTable,
   matchDraftsTable,
   playerHeroStatsTable,
   modelVersionsTable,
@@ -126,6 +127,10 @@ async function main(): Promise<void> {
       winsB: r.winsB,
     }))
     .filter(r => r.maps.length >= 2 && r.winsA !== r.winsB);
+  // Audit fix 2026-07-17 (anti-leakage): серии сортируем по времени (matchId
+  // первой карты монотонно растёт со временем) — сплит train/calib/test ниже
+  // становится временны́м, а не позиционным.
+  series.sort((a, b) => (a.maps[0]?.matchId ?? 0) - (b.maps[0]?.matchId ?? 0));
   console.log(`  series usable: ${series.length}`);
 
   // ── drop-rate: per-team (opportunities, drops) — глобально + вклад по сериям
@@ -168,9 +173,47 @@ async function main(): Promise<void> {
     if (t.rating != null && g >= 5) teams.set(Number(t.teamId), { rating: t.rating, wr: (t.wins ?? 0) / g });
   }
 
+  // Audit fix 2026-07-17 (anti-leakage): рейтинг/winrate — из team_rating_snapshots
+  // на дату НАЧАЛА серии (последний снапшот ≤ даты серии). Для серий старше
+  // первого снапшота берём самый ранний снапшот (ближе к правде, чем «сегодня»).
+  // Fallback на текущие teams — только если снапшотов по команде нет вовсе.
+  const snapByTeam = new Map<number, Array<{ date: string; rating: number; wr: number; games: number }>>();
+  {
+    const snapRows = await db.select({
+      teamId: teamRatingSnapshotsTable.teamId,
+      capturedAt: teamRatingSnapshotsTable.capturedAt,
+      rating: teamRatingSnapshotsTable.rating,
+      wins: teamRatingSnapshotsTable.wins,
+      losses: teamRatingSnapshotsTable.losses,
+    }).from(teamRatingSnapshotsTable);
+    for (const s of snapRows) {
+      const g = (s.wins ?? 0) + (s.losses ?? 0);
+      const arr = snapByTeam.get(Number(s.teamId)) ?? [];
+      arr.push({ date: String(s.capturedAt), rating: s.rating, wr: g > 0 ? (s.wins ?? 0) / g : 0.5, games: g });
+      snapByTeam.set(Number(s.teamId), arr);
+    }
+    for (const arr of snapByTeam.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
+    console.log(`  rating snapshots: ${snapRows.length} rows, teams=${snapByTeam.size}`);
+  }
+
+  function teamAsOf(teamId: number, dateStr: string | null): { rating: number; wr: number } | null {
+    const snaps = snapByTeam.get(teamId);
+    if (snaps && snaps.length > 0) {
+      let best: { date: string; rating: number; wr: number; games: number } | null = null;
+      if (dateStr) {
+        for (const s of snaps) {
+          if (s.date <= dateStr) best = s; else break;
+        }
+      }
+      const chosen = best ?? snaps[0];
+      if (chosen.games >= 5) return { rating: chosen.rating, wr: chosen.wr };
+    }
+    return teams.get(teamId) ?? null;
+  }
+
   // ── prev-map stats: pro_matches по всем matchId из серий
   const allMatchIds = series.flatMap(s => s.maps.map(m => m.matchId));
-  const matchStats = new Map<number, { duration: number; rScore: number; dScore: number }>();
+  const matchStats = new Map<number, { duration: number; rScore: number; dScore: number; startTime: number }>();
   const CHUNK = 5000;
   for (let i = 0; i < allMatchIds.length; i += CHUNK) {
     const chunk = allMatchIds.slice(i, i + CHUNK);
@@ -179,10 +222,12 @@ async function main(): Promise<void> {
       duration: proMatchesTable.duration,
       rScore: proMatchesTable.radiantScore,
       dScore: proMatchesTable.direScore,
+      startTime: proMatchesTable.startTime,
     }).from(proMatchesTable).where(inArray(proMatchesTable.matchId, chunk));
     for (const m of ms) {
       matchStats.set(Number(m.matchId), {
         duration: m.duration, rScore: m.rScore ?? 0, dScore: m.dScore ?? 0,
+        startTime: m.startTime,
       });
     }
   }
@@ -252,12 +297,19 @@ async function main(): Promise<void> {
   // ── сэмплы
   interface Sample { features: number[]; label: number; }
   const samples: Sample[] = [];
+  const samplesBySeries: Sample[][] = [];
   for (const s of series) {
     const need = needToWin(s.format);
     const aWinsSeries = s.winsA > s.winsB ? 1 : 0;
-    const tA = teams.get(s.teamAId!);
-    const tB = teams.get(s.teamBId!);
+    // Audit fix 2026-07-17 (anti-leakage): рейтинг/winrate на дату начала серии.
+    const firstSt = matchStats.get(s.maps[0].matchId);
+    const seriesDate = firstSt?.startTime
+      ? new Date(firstSt.startTime * 1000).toISOString().slice(0, 10)
+      : null;
+    const tA = teamAsOf(s.teamAId!, seriesDate);
+    const tB = teamAsOf(s.teamBId!, seriesDate);
     if (!tA || !tB) continue;
+    const seriesSamples: Sample[] = [];
     let sa = 0; let sb = 0;
     for (let k = 0; k < s.maps.length - 1; k++) {
       const map = s.maps[k];
@@ -272,7 +324,7 @@ async function main(): Promise<void> {
       const d = drafts.get(map.matchId);
       const strA = d ? strangeness(aIsRadiant ? d.rPicks : d.dPicks, aIsRadiant ? d.rAcc : d.dAcc) : null;
       const strB = d ? strangeness(aIsRadiant ? d.dPicks : d.rPicks, aIsRadiant ? d.dAcc : d.rAcc) : null;
-      samples.push({
+      seriesSamples.push({
         features: [
           1,
           (tA.rating - tB.rating) / 200,
@@ -290,17 +342,26 @@ async function main(): Promise<void> {
         label: aWinsSeries,
       });
     }
+    if (seriesSamples.length > 0) {
+      samplesBySeries.push(seriesSamples);
+      samples.push(...seriesSamples);
+    }
   }
-  console.log(`  samples: ${samples.length}`);
+  console.log(`  samples: ${samples.length} (series groups: ${samplesBySeries.length})`);
   if (samples.length < minSamples) {
     console.log(`[train-series-model] SKIP: ${samples.length} < ${minSamples} — остаёмся на Layer A`);
     process.exit(0);
   }
 
-  const n = samples.length;
-  const train = samples.slice(0, Math.floor(n * 0.8));
-  const calib = samples.slice(Math.floor(n * 0.8), Math.floor(n * 0.9));
-  const test = samples.slice(Math.floor(n * 0.9));
+  // Audit fix 2026-07-17 (anti-leakage): сплит по ГРАНИЦАМ серий (одна серия
+  // не может попасть и в train, и в test) и по времени (series отсортированы
+  // по matchId первой карты выше).
+  const nGroups = samplesBySeries.length;
+  const trainEnd = Math.floor(nGroups * 0.8);
+  const calibEnd = Math.floor(nGroups * 0.9);
+  const train = samplesBySeries.slice(0, trainEnd).flat();
+  const calib = samplesBySeries.slice(trainEnd, calibEnd).flat();
+  const test = samplesBySeries.slice(calibEnd).flat();
 
   const token = mlServiceToken();
   if (!token) {

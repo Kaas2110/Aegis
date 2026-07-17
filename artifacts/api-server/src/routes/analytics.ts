@@ -572,7 +572,9 @@ router.post('/predict', async (req, res) => {
             // Линии совпадают с дефолтами math-моделей (52.5 киллов / 42.0 мин);
             // live-модель отдаёт log-space mean/std → P(over line) из log-normal.
             const lineRaw = betType === 'total_kills' ? 52.5 : 42.0;
-            const lineForProb = betType === 'total_duration' ? lineRaw * 60 : lineRaw;
+            // Audit fix 2026-07-17: live_total_kills обучена на log(final_kills + 1),
+            // поэтому линию сравниваем как (line + 1); duration — log(сек), line × 60.
+            const lineForProb = betType === 'total_duration' ? lineRaw * 60 : lineRaw + 1;
             const pOver = probLogNormalOver(lineForProb, rows[0].mean, Math.max(1e-3, rows[0].std));
             result.predictions[tIdx] = {
               ...old,
@@ -879,8 +881,9 @@ router.get('/totals-ladder', async (req, res) => {
     }
   }
 
-  // Центр лестницы: для прематч — μ модели, для live — projection.projected
-  const center = projection ? projection.projected : (type === 'kills' ? baseExpectedKills : baseExpectedDuration);
+  // Центр лестницы: для прематч — медиана LGB-модели (пересчитывается ниже,
+  // когда lgbLogN известен), для live — projection.projected.
+  let center = projection ? projection.projected : (type === 'kills' ? baseExpectedKills : baseExpectedDuration);
   const step = type === 'kills' ? 1 : 0.5;
   // Линии у буков:
   //   kills — всегда X.5 (49.5, 50.5, 51.5...) — snap к ближайшему X.5
@@ -1010,8 +1013,30 @@ router.get('/totals-ladder', async (req, res) => {
     return;
   }
 
+  // Audit fix 2026-07-17 (прематч): центр лестницы = медиана модели exp(mean),
+  // а не константная эвристика со stub-фичами 0.5 (иначе при расхождении с
+  // моделью все линии улетали в один хвост, pOver≈0 или ≈1 на всех).
+  if (!projection && lgbLogN) {
+    const modelCenter = Math.exp(lgbLogN.mean) / linesScale;
+    if (Number.isFinite(modelCenter) && modelCenter > 0) {
+      center = modelCenter;
+      snappedCenter = type === 'kills'
+        ? Math.round(center - 0.5) + 0.5
+        : Math.round(center * 2) / 2;
+      lineValues.length = 0;
+      for (let i = 0; i < lineCount; i++) {
+        lineValues.push(snappedCenter + (startOffset + i) * step);
+      }
+    }
+  }
+
   const lines = lineValues.map(line => {
-    const pOver = probLogNormalOver(line * linesScale, lgbLogN.mean, lgbLogN.std);
+    // Audit fix 2026-07-17: live_total_kills обучена на log(kills + 1) → line + 1;
+    // прематч kills — log(kills) без сдвига; duration (обе) — log(сек) → line × 60.
+    const lineArg = type === 'kills'
+      ? (liveSource ? line + 1 : line)
+      : line * linesScale;
+    const pOver = probLogNormalOver(lineArg, lgbLogN.mean, lgbLogN.std);
     return {
       line: Number(line.toFixed(1)),
       pOver: Number(pOver.toFixed(4)),
@@ -1025,10 +1050,11 @@ router.get('/totals-ladder', async (req, res) => {
     isLive,
     projection,
     lines,
+    // Audit fix 2026-07-17: квантили обучены на log(duration_sec) → в UI минуты (/60).
     interval: type === 'duration' && lgbQ25 != null && lgbQ75 != null
       ? {
-          q25: Number(Math.exp(lgbQ25).toFixed(2)),
-          q75: Number(Math.exp(lgbQ75).toFixed(2)),
+          q25: Number((Math.exp(lgbQ25) / 60).toFixed(2)),
+          q75: Number((Math.exp(lgbQ75) / 60).toFixed(2)),
         }
       : null,
     confidence,

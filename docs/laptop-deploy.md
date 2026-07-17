@@ -35,11 +35,81 @@ Replay Parse Loop (остаток). Если replay-парсинг упирае�
 long-running процессом (systemd-юнит, pm2, screen). Внутри него уже крутятся
 **в-процессные воркеры** LiveWorker и SchedulerWorker — их трогать не нужно.
 
-## Предусловия на ноуте
+## Шаг 0. Чистая установка ноута (каждый шаг и действие)
 
-1. **Node 24** + **pnpm 9** + **Python 3.11+** (для ml-service)
+Предполагается Linux (Ubuntu/Debian) или WSL2 на Windows. Команды — от
+обычного пользователя, `sudo` — где указано.
+
+```bash
+# 0.1 Базовые пакеты
+sudo apt update && sudo apt install -y curl git build-essential
+
+# 0.2 Node 24 через nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.bashrc
+nvm install 24 && nvm alias default 24
+node -v            # v24.x
+
+# 0.3 pnpm
+corepack enable && corepack prepare pnpm@9 --activate
+pnpm -v            # 9.x
+
+# 0.4 Python 3.11+ и uv (для ml-service)
+sudo apt install -y python3 python3-venv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv --version
+
+# 0.5 PostgreSQL 16
+sudo apt install -y postgresql
+sudo -u postgres psql -c "CREATE USER aegis WITH PASSWORD 'ЗАМЕНИТЬ' CREATEDB;"
+sudo -u postgres psql -c "CREATE DATABASE aegis OWNER aegis;"
+psql postgres://aegis:ЗАМЕНИТЬ@127.0.0.1:5432/aegis -c "SELECT 1;"   # должно ответить
+
+# 0.6 Код: клонировать репо (GitHub-экспорт из Replit или zip)
+git clone <URL-репо> ~/aegis && cd ~/aegis
+pnpm install
+
+# 0.7 Переменные окружения
+cp .env.example .env
+nano .env          # заполнить по комментариям внутри (DATABASE_URL, SESSION_SECRET, ...)
+                   # значения секретов скопировать из Replit: Tools → Secrets
+
+# 0.8 База: восстановить бэкап (части aegis-db.part-NN.gz ≤150MB из Replit)
+#     ИЛИ начать с пустой схемы (тогда пропустить cat/gunzip/pg_restore)
+cat aegis-db.part-*.gz > aegis-db.dump.gz   # склейка (валидный gzip только целиком)
+gunzip aegis-db.dump.gz                     # → aegis-db.dump (формат pg_dump -Fc)
+pg_restore --no-owner --no-privileges -d "postgres://aegis:ЗАМЕНИТЬ@127.0.0.1:5432/aegis" aegis-db.dump
+set -a; source .env; set +a
+pnpm --filter @workspace/db run push     # догнать схему до кода (идемпотентно)
+
+# 0.9 ml-service: зависимости Python (venv + requirements.txt)
+cd artifacts/ml-service
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cd ../..
+
+# 0.10 Первый запуск руками (два терминала)
+set -a; source .env; set +a
+# терминал 1 — ml-service:
+cd artifacts/ml-service && .venv/bin/python -m uvicorn src.main:app --host 127.0.0.1 --port 8090 --app-dir .
+# терминал 2 — api-server:
+PORT=8080 pnpm --filter @workspace/api-server run start
+curl -s localhost:8080/api/healthz        # {"ok":true,...}
+
+# 0.11 Публичный HTTPS для мобилки (выбрать одно):
+#   A. Cloudflare Tunnel (бесплатно, рекомендуется):
+#      cloudflared tunnel --url http://localhost:8080  → постоянный туннель по доке CF
+#   B. Свой домен + VPS reverse-proxy → ноут по WireGuard
+# Итоговый URL зашивается в мобилку как EXPO_PUBLIC_API_URL (docs/rustore-release.md)
+```
+
+После шага 0 переходите к smoke-test'ам ниже и затем к systemd (вариант B).
+
+## Предусловия на ноуте (сводка)
+
+1. **Node 24** + **pnpm 9** + **Python 3.11+ / uv** (для ml-service)
 2. Локальный **PostgreSQL** (или удалённый — если хотим оставить prod-БД)
-3. `.env` файл рядом с репо со следующими переменными:
+3. `.env` файл рядом с репо — полный шаблон с комментариями: **`.env.example`**
+   в корне репо. Ключевые переменные:
    ```bash
    # обязательное
    DATABASE_URL=postgres://aegis:password@127.0.0.1:5432/aegis
@@ -207,7 +277,7 @@ Type=simple
 User=aegis
 WorkingDirectory=/home/aegis/aegis/artifacts/ml-service
 EnvironmentFile=/home/aegis/aegis/.env
-ExecStart=/usr/bin/uv run uvicorn app:app --host 127.0.0.1 --port 8090
+ExecStart=/home/aegis/aegis/artifacts/ml-service/.venv/bin/python -m uvicorn src.main:app --host 127.0.0.1 --port 8090 --app-dir .
 Restart=always
 
 [Install]
@@ -254,22 +324,24 @@ EnvironmentFile=/home/aegis/aegis/.env
 ExecStart=/bin/bash scripts/run-daily.sh
 ```
 
-`/etc/systemd/system/aegis-daily.timer`:
+`/etc/systemd/system/aegis-daily.timer` (⚠️ время — по финальному расписанию
+из `replit.md`: Daily **00:30 МСК**, systemd берёт локальную TZ ноута):
 
 ```ini
 [Unit]
-Description=Aegis daily ingest @ 04:00
+Description=Aegis daily ingest @ 00:30 MSK
 
 [Timer]
-OnCalendar=*-*-* 04:00:00
+OnCalendar=*-*-* 00:30:00
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 ```
 
-Аналогично создать `aegis-hourly.{service,timer}` (OnCalendar=hourly) и
-`aegis-enrichment.{service,timer}` (OnCalendar=Sun 03:00:00).
+Аналогично создать `aegis-hourly.{service,timer}` (`OnCalendar=*-*-* *:05:00`
+— каждый час на 5-й минуте) и `aegis-enrichment.{service,timer}`
+(`OnCalendar=Sun 02:00:00` — вс 02:00 МСК).
 
 ### B5. Активация
 
@@ -316,8 +388,13 @@ sudo systemctl list-timers '*aegis*'
 - [ ] В админке `/admin-web/sources` создан хотя бы один источник, CSV-экспорт
       скачивается, тумблер «Поле промокода при регистрации» работает
       (мобилка читает его из `GET /api/client-config`)
-- [ ] (опционально) Cloudflare Tunnel / Tailscale Funnel для публичного HTTPS
-      доступа к api-server, если мобилка ходит снаружи
+- [ ] Cloudflare Tunnel / домен для публичного HTTPS доступа к api-server
+      (обязательно для мобилки из сторов, см. `docs/rustore-release.md`)
+- [ ] **Проверка мобилки**: dev-сборка Expo с `EXPO_PUBLIC_API_URL=<прод-URL>` —
+      лента матчей грузится, детали матча открываются, регистрация работает,
+      алерт срабатывает на live-матче
+- [ ] Букмекеры передиагностированы с РФ-IP (секция ниже), Bovada отключена
+      если отдаёт HTML/403
 
 ## Букмекеры — диагностика после переезда (важно)
 

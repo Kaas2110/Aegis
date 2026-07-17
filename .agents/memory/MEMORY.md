@@ -1,0 +1,6 @@
+- [OpenDota free-mode quota](opendota-free-quota.md) — 3000 req/day делится между LiveWorker, Hourly/Daily cron и Replay Parse Loop; агрессивный parse-loop устраивает 429-шторм всем.
+- [Live totals log(kills+1)](live-totals-label-offset.md) — live-модели тоталов учат log(kills+1); любой потребитель обязан передавать line+1, иначе систематическое смещение.
+- [Series/timeseries split rules](timeseries-split-leakage.md) — сплит только по границам серий/времени; фичи-рейтинги брать из snapshot на дату события, не текущие.
+- [Ladder centering](totals-ladder-centering.md) — центр ladder тоталов выводить из активной модели (exp(mean log)/scale), не из константной эвристики; после live-override пересобрать линии.
+- [Backup/present_asset extensions](backup-split-parts.md) — split-части бэкапа именовать .gz (gzip целиком валиден после cat); present_asset принимает только известные расширения.
+- [Bash background limits](bash-background-limits.md) — nohup/фоновые процессы умирают с завершением команды; долгое — foreground ≤120s или workflow.

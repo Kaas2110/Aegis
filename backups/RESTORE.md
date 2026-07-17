@@ -1,16 +1,20 @@
 # Aegis — полное восстановление (код + БД + модели)
 
-Этот бэкап содержит **всё**, что было сделано в текущей Replit-сессии: исходники, схему БД, исторические данные (pro_matches, drafts, hero stats), и все обученные модели (LR + LightGBM весами в `model_versions`).
+Этот бэкап содержит **всё**: исходники, схему БД, исторические данные (pro_matches, drafts, hero stats), и все обученные модели (LR + LightGBM весами/блобами в `model_versions`).
 
 ## Что в папке `backups/`
 
 | Файл | Что | Размер |
 |---|---|---|
-| `aegis-db-YYYY-MM-DD_HHMMSS.dump` | PostgreSQL **custom-format** дамп (для `pg_restore`) | ~1.5 MB |
-| `aegis-db-YYYY-MM-DD_HHMMSS.sql.gz` | Plain SQL дамп (для `psql`, можно посмотреть глазами) | ~1.5 MB |
-| `aegis-code-YYYY-MM-DD_HHMMSS.bundle` | Полный git-репозиторий со всей историей (запасной канал, если GitHub недоступен) | ~10 MB |
+| **`aegis-db.part-00.gz` … `part-02.gz`** | ⭐ **АКТУАЛЬНЫЙ бэкап 2026-07-17**: pg_dump custom-format, gzip, порезан на части ≤150MB. Восстановление: `cat aegis-db.part-*.gz > aegis-db.dump.gz && gunzip aegis-db.dump.gz` → `pg_restore` (см. ниже) | 150+150+97 MB |
+| `aegis-db-YYYY-MM-DD_HHMMSS.dump` | Устаревший дамп 2026-05-11 (custom-format) | ~1.5 MB |
+| `aegis-db-YYYY-MM-DD_HHMMSS.sql.gz` | Устаревший plain SQL дамп 2026-05-11 | ~1.5 MB |
+| `aegis-code-YYYY-MM-DD_HHMMSS.bundle` | Git-репозиторий на 2026-05-11 (запасной канал; актуальный код переносится импортом Repl / GitHub) | ~10 MB |
 
-> Берите **последний по дате** файл (или нужный конкретный, если делали несколько бэкапов).
+> ⚠️ Каждая часть `aegis-db.part-NN.gz` по отдельности — НЕ валидный gzip;
+> валидным файл становится только после склейки ВСЕХ частей по порядку.
+> Полные инструкции: `docs/migration-replit.md` (Replit) и
+> `docs/laptop-deploy.md` Шаг 0.8 (ноут).
 
 Дамп **включает** модели — таблица `model_versions` хранит:
 - `weights jsonb` — веса LR-моделей (prematch_winner v1/v2/v3, t1/t2, live_winner)
