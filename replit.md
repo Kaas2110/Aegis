@@ -183,6 +183,9 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
   (Шаг 0 «чистая установка», systemd-юниты, crontab, чек-лист). Читать перед миграцией.
 - **`docs/rustore-release.md`** — ⭐ выкатка мобилки в RuStore (keystore, EAS,
   модерация, чек-лист).
+- **`docs/store-release-plan.md`** — ⭐ план Google Play / App Store + подписки
+  во всех 4 сторах (RuStore/AppGallery/GP/AS): доработки БД/API/мобилки,
+  ограничения РФ-аккаунтов, порядок работ.
 - **`docs/migration-replit.md`** — перенос проекта на другой Replit-аккаунт
   (секреты, восстановление БД из `backups/aegis-db.part-*.gz`).
 - **`docs/business.md`** — ⭐ бизнес-описание для не-инженеров.
