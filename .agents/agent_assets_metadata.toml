@@ -48,3 +48,9 @@ id = "5p5T8tyTCcP3WwP454cJv"
 uri = "file://backups/aegis-db.part-02.gz"
 type = "unspecified"
 title = "Бэкап БД — часть 3 из 3 (97 MB)"
+
+[[outputs]]
+id = "iWDAg26CknacPyQx_Zn3k"
+uri = "file://exports/aegis-docs.zip"
+type = "unspecified"
+title = "Вся документация Aegis (zip)"
