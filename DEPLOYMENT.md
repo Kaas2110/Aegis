@@ -1,3 +1,5 @@
+> ⚠️ **УСТАРЕЛ (май 2026, эпоха «Dota Edge Analyzer»).** Актуальные доки: переезд/деплой — `docs/laptop-deploy.md` + `docs/migration-replit.md`; RuStore — `docs/rustore-release.md`. Оставлен для истории.
+
 # Dota Edge Analyzer — Полная инструкция по развёртыванию
 
 ## Обзор архитектуры

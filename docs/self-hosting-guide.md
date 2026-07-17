@@ -1,3 +1,5 @@
+> ⚠️ **ЧАСТИЧНО УСТАРЕЛ (2026-05-13).** Актуальные версии: переезд на ноут — `docs/laptop-deploy.md`, RuStore — `docs/rustore-release.md`, восстановление БД — `docs/migration-replit.md` + `backups/RESTORE.md`.
+
 # Aegis — Полная шпаргалка развёртывания и публикации в RuStore
 ## Для начинающих. Ничего не пропущено.
 
