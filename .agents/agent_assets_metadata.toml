@@ -53,4 +53,10 @@ title = "Бэкап БД — часть 3 из 3 (97 MB)"
 id = "iWDAg26CknacPyQx_Zn3k"
 uri = "file://exports/aegis-docs.zip"
 type = "unspecified"
-title = "Вся документация Aegis (zip)"
+title = "Вся документация Aegis (zip, обновлён)"
+
+[[outputs]]
+id = "j5SBivHtBGuvSi28ChUbw"
+uri = "file://replit.md"
+type = "text"
+title = "replit.md (обновлён)"

@@ -201,6 +201,11 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 
 > Полная история (Phase 0-10, T0→T12 milestones, retrain'ы, mobile UI waves,
 > infra) — `docs/changelog.md`. Здесь только PENDING.
+> **Статус 2026-07-17:** финальный мега-пакет DONE (аудит + 4 ML-фикса +
+> ретрейн series 87.6%* / live-totals 4/4 / market 10/10 + RuStore/миграция-доки
+> + бэкап `backups/aegis-db.part-*.gz`). *С оговоркой об остаточной утечке
+> двух фичей — см. `docs/changelog.md` 2026-07-17. TODO следующего ретрейна:
+> time-cutoff drop_rate + as-of pick_strangeness в series-модели.
 
 - **Фаза 9 баг-фиксы (in progress).** P0: F7 (Bovada events=0), F8 (e2e
   алертов). F1/F2/F3 уже в коде (см. комментарии «F1/F2 (Phase 9)» в
