@@ -232,31 +232,52 @@ async function computeDynamicForm(teamId: number): Promise<DynamicForm | null> {
 
 async function computeEloDecomp(teamId: number): Promise<EloDecomp | null> {
   try {
-    // Берём account_ids со стороны team_id в драфтах последних 30д матчей.
-    const r = await db.execute(sql`
-      WITH recent AS (
-        SELECT match_id, radiant_team_id, dire_team_id
-        FROM pro_matches
-        WHERE (radiant_team_id = ${teamId} OR dire_team_id = ${teamId})
-          AND start_time > EXTRACT(EPOCH FROM NOW() - INTERVAL '${sql.raw(String(ROSTER_LOOKBACK_DAYS))} days')
-      ),
-      accs AS (
-        SELECT DISTINCT (jsonb_array_elements_text(
-          CASE WHEN r.radiant_team_id = ${teamId} THEN md.radiant_account_ids
-               ELSE md.dire_account_ids END
-        ))::bigint AS account_id
-        FROM recent r
-        JOIN match_drafts md ON md.match_id = r.match_id
-        WHERE CASE WHEN r.radiant_team_id = ${teamId} THEN md.radiant_account_ids
-                   ELSE md.dire_account_ids END IS NOT NULL
-      )
+    // F6 (Phase 9): первичный источник — таблица team_rosters (E1
+    // ingest:od-team-rosters, 7d freshness): текущий ростер, top-5 по играм.
+    // Драфты свежих матчей часто ещё не заингестены (лаг ingest:drafts),
+    // из-за чего старое 30д-окно по match_drafts давало пустой результат
+    // даже для tier-1 команд.
+    const rosterRes = await db.execute(sql`
       SELECT pr.rating
-      FROM accs a
-      JOIN player_ratings pr ON pr.account_id = a.account_id
-      WHERE a.account_id > 0
+      FROM (
+        SELECT account_id
+        FROM team_rosters
+        WHERE team_id = ${teamId} AND is_current AND account_id > 0
+        ORDER BY games_played DESC
+        LIMIT 5
+      ) tr
+      JOIN player_ratings pr ON pr.account_id = tr.account_id
     `);
-    const ratings = (r.rows as Array<{ rating?: number }>)
+    let ratings = (rosterRes.rows as Array<{ rating?: number }>)
       .map(x => x.rating).filter((x): x is number => typeof x === 'number');
+
+    if (ratings.length === 0) {
+      // Fallback: account_ids со стороны team_id в драфтах последних 30д матчей.
+      const r = await db.execute(sql`
+        WITH recent AS (
+          SELECT match_id, radiant_team_id, dire_team_id
+          FROM pro_matches
+          WHERE (radiant_team_id = ${teamId} OR dire_team_id = ${teamId})
+            AND start_time > EXTRACT(EPOCH FROM NOW() - INTERVAL '${sql.raw(String(ROSTER_LOOKBACK_DAYS))} days')
+        ),
+        accs AS (
+          SELECT DISTINCT (jsonb_array_elements_text(
+            CASE WHEN r.radiant_team_id = ${teamId} THEN md.radiant_account_ids
+                 ELSE md.dire_account_ids END
+          ))::bigint AS account_id
+          FROM recent r
+          JOIN match_drafts md ON md.match_id = r.match_id
+          WHERE CASE WHEN r.radiant_team_id = ${teamId} THEN md.radiant_account_ids
+                     ELSE md.dire_account_ids END IS NOT NULL
+        )
+        SELECT pr.rating
+        FROM accs a
+        JOIN player_ratings pr ON pr.account_id = a.account_id
+        WHERE a.account_id > 0
+      `);
+      ratings = (r.rows as Array<{ rating?: number }>)
+        .map(x => x.rating).filter((x): x is number => typeof x === 'number');
+    }
     if (ratings.length === 0) {
       return { avgPlayerRating: null, playerRatingSpread: null, knownPlayers: 0, tierLevel: null };
     }

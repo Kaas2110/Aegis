@@ -892,3 +892,41 @@ systemd-таймеров под финальное расписание, фик�
 
 **Бэкап:** `backups/aegis-db.part-{00,01,02}.gz` (150+150+97MB) —
 pg_dump -Fc + gzip + split 150m. Восстановление: cat → gunzip → pg_restore.
+
+## 2026-07-17 — Фаза 9: все баг-фиксы закрыты (F4–F8)
+
+- **F7 (Bovada matched=0)** — два бага в `/api/bookmakers/matched/dota2`:
+  1. `toArray()` в `routes/bookmakers.ts` не понимал реальную форму ответа
+     `/api/matches/live` — `{ sources: [{ source, data: [...] }] }` — live-матчи
+     вообще не попадали в матчинг. Добавлено разворачивание `sources[].data`
+     + отдельный конвертер `liveToOurMatch()` для плоской live-формы
+     (`team_name_radiant/dire`, `match_id`/`ps_match_id`, `startsAt:null` —
+     окно ±2ч для live не применяется).
+  2. Alias-мисматч имён («BB Team» Bovada ≠ «BetBoom Team» PandaScore) —
+     в `BookmakerMatcher.ts` добавлен словарь `TOKEN_ALIAS`
+     (bb→betboom, vp/virtus→virtuspro, navi/natus/vincere→natusvincere),
+     токены нормализуются перед fuzzy-сравнением.
+  Проверено live: matched=2 (Falcons–Vici live + Nigma–BetBoom upcoming);
+  «Yandex vs Parivision» в unmatched легитимно — матча нет в нашем upcoming.
+- **F6 (team-compare все «—»)** — `computeEloDecomp()` в `teamProfile.ts`
+  зависел от `match_drafts` за 30д, которых у свежих матчей ещё нет (лаг
+  ingest:drafts). Теперь первичный источник — `team_rosters` (E1, is_current,
+  top-5 по games_played → join `player_ratings`), драфты остались фолбэком.
+  Проверено: Falcons отдаёт avgPlayerRating≈1609, spread≈24, 5 игроков.
+  У команд без покрытия ростера (Gaimin: 1 игрок без рейтинга) — честные null,
+  UI показывает баннер «данные накапливаются».
+- **F4 (тоталы рендерили имена команд вместо ТБ/ТМ)** — `MarketCard.tsx`:
+  для `total_kills`/`total_duration` линия парсится regex-ом из `market.label`
+  («Тотал убийств О/У 52.5» → «ТБ 52.5»/«ТМ 52.5», «…42мин» → «ТБ 42 мин»),
+  фолбэк без линии — «ТБ (больше)»/«ТМ (меньше)». e2e: тоталы на детальной
+  карточке показывают ТБ/ТМ, победитель матча — по-прежнему имена команд (ок).
+- **F5 (matchId → сводка)** — правки были в коде ранее (кнопка «Сводка матча»
+  скрывается при синтетическом id `up_…`/`od_…`; `summary/[id].tsx` фолбэк
+  `Number(id)`). e2e подтвердил: у live-матча с id `od_-…` кнопки нет
+  (корректно), `/api/analytics/match-summary?matchId=<числовой>` отвечает
+  структурой outcome/markets/liveSnapshots без ошибок.
+- **F8 (e2e алертов)** — сквозной тест на Expo web: онбординг + регистрация →
+  создание правила (label, уверенность ≥60%, mode any) → поллинг главного
+  экрана → алерт сработал по Team Lynx vs PuckChamp (match_winner conf 0.622),
+  карточка на вкладке «Сработавшие» с меткой правила и ~62%. In-app store,
+  cooldown и правило-матчинг работают.

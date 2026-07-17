@@ -1273,6 +1273,16 @@ router.get('/matched/dota2', async (req, res) => {
       const obj = v as Record<string, unknown>;
       if (Array.isArray(obj['matches'])) return obj['matches'] as unknown[];
       if (Array.isArray(obj['data'])) return obj['data'] as unknown[];
+      // F7 (Phase 9): /api/matches/live реально отвечает { sources: [{ source,
+      // data: [...] }] } — раньше эта форма не разворачивалась и live-матчи
+      // вообще не попадали в матчинг (все события буков уходили в unmatched).
+      if (Array.isArray(obj['sources'])) {
+        const out: unknown[] = [];
+        for (const s of obj['sources'] as Array<Record<string, unknown>>) {
+          if (s && Array.isArray(s['data'])) out.push(...(s['data'] as unknown[]));
+        }
+        return out;
+      }
     }
     return [];
   }
@@ -1306,14 +1316,59 @@ router.get('/matched/dota2', async (req, res) => {
     };
   }
 
+  // F7 (Phase 9): live-элементы из /api/matches/live (OpenDota и PandaScore
+  // live-конвертация) имеют плоскую форму { team_name_radiant, team_name_dire,
+  // match_id / ps_match_id, ... } — без opponents[]. Отдельный конвертер.
+  function liveToOurMatch(m: Record<string, unknown>): OurMatch | null {
+    const t1 = m['team_name_radiant'];
+    const t2 = m['team_name_dire'];
+    if (typeof t1 !== 'string' || typeof t2 !== 'string' || !t1 || !t2) return null;
+    const psId = m['ps_match_id'];
+    const rawId = m['match_id'] ?? psId;
+    if (rawId == null) return null;
+    return {
+      matchId: String(rawId),
+      psMatchId: typeof psId === 'number' ? psId : undefined,
+      team1Name: t1,
+      team2Name: t2,
+      team1Id: typeof m['team_id_radiant'] === 'number' ? (m['team_id_radiant'] as number) : undefined,
+      team2Id: typeof m['team_id_dire'] === 'number' ? (m['team_id_dire'] as number) : undefined,
+      startsAt: null, // live уже идёт — окно ±2ч не применяем
+      isLive: true,
+    };
+  }
+
+  // F7 (Phase 9): дедуп — один и тот же матч может прийти дважды:
+  // (а) только что начавшаяся серия видна и в live (OD match_id), и в
+  //     PS upcoming (begin_at в окне ±2ч);
+  // (б) при реактивации Stratz live один матч появится в двух sources[].
+  // Ключи: psMatchId + нормализованная пара имён (сортированная — порядок
+  // radiant/dire не важен). live добавляем первыми, чтобы приоритет был у них.
+  const seenPsIds = new Set<number>();
+  const seenPairs = new Set<string>();
+  const pairKey = (m: OurMatch): string =>
+    [m.team1Name, m.team2Name]
+      .map(n => n.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, ''))
+      .sort()
+      .join('::');
+  const pushUnique = (m: OurMatch): void => {
+    if (m.psMatchId != null && seenPsIds.has(m.psMatchId)) return;
+    const key = pairKey(m);
+    if (seenPairs.has(key)) return;
+    if (m.psMatchId != null) seenPsIds.add(m.psMatchId);
+    seenPairs.add(key);
+    ourMatches.push(m);
+  };
+
   const ourMatches: OurMatch[] = [];
   for (const m of liveRaw ?? []) {
-    const converted = psToOurMatch(m as Record<string, unknown>, true);
-    if (converted) ourMatches.push(converted);
+    const rec = m as Record<string, unknown>;
+    const converted = liveToOurMatch(rec) ?? psToOurMatch(rec, true);
+    if (converted) pushUnique(converted);
   }
   for (const m of upcomingRaw ?? []) {
     const converted = psToOurMatch(m as Record<string, unknown>, false);
-    if (converted) ourMatches.push(converted);
+    if (converted) pushUnique(converted);
   }
 
   const matched = matchBookmakerEvents(ourMatches, bookmakerEvents);

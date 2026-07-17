@@ -210,13 +210,12 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 > двух фичей — см. `docs/changelog.md` 2026-07-17. TODO следующего ретрейна:
 > time-cutoff drop_rate + as-of pick_strangeness в series-модели.
 
-- **Фаза 9 баг-фиксы (in progress).** P0: F7 (Bovada events=0), F8 (e2e
-  алертов). F1/F2/F3 уже в коде (см. комментарии «F1/F2 (Phase 9)» в
-  `(tabs)/index.tsx` + `href: null` для backtest в `(tabs)/_layout.tsx`) —
-  нужно прогнать e2e на эмуляторе. **F9 DONE 2026-05-19** — `MarketLgbm`
-  timeout 200 → 1500ms + AbortError не trip'ает circuit (см. `docs/changelog.md`).
-  Средние (P1): F4 (Сравнение коэф. рендерит имена вместо ТБ/ТМ), F5 (matchId
-  не доходит до match-summary), F6 (team-compare все «—»).
+- **Фаза 9 баг-фиксы — DONE 2026-07-17.** Все F4–F9 закрыты (детали —
+  `docs/changelog.md` 2026-07-17): F7 (live-форма `{sources:[…]}` в matched +
+  TOKEN_ALIAS в BookmakerMatcher; matched=2 live), F6 (eloDecomp с
+  team_rosters-приоритетом), F4 (ТБ/ТМ из label рынка), F5 (e2e-подтверждён),
+  F8 (сквозной e2e алертов на Expo web — правило 60% сработало). F1/F2/F3
+  ранее в коде, F9 DONE 2026-05-19.
 - **Mobile/UI без ML-зависимости:**
   - EV-merge на фронте — matching событий букмекеров к `pro_matches`, полный
     охват маркетов (winner/totals/firstBlood) для всех букмекеров.

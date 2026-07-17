@@ -16,6 +16,23 @@ const ORG_STOP = new Set([
   'team', 'gaming', 'esport', 'esports', 'club', 'fc', 'ex', 'former', 'the', 'gg',
 ]);
 
+// F7 (Phase 9): у букмекеров и PandaScore разные написания одних и тех же
+// организаций («BB Team» ↔ «BetBoom Team», «VP» ↔ «Virtus.pro»). Токены
+// нормализуем через словарь известных алиасов ПЕРЕД сравнением.
+const TOKEN_ALIAS: Record<string, string> = {
+  bb: 'betboom',
+  vp: 'virtuspro',
+  virtus: 'virtuspro',
+  navi: 'natusvincere',
+  natus: 'natusvincere',
+  vincere: 'natusvincere',
+};
+
+// Токены, различающие молодёжные/академические составы от основы.
+// Если один из сравниваемых нейм-сетов содержит такой токен, а другой нет —
+// это разные команды (даже если остальные токены совпали через alias).
+const DISCRIMINATOR_TOKENS = ['junior', 'jr', 'academy', 'youth', 'young'];
+
 function normalizeTeamName(name: string): string {
   return name
     .toLowerCase()
@@ -25,11 +42,13 @@ function normalizeTeamName(name: string): string {
 }
 
 function teamTokens(name: string): string[] {
-  return name
+  const tokens = name
     .toLowerCase()
     .split(/[^a-zа-яё0-9]+/i)
     .map(t => t.trim())
-    .filter(t => t.length >= 2 && !ORG_STOP.has(t));
+    .filter(t => t.length >= 2 && !ORG_STOP.has(t))
+    .map(t => TOKEN_ALIAS[t] ?? t);
+  return [...new Set(tokens)];
 }
 
 function fuzzyTeamMatch(a: string, b: string): boolean {
@@ -38,6 +57,11 @@ function fuzzyTeamMatch(a: string, b: string): boolean {
   const tokA = teamTokens(a);
   const tokB = teamTokens(b);
   if (!tokA.length || !tokB.length) return false;
+  // Дискриминаторы: «NAVI Junior» ≠ «Natus Vincere» — молодёжные/академ.
+  // составы не должны схлопываться с основой по subset-правилу.
+  for (const d of DISCRIMINATOR_TOKENS) {
+    if (tokA.includes(d) !== tokB.includes(d)) return false;
+  }
   const shorter = tokA.length <= tokB.length ? tokA : tokB;
   const longer  = tokA.length <= tokB.length ? tokB : tokA;
   return shorter.every(t => longer.includes(t));

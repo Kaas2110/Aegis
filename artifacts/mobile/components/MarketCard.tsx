@@ -47,8 +47,14 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
   const odds = market.bestOdds;
   const isPositiveEV = pred.ev > 0;
   const isTotalMarket = market.type === 'total_kills' || market.type === 'total_duration';
-  const t1Label = isTotalMarket ? (market.type === 'total_kills' ? 'Больше 52.5' : 'Больше 43.5 мин') : team1Name;
-  const t2Label = isTotalMarket ? (market.type === 'total_kills' ? 'Меньше 52.5' : 'Меньше 43.5 мин') : team2Name;
+  // F4 (Phase 9): линию тотала берём из label рынка (сервер шлёт «Тотал убийств
+  // О/У 52.5» / «Длительность О/У 42мин»), а не из хардкода. Если линию
+  // распарсить не удалось — показываем просто «ТБ/ТМ» без числа.
+  const lineMatch = isTotalMarket ? market.label.match(/(\d+(?:[.,]\d+)?)/) : null;
+  const lineStr = lineMatch ? lineMatch[1].replace(',', '.') : null;
+  const suffix = market.type === 'total_duration' ? ' мин' : '';
+  const t1Label = isTotalMarket ? (lineStr ? `ТБ ${lineStr}${suffix}` : 'ТБ (больше)') : team1Name;
+  const t2Label = isTotalMarket ? (lineStr ? `ТМ ${lineStr}${suffix}` : 'ТМ (меньше)') : team2Name;
   const edgePct = ((pred.edge) * 100).toFixed(1);
   const confPct = Math.round(pred.confidence * 100);
 
