@@ -349,7 +349,29 @@ async function applyMlMatchWinner(
   if (idx === -1) return result;
 
   const old = result.predictions[idx];
-  const probTeam1 = ml.probRadiantWin; // team1 = radiant в нашей нотации
+  // ML отдаёт P(серия | 0:0). Если серия уже идёт — пересчитываем аналитически
+  // (Layer A): инвертируем в per-map p и считаем P(серия | текущий счёт).
+  const { adjustSeriesProbForScore, perMapProbFromSeries } = await import('../services/BetTypeModels');
+  const fvSeries = result.featureVector;
+  const scoreS1 = fvSeries.seriesScore1 ?? 0;
+  const scoreS2 = fvSeries.seriesScore2 ?? 0;
+  let probTeam1 = adjustSeriesProbForScore(
+    ml.probRadiantWin, fvSeries.matchFormat, scoreS1, scoreS2,
+  ); // team1 = radiant в нашей нотации
+  let winnerVersion = ml.modelVersion;
+  // Layer B (T003): обучаемая mid-series модель (kind='series_mid') — если
+  // серия уже идёт и модель может собрать фичи (есть prev-карта в pro_matches),
+  // её вероятность заменяет аналитический Layer A. Fallback — Layer A выше.
+  if ((scoreS1 > 0 || scoreS2 > 0) && fvSeries.matchFormat !== 'BO1') {
+    try {
+      const { predictSeriesMid } = await import('../services/SeriesMidModel');
+      const mid = await predictSeriesMid(t1, t2, fvSeries.matchFormat, scoreS1, scoreS2);
+      if (mid) {
+        probTeam1 = mid.probTeamAWinsSeries;
+        winnerVersion = `${mid.modelVersion}+layerB`;
+      }
+    } catch { /* Layer A остаётся */ }
+  }
   const probTeam2 = 1 - probTeam1;
   // Edge/EV пересчитываем относительно тех же букмекерских коэффициентов.
   const odds1 = old.bookmakerOdds1;
@@ -368,7 +390,7 @@ async function applyMlMatchWinner(
     confidence: Math.max(probTeam1, probTeam2),
     edge,
     ev,
-    modelVersion: ml.modelVersion,
+    modelVersion: winnerVersion,
   };
 
   // Деривируем map_winner из ML-вероятности match_winner.
@@ -387,7 +409,11 @@ async function applyMlMatchWinner(
     const s1 = fv.seriesScore1 ?? 0;
     const s2 = fv.seriesScore2 ?? 0;
     const momentumAdj = s1 > s2 ? 0.025 : s2 > s1 ? -0.025 : 0;
-    const rawP = probTeam1 + earlyAdj + momentumAdj;
+    // База карты — per-map вероятность из ML P(серия|0:0), а не серийная.
+    const pMapBase = fv.matchFormat === 'BO1'
+      ? ml.probRadiantWin
+      : perMapProbFromSeries(ml.probRadiantWin, fv.matchFormat);
+    const rawP = pMapBase + earlyAdj + momentumAdj;
     const clamp = (v: number) => Math.max(0.05, Math.min(0.95, v));
     const mapProb1 = clamp(rawP);
     result.predictions[mapIdx] = {
@@ -424,23 +450,143 @@ router.post('/predict', async (req, res) => {
 
     const isLive = !!input.liveSnapshot;
     if (isLive) {
-      // Live-aware math по-прежнему считается (учитывает netWorthLead/
-      // killsLead/tower/aegis из liveSnapshot), НО match_winner/map_winner
-      // режем если у нас нет реального ELO команд — иначе мобилка с
-      // hardcode eloRating=1720 для обеих сторон получит честное math 50/50,
-      // что хуже, чем явное «прогноз недоступен». Live-winner ML-модель
-      // считает LiveWorker отдельно и пишет в predictionsTable; мобилка
-      // читает её через /api/matches/live → predictions.
+      // Стадийно-правильная live-ветка:
+      //  - map_winner (текущая карта) — свежий live-ML предикт из predictions
+      //    (LiveWorker пишет marketType='live_match_winner' каждые ~30s);
+      //  - match_winner (серия) — прематч-ML P(серия|0:0), пересчитанный
+      //    аналитически (Layer A) на текущий счёт серии;
+      //  - total_kills / total_duration — live-регрессии T3.5 если свежие.
+      // Live-aware math остаётся базой для остальных рынков.
       const result = runAnalytics(input, input.bookmakerOdds);
-      // Режем winner-рынки если у нас нет реального ELO хотя бы одной команды.
-      // Равные ELO у двух команд (e1===e2) — валидный кейс (реально равные пары),
-      // НЕ режем. Мобилка теперь не шлёт 1720-stub, поэтому undefined elo
-      // означает «нет данных в DB», а не «мобилка соврала».
       const e1 = input.team1.elo;
       const e2 = input.team2.elo;
       if (!e1 || !e2) {
         pruneWinnerMarkets(result);
       }
+      const { adjustSeriesProbForScore } = await import('../services/BetTypeModels');
+      const t1 = input.team1.teamId;
+      const t2 = input.team2.teamId;
+      const ls1 = input.seriesContext?.seriesScore1 ?? 0;
+      const ls2 = input.seriesContext?.seriesScore2 ?? 0;
+      const numericMatchId = Number(input.matchId);
+
+      // (a) match_winner = серия: ML прематч + Layer A пересчёт по счёту.
+      if (t1 && t2 && t1 !== t2) {
+        try {
+          const ml = await mlPredictMatchWinner(t1, t2);
+          if (ml) {
+            let pSeries = adjustSeriesProbForScore(ml.probRadiantWin, input.format, ls1, ls2);
+            let seriesVersion = `${ml.modelVersion}+seriesA`;
+            // Layer B (T003): mid-series модель заменяет Layer A когда серия
+            // уже идёт и фичи собираются (prev-карта уже в pro_matches).
+            if ((ls1 > 0 || ls2 > 0) && input.format !== 'BO1') {
+              try {
+                const { predictSeriesMid } = await import('../services/SeriesMidModel');
+                const mid = await predictSeriesMid(t1, t2, input.format, ls1, ls2);
+                if (mid) {
+                  pSeries = mid.probTeamAWinsSeries;
+                  seriesVersion = `${mid.modelVersion}+layerB`;
+                }
+              } catch { /* Layer A остаётся */ }
+            }
+            const idx = result.predictions.findIndex(p => p.betType === 'match_winner');
+            const patched = {
+              probTeam1: pSeries,
+              probTeam2: 1 - pSeries,
+              confidence: Math.max(pSeries, 1 - pSeries),
+              modelVersion: seriesVersion,
+            };
+            if (idx !== -1) {
+              result.predictions[idx] = { ...result.predictions[idx], ...patched };
+            }
+          }
+        } catch (err) {
+          req.log.warn({ err, matchId: input.matchId }, 'live predict: series ML recompute failed');
+        }
+      }
+
+      // (b) map_winner = текущая карта: свежий live-ML из predictions (≤180s).
+      if (Number.isFinite(numericMatchId)) {
+        try {
+          const rows = await db
+            .select({
+              p1: predictionsTable.modelProbTeam1,
+              version: predictionsTable.modelVersion,
+              predictedAt: predictionsTable.predictedAt,
+            })
+            .from(predictionsTable)
+            .where(and(
+              eq(predictionsTable.matchId, numericMatchId),
+              eq(predictionsTable.marketType, 'live_match_winner'),
+            ))
+            .orderBy(desc(predictionsTable.predictedAt))
+            .limit(1);
+          if (rows.length > 0 && Number.isFinite(rows[0].p1)) {
+            const ageSec = (Date.now() - new Date(rows[0].predictedAt).getTime()) / 1000;
+            if (ageSec <= 180) {
+              const mapIdx = result.predictions.findIndex(p => p.betType === 'map_winner');
+              if (mapIdx !== -1) {
+                const pMap = Math.max(0.02, Math.min(0.98, rows[0].p1));
+                result.predictions[mapIdx] = {
+                  ...result.predictions[mapIdx],
+                  probTeam1: pMap,
+                  probTeam2: 1 - pMap,
+                  confidence: Math.max(pMap, 1 - pMap),
+                  modelVersion: rows[0].version,
+                };
+              }
+            }
+          }
+        } catch (err) {
+          req.log.warn({ err, matchId: input.matchId }, 'live predict: live_match_winner lookup failed');
+        }
+
+        // (c) live-тоталы T3.5: median из log-normal (mean в log-space) вместо
+        // прематч-математики. Если свежего live-предикта нет — рынок остаётся math.
+        try {
+          const { probLogNormalOver } = await import('../services/MarketLgbm');
+          for (const [betType, marketType] of [
+            ['total_kills', 'live_total_kills'],
+            ['total_duration', 'live_total_duration'],
+          ] as const) {
+            const rows = await db
+              .select({
+                mean: predictionsTable.modelProbTeam1,
+                std: predictionsTable.modelProbTeam2,
+                version: predictionsTable.modelVersion,
+                predictedAt: predictionsTable.predictedAt,
+              })
+              .from(predictionsTable)
+              .where(and(
+                eq(predictionsTable.matchId, numericMatchId),
+                eq(predictionsTable.marketType, marketType),
+              ))
+              .orderBy(desc(predictionsTable.predictedAt))
+              .limit(1);
+            if (rows.length === 0) continue;
+            const ageSec = (Date.now() - new Date(rows[0].predictedAt).getTime()) / 1000;
+            if (ageSec > 180 || !Number.isFinite(rows[0].mean) || !(rows[0].std > 0)) continue;
+            const tIdx = result.predictions.findIndex(p => p.betType === betType);
+            if (tIdx === -1) continue;
+            const old = result.predictions[tIdx];
+            // Линии совпадают с дефолтами math-моделей (52.5 киллов / 42.0 мин);
+            // live-модель отдаёт log-space mean/std → P(over line) из log-normal.
+            const lineRaw = betType === 'total_kills' ? 52.5 : 42.0;
+            const lineForProb = betType === 'total_duration' ? lineRaw * 60 : lineRaw;
+            const pOver = probLogNormalOver(lineForProb, rows[0].mean, Math.max(1e-3, rows[0].std));
+            result.predictions[tIdx] = {
+              ...old,
+              probTeam1: pOver,
+              probTeam2: 1 - pOver,
+              confidence: Math.max(pOver, 1 - pOver),
+              modelVersion: rows[0].version,
+            };
+          }
+        } catch (err) {
+          req.log.warn({ err, matchId: input.matchId }, 'live predict: live totals override failed');
+        }
+      }
+
       res.json(result);
       return;
     }

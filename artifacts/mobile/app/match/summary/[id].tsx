@@ -153,11 +153,11 @@ export default function MatchSummaryScreen() {
               </Text>
             </View>
             <Text style={[styles.hint, { color: colors.mutedForeground, lineHeight: 18 }]}>
-              Здесь собран post-mortem по матчу: что предсказывала модель ДО старта,
-              чем матч закончился на самом деле, насколько модель ошиблась
+              Здесь собран разбор матча: каким был прогноз ДО старта,
+              чем матч закончился на самом деле, насколько прогноз ошибся
               (калибровка), какие маркеты были на момент прогноза и сколько
               live-снапшотов удалось снять. Полезно, чтобы понять — почему
-              модель промахнулась, или наоборот, на чём она выиграла.
+              прогноз промахнулся, или наоборот, на чём он выиграл.
             </Text>
           </View>
 
@@ -188,13 +188,13 @@ export default function MatchSummaryScreen() {
                 </Text>
               </View>
               <View style={styles.kvRow}>
-                <Text style={[styles.kvLabel, { color: colors.mutedForeground }]}>Уверенность модели</Text>
+                <Text style={[styles.kvLabel, { color: colors.mutedForeground }]}>Уверенность прогноза</Text>
                 <Text style={[styles.kvVal, { color: colors.foreground }]}>
                   {fmtPct(data.outcome.predictedConfidence)}
                 </Text>
               </View>
               <View style={styles.kvRow}>
-                <Text style={[styles.kvLabel, { color: colors.mutedForeground }]}>Модель</Text>
+                <Text style={[styles.kvLabel, { color: colors.mutedForeground }]}>Версия прогноза</Text>
                 <Text style={[styles.kvValSmall, { color: colors.mutedForeground }]} numberOfLines={1}>
                   {data.outcome.modelVersion ?? '—'}
                 </Text>

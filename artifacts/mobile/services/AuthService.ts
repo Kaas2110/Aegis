@@ -67,11 +67,11 @@ function apiBase(): string {
   return '';
 }
 
-export async function register(email: string, password: string): Promise<AuthUser> {
+export async function register(email: string, password: string, promoCode?: string): Promise<AuthUser> {
   const res = await fetch(`${apiBase()}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(promoCode?.trim() ? { email, password, promoCode: promoCode.trim() } : { email, password }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {

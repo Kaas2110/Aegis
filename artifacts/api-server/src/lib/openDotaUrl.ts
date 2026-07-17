@@ -86,14 +86,22 @@ export function getOdUsageStats(): OdUsageStats {
   };
 }
 
+/**
+ * FREE MODE: ключ добавляется ТОЛЬКО при OPENDOTA_USE_PREMIUM=true.
+ * Иначе — free tier (60 req/min, 3000 req/day), запросы не тарифицируются.
+ */
+export function isOpenDotaPremium(): boolean {
+  return process.env.OPENDOTA_USE_PREMIUM === 'true' && !!process.env.OPENDOTA_API_KEY;
+}
+
 export function withOpenDotaKey(url: string): string {
   recordOdCall();
-  const key = process.env.OPENDOTA_API_KEY;
-  if (!key) return url;
+  if (!isOpenDotaPremium()) return url;
+  const key = process.env.OPENDOTA_API_KEY!;
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}api_key=${encodeURIComponent(key)}`;
 }
 
 export function hasOpenDotaKey(): boolean {
-  return Boolean(process.env.OPENDOTA_API_KEY);
+  return isOpenDotaPremium();
 }

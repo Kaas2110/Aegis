@@ -40,6 +40,10 @@ import type {
   AdminOpenObject,
   AdminPruneInput,
   AdminPruneResult,
+  AdminRefCodeCreateInput,
+  AdminRefCodeOnlyResponse,
+  AdminRefCodePatchInput,
+  AdminRefCodesResponse,
   AdminRetrainResult,
   AdminSettingsInput,
   AdminSettingsOnlyResponse,
@@ -614,6 +618,254 @@ export const useUpdateAdminSettings = <
   TContext
 > => {
   return useMutation(getUpdateAdminSettingsMutationOptions(options));
+};
+
+/**
+ * @summary Реферальные коды («Источники») со статистикой кликов и регистраций
+ */
+export const getListAdminRefCodesUrl = () => {
+  return `/api/admin/ref-codes`;
+};
+
+export const listAdminRefCodes = async (
+  options?: RequestInit,
+): Promise<AdminRefCodesResponse> => {
+  return customFetch<AdminRefCodesResponse>(getListAdminRefCodesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminRefCodesQueryKey = () => {
+  return [`/api/admin/ref-codes`] as const;
+};
+
+export const getListAdminRefCodesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminRefCodes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminRefCodes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminRefCodesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminRefCodes>>
+  > = ({ signal }) => listAdminRefCodes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminRefCodes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminRefCodesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminRefCodes>>
+>;
+export type ListAdminRefCodesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Реферальные коды («Источники») со статистикой кликов и регистраций
+ */
+
+export function useListAdminRefCodes<
+  TData = Awaited<ReturnType<typeof listAdminRefCodes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminRefCodes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminRefCodesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Создать реферальный код
+ */
+export const getCreateAdminRefCodeUrl = () => {
+  return `/api/admin/ref-codes`;
+};
+
+export const createAdminRefCode = async (
+  adminRefCodeCreateInput: AdminRefCodeCreateInput,
+  options?: RequestInit,
+): Promise<AdminRefCodeOnlyResponse> => {
+  return customFetch<AdminRefCodeOnlyResponse>(getCreateAdminRefCodeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminRefCodeCreateInput),
+  });
+};
+
+export const getCreateAdminRefCodeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAdminRefCode>>,
+    TError,
+    { data: BodyType<AdminRefCodeCreateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAdminRefCode>>,
+  TError,
+  { data: BodyType<AdminRefCodeCreateInput> },
+  TContext
+> => {
+  const mutationKey = ["createAdminRefCode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAdminRefCode>>,
+    { data: BodyType<AdminRefCodeCreateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createAdminRefCode(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAdminRefCodeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAdminRefCode>>
+>;
+export type CreateAdminRefCodeMutationBody = BodyType<AdminRefCodeCreateInput>;
+export type CreateAdminRefCodeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Создать реферальный код
+ */
+export const useCreateAdminRefCode = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAdminRefCode>>,
+    TError,
+    { data: BodyType<AdminRefCodeCreateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAdminRefCode>>,
+  TError,
+  { data: BodyType<AdminRefCodeCreateInput> },
+  TContext
+> => {
+  return useMutation(getCreateAdminRefCodeMutationOptions(options));
+};
+
+/**
+ * @summary Обновить реферальный код (active/label)
+ */
+export const getPatchAdminRefCodeUrl = (id: number) => {
+  return `/api/admin/ref-codes/${id}`;
+};
+
+export const patchAdminRefCode = async (
+  id: number,
+  adminRefCodePatchInput: AdminRefCodePatchInput,
+  options?: RequestInit,
+): Promise<AdminRefCodeOnlyResponse> => {
+  return customFetch<AdminRefCodeOnlyResponse>(getPatchAdminRefCodeUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminRefCodePatchInput),
+  });
+};
+
+export const getPatchAdminRefCodeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAdminRefCode>>,
+    TError,
+    { id: number; data: BodyType<AdminRefCodePatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchAdminRefCode>>,
+  TError,
+  { id: number; data: BodyType<AdminRefCodePatchInput> },
+  TContext
+> => {
+  const mutationKey = ["patchAdminRefCode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchAdminRefCode>>,
+    { id: number; data: BodyType<AdminRefCodePatchInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchAdminRefCode(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchAdminRefCodeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchAdminRefCode>>
+>;
+export type PatchAdminRefCodeMutationBody = BodyType<AdminRefCodePatchInput>;
+export type PatchAdminRefCodeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Обновить реферальный код (active/label)
+ */
+export const usePatchAdminRefCode = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAdminRefCode>>,
+    TError,
+    { id: number; data: BodyType<AdminRefCodePatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchAdminRefCode>>,
+  TError,
+  { id: number; data: BodyType<AdminRefCodePatchInput> },
+  TContext
+> => {
+  return useMutation(getPatchAdminRefCodeMutationOptions(options));
 };
 
 /**

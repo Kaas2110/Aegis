@@ -10,6 +10,7 @@ import adminAuthRouter from "./adminAuth";
 import clientLogsRouter from "./clientLogs";
 import clientConfigRouter from "./clientConfig";
 import userAuthRouter from "./userAuth";
+import referralsRouter from "./referrals";
 
 const router: IRouter = Router();
 
@@ -22,6 +23,9 @@ router.use("/teams", teamsRouter);
 router.use("/client-logs", clientLogsRouter);
 router.use("/client-config", clientConfigRouter);
 router.use("/auth", userAuthRouter);
+// Рефералки: /api/r/:code. На ноуте (без префикс-прокси) дополнительно
+// монтируется как /r/:code в app.ts.
+router.use("/r", referralsRouter);
 
 // Auth endpoints (login/logout/whoami) — public, mounted BEFORE admin router so
 // they aren't gated by the admin auth middleware. They consume `req.body.token`

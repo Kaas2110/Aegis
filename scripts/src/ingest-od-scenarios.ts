@@ -21,10 +21,10 @@
 
 import { db, heroStatsTable, heroScenariosTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { withOpenDotaKey } from './lib/openDotaUrl.js';
+import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl.js';
 
 const FRESHNESS_HOURS = 24;
-const DELAY_MS = 150;
+const DELAY_MS = odThrottleMs(150);
 const OD_BASE = 'https://api.opendota.com/api';
 
 async function sleep(ms: number) {

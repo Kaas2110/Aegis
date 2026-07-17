@@ -22,6 +22,8 @@ router.get('/', async (_req, res) => {
     return {
       pollLiveSec: s.mobilePollLiveSec,
       pollIdleSec: s.mobilePollIdleSec,
+      // T005: показывать ли поле промокода на экране регистрации.
+      promoFieldEnabled: s.promoFieldEnabled,
       // Reserved для будущего push-обновления конфига мобилы (feature flags etc).
       version: 1,
     };

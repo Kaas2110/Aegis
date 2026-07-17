@@ -19,6 +19,10 @@ export const usersTable = pgTable(
       .notNull()
       .default(sql`now()`),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    /** Тариф пользователя: 'free' | 'basic' | 'premium'. Пока все 'free'. */
+    tariff: text('tariff').notNull().default('free'),
+    /** Промокод источника (ref_codes.code), указанный при регистрации. */
+    refCode: text('ref_code'),
   },
   (t) => [
     // Email уникален case-insensitive. На уровне БД enforce'им через unique

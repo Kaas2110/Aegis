@@ -163,7 +163,7 @@ export default function MatchDetailScreen() {
   // Подвкладки во вкладке «Драфт» — для серий BO3/BO5 пользователь хочет
   // переключаться между картами. Пока бэк отдаёт draft только для текущей карты,
   // на картах 2/3 показываем заглушку «откроется когда стартует карта N».
-  const [draftMapTab, setDraftMapTab] = useState<1 | 2 | 3>(1);
+  const [draftMapTab, setDraftMapTab] = useState<number>(1);
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   // ── Гуманизированное объяснение прогноза от бэка (T006) ───────────────────
@@ -378,22 +378,12 @@ export default function MatchDetailScreen() {
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel="Сводка матча"
-                accessibilityHint="Показать прогноз, факт и калибровку модели"
+                accessibilityHint="Показать прогноз и фактический результат"
               >
                 <Feather name="file-text" size={18} color={colors.primary} />
               </TouchableOpacity>
             );
           })()}
-          {/* Сравнение коэффициентов */}
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/market-compare/[id]', params: { id: match.id } })}
-            style={styles.compareBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Сравнить коэффициенты букмекеров"
-          >
-            <Feather name="bar-chart" size={18} color={colors.primary} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -445,7 +435,7 @@ export default function MatchDetailScreen() {
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <SectionTitle title="Вероятность победы" colors={colors} />
                 <Text style={{ color: colors.mutedForeground, fontSize: 13, lineHeight: 18 }}>
-                  Прогноз победителя недоступен — у одной из команд нет истории матчей в нашей базе для ML-модели. Никаких math-моделей с дефолтным рейтингом мы не показываем (это были бы фейковые 50/50).
+                  Прогноз победителя недоступен — у одной из команд недостаточно истории матчей в нашей базе. Приблизительные оценки мы не показываем.
                 </Text>
               </View>
             )}
@@ -575,8 +565,9 @@ export default function MatchDetailScreen() {
               </View>
             )}
 
-            {/* T005: Тоталы карусель — ориентиры от модели */}
-            {explain && (
+            {/* T005: Тоталы карусель. T004: без прогноза блок скрываем полностью
+                (никаких «Данные загружаются»-заглушек). */}
+            {explain && explain.totals.usedMlModel && (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <SectionTitle title="Прогноз по тоталам" colors={colors} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
@@ -596,9 +587,7 @@ export default function MatchDetailScreen() {
                   />
                 </ScrollView>
                 <Text style={[styles.sectionHint, { color: colors.mutedForeground, marginTop: 8 }]}>
-                  {explain.totals.usedMlModel
-                    ? 'На основе статистики прошлых матчей этих команд'
-                    : 'Данные загружаются'}
+                  На основе статистики прошлых матчей этих команд
                 </Text>
               </View>
             )}
@@ -622,9 +611,12 @@ export default function MatchDetailScreen() {
           <View style={styles.section}>
             {/* T005: подвкладки по картам. Для BO3/BO5 — реальные карты,
                 для BO1 — единственная карта без выбора. */}
-            {(match.format === 'BO3' || match.format === 'BO5') && (
+            {match.format !== 'BO1' && (
               <View style={[styles.mapSubTabs, { backgroundColor: colors.muted }]}>
-                {([1, 2, 3] as const).map(n => {
+                {Array.from(
+                  { length: match.format === 'BO5' ? 5 : 3 },
+                  (_, i) => i + 1,
+                ).map(n => {
                   const active = draftMapTab === n;
                   const isCurrent = n === (match.currentMapNumber ?? 1);
                   return (
@@ -749,7 +741,6 @@ export default function MatchDetailScreen() {
                     team2Name={match.team2.name}
                     onPress={async () => {
                       await logProductEvent('market_card_viewed', 'match_detail', { matchId: match.id, marketId: mkt.id });
-                      router.push({ pathname: '/market-compare/[id]', params: { id: match.id } });
                     }}
                   />
                 );

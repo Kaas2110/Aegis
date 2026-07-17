@@ -14,6 +14,7 @@
 
 import { db, teamsTable, teamRatingSnapshotsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
+import { odThrottleMs } from './lib/openDotaUrl';
 
 interface OpenDotaTeamDetail {
   team_id: number;
@@ -25,7 +26,7 @@ interface OpenDotaTeamDetail {
   tag: string | null;
 }
 
-const THROTTLE_MS = 200; // 5 req/s
+const THROTTLE_MS = odThrottleMs(200); // premium: 5 req/s; free: ~1 req/s
 
 async function fetchTeam(id: number, withKey: (url: string) => string): Promise<OpenDotaTeamDetail | null> {
   const url = withKey(`https://api.opendota.com/api/teams/${id}`);

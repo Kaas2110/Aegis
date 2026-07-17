@@ -90,6 +90,13 @@ export interface AdminAppSettings {
   mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
+  /** Показывать ли поле промокода на экране регистрации мобилки */
+  promoFieldEnabled?: boolean;
+  /**
+   * URL лендинга для реферальных редиректов /r/:code (null = дефолт)
+   * @nullable
+   */
+  refRedirectUrl?: string | null;
   /** ISO-8601 timestamp */
   updatedAt: string;
 }

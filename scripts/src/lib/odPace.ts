@@ -3,10 +3,10 @@
  * Throttle 50ms = 20 req/s — безопасно ниже premium лимита 50 req/s.
  * Таймауты, авторизация и подсчёт ошибок — здесь.
  */
-import { withOpenDotaKey } from './openDotaUrl.js';
+import { withOpenDotaKey, odThrottleMs } from './openDotaUrl.js';
 
 export const OD_BASE = 'https://api.opendota.com/api';
-export const DELAY_MS = 50;
+export const DELAY_MS = odThrottleMs(50);
 export const TIMEOUT_MS = 15_000;
 
 export async function sleep(ms: number): Promise<void> {

@@ -43,7 +43,7 @@ export function ProbabilityTimeline({ data, team1Name, team2Name }: Props) {
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: colors.chart1 }]} />
-          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Модель</Text>
+          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Прогноз</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDash, { backgroundColor: colors.chart3 }]} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
@@ -33,8 +33,29 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [promoEnabled, setPromoEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Поле промокода включается динамически через /api/client-config
+  // (админ может включить/выключить без релиза приложения).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const base = (globalThis as { process?: { env?: Record<string, string> } })
+          .process?.env?.['EXPO_PUBLIC_API_URL']?.replace(/\/$/, '') ?? '';
+        const res = await fetch(`${base}/api/client-config`);
+        if (!res.ok) return;
+        const cfg = (await res.json()) as { promoFieldEnabled?: boolean };
+        if (!cancelled) setPromoEnabled(cfg.promoFieldEnabled === true);
+      } catch {
+        // нет связи — просто не показываем поле
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -48,7 +69,7 @@ export default function AuthScreen() {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (mode === 'login') await login(email.trim().toLowerCase(), password);
-      else await register(email.trim().toLowerCase(), password);
+      else await register(email.trim().toLowerCase(), password, promoCode.trim() || undefined);
       router.replace('/(tabs)');
     } catch (err) {
       const code = err instanceof Error ? err.message : 'network';
@@ -115,6 +136,24 @@ export default function AuthScreen() {
             editable={!busy}
             style={[styles.input, { backgroundColor: colors.card, color: fg, borderColor: colors.border }]}
           />
+
+          {mode === 'register' && promoEnabled && (
+            <>
+              <Text style={[styles.label, { color: colors.mutedForeground, marginTop: 12 }]}>
+                Промокод <Text style={{ color: colors.mutedForeground }}>(необязательно)</Text>
+              </Text>
+              <TextInput
+                value={promoCode}
+                onChangeText={setPromoCode}
+                placeholder="если есть — введите код"
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+                style={[styles.input, { backgroundColor: colors.card, color: fg, borderColor: colors.border }]}
+              />
+            </>
+          )}
 
           {error && (
             <View style={[styles.errorBox, { backgroundColor: colors.destructive + '18', borderColor: colors.destructive + '55' }]}>

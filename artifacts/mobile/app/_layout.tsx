@@ -35,7 +35,6 @@ function RootLayoutNav() {
       <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="match/[id]" options={{ presentation: 'card' }} />
-      <Stack.Screen name="market-compare/[id]" options={{ presentation: 'card' }} />
       <Stack.Screen name="admin" options={{ presentation: 'card' }} />
       <Stack.Screen name="glossary" options={{ presentation: 'card' }} />
     </Stack>

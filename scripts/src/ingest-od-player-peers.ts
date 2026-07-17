@@ -17,10 +17,10 @@
 
 import { db, matchDraftsTable, playerPeersTable } from '@workspace/db';
 import { sql, inArray } from 'drizzle-orm';
-import { withOpenDotaKey } from './lib/openDotaUrl.js';
+import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl.js';
 
 const FRESHNESS_DAYS = 7;
-const DELAY_MS = 200;
+const DELAY_MS = odThrottleMs(200);
 const MIN_GAMES = 5;
 const OD_BASE = 'https://api.opendota.com/api';
 

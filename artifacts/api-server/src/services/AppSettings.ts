@@ -27,6 +27,8 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   mobilePollLiveSec: 60,
   mobilePollIdleSec: 120,
   notes: null,
+  promoFieldEnabled: false,
+  refRedirectUrl: null,
   monetizationMode: null,
   featureFlags: null,
   storeSettings: null,
@@ -75,6 +77,8 @@ export async function updateAppSettings(
     | 'mobilePollLiveSec'
     | 'mobilePollIdleSec'
     | 'notes'
+    | 'promoFieldEnabled'
+    | 'refRedirectUrl'
   >>,
 ): Promise<AppSettings> {
   await getAppSettings();

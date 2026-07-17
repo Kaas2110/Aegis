@@ -23,7 +23,7 @@ import {
   timingSafeEqual,
   createHmac,
 } from 'node:crypto';
-import { db, usersTable } from '@workspace/db';
+import { db, usersTable, refCodesTable } from '@workspace/db';
 import { eq, sql } from 'drizzle-orm';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -187,10 +187,26 @@ router.post('/register', async (req, res) => {
       res.status(409).json({ error: 'email_already_registered' });
       return;
     }
+    // T005: опциональный промокод. Сохраняем ТОЛЬКО если он существует и
+    // активен в ref_codes — иначе молча игнорируем (регистрация не ломается).
+    let refCode: string | null = null;
+    const rawPromo = (req.body as Record<string, unknown>)['promoCode'];
+    if (typeof rawPromo === 'string') {
+      const promo = rawPromo.trim().toLowerCase();
+      if (/^[a-z0-9_-]{1,64}$/.test(promo)) {
+        const found = await db
+          .select({ id: refCodesTable.id })
+          .from(refCodesTable)
+          .where(sql`lower(${refCodesTable.code}) = ${promo} AND ${refCodesTable.active} = true`)
+          .limit(1);
+        if (found.length > 0) refCode = promo;
+      }
+    }
+
     const passwordHash = hashPassword(password);
     const inserted = await db
       .insert(usersTable)
-      .values({ email, passwordHash, lastLoginAt: new Date() })
+      .values({ email, passwordHash, lastLoginAt: new Date(), refCode })
       .returning({ id: usersTable.id, email: usersTable.email, createdAt: usersTable.createdAt });
     const user = inserted[0];
     if (!user) throw new Error('insert_failed');

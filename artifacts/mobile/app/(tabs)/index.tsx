@@ -276,11 +276,15 @@ export default function HomeScreen() {
     return map;
   }, [enrichedLive, enrichedPrematch]);
 
-  function getBestMarket(matchId: string): Market | undefined {
+  function getBestMarket(matchId: string, isLiveMatch = false): Market | undefined {
     const mkts = marketsMap.get(matchId) ?? [];
     if (mkts.length === 0) return undefined;
 
-    // Жёсткий приоритет: match_winner ВСЕГДА первым.
+    // T004: для ЛАЙВ-матчей главный % на карточке — победитель ТЕКУЩЕЙ КАРТЫ
+    // (map_winner), а серия (match_winner) показывается отдельной строкой
+    // (см. seriesMarket ниже). Для prematch приоритет прежний.
+    //
+    // Жёсткий приоритет (prematch): match_winner ВСЕГДА первым.
     // Map_winner, тоталы и прочие — только если match_winner недоступен.
     //
     // Почему НЕ используем EV-сортировку внутри winner-типов:
@@ -289,19 +293,22 @@ export default function HomeScreen() {
     // match_winner реальный прогноз (33% для REK × 6.50) даёт ev≈1.1,
     // а у map_winner заглушка 50% × 6.50 даёт ev≈2.25 → алгоритм выбирает
     // карту с ложным EV, а не матч-виннер с честным прогнозом.
-    const TYPE_PRIORITY = [
-      'match_winner',
-      'map_winner',
-      'first_blood',
-      'total_kills',
-      'total_duration',
-    ];
+    const TYPE_PRIORITY = isLiveMatch
+      ? ['map_winner', 'match_winner', 'first_blood', 'total_kills', 'total_duration']
+      : ['match_winner', 'map_winner', 'first_blood', 'total_kills', 'total_duration'];
 
     for (const type of TYPE_PRIORITY) {
       const m = mkts.find(mkt => mkt.type === type);
       if (m) return m;
     }
     return mkts[0];
+  }
+
+  /** T004: серия отдельной строкой на live-карточке (если главный % — карта). */
+  function getSeriesMarket(matchId: string, bestMarket?: Market): Market | undefined {
+    if (!bestMarket || bestMarket.type !== 'map_winner') return undefined;
+    const mkts = marketsMap.get(matchId) ?? [];
+    return mkts.find(mkt => mkt.type === 'match_winner');
   }
 
   type SectionItem =
@@ -486,11 +493,13 @@ export default function HomeScreen() {
 
           if (item.type === 'match') {
             const match = item.match;
-            const bestMarket = getBestMarket(match.id);
+            const isLiveMatch = match.status === 'live' || match.status === 'between_maps';
+            const bestMarket = getBestMarket(match.id, isLiveMatch);
             return (
               <MatchCard
                 match={match}
                 bestMarket={bestMarket}
+                seriesMarket={getSeriesMarket(match.id, bestMarket)}
                 predictionStatus={statusMap.get(match.id) ?? 'pending'}
                 onPress={async () => {
                   await logProductEvent('match_detail_opened', 'home', { matchId: match.id });

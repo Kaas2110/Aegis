@@ -13,4 +13,6 @@ export interface ClientConfig {
   pollIdleSec: number;
   /** Версия конфига (на будущее, для push-обновлений) */
   version: number;
+  /** Показывать ли поле промокода на экране регистрации */
+  promoFieldEnabled: boolean;
 }

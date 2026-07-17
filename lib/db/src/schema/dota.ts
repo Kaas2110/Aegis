@@ -593,6 +593,10 @@ export const appSettingsTable = pgTable('app_settings', {
   mobilePollLiveSec: integer('mobile_poll_live_sec').notNull().default(60),
   mobilePollIdleSec: integer('mobile_poll_idle_sec').notNull().default(120),
   notes: text('notes'),
+  // ── Рефералки (T005): показывать ли поле промокода при регистрации в мобилке
+  // (отдаётся через GET /api/client-config) и куда редиректит GET /r/:code.
+  promoFieldEnabled: boolean('promo_field_enabled').notNull().default(false),
+  refRedirectUrl: text('ref_redirect_url'),
   // ── Legacy monetization (зарезервировано под платную модель: $4/нед, $15/мес) ──
   // Колонки физически есть в БД, кодом сейчас не читаются, но сохраняем как
   // pass-through конфиг для будущего Lite/Premium gating. Не дропать.

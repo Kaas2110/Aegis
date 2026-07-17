@@ -109,7 +109,7 @@ export function TotalsLadder({
           </Text>
           {data?.liveSource && (
             <Text style={[styles.subline, { color: colors.primary }]} numberOfLines={1}>
-              ⚡ live-модель (по текущему счёту/нетворту)
+              ⚡ live-прогноз (по текущему счёту/нетворту)
             </Text>
           )}
           {data?.projection && (
@@ -200,7 +200,7 @@ export function TotalsLadder({
           {!loading && !error && data && !data.unavailable && data.lines.length > 0 && (
             <View style={styles.footer}>
               <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-                Уверенность модели: {Math.round(data.confidence * 100)}%
+                Уверенность прогноза: {Math.round(data.confidence * 100)}%
               </Text>
               <FreshnessIndicator ageSeconds={Math.floor((Date.now() - new Date(data.generatedAt).getTime()) / 1000)} />
             </View>

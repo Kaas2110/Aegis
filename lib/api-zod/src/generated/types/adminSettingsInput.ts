@@ -80,4 +80,7 @@ export interface AdminSettingsInput {
   mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
+  promoFieldEnabled?: boolean;
+  /** @nullable */
+  refRedirectUrl?: string | null;
 }

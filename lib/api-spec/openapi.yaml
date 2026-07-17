@@ -118,6 +118,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminSettingsOnlyResponse"
 
+  /admin/ref-codes:
+    get:
+      operationId: listAdminRefCodes
+      tags: [admin]
+      summary: Реферальные коды («Источники») со статистикой кликов и регистраций
+      responses:
+        "200":
+          description: Коды + статистика
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefCodesResponse"
+    post:
+      operationId: createAdminRefCode
+      tags: [admin]
+      summary: Создать реферальный код
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRefCodeCreateInput"
+      responses:
+        "200":
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefCodeOnlyResponse"
+
+  /admin/ref-codes/{id}:
+    patch:
+      operationId: patchAdminRefCode
+      tags: [admin]
+      summary: Обновить реферальный код (active/label)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRefCodePatchInput"
+      responses:
+        "200":
+          description: Обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRefCodeOnlyResponse"
+
   /admin/metrics:
     get:
       operationId: getAdminMetrics
@@ -607,12 +662,18 @@ components:
           maximum: 3600
         notes:
           type: ["string", "null"]
+        promoFieldEnabled:
+          type: boolean
+          description: Показывать ли поле промокода на экране регистрации мобилки
+        refRedirectUrl:
+          type: ["string", "null"]
+          description: URL лендинга для реферальных редиректов /r/:code (null = дефолт)
         updatedAt:
           type: string
           description: ISO-8601 timestamp
     ClientConfig:
       type: object
-      required: [pollLiveSec, pollIdleSec, version]
+      required: [pollLiveSec, pollIdleSec, version, promoFieldEnabled]
       properties:
         pollLiveSec:
           type: integer
@@ -623,6 +684,9 @@ components:
         version:
           type: integer
           description: Версия конфига (на будущее, для push-обновлений)
+        promoFieldEnabled:
+          type: boolean
+          description: Показывать ли поле промокода на экране регистрации
 
     AdminSettingsResponse:
       type: object
@@ -701,6 +765,62 @@ components:
           maximum: 3600
         notes:
           type: ["string", "null"]
+        promoFieldEnabled:
+          type: boolean
+        refRedirectUrl:
+          type: ["string", "null"]
+
+    # ---- Referral sources (T005) ----
+    AdminRefCode:
+      type: object
+      required: [id, code, label, active, createdAt, clicks, registrations]
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        label:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+        clicks:
+          type: integer
+        registrations:
+          type: integer
+    AdminRefCodesResponse:
+      type: object
+      required: [codes]
+      properties:
+        codes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminRefCode"
+    AdminRefCodeCreateInput:
+      type: object
+      required: [code, label]
+      properties:
+        code:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
+        label:
+          type: string
+          maxLength: 200
+    AdminRefCodePatchInput:
+      type: object
+      properties:
+        active:
+          type: boolean
+        label:
+          type: string
+          maxLength: 200
+    AdminRefCodeOnlyResponse:
+      type: object
+      properties:
+        code:
+          type: object
+          additionalProperties: true
 
     # ---- Admin retrain / prune / metrics ----
     AdminRetrainResult:

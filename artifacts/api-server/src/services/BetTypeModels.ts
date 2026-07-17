@@ -154,6 +154,69 @@ function confidence(
   return Math.min(conf, 0.92);
 }
 
+// ─── СЕРИЙНАЯ МАТЕМАТИКА (Layer A) ─────────────────────────────────────────
+//
+// Все winner-модели (math и ML) обучены/откалиброваны на исходе СЕРИИ с 0:0.
+// Когда серия уже идёт (1-0, 1-1, 2-1) — вероятность взять серию обязана
+// пересчитываться. Делается аналитически:
+//   1) invert: из P(серия|0:0) восстанавливаем per-map вероятность p
+//   2) forward: P(серия | текущий счёт) из p по остатку серии.
+
+/** Сколько карт нужно выиграть для взятия серии. */
+function mapsToWin(format: string): number {
+  if (format === 'BO1') return 1;
+  if (format === 'BO2') return 2; // BO2 — обе карты для «победы 2-0»; трактуем как need 2
+  if (format === 'BO5') return 3;
+  return 2; // BO3
+}
+
+/** P(взять серию | нужно ещё w1 побед team1, w2 побед team2) при per-map p. */
+function seriesProbRecursive(p: number, w1: number, w2: number): number {
+  if (w1 <= 0) return 1;
+  if (w2 <= 0) return 0;
+  // мемоизация не нужна — глубина ≤ 5
+  return p * seriesProbRecursive(p, w1 - 1, w2) + (1 - p) * seriesProbRecursive(p, w1, w2 - 1);
+}
+
+/** P(серия | счёт s1:s2) для per-map вероятности p. */
+export function seriesWinProb(pMap: number, format: string, s1 = 0, s2 = 0): number {
+  const need = mapsToWin(format);
+  const w1 = Math.max(0, need - s1);
+  const w2 = Math.max(0, need - s2);
+  return clamp01(seriesProbRecursive(clamp01(pMap), w1, w2));
+}
+
+/**
+ * Обратная задача: модельная вероятность q — это P(серия|0:0).
+ * Ищем per-map p, при котором seriesWinProb(p,fmt,0,0)=q (бисекция).
+ */
+export function perMapProbFromSeries(qSeries: number, format: string): number {
+  const q = Math.min(0.99, Math.max(0.01, qSeries));
+  if (mapsToWin(format) === 1) return q;
+  let lo = 0.01, hi = 0.99;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (seriesWinProb(mid, format, 0, 0) < q) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Пересчёт серийной вероятности с учётом текущего счёта.
+ * qSeriesFrom00 — вероятность модели (прематч, с 0:0).
+ */
+export function adjustSeriesProbForScore(
+  qSeriesFrom00: number,
+  format: string,
+  s1: number,
+  s2: number,
+): number {
+  if (!s1 && !s2) return qSeriesFrom00;
+  const pMap = perMapProbFromSeries(qSeriesFrom00, format);
+  return seriesWinProb(pMap, format, s1, s2);
+}
+
 // ─── 1. ПОБЕДИТЕЛЬ МАТЧА ────────────────────────────────────────────────────
 
 export function predictMatchWinner(f: FeatureVector): BetPrediction {
@@ -175,6 +238,14 @@ export function predictMatchWinner(f: FeatureVector): BetPrediction {
   }
 
   p = normalize(p);
+
+  // Layer A: серия уже идёт → пересчитываем P(серии) от текущего счёта.
+  const ss1 = f.seriesScore1 ?? 0;
+  const ss2 = f.seriesScore2 ?? 0;
+  if ((ss1 > 0 || ss2 > 0) && f.matchFormat !== 'BO1') {
+    p = adjustSeriesProbForScore(p, f.matchFormat, ss1, ss2);
+  }
+
   const eloDiff = f.elo1 - f.elo2;
 
   return {
@@ -202,8 +273,11 @@ export function predictMatchWinner(f: FeatureVector): BetPrediction {
 // (статистически в проф. сцене ~+2.5% к p(победы) для команды, ведущей в серии).
 
 export function predictMapWinner(f: FeatureVector, mapNumber = 1): BetPrediction {
-  const base = predictMatchWinner(f);
-  let p = base.probTeam1;
+  // База карты — per-map вероятность, а не серийная (серийная «острее»).
+  // Считаем прогноз серии от 0:0 (без Layer A-коррекции) и инвертируем в per-map.
+  const base = predictMatchWinner({ ...f, seriesScore1: 0, seriesScore2: 0 });
+  const q00 = base.probTeam1;
+  let p = f.matchFormat === 'BO1' ? q00 : perMapProbFromSeries(q00, f.matchFormat);
   // Базовый radiant-бонус (статистика проф-сцены ~+2% к стороне Radiant).
   const radiantBonus = f.matchFormat !== 'BO1' ? 0.025 : 0.02;
   p += radiantBonus * (f.earlyScore1 - 0.5);

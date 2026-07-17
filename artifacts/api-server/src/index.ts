@@ -8,6 +8,7 @@ import { startBookmakerWorker } from "./services/BookmakerWorker";
 import { loadActiveLiveModel } from "./services/LiveWinnerModel";
 import { loadActiveAsymLiveModel } from "./services/AsymLiveModel";
 import { loadActiveMarketModels } from "./services/MarketLgbm";
+import { loadActiveSeriesMidModel } from "./services/SeriesMidModel";
 import { primeApiKeysCache } from "./services/ApiKeysService";
 
 const rawPort = process.env["PORT"];
@@ -46,6 +47,7 @@ app.listen(port, async (err) => {
   loadActiveLiveModel().catch((err) => logger.error({ err }, "Live model load failed"));
   loadActiveAsymLiveModel().catch((err) => logger.error({ err }, "Asym-live model load failed"));
   loadActiveMarketModels().catch((err) => logger.error({ err }, "Market models load failed"));
+  loadActiveSeriesMidModel().catch((err) => logger.error({ err }, "SeriesMid model load failed"));
 
   // Запускаем live-воркер: опрос OpenDota раз в минуту,
   // запись снапшотов и предсказаний в БД.

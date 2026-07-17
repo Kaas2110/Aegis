@@ -27,6 +27,9 @@ export const GetClientConfigResponse = zod.object({
   version: zod
     .number()
     .describe("Версия конфига (на будущее, для push-обновлений)"),
+  promoFieldEnabled: zod
+    .boolean()
+    .describe("Показывать ли поле промокода на экране регистрации"),
 });
 
 /**
@@ -184,6 +187,16 @@ export const GetAdminSettingsResponse = zod.object({
       .optional()
       .describe("Мобильный polling интервал когда live матчей нет (сек)"),
     notes: zod.string().nullish(),
+    promoFieldEnabled: zod
+      .boolean()
+      .optional()
+      .describe("Показывать ли поле промокода на экране регистрации мобилки"),
+    refRedirectUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "URL лендинга для реферальных редиректов \/r\/:code (null = дефолт)",
+      ),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),
   oddsApiKeyConfigured: zod.boolean(),
@@ -304,6 +317,8 @@ export const UpdateAdminSettingsBody = zod.object({
     .max(updateAdminSettingsBodyMobilePollIdleSecMax)
     .optional(),
   notes: zod.string().nullish(),
+  promoFieldEnabled: zod.boolean().optional(),
+  refRedirectUrl: zod.string().nullish(),
 });
 
 export const updateAdminSettingsResponseSettingsTrainWindowDaysMin = 30;
@@ -427,8 +442,70 @@ export const UpdateAdminSettingsResponse = zod.object({
       .optional()
       .describe("Мобильный polling интервал когда live матчей нет (сек)"),
     notes: zod.string().nullish(),
+    promoFieldEnabled: zod
+      .boolean()
+      .optional()
+      .describe("Показывать ли поле промокода на экране регистрации мобилки"),
+    refRedirectUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "URL лендинга для реферальных редиректов \/r\/:code (null = дефолт)",
+      ),
     updatedAt: zod.string().describe("ISO-8601 timestamp"),
   }),
+});
+
+/**
+ * @summary Реферальные коды («Источники») со статистикой кликов и регистраций
+ */
+export const ListAdminRefCodesResponse = zod.object({
+  codes: zod.array(
+    zod.object({
+      id: zod.number(),
+      code: zod.string(),
+      label: zod.string(),
+      active: zod.boolean(),
+      createdAt: zod.string(),
+      clicks: zod.number(),
+      registrations: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Создать реферальный код
+ */
+export const createAdminRefCodeBodyCodeRegExp = new RegExp(
+  "^[a-zA-Z0-9_-]{1,64}$",
+);
+export const createAdminRefCodeBodyLabelMax = 200;
+
+export const CreateAdminRefCodeBody = zod.object({
+  code: zod.string().regex(createAdminRefCodeBodyCodeRegExp),
+  label: zod.string().max(createAdminRefCodeBodyLabelMax),
+});
+
+export const CreateAdminRefCodeResponse = zod.object({
+  code: zod.record(zod.string(), zod.unknown()).optional(),
+});
+
+/**
+ * @summary Обновить реферальный код (active/label)
+ */
+export const PatchAdminRefCodeParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const patchAdminRefCodeBodyLabelMax = 200;
+
+export const PatchAdminRefCodeBody = zod.object({
+  active: zod.boolean().optional(),
+  label: zod.string().max(patchAdminRefCodeBodyLabelMax).optional(),
+});
+
+export const PatchAdminRefCodeResponse = zod.object({
+  code: zod.record(zod.string(), zod.unknown()).optional(),
 });
 
 /**

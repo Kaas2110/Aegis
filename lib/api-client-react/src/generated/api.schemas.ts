@@ -113,6 +113,13 @@ export interface AdminAppSettings {
   mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
+  /** Показывать ли поле промокода на экране регистрации мобилки */
+  promoFieldEnabled?: boolean;
+  /**
+   * URL лендинга для реферальных редиректов /r/:code (null = дефолт)
+   * @nullable
+   */
+  refRedirectUrl?: string | null;
   /** ISO-8601 timestamp */
   updatedAt: string;
 }
@@ -124,6 +131,8 @@ export interface ClientConfig {
   pollIdleSec: number;
   /** Версия конфига (на будущее, для push-обновлений) */
   version: number;
+  /** Показывать ли поле промокода на экране регистрации */
+  promoFieldEnabled: boolean;
 }
 
 export interface AdminSettingsResponse {
@@ -209,6 +218,42 @@ export interface AdminSettingsInput {
   mobilePollIdleSec?: number;
   /** @nullable */
   notes?: string | null;
+  promoFieldEnabled?: boolean;
+  /** @nullable */
+  refRedirectUrl?: string | null;
+}
+
+export interface AdminRefCode {
+  id: number;
+  code: string;
+  label: string;
+  active: boolean;
+  createdAt: string;
+  clicks: number;
+  registrations: number;
+}
+
+export interface AdminRefCodesResponse {
+  codes: AdminRefCode[];
+}
+
+export interface AdminRefCodeCreateInput {
+  /** @pattern ^[a-zA-Z0-9_-]{1,64}$ */
+  code: string;
+  /** @maxLength 200 */
+  label: string;
+}
+
+export interface AdminRefCodePatchInput {
+  active?: boolean;
+  /** @maxLength 200 */
+  label?: string;
+}
+
+export type AdminRefCodeOnlyResponseCode = { [key: string]: unknown };
+
+export interface AdminRefCodeOnlyResponse {
+  code?: AdminRefCodeOnlyResponseCode;
 }
 
 export interface AdminRetrainResult {

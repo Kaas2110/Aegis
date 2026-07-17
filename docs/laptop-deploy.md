@@ -6,6 +6,19 @@
 > Scheduler** (Windows + WSL). Идея — никаких рефакторов, просто другой
 > планировщик.
 
+## Режим OpenDota: FREE (актуально с 2026-07)
+
+Все ingest-скрипты и parse-пайплайн работают **без ключа OpenDota**:
+троттл `odThrottleMs()` = 1100ms (≈54 req/min при лимите 60 req/min,
+3000 req/day). Это уже учтено в интервалах ниже — ничего ускорять не надо.
+Если пользователь купит premium, включается парой env-переменных
+(`OPENDOTA_USE_PREMIUM=true` + `OPENDOTA_API_KEY`), тогда троттлы сами
+ужмутся до premium-значений.
+
+Бюджет free-дня (~3000 req): Hourly (24 × ~30 req) + Daily (~500-800 req) +
+Replay Parse Loop (остаток). Если replay-парсинг упирается в 429 — увеличить
+`TICK_SEC` в systemd-юните или снизить лимит матчей в `parse:request`.
+
 ## Что переносим
 
 В монорепо есть 5 long-running workflow-скриптов в `scripts/`:
@@ -32,6 +45,10 @@ long-running процессом (systemd-юнит, pm2, screen). Внутри н
    DATABASE_URL=postgres://aegis:password@127.0.0.1:5432/aegis
 
    # опциональное (если есть)
+   # OpenDota: FREE MODE по умолчанию (60 req/min, 3000 req/day, троттл 1100ms).
+   # Ключ подключается ТОЛЬКО парой переменных (одного ключа недостаточно):
+   #   OPENDOTA_USE_PREMIUM=true
+   #   OPENDOTA_API_KEY=...
    OPENDOTA_API_KEY=...
    STRATZ_TOKEN=tok1,tok2,tok3
    PANDASCORE_API_KEY=...
@@ -293,6 +310,12 @@ sudo systemctl list-timers '*aegis*'
 - [ ] Daily / Hourly / Enrichment timers активны (`systemctl list-timers`)
 - [ ] В admin UI worker heartbeats показывают `ok` для обоих воркеров
 - [ ] PG-бэкап в крон
+- [ ] Реферальные ссылки: `GET /r/<код>` отвечает 302 напрямую с api-server
+      (роут смонтирован и как `/r/:code`, и как `/api/r/:code`). Если перед
+      api-server стоит reverse-proxy — прокинуть путь `/r` тоже, не только `/api`
+- [ ] В админке `/admin-web/sources` создан хотя бы один источник, CSV-экспорт
+      скачивается, тумблер «Поле промокода при регистрации» работает
+      (мобилка читает его из `GET /api/client-config`)
 - [ ] (опционально) Cloudflare Tunnel / Tailscale Funnel для публичного HTTPS
       доступа к api-server, если мобилка ходит снаружи
 

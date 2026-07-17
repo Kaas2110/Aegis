@@ -42,6 +42,9 @@ import { clearResponseCache } from '../lib/responseCache';
 import {
   db,
   appSettingsTable,
+  refCodesTable,
+  refClicksTable,
+  usersTable,
   modelVersionsTable,
   matchParseQueueTable,
   matchParsedTable,
@@ -129,6 +132,8 @@ router.post('/settings', async (req, res) => {
     mobilePollLiveSec?: number;
     mobilePollIdleSec?: number;
     notes?: string | null;
+    promoFieldEnabled?: boolean;
+    refRedirectUrl?: string | null;
   };
   const patch: Parameters<typeof updateAppSettings>[0] = {};
   if (typeof body.useBookmakerOdds === 'boolean') patch.useBookmakerOdds = body.useBookmakerOdds;
@@ -167,6 +172,36 @@ router.post('/settings', async (req, res) => {
     }
   }
   if (typeof body.notes === 'string' || body.notes === null) patch.notes = body.notes;
+  if (typeof body.promoFieldEnabled === 'boolean') patch.promoFieldEnabled = body.promoFieldEnabled;
+  if (body.refRedirectUrl === null) patch.refRedirectUrl = null;
+  else if (typeof body.refRedirectUrl === 'string') {
+    const url = body.refRedirectUrl.trim();
+    if (url === '') patch.refRedirectUrl = null;
+    else if (url.length <= 500) {
+      // Строгая валидация: парсимый http(s)-URL без userinfo (защита от
+      // открытого редиректа через кривой ввод в админке).
+      try {
+        const parsed = new URL(url);
+        if (
+          (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+          parsed.hostname.length > 0 &&
+          parsed.username === '' &&
+          parsed.password === ''
+        ) {
+          patch.refRedirectUrl = parsed.toString();
+        } else {
+          res.status(400).json({ error: 'invalid refRedirectUrl' });
+          return;
+        }
+      } catch {
+        res.status(400).json({ error: 'invalid refRedirectUrl' });
+        return;
+      }
+    } else {
+      res.status(400).json({ error: 'invalid refRedirectUrl' });
+      return;
+    }
+  }
 
   if (Object.keys(patch).length === 0) {
     res.status(400).json({ error: 'no valid fields in body' });
@@ -174,6 +209,123 @@ router.post('/settings', async (req, res) => {
   }
   const settings = await updateAppSettings(patch);
   res.json({ settings });
+});
+
+// ── T005: Рефералки («Источники») ────────────────────────────────────────────
+// Список кодов + агрегаты: клики (ref_clicks) и регистрации (app_users.ref_code).
+
+const REF_CODE_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+async function listRefCodesWithStats() {
+  const codes = await db.select().from(refCodesTable).orderBy(desc(refCodesTable.createdAt));
+  const clicks = await db
+    .select({ code: refClicksTable.code, n: sql<number>`count(*)::int` })
+    .from(refClicksTable)
+    .groupBy(refClicksTable.code);
+  const regs = await db
+    .select({ code: usersTable.refCode, n: sql<number>`count(*)::int` })
+    .from(usersTable)
+    .where(sql`${usersTable.refCode} is not null`)
+    .groupBy(usersTable.refCode);
+  const clickMap = new Map(clicks.map((c) => [c.code, c.n]));
+  const regMap = new Map(regs.map((r) => [r.code ?? '', r.n]));
+  return codes.map((c) => ({
+    id: c.id,
+    code: c.code,
+    label: c.label,
+    active: c.active,
+    createdAt: c.createdAt.toISOString(),
+    clicks: clickMap.get(c.code.toLowerCase()) ?? 0,
+    registrations: regMap.get(c.code.toLowerCase()) ?? 0,
+  }));
+}
+
+router.get('/ref-codes', async (req, res) => {
+  try {
+    res.json({ codes: await listRefCodesWithStats() });
+  } catch (err) {
+    req.log.error({ tag: 'admin', err: String(err) }, 'ref-codes list failed');
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+router.post('/ref-codes', async (req, res) => {
+  const body = req.body as { code?: unknown; label?: unknown };
+  const code = typeof body.code === 'string' ? body.code.trim().toLowerCase() : '';
+  const label = typeof body.label === 'string' ? body.label.trim() : '';
+  if (!REF_CODE_RE.test(code)) {
+    res.status(400).json({ error: 'invalid_code' });
+    return;
+  }
+  if (!label || label.length > 200) {
+    res.status(400).json({ error: 'invalid_label' });
+    return;
+  }
+  try {
+    const inserted = await db
+      .insert(refCodesTable)
+      .values({ code, label })
+      .returning();
+    req.log.info({ tag: 'admin', action: 'ref-code-create', code }, 'ref code created');
+    res.json({ code: inserted[0] });
+  } catch (err) {
+    if (String(err).includes('ref_codes_code_unique_lower')) {
+      res.status(409).json({ error: 'code_already_exists' });
+      return;
+    }
+    req.log.error({ tag: 'admin', err: String(err) }, 'ref-code create failed');
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+router.patch('/ref-codes/:id', async (req, res) => {
+  const id = Number(req.params['id']);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  const body = req.body as { active?: unknown; label?: unknown };
+  const patch: Partial<{ active: boolean; label: string }> = {};
+  if (typeof body.active === 'boolean') patch.active = body.active;
+  if (typeof body.label === 'string' && body.label.trim() && body.label.trim().length <= 200) {
+    patch.label = body.label.trim();
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'no valid fields in body' });
+    return;
+  }
+  const updated = await db.update(refCodesTable).set(patch).where(eq(refCodesTable.id, id)).returning();
+  if (updated.length === 0) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  req.log.info({ tag: 'admin', action: 'ref-code-update', id, patch }, 'ref code updated');
+  res.json({ code: updated[0] });
+});
+
+// CSV export (Excel-friendly: UTF-8 BOM + ';' разделитель).
+router.get('/ref-codes/export.csv', async (req, res) => {
+  try {
+    const rows = await listRefCodesWithStats();
+    const esc = (v: string | number | boolean) => {
+      let s = String(v);
+      // CSV formula injection: нейтрализуем ведущие = + - @ (Excel/Sheets)
+      if (/^[=+\-@]/.test(s)) s = `'${s}`;
+      return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [
+      ['Код', 'Метка', 'Активен', 'Создан', 'Клики', 'Регистрации'].join(';'),
+      ...rows.map((r) =>
+        [esc(r.code), esc(r.label), r.active ? 'да' : 'нет', r.createdAt.slice(0, 10), r.clicks, r.registrations].join(';'),
+      ),
+    ];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="ref-codes.csv"');
+    res.send('\uFEFF' + lines.join('\r\n'));
+  } catch (err) {
+    req.log.error({ tag: 'admin', err: String(err) }, 'ref-codes export failed');
+    res.status(500).json({ error: 'internal' });
+  }
 });
 
 router.get('/metrics', async (req, res) => {

@@ -314,7 +314,7 @@ export default function AlertsScreen() {
               </Text>
               <Text style={[styles.emptySubtext, { color: colors.mutedForeground }]}>
                 {alertsEnabled
-                  ? `Алерт придёт когда уверенность модели ≥ ${defaultMinConf}%`
+                  ? `Алерт придёт когда уверенность прогноза ≥ ${defaultMinConf}%`
                   : 'Включите алерты кнопкой ВКЛ/ВЫКЛ в правом углу'}
               </Text>
             </View>
@@ -402,14 +402,14 @@ export default function AlertsScreen() {
             ))}
           </View>
 
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Минимальная уверенность модели</Text>
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Минимальная уверенность прогноза</Text>
           <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
             {CONFIDENCE_OPTIONS.map(v => (
               <ChipBtn key={v} label={`${v}%`} active={newMinConf === v} onPress={() => setNewMinConf(v)} colors={colors} small />
             ))}
           </View>
 
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Мин. перевес модели vs БК (опц.)</Text>
+          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Мин. перевес прогноза vs БК (опц.)</Text>
           <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
             {MIN_EDGE_OPTIONS.map(v => (
               <ChipBtn

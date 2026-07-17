@@ -112,8 +112,8 @@ export default function OnboardingScreen() {
             <View style={[styles.featuresList, { backgroundColor: colors.card, borderColor: colors.border }]}>
               {[
                 { icon: 'activity', text: 'Реальные live-данные с OpenDota' },
-                { icon: 'cpu', text: '15 типов ставок · ML-модели' },
-                { icon: 'bell', text: 'Алерты по уверенности модели' },
+                { icon: 'cpu', text: '15 типов ставок · умная аналитика' },
+                { icon: 'bell', text: 'Алерты по уверенности прогноза' },
                 { icon: 'trending-up', text: 'Прематч + лайв прогнозы' },
               ].map(({ icon, text }) => (
                 <View key={text} style={styles.featureRow}>
@@ -177,7 +177,7 @@ export default function OnboardingScreen() {
               ))}
             </FilterGroup>
 
-            <FilterGroup label="Минимальная уверенность модели">
+            <FilterGroup label="Минимальная уверенность прогноза">
               {[50, 60, 70, 80].map(v => (
                 <ChipBtn key={v} label={v + '%'} active={minConf === v} onPress={() => setMinConf(v)} colors={colors} />
               ))}

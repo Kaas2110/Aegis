@@ -49,7 +49,7 @@ Python-сервисе `artifacts/ml-service` (FastAPI/uvicorn). Pure-JS logistic
 | `train:live-model` | Live-winner из `live_snapshots × prematch_outcomes` |
 | `train:live-totals [-- --market kills\|duration\|all]` | LightGBM live-regression (T3.5): финальный total_kills / duration_sec из текущего снапшота. Feature view v1 (OD-only, 7 фич). Атомарный per-market swap |
 | `backfill:live-snapshots [-- --limit N]` | Backfill из OpenDota `/api/matches/{id}` для пустых live-окон |
-| `parse:request [-- --limit N --since-days D]` | T0.7 — `POST /api/request/{id}` ставит матчи в очередь OD replay-парсера. Идемпотентно через `match_parse_queue`. **OD premium = 3000 req/min = 50 req/s, неограниченно/мес, $0.0001/req (404/429/500 free). Скрипт держит 20 req/s (50ms throttle).** Дефолт 500 матчей, окно 180d |
+| `parse:request [-- --limit N --since-days D]` | T0.7 — `POST /api/request/{id}` ставит матчи в очередь OD replay-парсера. Идемпотентно через `match_parse_queue`. **OD FREE MODE (2026-07): 60 req/min, 3000 req/day, троттл 1100ms через `odThrottleMs()`. Premium включается парой `OPENDOTA_USE_PREMIUM=true` + `OPENDOTA_API_KEY`.** Дефолт 500 матчей, окно 180d |
 | `ingest:parsed [-- --limit N --timeout-hours H]` | T0.7 — для матчей в queue (status='queued', age>90s) тянет `/matches/{id}`, при `version!=null` сохраняет players/objectives/teamfights/draftTimings в `match_parsed`, отмечает `pro_matches.is_parsed=true`. **20 req/s (50ms throttle).** После 2h в queued → `status='timeout'` |
 
 **Required env:** `DATABASE_URL`. **Optional:** `ODDS_API_KEY`, `STRATZ_TOKEN`,
@@ -112,10 +112,11 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 - `GET /api/matches/live` (cache 30s) — OpenDota + Stratz `/League/live` + PandaScore `/running` параллельно с 5s timeout. Перерыв между картами помечается `between_maps:true`.
 - `GET /api/matches/upcoming` (cache 60s) — PandaScore.
 - `GET /api/bookmakers/for-match?team1=&team2=[&team1Id=&team2Id=]` — in-memory lookup букмекерского кэша.
-- `POST /api/auth/register|login|logout`, `GET /api/auth/me Authorization: Bearer <token>` — email/password auth, scrypt N=16384, stateless токен с HMAC SESSION_SECRET, TTL 30 дней. Per-IP throttle 20/15min.
+- `POST /api/auth/register|login|logout` (register принимает опц. `promoCode` — валидируется по `ref_codes`, невалидный молча игнорируется), `GET /api/auth/me Authorization: Bearer <token>` — email/password auth, scrypt N=16384, stateless токен с HMAC SESSION_SECRET, TTL 30 дней. Per-IP throttle 20/15min.
 - `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/whoami` — HttpOnly session cookie `aegis_admin_session` против `ADMIN_TOKEN`. Все `/api/admin/*` и `POST /api/analytics/retrain` требуют этой сессии.
 - `POST /api/admin/refresh-all` — сбрасывает все withCache (matches:live/upcoming/heroes), workaround для застрявшего TTL.
-- `GET /api/client-config` (public, cache 60s) — динамический конфиг polling-интервалов для мобилки (`pollLiveSec` / `pollIdleSec` / `version`). Меняется из `/admin-web/workers` без рестарта.
+- `GET /api/client-config` (public, cache 60s) — динамический конфиг для мобилки (`pollLiveSec` / `pollIdleSec` / `promoFieldEnabled` / `version`). Меняется из админки без рестарта.
+- **Рефералки (T005):** `GET /r/:code` (и `/api/r/:code`) — 302 на `app_settings.ref_redirect_url` + лог клика в `ref_clicks`. Админка `/admin-web/sources`: CRUD `ref_codes`, статистика кликов/регистраций, CSV-экспорт (BOM+`;`), тумблер промо-поля. `app_users.tariff` (default `free`) + `app_users.ref_code`.
 
 ## User preferences
 

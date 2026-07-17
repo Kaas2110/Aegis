@@ -11,6 +11,9 @@ import { getFieldState, shouldShowStalePlaceholder, needsRefreshIndicator } from
 interface Props {
   match: Match;
   bestMarket?: Market;
+  /** T004: для live-карточек главный % = текущая карта (map_winner),
+      а прогноз по серии (match_winner) — отдельной компактной строкой. */
+  seriesMarket?: Market;
   /**
    * 'pending'     — обогащение ML ещё не закончилось → крутилка «Данные собираются»
    * 'ready'       — есть прогноз, рендерим OddsTilesPair
@@ -37,7 +40,7 @@ function marketTypeRu(type: string): string {
   }
 }
 
-export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onPress }: Props) {
+export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 'pending', onPress }: Props) {
   const colors = useColors();
   const isLive = match.status === 'live';
   const isPrematch = match.status === 'prematch';
@@ -260,6 +263,22 @@ export function MatchCard({ match, bestMarket, predictionStatus = 'pending', onP
                 />
               );
             })()}
+
+            {/* T004: серия отдельной строкой (главный % выше — текущая карта) */}
+            {seriesMarket && (
+              <View style={[styles.seriesRow, { borderTopColor: colors.borderGold + '33' }]}>
+                <Text style={[styles.seriesLabel, { color: colors.mutedForeground }]}>СЕРИЯ</Text>
+                <Text style={[styles.seriesText, { color: colors.foreground }]}>
+                  <Text style={{ color: colors.radiant }}>
+                    {match.team1.shortName} {Math.round(seriesMarket.prediction.modelProbability * 100)}%
+                  </Text>
+                  <Text style={{ color: colors.mutedForeground }}>  ·  </Text>
+                  <Text style={{ color: colors.dire }}>
+                    {match.team2.shortName} {Math.round((1 - seriesMarket.prediction.modelProbability) * 100)}%
+                  </Text>
+                </Text>
+              </View>
+            )}
           </View>
         ) : predictionStatus === 'unavailable' ? (
           /* Модель честно вернула null (нет данных по команде / dim mismatch).
@@ -364,6 +383,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   marketHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  seriesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    paddingTop: 8,
+    marginTop: 2,
+  },
+  seriesLabel: { fontFamily: 'Cinzel_500Medium', fontSize: 10, letterSpacing: 1.4 },
+  seriesText: { fontFamily: 'Cinzel_700Bold', fontSize: 12 },
   marketLabel: { fontFamily: 'Cinzel_500Medium', fontSize: 10, letterSpacing: 1.4 },
   edgeBadge: {
     borderRadius: 2,

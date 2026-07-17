@@ -10,7 +10,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isHydrating: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, promoCode?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -47,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await logProductEvent('user_login', 'auth', { userId: u.id });
   }, []);
 
-  const register = useCallback(async (email: string, password: string) => {
-    const u = await svcRegister(email, password);
+  const register = useCallback(async (email: string, password: string, promoCode?: string) => {
+    const u = await svcRegister(email, password, promoCode);
     setUser(u);
     await logProductEvent('user_registered', 'auth', { userId: u.id });
   }, []);

@@ -18,10 +18,10 @@
 
 import { db, liveSnapshotsTable, proMatchesTable, prematchOutcomesTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { withOpenDotaKey } from './lib/openDotaUrl';
+import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl';
 
 const OPENDOTA_BASE = 'https://api.opendota.com/api';
-const RATE_LIMIT_MS = 100; // 10 req/s — premium OD (3000/min), консервативно с запасом
+const RATE_LIMIT_MS = odThrottleMs(100);
 
 const TRAIN_WINDOW_DAYS = 365;
 

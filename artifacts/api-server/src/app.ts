@@ -4,6 +4,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import referralsRouter from "./routes/referrals";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -39,5 +40,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+// Короткая реферальная ссылка /r/:code — для прода на ноуте, где api-server
+// принимает трафик напрямую (на Replit до сервера доходит только /api/*).
+app.use("/r", referralsRouter);
 
 export default app;
