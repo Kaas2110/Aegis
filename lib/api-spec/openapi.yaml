@@ -173,6 +173,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminRefCodeOnlyResponse"
 
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: Пользователи мобилки (поиск по email, до 200 строк)
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsersResponse"
+
+  /admin/users/{id}/admin:
+    post:
+      operationId: setAdminUserAdmin
+      tags: [admin]
+      summary: Выдать/забрать админ-режим мобилки у пользователя
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserAdminInput"
+      responses:
+        "200":
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserAdminResponse"
+
   /admin/metrics:
     get:
       operationId: getAdminMetrics
@@ -660,6 +704,14 @@ components:
           description: Мобильный polling интервал когда live матчей нет (сек)
           minimum: 30
           maximum: 3600
+        opendotaPremium:
+          type: ["boolean", "null"]
+          description: OpenDota premium-режим. null = fallback на env OPENDOTA_USE_PREMIUM. true требует OPENDOTA_API_KEY в env.
+        odDailyLimit:
+          type: integer
+          description: Дневной бюджет OD-запросов api-server'а в free-режиме (official free tier 3000/day на IP)
+          minimum: 100
+          maximum: 3000
         notes:
           type: ["string", "null"]
         promoFieldEnabled:
@@ -763,6 +815,12 @@ components:
           type: integer
           minimum: 30
           maximum: 3600
+        opendotaPremium:
+          type: ["boolean", "null"]
+        odDailyLimit:
+          type: integer
+          minimum: 100
+          maximum: 3000
         notes:
           type: ["string", "null"]
         promoFieldEnabled:
@@ -819,6 +877,51 @@ components:
       type: object
       properties:
         code:
+          type: object
+          additionalProperties: true
+
+    # ---- Admin: пользователи мобилки (T004) ----
+    AdminAppUser:
+      type: object
+      required: [id, email, createdAt, tariff, isAdmin]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        createdAt:
+          type: string
+        lastLoginAt:
+          type: string
+          nullable: true
+        tariff:
+          type: string
+        refCode:
+          type: string
+          nullable: true
+        isAdmin:
+          type: boolean
+    AdminUsersResponse:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAppUser"
+    AdminUserAdminInput:
+      type: object
+      required: [isAdmin]
+      properties:
+        isAdmin:
+          type: boolean
+    AdminUserAdminResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        user:
           type: object
           additionalProperties: true
 
@@ -1187,7 +1290,7 @@ components:
     # ---- Admin OD usage ----
     AdminOdUsageResponse:
       type: object
-      required: [today, last7d, last30d, estimatedCostUsdToday, estimatedCostUsdLast30d, hasKey, history, note]
+      required: [today, last7d, last30d, estimatedCostUsdToday, estimatedCostUsdLast30d, hasKey, premium, premiumSource, freeBudget, history, note]
       properties:
         today: { type: integer }
         last7d: { type: integer }
@@ -1195,6 +1298,23 @@ components:
         estimatedCostUsdToday: { type: number }
         estimatedCostUsdLast30d: { type: number }
         hasKey: { type: boolean }
+        premium:
+          type: boolean
+          description: Эффективный режим (учитывает env-приоритет и наличие ключа)
+        premiumSource:
+          type: string
+          enum: [env, db, default]
+          description: Откуда взят режим — env OPENDOTA_USE_PREMIUM, тогл админки (db) или дефолт (free)
+        freeBudget:
+          type: object
+          required: [dailyLimit, usedToday, minuteUsed, minuteLimit, hourUsed, hourBudget]
+          properties:
+            dailyLimit: { type: integer }
+            usedToday: { type: integer }
+            minuteUsed: { type: integer }
+            minuteLimit: { type: integer }
+            hourUsed: { type: integer }
+            hourBudget: { type: integer }
         history:
           type: array
           items:

@@ -103,6 +103,9 @@ export const getAdminSettingsResponseSettingsMobilePollLiveSecMax = 600;
 export const getAdminSettingsResponseSettingsMobilePollIdleSecMin = 30;
 export const getAdminSettingsResponseSettingsMobilePollIdleSecMax = 3600;
 
+export const getAdminSettingsResponseSettingsOdDailyLimitMin = 100;
+export const getAdminSettingsResponseSettingsOdDailyLimitMax = 3000;
+
 export const GetAdminSettingsResponse = zod.object({
   settings: zod.object({
     id: zod.number(),
@@ -186,6 +189,20 @@ export const GetAdminSettingsResponse = zod.object({
       .max(getAdminSettingsResponseSettingsMobilePollIdleSecMax)
       .optional()
       .describe("Мобильный polling интервал когда live матчей нет (сек)"),
+    opendotaPremium: zod
+      .boolean()
+      .nullish()
+      .describe(
+        "OpenDota premium-режим. null = fallback на env OPENDOTA_USE_PREMIUM. true требует OPENDOTA_API_KEY в env.",
+      ),
+    odDailyLimit: zod
+      .number()
+      .min(getAdminSettingsResponseSettingsOdDailyLimitMin)
+      .max(getAdminSettingsResponseSettingsOdDailyLimitMax)
+      .optional()
+      .describe(
+        "Дневной бюджет OD-запросов api-server'а в free-режиме (official free tier 3000\/day на IP)",
+      ),
     notes: zod.string().nullish(),
     promoFieldEnabled: zod
       .boolean()
@@ -243,6 +260,9 @@ export const updateAdminSettingsBodyMobilePollLiveSecMax = 600;
 
 export const updateAdminSettingsBodyMobilePollIdleSecMin = 30;
 export const updateAdminSettingsBodyMobilePollIdleSecMax = 3600;
+
+export const updateAdminSettingsBodyOdDailyLimitMin = 100;
+export const updateAdminSettingsBodyOdDailyLimitMax = 3000;
 
 export const UpdateAdminSettingsBody = zod.object({
   useBookmakerOdds: zod.boolean().optional(),
@@ -316,6 +336,12 @@ export const UpdateAdminSettingsBody = zod.object({
     .min(updateAdminSettingsBodyMobilePollIdleSecMin)
     .max(updateAdminSettingsBodyMobilePollIdleSecMax)
     .optional(),
+  opendotaPremium: zod.boolean().nullish(),
+  odDailyLimit: zod
+    .number()
+    .min(updateAdminSettingsBodyOdDailyLimitMin)
+    .max(updateAdminSettingsBodyOdDailyLimitMax)
+    .optional(),
   notes: zod.string().nullish(),
   promoFieldEnabled: zod.boolean().optional(),
   refRedirectUrl: zod.string().nullish(),
@@ -357,6 +383,9 @@ export const updateAdminSettingsResponseSettingsMobilePollLiveSecMax = 600;
 
 export const updateAdminSettingsResponseSettingsMobilePollIdleSecMin = 30;
 export const updateAdminSettingsResponseSettingsMobilePollIdleSecMax = 3600;
+
+export const updateAdminSettingsResponseSettingsOdDailyLimitMin = 100;
+export const updateAdminSettingsResponseSettingsOdDailyLimitMax = 3000;
 
 export const UpdateAdminSettingsResponse = zod.object({
   settings: zod.object({
@@ -441,6 +470,20 @@ export const UpdateAdminSettingsResponse = zod.object({
       .max(updateAdminSettingsResponseSettingsMobilePollIdleSecMax)
       .optional()
       .describe("Мобильный polling интервал когда live матчей нет (сек)"),
+    opendotaPremium: zod
+      .boolean()
+      .nullish()
+      .describe(
+        "OpenDota premium-режим. null = fallback на env OPENDOTA_USE_PREMIUM. true требует OPENDOTA_API_KEY в env.",
+      ),
+    odDailyLimit: zod
+      .number()
+      .min(updateAdminSettingsResponseSettingsOdDailyLimitMin)
+      .max(updateAdminSettingsResponseSettingsOdDailyLimitMax)
+      .optional()
+      .describe(
+        "Дневной бюджет OD-запросов api-server'а в free-режиме (official free tier 3000\/day на IP)",
+      ),
     notes: zod.string().nullish(),
     promoFieldEnabled: zod
       .boolean()
@@ -506,6 +549,43 @@ export const PatchAdminRefCodeBody = zod.object({
 
 export const PatchAdminRefCodeResponse = zod.object({
   code: zod.record(zod.string(), zod.unknown()).optional(),
+});
+
+/**
+ * @summary Пользователи мобилки (поиск по email, до 200 строк)
+ */
+export const ListAdminUsersQueryParams = zod.object({
+  q: zod.coerce.string().optional(),
+});
+
+export const ListAdminUsersResponse = zod.object({
+  users: zod.array(
+    zod.object({
+      id: zod.number(),
+      email: zod.string(),
+      createdAt: zod.string(),
+      lastLoginAt: zod.string().nullish(),
+      tariff: zod.string(),
+      refCode: zod.string().nullish(),
+      isAdmin: zod.boolean(),
+    }),
+  ),
+});
+
+/**
+ * @summary Выдать/забрать админ-режим мобилки у пользователя
+ */
+export const SetAdminUserAdminParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SetAdminUserAdminBody = zod.object({
+  isAdmin: zod.boolean(),
+});
+
+export const SetAdminUserAdminResponse = zod.object({
+  ok: zod.boolean(),
+  user: zod.record(zod.string(), zod.unknown()).optional(),
 });
 
 /**
@@ -913,6 +993,22 @@ export const GetAdminOdUsageResponse = zod.object({
   estimatedCostUsdToday: zod.number(),
   estimatedCostUsdLast30d: zod.number(),
   hasKey: zod.boolean(),
+  premium: zod
+    .boolean()
+    .describe("Эффективный режим (учитывает env-приоритет и наличие ключа)"),
+  premiumSource: zod
+    .enum(["env", "db", "default"])
+    .describe(
+      "Откуда взят режим — env OPENDOTA_USE_PREMIUM, тогл админки (db) или дефолт (free)",
+    ),
+  freeBudget: zod.object({
+    dailyLimit: zod.number(),
+    usedToday: zod.number(),
+    minuteUsed: zod.number(),
+    minuteLimit: zod.number(),
+    hourUsed: zod.number(),
+    hourBudget: zod.number(),
+  }),
   history: zod.array(
     zod.object({
       date: zod.string(),

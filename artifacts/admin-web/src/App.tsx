@@ -14,6 +14,7 @@ import Coverage from "@/pages/coverage";
 import Workers from "@/pages/workers";
 import Models from "@/pages/models";
 import Sources from "@/pages/sources";
+import Users from "@/pages/users";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -67,6 +68,7 @@ function App() {
                 <Route path="/operations" element={<Operations />} />
                 <Route path="/workers" element={<Workers />} />
                 <Route path="/sources" element={<Sources />} />
+                <Route path="/users" element={<Users />} />
               </Route>
             </Route>
 

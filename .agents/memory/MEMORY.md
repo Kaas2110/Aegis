@@ -6,3 +6,4 @@
 - [Bash background limits](bash-background-limits.md) — nohup/фоновые процессы умирают с завершением команды; долгое — foreground ≤120s или workflow.
 - [Формы ответов эндпоинтов](api-response-shapes.md) — /api/matches/live = `{sources:[{source,data:[…]}]}`, /upcoming = `{noData,data}`; потребители обязаны разворачивать sources[].data, иначе «пустой» список при живых данных.
 - [Changelog пишется в конец](changelog-ordering.md) — docs/changelog.md фактически хронологический (свежее внизу), несмотря на шапку «свежее — сверху»; новые записи дописывать в конец файла.
+- [E2e testing subagent quirks](e2e-testing-subagent.md) — у тест-субагента нет process.env; старт прогона рестартует workflows и стирает in-memory состояние; admin-web e2e — через заранее выданную cookie + dev-персист сессий.

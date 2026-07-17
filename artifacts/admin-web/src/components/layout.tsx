@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAdminLogout } from "@workspace/api-client-react";
-import { LogOut, Activity, Settings2, ShieldAlert, Cpu, Database, Terminal, Layers, Share2 } from "lucide-react";
+import { LogOut, Activity, Settings2, ShieldAlert, Cpu, Database, Terminal, Layers, Share2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Layout() {
@@ -15,6 +15,7 @@ export default function Layout() {
     { href: "/operations", label: "Операции", icon: Cpu },
     { href: "/workers", label: "Воркеры", icon: Terminal },
     { href: "/sources", label: "Источники", icon: Share2 },
+    { href: "/users", label: "Пользователи", icon: Users },
     { href: "/settings", label: "Настройки", icon: Settings2 },
   ];
 

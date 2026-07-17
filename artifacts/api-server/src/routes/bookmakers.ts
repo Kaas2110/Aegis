@@ -23,6 +23,7 @@
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { logger as bookmakerLogger } from '../lib/logger';
+import { normalizeTeamName, fuzzyTeamMatch, fuzzyPairMatch } from '../services/BookmakerMatcher';
 
 const router: IRouter = Router();
 
@@ -991,61 +992,16 @@ router.get('/for-match', async (req, res) => {
 });
 
 // ---------- Unified merge ----------
-// Нормализуем имя команды для дедупликации: убираем кавычки/тире/пробелы,
-// приводим к нижнему регистру. Простая эвристика, для EV-merge с pro_matches
-// будет более строгий matcher (по teamId), но для UI-агрегатора достаточно.
-function normalizeTeamName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[''`""«»]/g, '')
-    .replace(/[^\p{L}\p{N}]+/gu, '')
-    .trim();
-}
+// normalizeTeamName / fuzzyTeamMatch / fuzzyPairMatch — общие из
+// BookmakerMatcher (там TOKEN_ALIAS «bb→betboom» и дискриминаторы
+// junior/academy). Раньше здесь была локальная копия БЕЗ алиасов —
+// из-за этого for-match не матчил «BB Team» ↔ «BetBoom Team» и мобилка
+// не видела кэфы Bovada (баг 2026-07-17).
 
 function pairKey(team1: string, team2: string): string {
   const a = normalizeTeamName(team1);
   const b = normalizeTeamName(team2);
   return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-/**
- * Токены имени команды без служебных org-слов.
- * "Xtreme Gaming" → ["xtreme"], "Team Spirit" → ["spirit"],
- * "Ex-Heroic" → ["heroic"],    "Natus Vincere" → ["natus","vincere"]
- */
-const ORG_STOP = new Set([
-  'team','gaming','esport','esports','club','fc','ex','former','the','gg',
-]);
-function teamTokens(name: string): string[] {
-  return name
-    .toLowerCase()
-    .split(/[^a-zа-яё0-9]+/i)
-    .map(t => t.trim())
-    .filter(t => t.length >= 2 && !ORG_STOP.has(t));
-}
-
-/**
- * Fuzzy-сравнение двух названий команд:
- *  1. Точный нормализованный матч (быстрый путь).
- *  2. Token-overlap после отброса org-слов:
- *     "Xtreme" ↔ "Xtreme Gaming", "Ex-Heroic" ↔ "Heroic",
- *     "Team AURORA" ↔ "Aurora Gaming".
- */
-function fuzzyTeamMatch(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (normalizeTeamName(a) === normalizeTeamName(b)) return true;
-  const tokA = teamTokens(a);
-  const tokB = teamTokens(b);
-  if (!tokA.length || !tokB.length) return false;
-  const shorter = tokA.length <= tokB.length ? tokA : tokB;
-  const longer  = tokA.length <= tokB.length ? tokB : tokA;
-  return shorter.every(t => longer.includes(t));
-}
-
-/** Fuzzy-матч двух пар команд (с учётом возможной смены ориентации). */
-function fuzzyPairMatch(a1: string, a2: string, b1: string, b2: string): boolean {
-  return (fuzzyTeamMatch(a1, b1) && fuzzyTeamMatch(a2, b2))
-      || (fuzzyTeamMatch(a1, b2) && fuzzyTeamMatch(a2, b1));
 }
 
 interface MergedEvent {

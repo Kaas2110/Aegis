@@ -249,9 +249,9 @@ function OdUsageCard() {
         <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">OpenDota usage</CardTitle>
         <CardDescription className="font-mono text-xs">
           {data.hasKey ? (
-            <span className="text-radiant">Премиум-ключ активен · 3000 req/min · $0.0001/req · 404/429/500 free</span>
+            <span className="text-radiant">Premium-режим · 3000 req/min · $0.0001/req · 404/429/500 free</span>
           ) : (
-            <span className="text-dire">Без ключа · 60 req/min, 3000/день</span>
+            <span className="text-dire">Free-режим · 60 req/min, 3000/день</span>
           )}
           {" · "}счётчик in-memory (сбрасывается при рестарте)
         </CardDescription>

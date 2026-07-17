@@ -12,11 +12,37 @@
  *     бросается OdQuotaExhaustedError, все последующие вызовы фейлятся сразу
  *     БЕЗ сетевых запросов. Скрипты должны ловить эту ошибку и прерывать цикл.
  */
-import { withOpenDotaKey, odThrottleMs } from './openDotaUrl.js';
+import { withOpenDotaKey, odThrottleMs, odEnvModeSet, setOdDbPremium } from './openDotaUrl.js';
 
 export const OD_BASE = 'https://api.opendota.com/api';
-export const DELAY_MS = odThrottleMs(50);
+// `let` + live binding: после ensureOdModeLoaded() значение может обновиться
+// (БД-тогл premium из админки). Импортёры видят актуальное значение (ESM).
+export let DELAY_MS = odThrottleMs(50);
 export const TIMEOUT_MS = 15_000;
+
+// Однократная ленивая загрузка app_settings.opendota_premium из БД.
+// env OPENDOTA_USE_PREMIUM приоритетнее — тогда БД не читаем вовсе.
+let odModeLoadPromise: Promise<void> | null = null;
+
+export async function ensureOdModeLoaded(): Promise<void> {
+  if (odEnvModeSet()) return;
+  if (!odModeLoadPromise) {
+    odModeLoadPromise = (async () => {
+      try {
+        const { db, appSettingsTable } = await import('@workspace/db');
+        const rows = await db
+          .select({ premium: appSettingsTable.opendotaPremium })
+          .from(appSettingsTable)
+          .limit(1);
+        setOdDbPremium(rows[0]?.premium ?? null);
+        DELAY_MS = odThrottleMs(50);
+      } catch {
+        // БД недоступна — остаёмся на env/free-дефолте.
+      }
+    })();
+  }
+  return odModeLoadPromise;
+}
 
 const BREAKER_THRESHOLD = 3;
 const BREAKER_COOLDOWN_MS = 30 * 60_000;
@@ -47,6 +73,7 @@ export async function sleep(ms: number): Promise<void> {
  * Кидает Error на остальные не-200.
  */
 export async function fetchOdJson<T = unknown>(path: string, timeoutMs = TIMEOUT_MS): Promise<T | null> {
+  await ensureOdModeLoaded();
   if (isOdCircuitOpen()) {
     const minLeft = Math.ceil((circuitOpenUntil - Date.now()) / 60_000);
     throw new OdQuotaExhaustedError(`OD-квота исчерпана — circuit open ещё ~${minLeft} мин`);

@@ -39,7 +39,6 @@ interface AppContextValue {
   setAgeConfirmed: (v: boolean) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
   updateFilters: (patch: Partial<Filters>) => void;
-  isAdmin: boolean;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -136,7 +135,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAgeConfirmed,
       updateSettings,
       updateFilters,
-      isAdmin: settings.role === 'admin',
+      // T004: isAdmin убран из AppContext — админ-режим теперь приходит с
+      // сервера через useAuth().user?.isAdmin (app_users.is_admin).
     }}>
       {children}
     </AppContext.Provider>

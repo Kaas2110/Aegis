@@ -207,7 +207,12 @@ router.post('/register', async (req, res) => {
     const inserted = await db
       .insert(usersTable)
       .values({ email, passwordHash, lastLoginAt: new Date(), refCode })
-      .returning({ id: usersTable.id, email: usersTable.email, createdAt: usersTable.createdAt });
+      .returning({
+        id: usersTable.id,
+        email: usersTable.email,
+        createdAt: usersTable.createdAt,
+        isAdmin: usersTable.isAdmin,
+      });
     const user = inserted[0];
     if (!user) throw new Error('insert_failed');
     const { token, expiresAt } = issueToken(user.id);
@@ -215,7 +220,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       token,
       expiresAt,
-      user: { id: user.id, email: user.email, createdAt: user.createdAt },
+      user: { id: user.id, email: user.email, createdAt: user.createdAt, isAdmin: user.isAdmin },
     });
   } catch (err) {
     // Race-condition: уникальный индекс БД отверг дубль (PG код 23505).
@@ -270,7 +275,7 @@ router.post('/login', async (req, res) => {
     res.json({
       token,
       expiresAt,
-      user: { id: user.id, email: user.email, createdAt: user.createdAt },
+      user: { id: user.id, email: user.email, createdAt: user.createdAt, isAdmin: user.isAdmin },
     });
   } catch (err) {
     req.log.error({ tag: 'auth', action: 'login', err: String(err) }, 'login failed');
@@ -299,6 +304,7 @@ router.get('/me', async (req, res) => {
       email: usersTable.email,
       createdAt: usersTable.createdAt,
       lastLoginAt: usersTable.lastLoginAt,
+      isAdmin: usersTable.isAdmin,
     })
     .from(usersTable)
     .where(eq(usersTable.id, decoded.userId))

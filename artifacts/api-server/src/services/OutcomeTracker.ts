@@ -18,7 +18,7 @@
 import { db, prematchOutcomesTable } from '@workspace/db';
 import { eq, isNull, and, lt, sql, isNotNull } from 'drizzle-orm';
 import { logger } from '../lib/logger';
-import { withOpenDotaKey } from '../lib/openDotaUrl';
+import { withOpenDotaKey, tryAcquireOd, isOpenDotaPremium } from '../lib/openDotaUrl';
 
 // Раз в час, чтобы успевать за live-воркером. При 6 одновременных матчах
 // LiveWorker видит ~6 новых рядов в час; resolver обрабатывает до 100 за тик
@@ -100,10 +100,16 @@ async function resolveUnsettled(): Promise<void> {
 
   let resolved = 0;
   for (const row of pending) {
+    // Фоновый вызов: в free-режиме уважаем часовой бюджет (dailyLimit/24),
+    // чтобы OutcomeTracker не выжигал дневную квоту к вечеру.
+    if (!tryAcquireOd('background')) {
+      logger.info({ resolved }, '[OutcomeTracker] OD free budget exhausted — deferring rest to next tick');
+      break;
+    }
     const summary = await fetchMatchSummary(row.matchId);
     if (!summary) {
-      // Premium OD: 50 req/s. Держим 10 req/s — щадящий темп для outcome poll.
-      await new Promise(r => setTimeout(r, 100));
+      // Premium: 10 req/s щадящий темп. Free: 60 req/min → 1100ms.
+      await new Promise(r => setTimeout(r, isOpenDotaPremium() ? 100 : 1100));
       continue;
     }
     await db

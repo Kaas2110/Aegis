@@ -6,7 +6,7 @@
  * Сессии stateless — HMAC-токен с user_id+exp подписан SESSION_SECRET, поэтому
  * отдельная таблица сессий не нужна.
  */
-import { pgTable, text, timestamp, serial, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, serial, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const usersTable = pgTable(
@@ -23,6 +23,11 @@ export const usersTable = pgTable(
     tariff: text('tariff').notNull().default('free'),
     /** Промокод источника (ref_codes.code), указанный при регистрации. */
     refCode: text('ref_code'),
+    /**
+     * Админ-режим мобилки (debug-экраны). Выдаётся ТОЛЬКО из админки
+     * (/admin-web/users) — свободного тогла в мобилке больше нет.
+     */
+    isAdmin: boolean('is_admin').notNull().default(false),
   },
   (t) => [
     // Email уникален case-insensitive. На уровне БД enforce'им через unique

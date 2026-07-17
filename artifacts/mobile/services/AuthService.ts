@@ -15,6 +15,8 @@ export interface AuthUser {
   email: string;
   createdAt: string;
   lastLoginAt?: string | null;
+  /** Админ-режим (debug-экраны). Выдаётся только из админки, T004. */
+  isAdmin?: boolean;
 }
 
 interface AuthResponse {

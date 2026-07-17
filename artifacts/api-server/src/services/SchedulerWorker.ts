@@ -30,7 +30,7 @@ import { loadActiveLiveModel } from './LiveWinnerModel';
 import { loadActiveAsymLiveModel } from './AsymLiveModel';
 import { pruneLiveSnapshots } from './OutcomeTracker';
 import { getAppSettings } from './AppSettings';
-import { withOpenDotaKey } from '../lib/openDotaUrl';
+import { withOpenDotaKey, tryAcquireOd } from '../lib/openDotaUrl';
 
 const DEFAULT_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа — fallback если БД недоступна
 const PATCH_DELAY_DAYS = 7;                     // ждать 7 дней после нового патча
@@ -85,6 +85,7 @@ async function updateState(patch: Partial<typeof schedulerStateTable.$inferInser
 
 async function fetchCurrentPatch(): Promise<OpenDotaPatch | null> {
   try {
+    if (!tryAcquireOd('background')) throw new Error('OD free budget exhausted');
     const resp = await fetch(withOpenDotaKey(PATCH_API), { headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' } });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = (await resp.json()) as OpenDotaPatch[] | OpenDotaPatch;
@@ -109,6 +110,7 @@ async function fetchCurrentPatch(): Promise<OpenDotaPatch | null> {
 async function computeTrainSinceUnix(windowDays: number, maxPatches: number): Promise<number> {
   const windowCutoff = Math.floor(Date.now() / 1000) - windowDays * 86_400;
   try {
+    if (!tryAcquireOd('background')) throw new Error('OD free budget exhausted');
     const resp = await fetch(withOpenDotaKey(PATCH_API), { headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' } });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const raw = (await resp.json()) as OpenDotaPatch[] | OpenDotaPatch;

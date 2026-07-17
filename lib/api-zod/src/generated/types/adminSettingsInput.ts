@@ -79,6 +79,13 @@ export interface AdminSettingsInput {
    */
   mobilePollIdleSec?: number;
   /** @nullable */
+  opendotaPremium?: boolean | null;
+  /**
+   * @minimum 100
+   * @maximum 3000
+   */
+  odDailyLimit?: number;
+  /** @nullable */
   notes?: string | null;
   promoFieldEnabled?: boolean;
   /** @nullable */

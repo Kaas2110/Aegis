@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useGetAdminSchedulerState,
   useGetAdminModels,
@@ -6,13 +6,21 @@ import {
   useGetAdminCoverage,
   useTriggerAdminRefreshAll,
   useTriggerAdminRetrain,
+  useGetAdminSettings,
+  useUpdateAdminSettings,
+  useGetAdminOdUsage,
+  getGetAdminSettingsQueryKey,
+  getGetAdminOdUsageQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import { formatDate, formatMetric } from "@/lib/utils";
-import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert, RefreshCw, Cpu, Database } from "lucide-react";
+import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert, RefreshCw, Cpu, Database, Gauge } from "lucide-react";
 
 export default function Dashboard() {
   const { data: schedulerState, isLoading: isLoadingScheduler } = useGetAdminSchedulerState();
@@ -197,6 +205,8 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+      <OdModeCard />
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="rounded-none border-border bg-card">
           <CardHeader className="pb-3 border-b border-border">
@@ -266,6 +276,146 @@ export default function Dashboard() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * Карточка режима OpenDota: тогл free/premium (пишется в app_settings,
+ * hot-reload ≤30s без рестарта) + счётчики дневного бюджета free-режима.
+ * env OPENDOTA_USE_PREMIUM (если задан) приоритетнее тогла — тогда показываем
+ * предупреждение, что режим зафиксирован окружением.
+ */
+function OdModeCard() {
+  const { data: settingsData, isLoading: isLoadingSettings } = useGetAdminSettings();
+  const { data: usage, isLoading: isLoadingUsage } = useGetAdminOdUsage({
+    query: { refetchInterval: 60_000, queryKey: getGetAdminOdUsageQueryKey() },
+  });
+  const updateSettings = useUpdateAdminSettings();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [dailyLimit, setDailyLimit] = useState("3000");
+  useEffect(() => {
+    const v = settingsData?.settings?.odDailyLimit;
+    if (typeof v === "number") setDailyLimit(String(v));
+  }, [settingsData?.settings?.odDailyLimit]);
+
+  if (isLoadingSettings || isLoadingUsage || !usage) {
+    return <Skeleton className="h-40 w-full rounded-none bg-card" />;
+  }
+
+  const dbToggle = settingsData?.settings?.opendotaPremium ?? null; // null = env/дефолт
+  const envLocked = usage.premiumSource === "env";
+  const premium = usage.premium;
+  const fb = usage.freeBudget;
+  const usedPct = fb.dailyLimit > 0 ? Math.min(100, (fb.usedToday / fb.dailyLimit) * 100) : 0;
+
+  const saveMode = (value: boolean | null) => {
+    updateSettings.mutate({ data: { opendotaPremium: value } }, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetAdminSettingsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getGetAdminOdUsageQueryKey() });
+        toast({ title: "Режим OpenDota обновлён", description: "Подхватится за ≤30 секунд без рестарта." });
+      },
+      onError: (e) => toast({ variant: "destructive", title: "Ошибка", description: e instanceof Error ? e.message : String(e) }),
+    });
+  };
+
+  const saveLimit = () => {
+    const n = parseInt(dailyLimit, 10);
+    if (isNaN(n) || n < 100 || n > 3000) {
+      toast({ variant: "destructive", title: "Ошибка", description: "Дневной бюджет: 100–3000 (free tier OpenDota = 3000/день на IP)" });
+      return;
+    }
+    updateSettings.mutate({ data: { odDailyLimit: n } }, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetAdminSettingsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getGetAdminOdUsageQueryKey() });
+        toast({ title: "Дневной бюджет сохранён", description: `${n} запросов/день для api-server (free-режим).` });
+      },
+      onError: (e) => toast({ variant: "destructive", title: "Ошибка", description: e instanceof Error ? e.message : String(e) }),
+    });
+  };
+
+  const modeBtn = (label: string, active: boolean, onClick: () => void, disabled?: boolean) => (
+    <Button
+      variant={active ? "default" : "outline"}
+      size="sm"
+      onClick={onClick}
+      disabled={disabled || updateSettings.isPending}
+      className={`rounded-none font-mono text-[11px] uppercase tracking-wider ${active ? "" : "border-border text-muted-foreground"}`}
+    >
+      {label}
+    </Button>
+  );
+
+  return (
+    <Card className="rounded-none border-border bg-card">
+      <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">Режим OpenDota</CardTitle>
+          <CardDescription className="font-mono text-[10px] mt-1">
+            {premium
+              ? "Premium: 3000 req/min · $0.0001/req · без дневного capа"
+              : "Free: 60 req/min · 3000 req/день на IP (делится со скриптами ingest)"}
+            {" · источник: "}
+            {usage.premiumSource === "env" ? "env (.env приоритетнее тогла)" : usage.premiumSource === "db" ? "тогл админки" : "дефолт (free)"}
+          </CardDescription>
+        </div>
+        <Gauge className="w-4 h-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent className="pt-4 space-y-4">
+        {envLocked && (
+          <p className="font-mono text-[11px] text-primary">
+            ⚠ Режим зафиксирован переменной окружения OPENDOTA_USE_PREMIUM — тогл ниже не действует, пока она задана.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mr-1">Режим:</span>
+          {modeBtn("Free", dbToggle === false, () => saveMode(false), envLocked)}
+          {modeBtn("Premium", dbToggle === true, () => saveMode(true), envLocked)}
+          {modeBtn("Auto (env)", dbToggle === null, () => saveMode(null), envLocked)}
+          <Badge variant="outline" className={`rounded-none font-mono text-[10px] h-5 ml-2 ${premium ? "text-radiant border-radiant/40" : "text-dire border-dire/40"}`}>
+            Сейчас: {premium ? "PREMIUM" : "FREE"}
+          </Badge>
+        </div>
+        {!premium && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between font-mono text-[11px] text-muted-foreground">
+              <span>Бюджет api-server сегодня: {fb.usedToday.toLocaleString("ru")} / {fb.dailyLimit.toLocaleString("ru")}</span>
+              <span>минута: {fb.minuteUsed}/{fb.minuteLimit} · час (фон): {fb.hourUsed}/{fb.hourBudget}</span>
+            </div>
+            <div className="h-2 bg-background border border-border">
+              <div
+                className={`h-full ${usedPct >= 90 ? "bg-dire" : usedPct >= 70 ? "bg-primary" : "bg-radiant"}`}
+                style={{ width: `${usedPct}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Дневной бюджет:</span>
+              <Input
+                value={dailyLimit}
+                onChange={(e) => setDailyLimit(e.target.value)}
+                className="rounded-none h-8 w-24 font-mono text-xs"
+                inputMode="numeric"
+              />
+              <Button size="sm" variant="outline" onClick={saveLimit} disabled={updateSettings.isPending}
+                className="rounded-none font-mono text-[11px] uppercase tracking-wider border-primary/40 text-primary hover:bg-primary/10">
+                Сохранить
+              </Button>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                счётчик in-memory, сбрасывается при рестарте
+              </span>
+            </div>
+          </div>
+        )}
+        {premium && (
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Сегодня: {usage.today.toLocaleString("ru")} запросов ≈ ${usage.estimatedCostUsdToday.toFixed(4)} · 30 дней: {usage.last30d.toLocaleString("ru")} ≈ ${usage.estimatedCostUsdLast30d.toFixed(4)}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

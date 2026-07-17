@@ -4,18 +4,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { useAuth } from '@/context/AuthContext';
 import { getStoredProductEvents, getStoredTechnicalLogs, getStoredAuditLogs } from '@/services/logging/EventLogger';
-import { AdminSettingsTab } from '@/components/AdminSettingsTab';
-import { AdminMetricsTab } from '@/components/AdminMetricsTab';
 
 export default function AdminScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [productEventCount, setProductEventCount] = useState(0);
   const [techLogCount, setTechLogCount] = useState(0);
   const [auditLogCount, setAuditLogCount] = useState(0);
   const [recentEvents, setRecentEvents] = useState<unknown[]>([]);
-  const [activeSection, setActiveSection] = useState<'settings' | 'metrics' | 'sources' | 'logs' | 'model'>('settings');
+  // T004: вкладки «Настройки»/«Метрики» удалены — они ходили в /api/admin/*
+  // с легаси-заголовком X-Admin-Token, который сервер больше не принимает.
+  // Управление настройками и метриками живёт в admin-web (/admin-web).
+  const [activeSection, setActiveSection] = useState<'sources' | 'logs' | 'model'>('logs');
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   useEffect(() => {
@@ -32,6 +35,23 @@ export default function AdminScreen() {
     setTechLogCount(tech.length);
     setAuditLogCount(audit.length);
     setRecentEvents(events.slice(-10).reverse());
+  }
+
+  // T004: жёсткий гейт — экран доступен только пользователям с is_admin=true
+  // (выдаётся из админки). Защита от прямого deep-link'а на /admin.
+  if (!user?.isAdmin) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
+        <Feather name="lock" size={32} color={colors.mutedForeground} />
+        <Text style={{ color: colors.foreground, fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 12 }}>Доступ ограничен</Text>
+        <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 6, textAlign: 'center' }}>
+          Админ-режим выдаётся администратором. Если он был выдан только что — перезапустите приложение.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+          <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>Назад</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
@@ -52,14 +72,14 @@ export default function AdminScreen() {
         style={[styles.tabBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
         contentContainerStyle={{ flexDirection: 'row' }}
       >
-        {(['settings', 'metrics', 'sources', 'logs', 'model'] as const).map(tab => (
+        {(['logs', 'sources', 'model'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
             onPress={() => setActiveSection(tab)}
             style={[styles.tab, { paddingHorizontal: 18 }, activeSection === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
           >
             <Text style={[styles.tabText, { color: activeSection === tab ? colors.primary : colors.mutedForeground }]}>
-              {tab === 'settings' ? 'Настройки' : tab === 'metrics' ? 'Метрики' : tab === 'sources' ? 'Источники' : tab === 'logs' ? 'Логи' : 'Модель'}
+              {tab === 'sources' ? 'Источники' : tab === 'logs' ? 'Логи' : 'Модель'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -70,18 +90,6 @@ export default function AdminScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 30 }]}
         showsVerticalScrollIndicator={false}
       >
-        {activeSection === 'settings' && (
-          <View style={styles.section}>
-            <AdminSettingsTab />
-          </View>
-        )}
-
-        {activeSection === 'metrics' && (
-          <View style={styles.section}>
-            <AdminMetricsTab />
-          </View>
-        )}
-
         {activeSection === 'sources' && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Адаптеры источников данных</Text>

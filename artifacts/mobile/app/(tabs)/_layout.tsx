@@ -115,8 +115,9 @@ function ClassicTabLayout({ isAdmin }: { isAdmin: boolean }) {
 }
 
 export default function TabLayout() {
-  const { isAdmin } = useApp();
-  const { isAuthenticated, isHydrating } = useAuth();
+  const { isAuthenticated, isHydrating, user } = useAuth();
+  // T004: админ-режим приходит с сервера (app_users.is_admin).
+  const isAdmin = !!user?.isAdmin;
 
   // Защитный guard: если состояние auth изменилось во время сессии (logout
   // на другой вкладке, инвалидация токена) — выкидываем на /auth.

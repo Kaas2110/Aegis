@@ -5,7 +5,7 @@ import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
 import { getApiKey, getStratzToken } from '../services/ApiKeysService';
 import { getAppSettings } from '../services/AppSettings';
-import { withOpenDotaKey } from '../lib/openDotaUrl';
+import { withOpenDotaKey, tryAcquireOd, isOpenDotaPremium } from '../lib/openDotaUrl';
 
 const router: IRouter = Router();
 
@@ -66,18 +66,27 @@ async function enrichLiveMatchesWithTeamNames(
 /**
  * Подмешивает в каждый матч поле `league_name` (берётся из локальной таблицы
  * `leagues`, заполняется ingest:leagues). Если лиги нет — оставляет undefined,
- * мобилка покажет fallback («Pro Match» / «Лига #N»). Поддерживает массив
- * объектов с полями `league_id` (OpenDota live) или `league.id` (PandaScore).
+ * мобилка покажет fallback («Pro Match» / «Лига #N»).
+ *
+ * ⚠️ Матчи, у которых УЖЕ есть собственное имя лиги (`league.name` в
+ * PandaScore-форме), НЕ трогаем: у PandaScore СВОЁ ID-пространство лиг
+ * (и flat `league_id`, и `league.id` — это PS-IDs), а наша таблица `leagues` —
+ * OpenDota-IDs. Подстановка по числовому совпадению давала коллизии:
+ * EWC (PS league 5404) показывался как «U Tournament» (OpenDota league 5404).
  */
+function hasOwnLeagueName(m: Record<string, unknown>): boolean {
+  const nested = m['league'] as Record<string, unknown> | undefined;
+  return typeof nested?.['name'] === 'string' && (nested['name'] as string).trim().length > 0;
+}
+
 async function enrichWithLeagueNames(matches: unknown): Promise<unknown> {
   if (!Array.isArray(matches) || matches.length === 0) return matches;
   const ids = new Set<number>();
   for (const raw of matches) {
     const m = raw as Record<string, unknown>;
+    if (hasOwnLeagueName(m)) continue;
     const direct = m['league_id'];
     if (typeof direct === 'number' && direct > 0) ids.add(direct);
-    const nested = (m['league'] as Record<string, unknown> | undefined)?.['id'];
-    if (typeof nested === 'number' && nested > 0) ids.add(nested);
   }
   if (ids.size === 0) return matches;
   const rows = await db
@@ -87,10 +96,9 @@ async function enrichWithLeagueNames(matches: unknown): Promise<unknown> {
   const byId = new Map(rows.map(r => [r.leagueId, { name: r.name ?? '', tier: r.tier ?? '' }] as const));
   return matches.map(raw => {
     const m = raw as Record<string, unknown>;
+    if (hasOwnLeagueName(m)) return m;
     const direct = m['league_id'] as number | undefined;
-    const nested = (m['league'] as Record<string, unknown> | undefined)?.['id'] as number | undefined;
-    const lid = (typeof direct === 'number' && direct > 0) ? direct
-      : (typeof nested === 'number' && nested > 0) ? nested : null;
+    const lid = (typeof direct === 'number' && direct > 0) ? direct : null;
     if (lid === null) return m;
     const info = byId.get(lid);
     if (!info || !info.name) return m;
@@ -583,6 +591,8 @@ function setDraftCache(matchId: number, payload: LiveDraftPayload | null) {
 async function fetchOpenDotaDraft(matchId: number): Promise<LiveDraftPayload | null> {
   const cached = draftCache.get(matchId);
   if (cached && (Date.now() - cached.at) < DRAFT_CACHE_TTL_MS) return cached.payload;
+  // Бюджет исчерпан — не кэшируем негатив, попробуем на следующем запросе.
+  if (!tryAcquireOd('user')) return null;
   try {
     const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/matches/${matchId}`), { timeout: 4000 });
     if (!resp.ok) {
@@ -850,7 +860,10 @@ async function apiFetch(url: string, options: RequestOptions = {}): Promise<Resp
 router.get('/live', async (req, res) => {
   // Не кэшируем неудачные ответы (noData=true): если у OpenDota транзиентный
   // 503, мы не должны 30с подряд возвращать пустоту всем клиентам.
-  const payload = await withCache('matches:live', 30_000, async () => {
+  // Free-режим OD: TTL 60s (мобилка и так опрашивает раз в 60s) — вдвое
+  // меньше OD-запросов. Premium: 30s.
+  const liveTtlMs = isOpenDotaPremium() ? 30_000 : 60_000;
+  const payload = await withCache('matches:live', liveTtlMs, async () => {
     const results: { source: string; data: unknown; error?: string }[] = [];
 
     const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
@@ -858,7 +871,9 @@ router.get('/live', async (req, res) => {
     // Запрашиваем OpenDota live, PandaScore running и Stratz параллельно.
     // PandaScore /running даёт официальные имена команд, счёт серии и номер
     // текущей карты. OpenDota даёт реальный game state (kills, gold, time).
-    const openDotaPromise = apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/live`), { timeout: 20_000 })
+    const openDotaPromise = (tryAcquireOd('user')
+      ? apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/live`), { timeout: 20_000 })
+      : Promise.reject(new Error('OD free budget exhausted')))
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const raw = await r.json() as unknown;
@@ -1070,6 +1085,7 @@ router.get('/upcoming', async (req, res) => {
 router.get('/heroes', async (req, res) => {
   try {
     const data = await withCache('matches:heroes', 3_600_000, async () => {
+      if (!tryAcquireOd('user')) throw new Error('OD free budget exhausted');
       const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/heroes`));
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return await resp.json() as unknown;
@@ -1083,6 +1099,7 @@ router.get('/heroes', async (req, res) => {
 
 router.get('/hero-stats', async (req, res) => {
   try {
+    if (!tryAcquireOd('user')) throw new Error('OD free budget exhausted');
     const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/heroStats`));
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json() as unknown;

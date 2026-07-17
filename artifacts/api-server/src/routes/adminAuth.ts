@@ -6,8 +6,10 @@
  *   POST /api/admin/logout                → clear cookie
  *   GET  /api/admin/whoami                → { authenticated: boolean }
  *
- * Sessions are stored in-memory (single-process api-server). On restart all
- * sessions invalidate — admin re-logs in. Sufficient for single operator.
+ * Sessions are stored in-memory (single-process api-server). In production on
+ * restart all sessions invalidate — admin re-logs in. Sufficient for single
+ * operator. In development only, sessions are additionally persisted to a
+ * /tmp file (mode 0600) so dev-server restarts don't log the admin out.
  *
  * The `requireAdminSession` middleware here is the sole gate for /api/admin/*
  * (and POST /api/analytics/retrain). The legacy `X-Admin-Token` header is no
@@ -15,6 +17,7 @@
  */
 import { Router, type IRouter, type RequestHandler } from 'express';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const SESSION_COOKIE = 'aegis_admin_session';
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -25,6 +28,33 @@ interface SessionEntry {
 }
 
 const sessions = new Map<string, SessionEntry>();
+
+// Dev-only: persist sessions across dev-server restarts (never in production).
+const DEV_SESSION_FILE = '/tmp/aegis_admin_sessions.json';
+const DEV_PERSIST = process.env['NODE_ENV'] !== 'production';
+
+function persistSessions(): void {
+  if (!DEV_PERSIST) return;
+  try {
+    writeFileSync(DEV_SESSION_FILE, JSON.stringify([...sessions.entries()]), { mode: 0o600 });
+  } catch {
+    /* best-effort dev convenience */
+  }
+}
+
+if (DEV_PERSIST) {
+  try {
+    const raw = JSON.parse(readFileSync(DEV_SESSION_FILE, 'utf8')) as [string, SessionEntry][];
+    const now = Date.now();
+    for (const [token, entry] of raw) {
+      if (typeof token === 'string' && entry && typeof entry.expiresAt === 'number' && entry.expiresAt > now) {
+        sessions.set(token, entry);
+      }
+    }
+  } catch {
+    /* no file / bad file — start empty */
+  }
+}
 
 function purgeExpired(): void {
   const now = Date.now();
@@ -39,6 +69,7 @@ function createSession(): { token: string; expiresAt: number } {
   const now = Date.now();
   const expiresAt = now + SESSION_TTL_MS;
   sessions.set(token, { createdAt: now, expiresAt });
+  persistSessions();
   return { token, expiresAt };
 }
 
@@ -147,7 +178,7 @@ router.post('/login', (req, res) => {
 
 router.post('/logout', (req, res) => {
   const cookieToken = (req as unknown as { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE];
-  if (cookieToken) sessions.delete(cookieToken);
+  if (cookieToken && sessions.delete(cookieToken)) persistSessions();
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.json({ ok: true });
 });

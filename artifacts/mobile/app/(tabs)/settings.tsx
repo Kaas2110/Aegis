@@ -113,8 +113,11 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, setOnboarded, setAgeConfirmed, isAdmin } = useApp();
+  const { settings, updateSettings, setOnboarded, setAgeConfirmed } = useApp();
   const { user, logout } = useAuth();
+  // T004: админ-режим выдаётся ТОЛЬКО с сервера (app_users.is_admin через
+  // админку). Свободного тогла в мобилке больше нет.
+  const isAdmin = !!user?.isAdmin;
 
   async function handleLogout() {
     Alert.alert(
@@ -178,10 +181,6 @@ export default function SettingsScreen() {
   async function handleExportData() {
     await logProductEvent('privacy_export_requested', 'settings');
     Alert.alert('Экспорт данных', 'В MVP 1 данные хранятся локально в AsyncStorage. Функция полного экспорта доступна в следующих версиях.');
-  }
-
-  async function handleEnableAdmin() {
-    await updateSettings({ role: settings.role === 'admin' ? 'user' : 'admin' });
   }
 
   return (
@@ -252,24 +251,15 @@ export default function SettingsScreen() {
 
       <FavoriteTeamsCard colors={colors} />
 
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <SectionHeader title="РАЗРАБОТКА" />
-        <Row
-          label={`Режим Admin ${isAdmin ? '(включен)' : ''}`}
-          right={
-            <Switch
-              value={isAdmin}
-              onValueChange={handleEnableAdmin}
-              trackColor={{ false: colors.muted, true: colors.warning + '88' }}
-              thumbColor={isAdmin ? colors.warning : colors.mutedForeground}
-            />
-          }
-        />
-        {isAdmin && (
+      {/* T004: секция видна только пользователям с is_admin=true (выдаётся
+          из админки, /admin-web/users). Свободный тогл удалён. */}
+      {isAdmin && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SectionHeader title="РАЗРАБОТКА (АДМИН)" />
           <Row label="Debug: Sources & Logs" onPress={() => router.push('/admin')} />
-        )}
-        <Row label="Сброс онбординга" onPress={async () => { await setOnboarded(false); router.replace('/onboarding'); }} />
-      </View>
+          <Row label="Сброс онбординга" onPress={async () => { await setOnboarded(false); router.replace('/onboarding'); }} />
+        </View>
+      )}
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <SectionHeader title="АККАУНТ" />

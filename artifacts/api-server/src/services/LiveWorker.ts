@@ -35,7 +35,7 @@ import { recordPrematchPrediction } from './OutcomeTracker';
 // DORMANT — Stratz live upstream пуст. Раскомментировать при восстановлении:
 // import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
 import { predictLiveTotalsFor } from './MarketLgbm';
-import { withOpenDotaKey } from '../lib/openDotaUrl';
+import { withOpenDotaKey, tryAcquireOd, isOpenDotaPremium } from '../lib/openDotaUrl';
 import { recordHeartbeat } from './workerHeartbeats';
 import { getAppSettings } from './AppSettings';
 
@@ -56,7 +56,10 @@ let lastValidLiveCount = 0;
 async function getBaseIntervalMs(): Promise<number> {
   try {
     const s = await getAppSettings();
-    return (lastValidLiveCount > 0 ? s.liveWorkerLiveSec : s.liveWorkerIdleSec) * 1000;
+    const base = (lastValidLiveCount > 0 ? s.liveWorkerLiveSec : s.liveWorkerIdleSec) * 1000;
+    // Free-режим OD: тик не чаще 60s, чтобы не выжигать 3000/day квоту
+    // (30s-тик = 2880 запросов/сутки одним только LiveWorker'ом).
+    return isOpenDotaPremium() ? base : Math.max(base, 60_000);
   } catch {
     return lastValidLiveCount > 0 ? DEFAULT_LIVE_INTERVAL_MS : DEFAULT_IDLE_INTERVAL_MS;
   }
@@ -180,6 +183,13 @@ function hashLiveMatch(m: LiveMatch): string {
 async function pollOnce(): Promise<void> {
   stats.totalPolls++;
   stats.lastPollAt = new Date();
+
+  // Free-режим: бюджетный guard (55/мин + дневной cap). LiveWorker — 'user'
+  // приоритет: его данные напрямую видит пользователь (live-прогнозы).
+  if (!tryAcquireOd('user')) {
+    logger.warn('[LiveWorker] OD free budget exhausted — skipping tick');
+    return;
+  }
 
   let matches: LiveMatch[] = [];
   try {

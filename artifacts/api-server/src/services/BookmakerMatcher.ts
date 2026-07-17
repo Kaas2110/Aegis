@@ -33,7 +33,7 @@ const TOKEN_ALIAS: Record<string, string> = {
 // это разные команды (даже если остальные токены совпали через alias).
 const DISCRIMINATOR_TOKENS = ['junior', 'jr', 'academy', 'youth', 'young'];
 
-function normalizeTeamName(name: string): string {
+export function normalizeTeamName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[''`""«»]/g, '')
@@ -51,7 +51,7 @@ function teamTokens(name: string): string[] {
   return [...new Set(tokens)];
 }
 
-function fuzzyTeamMatch(a: string, b: string): boolean {
+export function fuzzyTeamMatch(a: string, b: string): boolean {
   if (!a || !b) return false;
   if (normalizeTeamName(a) === normalizeTeamName(b)) return true;
   const tokA = teamTokens(a);
@@ -65,6 +65,12 @@ function fuzzyTeamMatch(a: string, b: string): boolean {
   const shorter = tokA.length <= tokB.length ? tokA : tokB;
   const longer  = tokA.length <= tokB.length ? tokB : tokA;
   return shorter.every(t => longer.includes(t));
+}
+
+/** Fuzzy-матч двух пар команд (с учётом возможной смены ориентации). */
+export function fuzzyPairMatch(a1: string, a2: string, b1: string, b2: string): boolean {
+  return (fuzzyTeamMatch(a1, b1) && fuzzyTeamMatch(a2, b2))
+      || (fuzzyTeamMatch(a1, b2) && fuzzyTeamMatch(a2, b1));
 }
 
 export interface OurMatch {

@@ -592,6 +592,14 @@ export const appSettingsTable = pgTable('app_settings', {
   // Mobile polling (отдаётся через GET /api/client-config).
   mobilePollLiveSec: integer('mobile_poll_live_sec').notNull().default(60),
   mobilePollIdleSec: integer('mobile_poll_idle_sec').notNull().default(120),
+  // ── OpenDota режим (управляется с дашборда админки) ────────────────────
+  // opendotaPremium: null = fallback на env OPENDOTA_USE_PREMIUM;
+  //   true = добавлять api_key (нужен OPENDOTA_API_KEY в env), false = free tier.
+  // odDailyLimit: дневной бюджет OD-запросов api-server'а в free-режиме
+  //   (official free tier = 3000/day на IP; ingest-скрипты работают в тех же
+  //   лимитах, поэтому серверу разумно давать меньше, напр. 1500).
+  opendotaPremium: boolean('opendota_premium'),
+  odDailyLimit: integer('od_daily_limit').notNull().default(3000),
   notes: text('notes'),
   // ── Рефералки (T005): показывать ли поле промокода при регистрации в мобилке
   // (отдаётся через GET /api/client-config) и куда редиректит GET /r/:code.

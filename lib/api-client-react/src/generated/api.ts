@@ -48,12 +48,16 @@ import type {
   AdminSettingsInput,
   AdminSettingsOnlyResponse,
   AdminSettingsResponse,
+  AdminUserAdminInput,
+  AdminUserAdminResponse,
+  AdminUsersResponse,
   AdminWhoami,
   AdminWorkersConfig,
   AdminWorkersConfigInput,
   ClientConfig,
   GetAdminJobStatus404,
   HealthStatus,
+  ListAdminUsersParams,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -866,6 +870,187 @@ export const usePatchAdminRefCode = <
   TContext
 > => {
   return useMutation(getPatchAdminRefCodeMutationOptions(options));
+};
+
+/**
+ * @summary Пользователи мобилки (поиск по email, до 200 строк)
+ */
+export const getListAdminUsersUrl = (params?: ListAdminUsersParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/users?${stringifiedParams}`
+    : `/api/admin/users`;
+};
+
+export const listAdminUsers = async (
+  params?: ListAdminUsersParams,
+  options?: RequestInit,
+): Promise<AdminUsersResponse> => {
+  return customFetch<AdminUsersResponse>(getListAdminUsersUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminUsersQueryKey = (params?: ListAdminUsersParams) => {
+  return [`/api/admin/users`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminUsersQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsers>>> = ({
+    signal,
+  }) => listAdminUsers(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminUsers>>
+>;
+export type ListAdminUsersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Пользователи мобилки (поиск по email, до 200 строк)
+ */
+
+export function useListAdminUsers<
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminUsersQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Выдать/забрать админ-режим мобилки у пользователя
+ */
+export const getSetAdminUserAdminUrl = (id: number) => {
+  return `/api/admin/users/${id}/admin`;
+};
+
+export const setAdminUserAdmin = async (
+  id: number,
+  adminUserAdminInput: AdminUserAdminInput,
+  options?: RequestInit,
+): Promise<AdminUserAdminResponse> => {
+  return customFetch<AdminUserAdminResponse>(getSetAdminUserAdminUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminUserAdminInput),
+  });
+};
+
+export const getSetAdminUserAdminMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setAdminUserAdmin>>,
+    TError,
+    { id: number; data: BodyType<AdminUserAdminInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setAdminUserAdmin>>,
+  TError,
+  { id: number; data: BodyType<AdminUserAdminInput> },
+  TContext
+> => {
+  const mutationKey = ["setAdminUserAdmin"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setAdminUserAdmin>>,
+    { id: number; data: BodyType<AdminUserAdminInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setAdminUserAdmin(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetAdminUserAdminMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setAdminUserAdmin>>
+>;
+export type SetAdminUserAdminMutationBody = BodyType<AdminUserAdminInput>;
+export type SetAdminUserAdminMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Выдать/забрать админ-режим мобилки у пользователя
+ */
+export const useSetAdminUserAdmin = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setAdminUserAdmin>>,
+    TError,
+    { id: number; data: BodyType<AdminUserAdminInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setAdminUserAdmin>>,
+  TError,
+  { id: number; data: BodyType<AdminUserAdminInput> },
+  TContext
+> => {
+  return useMutation(getSetAdminUserAdminMutationOptions(options));
 };
 
 /**

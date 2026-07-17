@@ -88,6 +88,17 @@ export interface AdminAppSettings {
    * @maximum 3600
    */
   mobilePollIdleSec?: number;
+  /**
+   * OpenDota premium-режим. null = fallback на env OPENDOTA_USE_PREMIUM. true требует OPENDOTA_API_KEY в env.
+   * @nullable
+   */
+  opendotaPremium?: boolean | null;
+  /**
+   * Дневной бюджет OD-запросов api-server'а в free-режиме (official free tier 3000/day на IP)
+   * @minimum 100
+   * @maximum 3000
+   */
+  odDailyLimit?: number;
   /** @nullable */
   notes?: string | null;
   /** Показывать ли поле промокода на экране регистрации мобилки */

@@ -131,6 +131,8 @@ router.post('/settings', async (req, res) => {
     schedulerTickHours?: number;
     mobilePollLiveSec?: number;
     mobilePollIdleSec?: number;
+    opendotaPremium?: boolean | null;
+    odDailyLimit?: number;
     notes?: string | null;
     promoFieldEnabled?: boolean;
     refRedirectUrl?: string | null;
@@ -170,6 +172,13 @@ router.post('/settings', async (req, res) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (patch as any)[dst] = Math.floor(v);
     }
+  }
+  // OD-режим: true/false — явный тогл, null — вернуться к env-дефолту.
+  if (typeof body.opendotaPremium === 'boolean' || body.opendotaPremium === null) {
+    patch.opendotaPremium = body.opendotaPremium;
+  }
+  if (typeof body.odDailyLimit === 'number' && Number.isFinite(body.odDailyLimit) && body.odDailyLimit >= 100 && body.odDailyLimit <= 3000) {
+    patch.odDailyLimit = Math.floor(body.odDailyLimit);
   }
   if (typeof body.notes === 'string' || body.notes === null) patch.notes = body.notes;
   if (typeof body.promoFieldEnabled === 'boolean') patch.promoFieldEnabled = body.promoFieldEnabled;
@@ -325,6 +334,62 @@ router.get('/ref-codes/export.csv', async (req, res) => {
   } catch (err) {
     req.log.error({ tag: 'admin', err: String(err) }, 'ref-codes export failed');
     res.status(500).json({ error: 'internal' });
+  }
+});
+
+// ── T004: пользователи мобилки — просмотр + выдача админ-режима ────────────
+router.get('/users', async (req, res) => {
+  const rawQ = req.query['q'];
+  const q = typeof rawQ === 'string' ? rawQ.trim().toLowerCase() : '';
+  try {
+    const base = db
+      .select({
+        id: usersTable.id,
+        email: usersTable.email,
+        createdAt: usersTable.createdAt,
+        lastLoginAt: usersTable.lastLoginAt,
+        tariff: usersTable.tariff,
+        refCode: usersTable.refCode,
+        isAdmin: usersTable.isAdmin,
+      })
+      .from(usersTable);
+    const rows = q
+      ? await base
+          .where(sql`lower(${usersTable.email}) LIKE ${'%' + q + '%'}`)
+          .orderBy(desc(usersTable.id))
+          .limit(200)
+      : await base.orderBy(desc(usersTable.id)).limit(200);
+    res.json({ users: rows });
+  } catch (err) {
+    req.log.error({ tag: 'admin', action: 'list-users', err: String(err) }, 'list users failed');
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+router.post('/users/:id/admin', async (req, res) => {
+  const id = Number(req.params['id']);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const isAdmin = body['isAdmin'];
+  if (!Number.isInteger(id) || id <= 0 || typeof isAdmin !== 'boolean') {
+    res.status(400).json({ error: 'invalid_input', detail: 'нужен целый id и isAdmin:boolean' });
+    return;
+  }
+  try {
+    const updated = await db
+      .update(usersTable)
+      .set({ isAdmin })
+      .where(eq(usersTable.id, id))
+      .returning({ id: usersTable.id, email: usersTable.email, isAdmin: usersTable.isAdmin });
+    const user = updated[0];
+    if (!user) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
+    req.log.info({ tag: 'admin', action: 'set-user-admin', targetUserId: id, isAdmin }, 'user admin flag changed');
+    res.json({ ok: true, user });
+  } catch (err) {
+    req.log.error({ tag: 'admin', action: 'set-user-admin', err: String(err) }, 'set admin failed');
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 

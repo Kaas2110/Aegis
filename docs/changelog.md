@@ -999,3 +999,42 @@ fetch при activeTab='draft' && формат≠BO1 && curMap>1 && status live/
 OD daily quota исчерпана (free mode) — для текущей серии FAL–VIC ни снапшотов,
 ни pro_matches: UI показывает честную заглушку, данные появятся после
 восстановления квоты.
+
+## 2026-07-17 (ночь) — Пакет: турнир, Bovada, OD-тогл, «Режим админ» под логином + e2e
+
+**1. Турнир не отображался** — исправлено сопоставление лиги/турнира для live и
+upcoming матчей (детали в записях выше по коду роутов matches).
+
+**2. Bovada/кэфы** — восстановлен показ букмекерских коэффициентов
+(`/api/bookmakers/for-match`, live-форма `{sources:[…]}`).
+
+**3. OD free/premium тогл** — карточка `OdModeCard` на дашборде админки:
+переключение free (60 req/min, 3000/day) ↔ premium (`OPENDOTA_USE_PREMIUM`
++ ключ), бюджет дня, прогресс-бар.
+
+**4. «Режим админ» в мобилке только под логином и по гранту из админки:**
+- БД: `app_users.is_admin boolean NOT NULL DEFAULT false` (drizzle push).
+- API: register/login/me отдают `isAdmin`; `GET /api/admin/users?q=` (поиск по
+  email) + `POST /api/admin/users/:id/admin {isAdmin}` — только под admin-сессией
+  (401/400/404 проверены curl'ом). openapi.yaml + codegen.
+- Админка: страница `/admin-web/users` («Пользователи» в навигации): поиск,
+  таблица, кнопки «Выдать» (window.confirm) / «Выдан — отозвать», toast'ы.
+- Мобилка: `AuthUser.isAdmin`; секция «РАЗРАБОТКА (АДМИН)» в настройках и экран
+  `/admin` гейтятся по `useAuth().user?.isAdmin` (ручной Switch-тогл и
+  `AppContext.isAdmin` удалены). Без прав — «Доступ ограничен». В мобильном
+  `/admin` удалены вкладки «Настройки»/«Метрики» (били в легаси X-Admin-Token →
+  401); остались logs/sources/model.
+
+**5. Dev-персист admin-сессий** (`routes/adminAuth.ts`): в dev (NODE_ENV≠production)
+сессии дублируются в `/tmp/aegis_admin_sessions.json` (mode 0600) и
+подхватываются при старте — рестарт dev-сервера больше не разлогинивает
+админку. В production поведение прежнее (in-memory, single operator).
+Причина: e2e-тесты и dev-рестарты убивали in-memory сессии.
+
+**Верификация:** architect PASS (замечания закрыты: мобильные вкладки админки,
+подпись Free/Premium в coverage). `pnpm run typecheck` зелёный. **E2e
+testing-субагентом:** (а) мобилка — регистрация → секции админа нет → грант
+через БД → relogin → секция есть, Admin·Debug открывается — SUCCESS;
+(б) админка — вход по сессионной cookie, поиск пользователя, «Выдать» с
+confirm → toast «Админ-режим выдан» → «Выдан — отозвать» → toast «Админ-режим
+отозван» — SUCCESS. Тестовые e2e-пользователи удалены из БД.

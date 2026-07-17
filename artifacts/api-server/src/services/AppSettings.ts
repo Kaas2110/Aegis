@@ -8,6 +8,7 @@
 import { db, appSettingsTable, type AppSettings } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 import { logger } from '../lib/logger';
+import { setOdRuntimeConfig } from '../lib/openDotaUrl';
 
 const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   id: 1,
@@ -26,6 +27,8 @@ const DEFAULTS: Omit<AppSettings, 'updatedAt'> = {
   schedulerTickHours: 24,
   mobilePollLiveSec: 60,
   mobilePollIdleSec: 120,
+  opendotaPremium: null,
+  odDailyLimit: 3000,
   notes: null,
   promoFieldEnabled: false,
   refRedirectUrl: null,
@@ -56,6 +59,8 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
     cache = rows[0]!;
   }
   cacheLoadedAt = now;
+  // Пуш runtime-конфига OpenDota в sync-хелпер (hot-reload тогла из админки).
+  setOdRuntimeConfig({ premium: cache.opendotaPremium, dailyLimit: cache.odDailyLimit });
   return cache;
 }
 
@@ -76,6 +81,8 @@ export async function updateAppSettings(
     | 'schedulerTickHours'
     | 'mobilePollLiveSec'
     | 'mobilePollIdleSec'
+    | 'opendotaPremium'
+    | 'odDailyLimit'
     | 'notes'
     | 'promoFieldEnabled'
     | 'refRedirectUrl'

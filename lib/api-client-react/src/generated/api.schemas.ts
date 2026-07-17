@@ -111,6 +111,17 @@ export interface AdminAppSettings {
    * @maximum 3600
    */
   mobilePollIdleSec?: number;
+  /**
+   * OpenDota premium-режим. null = fallback на env OPENDOTA_USE_PREMIUM. true требует OPENDOTA_API_KEY в env.
+   * @nullable
+   */
+  opendotaPremium?: boolean | null;
+  /**
+   * Дневной бюджет OD-запросов api-server'а в free-режиме (official free tier 3000/day на IP)
+   * @minimum 100
+   * @maximum 3000
+   */
+  odDailyLimit?: number;
   /** @nullable */
   notes?: string | null;
   /** Показывать ли поле промокода на экране регистрации мобилки */
@@ -217,6 +228,13 @@ export interface AdminSettingsInput {
    */
   mobilePollIdleSec?: number;
   /** @nullable */
+  opendotaPremium?: boolean | null;
+  /**
+   * @minimum 100
+   * @maximum 3000
+   */
+  odDailyLimit?: number;
+  /** @nullable */
   notes?: string | null;
   promoFieldEnabled?: boolean;
   /** @nullable */
@@ -254,6 +272,31 @@ export type AdminRefCodeOnlyResponseCode = { [key: string]: unknown };
 
 export interface AdminRefCodeOnlyResponse {
   code?: AdminRefCodeOnlyResponseCode;
+}
+
+export interface AdminAppUser {
+  id: number;
+  email: string;
+  createdAt: string;
+  lastLoginAt?: string | null;
+  tariff: string;
+  refCode?: string | null;
+  isAdmin: boolean;
+}
+
+export interface AdminUsersResponse {
+  users: AdminAppUser[];
+}
+
+export interface AdminUserAdminInput {
+  isAdmin: boolean;
+}
+
+export type AdminUserAdminResponseUser = { [key: string]: unknown };
+
+export interface AdminUserAdminResponse {
+  ok: boolean;
+  user?: AdminUserAdminResponseUser;
 }
 
 export interface AdminRetrainResult {
@@ -558,6 +601,27 @@ export interface AdminCoverageResponse {
   generatedAt: string;
 }
 
+/**
+ * Откуда взят режим — env OPENDOTA_USE_PREMIUM, тогл админки (db) или дефолт (free)
+ */
+export type AdminOdUsageResponsePremiumSource =
+  (typeof AdminOdUsageResponsePremiumSource)[keyof typeof AdminOdUsageResponsePremiumSource];
+
+export const AdminOdUsageResponsePremiumSource = {
+  env: "env",
+  db: "db",
+  default: "default",
+} as const;
+
+export type AdminOdUsageResponseFreeBudget = {
+  dailyLimit: number;
+  usedToday: number;
+  minuteUsed: number;
+  minuteLimit: number;
+  hourUsed: number;
+  hourBudget: number;
+};
+
 export type AdminOdUsageResponseHistoryItem = {
   date: string;
   count: number;
@@ -571,6 +635,11 @@ export interface AdminOdUsageResponse {
   estimatedCostUsdToday: number;
   estimatedCostUsdLast30d: number;
   hasKey: boolean;
+  /** Эффективный режим (учитывает env-приоритет и наличие ключа) */
+  premium: boolean;
+  /** Откуда взят режим — env OPENDOTA_USE_PREMIUM, тогл админки (db) или дефолт (free) */
+  premiumSource: AdminOdUsageResponsePremiumSource;
+  freeBudget: AdminOdUsageResponseFreeBudget;
   history: AdminOdUsageResponseHistoryItem[];
   note: string;
 }
@@ -675,6 +744,10 @@ export interface AdminBookmakerProbeResponse {
 export interface AdminOpenObject {
   [key: string]: unknown;
 }
+
+export type ListAdminUsersParams = {
+  q?: string;
+};
 
 export type GetAdminJobStatus404 = {
   error: string;

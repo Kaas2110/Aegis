@@ -5,7 +5,9 @@
  * Aegis API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminOdUsageResponseFreeBudget } from "./adminOdUsageResponseFreeBudget";
 import type { AdminOdUsageResponseHistoryItem } from "./adminOdUsageResponseHistoryItem";
+import type { AdminOdUsageResponsePremiumSource } from "./adminOdUsageResponsePremiumSource";
 
 export interface AdminOdUsageResponse {
   today: number;
@@ -14,6 +16,11 @@ export interface AdminOdUsageResponse {
   estimatedCostUsdToday: number;
   estimatedCostUsdLast30d: number;
   hasKey: boolean;
+  /** Эффективный режим (учитывает env-приоритет и наличие ключа) */
+  premium: boolean;
+  /** Откуда взят режим — env OPENDOTA_USE_PREMIUM, тогл админки (db) или дефолт (free) */
+  premiumSource: AdminOdUsageResponsePremiumSource;
+  freeBudget: AdminOdUsageResponseFreeBudget;
   history: AdminOdUsageResponseHistoryItem[];
   note: string;
 }
