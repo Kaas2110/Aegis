@@ -7,7 +7,7 @@
  */
 import { db, heroStatsTable, heroItemPopularityTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { fetchOdJson, sleep, DELAY_MS } from './lib/odPace.js';
+import { fetchOdJson, sleep, DELAY_MS, OdQuotaExhaustedError } from './lib/odPace.js';
 
 interface OdItemPop {
   start_game_items?: Record<string, number>;
@@ -48,6 +48,10 @@ async function main() {
         saved++;
       }
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) {
+        console.warn(`[od-hero-item-pop] ${e.message} — прерываю цикл (failed=${failed})`);
+        break;
+      }
       failed++;
       if (failed <= 5) console.warn(`[od-hero-item-pop] hero=${heroId} ${(e as Error).message}`);
     }

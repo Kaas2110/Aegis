@@ -930,3 +930,39 @@ pg_dump -Fc + gzip + split 150m. Восстановление: cat → gunzip �
   экрана → алерт сработал по Team Lynx vs PuckChamp (match_winner conf 0.622),
   карточка на вкладке «Сработавшие» с меткой правила и ~62%. In-app store,
   cooldown и правило-матчинг работают.
+
+## 2026-07-17 — Аудит функционала: LGBM-рынки в /predict + OD circuit-breaker
+
+**Аудит основного функционала** (реестр моделей, эндпоинты, live/upcoming,
+totals-ladder, ml-predict, team-compare — всё OK) нашёл 2 бага, оба исправлены:
+
+1. **`/predict` игнорировал LightGBM market-модели.** Прематч-ветка
+   `POST /api/analytics/predict` отдавала first_blood / total_kills /
+   total_duration от математических моделей (`math-v1`), хотя 10/10
+   LightGBM market-моделей активны и `totals-ladder` их уже использует.
+   Фикс: `applyLgbMarketOverrides()` в `routes/analytics.ts` — после
+   `applyMlMatchWinner` оверрайдит эти 3 рынка из `MarketLgbm.predictMarketsFor()`:
+   FB = calibrated_prob (conf 0.62), kills = `probLogNormalOver(52.5, …)`
+   (прематч-label = log(kills) БЕЗ +1 — сдвиг только у live), duration =
+   линия 42.0 мин × 60 сек, conf 0.72, `modelVersion=lightgbm-market:{tier}`,
+   пересчёт edge/EV при наличии bookmakerOdds. Live-ветка не затронута
+   (у неё свои live-override'ы). Верифицировано curl: 3 рынка отдают
+   `lightgbm-market:pure`. Architect-ревью PASS (математика лог-нормали
+   сверена с label'ами train-market-models). TODO (не блокер): пробросить
+   draftHint в `predictMarketsFor` для `with_draft`-tier на детальном экране.
+2. **Ingest-скрипты жгли исчерпанную OD-квоту тысячами 429.** При
+   исчерпании Stratz дневного лимита enrichment уходил в OD-fallback и
+   выжигал OD free-квоту (3000/день), «додавливая» и user-facing live-путь.
+   Фикс: `scripts/src/lib/odPace.ts` — общий circuit-breaker: 1-2-й 429
+   подряд → пауза 65s; 3-й → `OdQuotaExhaustedError` + circuit open 30 мин
+   (дальнейшие вызовы фейлятся мгновенно без сети). 13 скриптов прерывают
+   цикл при quota-exhausted: 7×E1 (rosters/hero-pools/player-totals/counts/
+   wl-pro/hero-benchmarks/item-popularity), od-scenarios, od-distributions,
+   od-player-peers, players-heroes, drafts (локальные fetch-хелперы
+   заменены на общий `fetchOdJson`), ingest-parsed (свой consecutive-429
+   счётчик: 429 не инкрементирует attempts, 3 подряд → abort тика).
+   TODO (follow-up): мигрировать ingest-matches / ingest-teams /
+   ingest-hero-stats на odPace для единого breaker'а всего Daily Ingest.
+
+Typecheck зелёный. Бэкап БД не пересобирался — фиксы code-only, свежий
+бэкап `backups/aegis-db.part-*.gz` от 2026-07-17 актуален.

@@ -7,7 +7,7 @@
  */
 import { db, matchDraftsTable, playerTotalsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { fetchOdJson, sleep, DELAY_MS } from './lib/odPace.js';
+import { fetchOdJson, sleep, DELAY_MS, OdQuotaExhaustedError } from './lib/odPace.js';
 
 const FRESHNESS_DAYS = 14;
 
@@ -71,6 +71,10 @@ async function main() {
         }
       }
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) {
+        console.warn(`[od-player-totals] ${e.message} — прерываю цикл (saved=${saved} failed=${failed})`);
+        break;
+      }
       failed++;
       if (failed <= 5) console.warn(`[od-player-totals] acct=${accountId} ${(e as Error).message}`);
     }

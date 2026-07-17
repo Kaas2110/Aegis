@@ -21,7 +21,7 @@
  *   pnpm --filter @workspace/scripts run ingest:players-heroes --no-stratz
  */
 
-import { withOpenDotaKey } from './lib/openDotaUrl';
+import { fetchOdJson, OdQuotaExhaustedError } from './lib/odPace.js';
 import { db, matchDraftsTable, playersTable, playerHeroStatsTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
 import {
@@ -50,20 +50,19 @@ interface OpenDotaPlayerProfile {
   last_match_time?: number | null;
 }
 
+// Аудит 2026-07-17: общий fetchOdJson с 429 circuit-breaker вместо локального fetch —
+// при исчерпании OD-квоты (Stratz-фоллбек-шторм) скрипт прерывается, а не жжёт
+// тысячи 429, добивая user-facing live-путь api-server'а.
 async function fetchOdPlayerHeroes(accountId: number): Promise<OpenDotaPlayerHero[]> {
-  const r = await fetch(withOpenDotaKey(`https://api.opendota.com/api/players/${accountId}/heroes`), {
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status} for /players/${accountId}/heroes`);
-  return (await r.json()) as OpenDotaPlayerHero[];
+  const data = await fetchOdJson<OpenDotaPlayerHero[]>(`/players/${accountId}/heroes`);
+  if (data == null) throw new Error(`HTTP 404 for /players/${accountId}/heroes`);
+  return data;
 }
 
 async function fetchPlayerProfile(accountId: number): Promise<OpenDotaPlayerProfile> {
-  const r = await fetch(withOpenDotaKey(`https://api.opendota.com/api/players/${accountId}`), {
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status} for /players/${accountId}`);
-  return (await r.json()) as OpenDotaPlayerProfile;
+  const data = await fetchOdJson<OpenDotaPlayerProfile>(`/players/${accountId}`);
+  if (data == null) throw new Error(`HTTP 404 for /players/${accountId}`);
+  return data;
 }
 
 async function upsertProfile(accountId: number): Promise<void> {
@@ -228,7 +227,11 @@ async function main() {
       // Профиль игрока — всегда из OpenDota (pro-имена там точнее)
       await upsertProfile(accountId);
       okProfile++;
-    } catch {
+    } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) {
+        console.warn(`\n[ingest-players-heroes] ${e.message} — прерываю цикл (heroes=${okHeroes} failed=${failed})`);
+        break;
+      }
       failed++;
     }
 

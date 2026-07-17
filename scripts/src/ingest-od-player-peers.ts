@@ -17,12 +17,12 @@
 
 import { db, matchDraftsTable, playerPeersTable } from '@workspace/db';
 import { sql, inArray } from 'drizzle-orm';
-import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl.js';
+import { odThrottleMs } from './lib/openDotaUrl.js';
+import { fetchOdJson, sleep, OdQuotaExhaustedError } from './lib/odPace.js';
 
 const FRESHNESS_DAYS = 7;
 const DELAY_MS = odThrottleMs(200);
 const MIN_GAMES = 5;
-const OD_BASE = 'https://api.opendota.com/api';
 
 interface OdPeer {
   account_id: number;
@@ -36,15 +36,10 @@ interface OdPeer {
   winrate?: number;
 }
 
-async function sleep(ms: number) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
+// Аудит 2026-07-17: общий fetchOdJson с 429 circuit-breaker вместо локального fetch.
 async function fetchPeers(accountId: number): Promise<OdPeer[]> {
-  const url = withOpenDotaKey(`${OD_BASE}/players/${accountId}/peers`);
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<OdPeer[]>;
+  const data = await fetchOdJson<OdPeer[]>(`/players/${accountId}/peers`, 10_000);
+  return Array.isArray(data) ? data : [];
 }
 
 async function main() {
@@ -114,6 +109,10 @@ async function main() {
         saved += insertRows.length;
       }
     } catch (err) {
+      if (err instanceof OdQuotaExhaustedError) {
+        console.warn(`[od-player-peers] ${err.message} — прерываю цикл (peerRows=${saved} failed=${failed})`);
+        break;
+      }
       failed++;
       console.warn(`[od-player-peers] account=${accountId} FAILED: ${err}`);
     }

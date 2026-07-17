@@ -430,6 +430,79 @@ async function applyMlMatchWinner(
   return result;
 }
 
+/**
+ * Аудит 2026-07-17: LightGBM market-модели (first_blood / total_kills /
+ * total_duration) раньше применялись только в popular-markets и totals-ladder —
+ * основной список POST /predict (детальный экран мобилки) оставался на
+ * math_v1.0.0 с плоскими 50/50 для FB. Теперь прематч-ветка тоже получает
+ * ML-оверрайды. Линии совпадают с дефолтами math-моделей (52.5 киллов /
+ * 42.0 мин); прематч kills обучены на log(kills) БЕЗ сдвига +1 (сдвиг — только
+ * у live_total_kills), duration — log(сек) → line × 60 (см. totals-ladder).
+ */
+async function applyLgbMarketOverrides(
+  result: ReturnType<typeof runAnalytics>,
+  input: MatchInput,
+  log?: { warn: (o: object, m?: string) => void },
+): Promise<ReturnType<typeof runAnalytics>> {
+  const t1 = input.team1.teamId;
+  const t2 = input.team2.teamId;
+  if (!t1 || !t2 || t1 === t2) return result;
+  try {
+    const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
+    const lgb = await predictMarketsFor(t1, t2);
+
+    const patch = (betType: string, pRaw: number | null, version: string, confidence: number): void => {
+      if (pRaw == null || !Number.isFinite(pRaw)) return;
+      const idx = result.predictions.findIndex(p => p.betType === betType);
+      if (idx === -1) return;
+      const old = result.predictions[idx];
+      const p = Math.max(0.02, Math.min(0.98, pRaw));
+      let edge = old.edge ?? 0;
+      let ev = old.ev ?? 0;
+      if (old.bookmakerOdds1 && old.bookmakerOdds2) {
+        const fair = (1 / old.bookmakerOdds1) / (1 / old.bookmakerOdds1 + 1 / old.bookmakerOdds2);
+        edge = p - fair;
+        ev = p * (old.bookmakerOdds1 - 1) - (1 - p);
+      }
+      result.predictions[idx] = {
+        ...old,
+        probTeam1: p,
+        probTeam2: 1 - p,
+        confidence,
+        edge,
+        ev,
+        modelVersion: version,
+      };
+    };
+
+    patch(
+      'first_blood',
+      lgb.firstBloodP,
+      `lightgbm-market:${lgb.tier.firstBlood ?? 'pure'}`,
+      0.62,
+    );
+    if (lgb.totalKillsLogN) {
+      patch(
+        'total_kills',
+        probLogNormalOver(52.5, lgb.totalKillsLogN.mean, lgb.totalKillsLogN.std),
+        `lightgbm-market:${lgb.tier.totalKills ?? 'pure'}`,
+        0.72,
+      );
+    }
+    if (lgb.totalDurationLogN) {
+      patch(
+        'total_duration',
+        probLogNormalOver(42.0 * 60, lgb.totalDurationLogN.mean, lgb.totalDurationLogN.std),
+        `lightgbm-market:${lgb.tier.totalDuration ?? 'pure'}`,
+        0.72,
+      );
+    }
+  } catch (err) {
+    log?.warn?.({ err }, 'predict: lgb market overrides failed');
+  }
+  return result;
+}
+
 router.post('/predict', async (req, res) => {
   try {
     const rawInput = req.body as MatchInput & {
@@ -613,7 +686,9 @@ router.post('/predict', async (req, res) => {
       PREMATCH_PREDICT_TTL_MS,
       async () => {
         const r = runAnalytics(input, input.bookmakerOdds);
-        return applyMlMatchWinner(r, input);
+        const withWinner = await applyMlMatchWinner(r, input);
+        // Аудит 2026-07-17: FB/тоталы — LightGBM market-модели вместо math.
+        return applyLgbMarketOverrides(withWinner, input, req.log);
       },
     );
     res.json(result);

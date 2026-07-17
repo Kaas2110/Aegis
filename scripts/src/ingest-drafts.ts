@@ -58,13 +58,13 @@ interface OpenDotaMatch {
 const OD_SLEEP_MS = 1100;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+// Аудит 2026-07-17: общий fetchOdJson с 429 circuit-breaker вместо локального fetch —
+// при исчерпании OD-квоты (Stratz-фоллбек-шторм) скрипт прерывается, а не жжёт квоту.
 async function fetchMatchOpenDota(matchId: number): Promise<OpenDotaMatch> {
-  const { withOpenDotaKey } = await import('./lib/openDotaUrl');
-  const resp = await fetch(withOpenDotaKey(`https://api.opendota.com/api/matches/${matchId}`), {
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} for match ${matchId}`);
-  return (await resp.json()) as OpenDotaMatch;
+  const { fetchOdJson } = await import('./lib/odPace.js');
+  const data = await fetchOdJson<OpenDotaMatch>(`/matches/${matchId}`);
+  if (data == null) throw new Error(`HTTP 404 for match ${matchId}`);
+  return data;
 }
 
 function partitionOD(pb: OpenDotaPickBan[]) {
@@ -314,6 +314,10 @@ async function main() {
         await sleep(OD_SLEEP_MS);
       }
     } catch (e) {
+      if ((e as Error).name === 'OdQuotaExhaustedError') {
+        console.warn(`\n[ingest-drafts] ${(e as Error).message} — прерываю цикл (saved=${saved} failed=${failed})`);
+        break;
+      }
       failed++;
       const msg = (e as Error).message;
       // 404 — матч удалён из источника; помечаем пустым чтобы не повторять.

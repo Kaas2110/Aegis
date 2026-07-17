@@ -9,7 +9,7 @@
  */
 import { db, heroStatsTable, heroBenchmarksTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { fetchOdJson, sleep, DELAY_MS } from './lib/odPace.js';
+import { fetchOdJson, sleep, DELAY_MS, OdQuotaExhaustedError } from './lib/odPace.js';
 
 interface OdBenchmarks {
   hero_id: number;
@@ -39,6 +39,10 @@ async function main() {
         saved++;
       }
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) {
+        console.warn(`[od-hero-benchmarks] ${e.message} — прерываю цикл (failed=${failed})`);
+        break;
+      }
       failed++;
       if (failed <= 5) console.warn(`[od-hero-benchmarks] hero=${heroId} ${(e as Error).message}`);
     }

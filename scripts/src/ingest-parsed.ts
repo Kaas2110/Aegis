@@ -142,10 +142,26 @@ async function main(): Promise<void> {
   let timedOut = 0;
   let httpErrors = 0;
 
+  // Аудит 2026-07-17: circuit-breaker на серию 429 — при исчерпанной OD-квоте
+  // не жжём 200 req/тик впустую (добивая user-facing live-путь api-server'а).
+  let consecutive429 = 0;
   for (let i = 0; i < todo.length; i++) {
     const { matchId, requestedAt, attempts } = todo[i];
     const ageMs = Date.now() - new Date(requestedAt).getTime();
     const { data, error } = await fetchMatch(matchId);
+
+    if (error && /\b429\b/.test(error)) {
+      consecutive429++;
+      httpErrors++;
+      if (consecutive429 >= 3) {
+        console.warn(`[ingest-parsed] 3× HTTP 429 подряд — OD-квота исчерпана, прерываю тик (${i + 1}/${todo.length})`);
+        break;
+      }
+      // НЕ инкрементируем attempts — 429 не вина матча, доберём в следующем тике.
+      await sleep(65_000);
+      continue;
+    }
+    consecutive429 = 0;
 
     if (error) {
       httpErrors++;

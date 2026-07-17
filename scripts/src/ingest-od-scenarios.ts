@@ -21,21 +21,17 @@
 
 import { db, heroStatsTable, heroScenariosTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl.js';
+import { odThrottleMs } from './lib/openDotaUrl.js';
+import { fetchOdJson, sleep, OdQuotaExhaustedError } from './lib/odPace.js';
 
 const FRESHNESS_HOURS = 24;
 const DELAY_MS = odThrottleMs(150);
-const OD_BASE = 'https://api.opendota.com/api';
 
-async function sleep(ms: number) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
+// Аудит 2026-07-17: общий fetchOdJson с 429 circuit-breaker вместо локального fetch.
 async function odGet(path: string): Promise<unknown> {
-  const url = withOpenDotaKey(`${OD_BASE}${path}`);
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`OD ${path} → HTTP ${res.status}`);
-  return res.json();
+  const data = await fetchOdJson<unknown>(path, 10_000);
+  if (data == null) throw new Error(`OD ${path} → HTTP 404`);
+  return data;
 }
 
 async function upsertScenario(heroId: number, scenarioType: string, data: unknown[]) {
@@ -85,7 +81,7 @@ async function main() {
     skipped++;
   }
 
-  for (let i = 0; i < heroIds.length; i++) {
+  outer: for (let i = 0; i < heroIds.length; i++) {
     const heroId = heroIds[i]!;
 
     for (const scenarioType of ['itemTimings', 'laneRoles'] as const) {
@@ -97,6 +93,10 @@ async function main() {
         await upsertScenario(heroId, scenarioType, Array.isArray(data) ? data : []);
         saved++;
       } catch (err) {
+        if (err instanceof OdQuotaExhaustedError) {
+          console.warn(`[od-scenarios] ${err.message} — прерываю цикл (saved=${saved} failed=${failed})`);
+          break outer;
+        }
         failed++;
         console.warn(`[od-scenarios] hero=${heroId} type=${scenarioType} FAILED: ${err}`);
       }

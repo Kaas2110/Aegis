@@ -8,7 +8,7 @@
  */
 import { db, teamsTable, teamRostersTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
-import { fetchOdJson, sleep, DELAY_MS } from './lib/odPace.js';
+import { fetchOdJson, sleep, DELAY_MS, OdQuotaExhaustedError } from './lib/odPace.js';
 
 const FRESHNESS_DAYS = 7;
 const ACTIVE_WINDOW_DAYS = 365;
@@ -76,6 +76,10 @@ async function main() {
         }
       }
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) {
+        console.warn(`[od-team-rosters] ${e.message} — прерываю цикл (saved=${saved} failed=${failed})`);
+        break;
+      }
       failed++;
       if (failed <= 5) console.warn(`[od-team-rosters] team=${teamId} ${(e as Error).message}`);
     }

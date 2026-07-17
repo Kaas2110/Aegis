@@ -1,6 +1,8 @@
-- [OpenDota free-mode quota](opendota-free-quota.md) — 3000 req/day делится между LiveWorker, Hourly/Daily cron и Replay Parse Loop; агрессивный parse-loop устраивает 429-шторм всем.
-- [Live totals log(kills+1)](live-totals-label-offset.md) — live-модели тоталов учат log(kills+1); любой потребитель обязан передавать line+1, иначе систематическое смещение.
+- [OpenDota free-mode quota](opendota-free-quota.md) — 3000 req/day делится между LiveWorker, Hourly/Daily cron и Replay Parse Loop; исчерпание Stratz каскадно уводит ingest в OD-fallback и жжёт квоту — все OD-вызовы скриптов через общий breaker odPace.
+- [Тотал-модели: шкалы label'ов](live-totals-label-offset.md) — live kills = log(kills+1) (потребитель передаёт line+1), prematch kills = log(kills) БЕЗ +1, duration = log(секунд); дефолт-линии 52.5 / 42.0 мин.
 - [Series/timeseries split rules](timeseries-split-leakage.md) — сплит только по границам серий/времени; фичи-рейтинги брать из snapshot на дату события, не текущие.
 - [Ladder centering](totals-ladder-centering.md) — центр ladder тоталов выводить из активной модели (exp(mean log)/scale), не из константной эвристики; после live-override пересобрать линии.
 - [Backup/present_asset extensions](backup-split-parts.md) — split-части бэкапа именовать .gz (gzip целиком валиден после cat); present_asset принимает только известные расширения.
 - [Bash background limits](bash-background-limits.md) — nohup/фоновые процессы умирают с завершением команды; долгое — foreground ≤120s или workflow.
+- [Формы ответов эндпоинтов](api-response-shapes.md) — /api/matches/live = `{sources:[{source,data:[…]}]}`, /upcoming = `{noData,data}`; потребители обязаны разворачивать sources[].data, иначе «пустой» список при живых данных.
+- [Changelog пишется в конец](changelog-ordering.md) — docs/changelog.md фактически хронологический (свежее внизу), несмотря на шапку «свежее — сверху»; новые записи дописывать в конец файла.
