@@ -47,7 +47,7 @@ The mobile client can send arbitrary request bodies to analytics endpoints. The 
 
 ### Information Disclosure
 
-The application handles secrets, model metadata, and operational state. Responses and logs must not leak environment secrets, stack traces, or unnecessary internals. Because the admin UI stores the admin token in browser localStorage, any same-origin script injection would directly expose that token.
+The application handles secrets, model metadata, and operational state. Responses and logs must not leak environment secrets, stack traces, or unnecessary internals. The admin token lives only inside the HttpOnly session cookie (never in localStorage), so same-origin script injection cannot read it directly, but XSS could still ride the cookie to perform admin actions — the admin SPA must remain free of injection sinks.
 
 ### Denial of Service
 

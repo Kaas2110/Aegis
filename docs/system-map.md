@@ -335,7 +335,8 @@ mobile отправляет POST /predict с {
 ## 11. Pointers
 
 - `replit.md` — high-level overview + user preferences.
-- `docs/architecture.md` — историческая архитектура, более старые детали.
+- `docs/operations.md` — справочник ingest/compute/train скриптов, env-переменных, STRATZ multi-token pool.
+- `docs/architecture.md` — API endpoints (контракт), admin & settings, bookmakers, gotchas, реестр log-тэгов.
 - `docs/changelog.md` — хронология крупных изменений.
 - `threat_model.md` — модель угроз для security-сканов.
 - Эта карта (`docs/system-map.md`) — **источник правды по связям сервисов**. Обновлять при каждом архитектурном изменении.

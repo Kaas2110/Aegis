@@ -42,8 +42,13 @@ scripts/            # Ингест/трейн скрипты (одиночный
 - `POST /api/admin/login` { token } → устанавливает HttpOnly cookie
   `aegis_admin_session`. Token сравнивается с `ADMIN_TOKEN` env через
   constant-time compare.
-- Сессии in-memory (24h TTL), пересоздаются при рестарте сервера.
+- Сессии in-memory (24h TTL). В dev (NODE_ENV≠production) дополнительно
+  персистятся в `/tmp/aegis_admin_sessions.json` (mode 0600) и переживают
+  рестарт dev-сервера; в prod — чисто in-memory.
 - Защита: throttle 10/15min на IP.
+- `GET /api/admin/users?q=` + `POST /api/admin/users/:id/admin {isAdmin}` —
+  выдача/отзыв «Режима админ» мобилки (`app_users.is_admin`); мобилка гейтит
+  секцию «РАЗРАБОТКА (АДМИН)» и экран `/admin` по `isAdmin` из auth-ответов.
 
 ### User (bearer-token, для mobile)
 - `POST /api/auth/register` { email, password } → 201, `{ token, user }`
@@ -173,7 +178,7 @@ curl -X POST localhost:80/api/analytics/retrain --cookie ...
 
 | Таблица              | Назначение                                         |
 |---------------------|---------------------------------------------------|
-| `app_users`         | **Зарегистрированные пользователи мобилки**        |
+| `app_users`         | **Зарегистрированные пользователи мобилки** (`is_admin` — «Режим админ», `tariff` default `free`, `ref_code`) |
 | `teams`             | OpenDota team ratings (~1000 команд)               |
 | `pro_matches`       | Исторические pro matches для трейна               |
 | `live_snapshots`    | Полные снимки live-матчей (для live-винера)        |
