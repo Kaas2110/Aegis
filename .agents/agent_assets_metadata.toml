@@ -60,3 +60,9 @@ id = "j5SBivHtBGuvSi28ChUbw"
 uri = "file://replit.md"
 type = "text"
 title = "replit.md (обновлён)"
+
+[[outputs]]
+id = "Rlz-16RETasm9NRpCLua3"
+uri = "file://exports/aegis-design-screens.zip"
+type = "unspecified"
+title = "Скриншоты дизайна всех экранов (админка + мобилка)"
