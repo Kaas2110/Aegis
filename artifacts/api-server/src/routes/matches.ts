@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
-import { db, teamsTable, leaguesTable, heroStatsTable } from '@workspace/db';
-import { inArray } from 'drizzle-orm';
+import { db, teamsTable, leaguesTable, heroStatsTable, liveSnapshotsTable, matchDraftsTable, proMatchesTable } from '@workspace/db';
+import { inArray, and, or, eq, gte, sql } from 'drizzle-orm';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
 import { getApiKey, getStratzToken } from '../services/ApiKeysService';
@@ -650,6 +650,176 @@ async function enrichLiveMatchesWithDrafts(matches: unknown): Promise<unknown> {
     return draft ? { ...m, draft } : m;
   });
 }
+
+// ── Драфты завершённых карт live-серии ────────────────────────────────────
+//
+// Мобилка во вкладке «Драфт» показывает подвкладки «Карта 1..N». Раньше драфт
+// был доступен только для текущей карты; для уже сыгранных карт стояла
+// заглушка «появится когда стартует» — баг. Здесь достаём драфты сыгранных
+// карт серии:
+//   1. Сыгранные карты определяем по live_snapshots: LiveWorker пишет снапшоты
+//      каждой карты (matchId + team ids). Окно 12h покрывает любую BO5.
+//   2. Драфт карты берём из match_drafts (заполняется ingest:drafts), а если
+//      ingest ещё не успел (карта закончилась минуты назад) — из OpenDota
+//      /api/matches/{id}. Драфт завершённой карты не меняется → кэш 30 мин,
+//      null-результат кэшируем на 60s (быстрый ретрай).
+
+const SERIES_WINDOW_MS = 12 * 60 * 60 * 1000;
+const FINISHED_DRAFT_TTL_MS = 30 * 60 * 1000;
+const FINISHED_DRAFT_NULL_TTL_MS = 60 * 1000;
+const FINISHED_DRAFT_CACHE_MAX = 300;
+const finishedDraftCache = new Map<number, { payload: LiveDraftPayload | null; at: number }>();
+
+async function getFinishedMapDraft(matchId: number): Promise<LiveDraftPayload | null> {
+  const cached = finishedDraftCache.get(matchId);
+  if (cached) {
+    const ttl = cached.payload ? FINISHED_DRAFT_TTL_MS : FINISHED_DRAFT_NULL_TTL_MS;
+    if (Date.now() - cached.at < ttl) return cached.payload;
+  }
+  // 1) Локальная таблица match_drafts (после ingest:drafts) — без внешних вызовов.
+  let payload: LiveDraftPayload | null = null;
+  try {
+    const rows = await db.select().from(matchDraftsTable)
+      .where(eq(matchDraftsTable.matchId, matchId)).limit(1);
+    const row = rows[0];
+    if (row && (row.radiantPicks.length > 0 || row.direPicks.length > 0)) {
+      const heroes = await getHeroNames();
+      const nameOf = (id: number) => heroes.get(id) ?? `Hero #${id}`;
+      const mk = (ids: number[], side: 'radiant' | 'dire', base: number) =>
+        ids.map((heroId, i) => ({ heroId, heroName: nameOf(heroId), side, order: base + i }));
+      payload = {
+        picks: [...mk(row.radiantPicks, 'radiant', 0), ...mk(row.direPicks, 'dire', 100)],
+        bans: [...mk(row.radiantBans, 'radiant', 0), ...mk(row.direBans, 'dire', 100)],
+        source: 'opendota',
+        fetchedAt: row.fetchedAt.toISOString(),
+      };
+    }
+  } catch { /* БД недоступна — пробуем OD ниже */ }
+  // 2) OpenDota: свежезавершённая карта, ingest ещё не прошёл.
+  if (!payload) payload = await fetchOpenDotaDraft(matchId);
+  finishedDraftCache.set(matchId, { payload, at: Date.now() });
+  if (finishedDraftCache.size > FINISHED_DRAFT_CACHE_MAX) {
+    const excess = finishedDraftCache.size - FINISHED_DRAFT_CACHE_MAX;
+    const it = finishedDraftCache.keys();
+    for (let i = 0; i < excess; i++) {
+      const k = it.next().value;
+      if (k !== undefined) finishedDraftCache.delete(k);
+    }
+  }
+  return payload;
+}
+
+/**
+ * GET /api/matches/series-drafts
+ *   ?team1Id=&team2Id=            — пара команд текущей live-серии (обязательно)
+ *   &currentMatchId=              — OD match_id текущей ИГРАЮЩЕЙСЯ карты
+ *                                   (не передавать между картами: OD в этот
+ *                                   момент держит id уже завершённой карты)
+ *   &currentMapNumber=            — номер текущей карты по PandaScore (1-based)
+ *
+ * Ответ: { maps: [{ mapNumber, matchId, radiantTeamId, direTeamId, draft }] }
+ * — только сыгранные карты. mapNumber выравнивается с конца: последняя
+ * сыгранная карта = currentMapNumber - 1 (счёт PS надёжнее, чем полнота
+ * наших снапшотов). draft=null — честный «данные ещё не готовы» для UI.
+ */
+router.get('/series-drafts', async (req, res) => {
+  const team1Id = Number(req.query['team1Id']);
+  const team2Id = Number(req.query['team2Id']);
+  const currentMatchIdRaw = Number(req.query['currentMatchId'] ?? 0);
+  const currentMatchId = Number.isInteger(currentMatchIdRaw) && currentMatchIdRaw > 0 ? currentMatchIdRaw : 0;
+  const currentMapRaw = Number(req.query['currentMapNumber'] ?? 0);
+  const currentMapNumber = Number.isInteger(currentMapRaw) && currentMapRaw >= 1 && currentMapRaw <= 5 ? currentMapRaw : 0;
+  if (!Number.isInteger(team1Id) || team1Id <= 0 ||
+      !Number.isInteger(team2Id) || team2Id <= 0 || team1Id === team2Id) {
+    res.status(400).json({ error: 'team1Id и team2Id обязательны (положительные, разные)' });
+    return;
+  }
+  try {
+    const key = `series-drafts:${team1Id}:${team2Id}:${currentMatchId}:${currentMapNumber}`;
+    const result = await withCache(key, 60_000, async () => {
+      const cutoff = new Date(Date.now() - SERIES_WINDOW_MS);
+      // Источник 1: live_snapshots (LiveWorker пишет их пока OD /api/live жив).
+      const snapRows = await db.select({
+        matchId: liveSnapshotsTable.matchId,
+        radiantTeamId: liveSnapshotsTable.radiantTeamId,
+        direTeamId: liveSnapshotsTable.direTeamId,
+        firstSeenSec: sql<number>`extract(epoch from min(${liveSnapshotsTable.capturedAt}))::bigint`,
+      })
+        .from(liveSnapshotsTable)
+        .where(and(
+          gte(liveSnapshotsTable.capturedAt, cutoff),
+          or(
+            and(eq(liveSnapshotsTable.radiantTeamId, team1Id), eq(liveSnapshotsTable.direTeamId, team2Id)),
+            and(eq(liveSnapshotsTable.radiantTeamId, team2Id), eq(liveSnapshotsTable.direTeamId, team1Id)),
+          ),
+        ))
+        .groupBy(liveSnapshotsTable.matchId, liveSnapshotsTable.radiantTeamId, liveSnapshotsTable.direTeamId)
+        .orderBy(sql`min(${liveSnapshotsTable.capturedAt}) asc`);
+
+      // Источник 2: pro_matches (hourly ingest). Покрывает серии, которые шли
+      // без OD live (429/квота): карта появится здесь в течение часа после
+      // восстановления квоты, и драфт подтянется из match_drafts.
+      const cutoffSec = Math.floor(cutoff.getTime() / 1000);
+      const proRows = await db.select({
+        matchId: proMatchesTable.matchId,
+        radiantTeamId: proMatchesTable.radiantTeamId,
+        direTeamId: proMatchesTable.direTeamId,
+        startTime: proMatchesTable.startTime,
+      })
+        .from(proMatchesTable)
+        .where(and(
+          gte(proMatchesTable.startTime, cutoffSec),
+          or(
+            and(eq(proMatchesTable.radiantTeamId, team1Id), eq(proMatchesTable.direTeamId, team2Id)),
+            and(eq(proMatchesTable.radiantTeamId, team2Id), eq(proMatchesTable.direTeamId, team1Id)),
+          ),
+        ))
+        .orderBy(sql`${proMatchesTable.startTime} asc`);
+
+      // Merge + dedupe по matchId; сортировка по времени первого появления.
+      // В live_snapshots capturedAt ≥ фактического старта карты, в pro_matches
+      // start_time — точный старт; для одного matchId берём pro_matches-версию.
+      const byId = new Map<number, { matchId: number; radiantTeamId: number | null; direTeamId: number | null; orderSec: number }>();
+      for (const r of snapRows) {
+        byId.set(r.matchId, { matchId: r.matchId, radiantTeamId: r.radiantTeamId, direTeamId: r.direTeamId, orderSec: Number(r.firstSeenSec) });
+      }
+      for (const r of proRows) {
+        byId.set(r.matchId, { matchId: r.matchId, radiantTeamId: r.radiantTeamId, direTeamId: r.direTeamId, orderSec: r.startTime });
+      }
+      const rows = Array.from(byId.values()).sort((a, b) => a.orderSec - b.orderSec);
+
+      const finishedRows = rows.filter(r => r.matchId !== currentMatchId);
+      const total = finishedRows.length;
+      // Номеруем с конца: последняя сыгранная = currentMapNumber - 1.
+      // Если currentMapNumber не передан — просто 1..N по порядку снапшотов.
+      const lastNumber = currentMapNumber >= 2 ? currentMapNumber - 1 : total;
+      const maps: Array<{
+        mapNumber: number;
+        matchId: number;
+        radiantTeamId: number | null;
+        direTeamId: number | null;
+        draft: LiveDraftPayload | null;
+      }> = [];
+      for (let i = 0; i < total; i++) {
+        const r = finishedRows[i]!;
+        const mapNumber = lastNumber - (total - 1 - i);
+        if (mapNumber < 1) continue; // рассинхрон снапшотов и счёта PS — лишние отбрасываем
+        maps.push({
+          mapNumber,
+          matchId: r.matchId,
+          radiantTeamId: r.radiantTeamId,
+          direTeamId: r.direTeamId,
+          draft: await getFinishedMapDraft(r.matchId),
+        });
+      }
+      return { maps };
+    }, v => v.maps.length > 0); // пустой ответ не кэшируем: снапшоты могли ещё не записаться
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'series-drafts failed');
+    res.status(500).json({ error: 'Не удалось получить драфты серии' });
+  }
+});
 
 interface RequestOptions {
   timeout?: number;

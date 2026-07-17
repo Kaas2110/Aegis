@@ -161,9 +161,23 @@ export default function MatchDetailScreen() {
   // ушёл на последнее место как справочный экран.
   const [activeTab, setActiveTab] = useState<'markets' | 'draft' | 'overview'>('markets');
   // Подвкладки во вкладке «Драфт» — для серий BO3/BO5 пользователь хочет
-  // переключаться между картами. Пока бэк отдаёт draft только для текущей карты,
-  // на картах 2/3 показываем заглушку «откроется когда стартует карта N».
+  // переключаться между картами. Текущая карта берёт draft из live-данных,
+  // сыгранные карты — из /api/matches/series-drafts (см. эффект ниже),
+  // будущие карты показывают заглушку «откроется когда стартует карта N».
   const [draftMapTab, setDraftMapTab] = useState<number>(1);
+  // Драфты уже сыгранных карт серии: mapNumber → данные карты.
+  // null в поле draft = карта была, но данные ещё не готовы (честная заглушка).
+  type SeriesMapDraft = {
+    mapNumber: number;
+    matchId: number;
+    radiantTeamId: number | null;
+    direTeamId: number | null;
+    draft: {
+      picks: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+      bans: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+    } | null;
+  };
+  const [seriesDrafts, setSeriesDrafts] = useState<Map<number, SeriesMapDraft>>(new Map());
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   // ── Гуманизированное объяснение прогноза от бэка (T006) ───────────────────
@@ -233,6 +247,48 @@ export default function MatchDetailScreen() {
     return () => { cancelled = true; };
   }, [match?.id, match?.liveSnapshot?.gameTimeSeconds]);
 
+  // Смена пары команд = другая серия: сбрасываем драфты прошлых карт, чтобы
+  // при переиспользовании экрана не показать драфт из чужой серии.
+  useEffect(() => {
+    setSeriesDrafts(new Map());
+  }, [match?.team1.id, match?.team2.id]);
+
+  // Драфты сыгранных карт серии (BO3/BO5). Тянем когда открыта вкладка «Драфт»
+  // и в серии уже есть завершённые карты. Для карты, играющейся прямо сейчас,
+  // передаём её match_id, чтобы бэк исключил её из «сыгранных». Между картами
+  // ничего не исключаем: OpenDota в этот момент держит id уже завершённой карты.
+  useEffect(() => {
+    if (activeTab !== 'draft' || !match) return;
+    if (match.format === 'BO1') return;
+    const curMap = match.currentMapNumber ?? 1;
+    if (curMap <= 1) return;
+    if (match.status !== 'live' && match.status !== 'between_maps') return;
+    const t1 = Number(match.team1.id);
+    const t2 = Number(match.team2.id);
+    if (!Number.isFinite(t1) || t1 <= 0 || !Number.isFinite(t2) || t2 <= 0 || t1 === t2) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          team1Id: String(t1),
+          team2Id: String(t2),
+          currentMapNumber: String(curMap),
+        });
+        if (match.status === 'live') {
+          const numericId = extractNumericMatchId(match.id);
+          if (numericId && numericId > 0) params.set('currentMatchId', String(numericId));
+        }
+        const r = await fetch(`/api/matches/series-drafts?${params.toString()}`);
+        if (!r.ok) return;
+        const json = await r.json() as { maps?: SeriesMapDraft[] };
+        if (!cancelled && Array.isArray(json.maps)) {
+          setSeriesDrafts(new Map(json.maps.map(m => [m.mapNumber, m])));
+        }
+      } catch { /* остаётся честная заглушка «данные ещё не готовы» */ }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, match?.id, match?.currentMapNumber, match?.status]);
+
   // Нет ID вообще
   if (!id) {
     return (
@@ -264,6 +320,34 @@ export default function MatchDetailScreen() {
   const isLive = match.status === 'live';
   const isBetweenMaps = match.status === 'between_maps';
   const isFinished = match.status === 'finished';
+
+  // ── Какой драфт показывать в выбранной подвкладке карты ──────────────────
+  // Текущая карта — live-драфт из match.draft; сыгранные карты — из
+  // seriesDrafts (/api/matches/series-drafts); будущие — заглушка.
+  const curMapNumber = match.currentMapNumber ?? 1;
+  const isPastMap = draftMapTab < curMapNumber;
+  const pastEntry = isPastMap ? seriesDrafts.get(draftMapTab) : undefined;
+  const displayDraft = isPastMap
+    ? (pastEntry?.draft ?? null)
+    : (draftMapTab === curMapNumber ? (draft ?? null) : null);
+  // На прошлой карте команды могли играть за другие стороны, чем сейчас.
+  // Мапим стороны по teamId из снапшота той карты; если ids не совпали —
+  // честные фракционные метки, а не наугад имена команд.
+  let draftRadiantLabel = match.team1.name;
+  let draftDireLabel = match.team2.name;
+  if (isPastMap && pastEntry) {
+    const t1IdNum = Number(match.team1.id);
+    const t2IdNum = Number(match.team2.id);
+    if (pastEntry.radiantTeamId === t1IdNum || pastEntry.direTeamId === t2IdNum) {
+      // ориентация совпадает с текущей
+    } else if (pastEntry.radiantTeamId === t2IdNum || pastEntry.direTeamId === t1IdNum) {
+      draftRadiantLabel = match.team2.name;
+      draftDireLabel = match.team1.name;
+    } else {
+      draftRadiantLabel = 'Radiant';
+      draftDireLabel = 'Dire';
+    }
+  }
 
   // T005: канонический порядок блоков во вкладке «Прогнозы».
   // Сначала исход серии (match_winner), затем текущая карта, тоталы,
@@ -633,34 +717,26 @@ export default function MatchDetailScreen() {
                 })}
               </View>
             )}
-            {/* Драфт показываем только когда выбранная карта = текущей.
-                Для других карт — контентная заглушка, пока бэк не отдаёт
-                драфты per-map (TODO: расширить /api/matches/live). */}
-            {draftMapTab !== (match.currentMapNumber ?? 1) ? (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.emptyCard}>
-                  <Feather name="map" size={28} color={colors.mutedForeground} />
-                  <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
-                    Драфт карты {draftMapTab} появится когда стартует эта карта
-                  </Text>
-                </View>
-              </View>
-            ) : draft ? (
+            {/* Текущая карта — live-драфт; сыгранные карты — драфт из
+                /api/matches/series-drafts; будущие — заглушка «появится
+                когда стартует». Если карта сыграна, но данных ещё нет —
+                честное «данные ещё не готовы», никаких фейков. */}
+            {displayDraft ? (
               <>
                 <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <SectionTitle title="Пики" colors={colors} />
                   <View style={styles.draftGrid}>
                     <View style={styles.draftSide}>
-                      <Text style={[styles.sideLabel, { color: colors.radiant }]}>{match.team1.name}</Text>
-                      {draft.picks.filter(p => p.side === 'radiant').map(p => (
+                      <Text style={[styles.sideLabel, { color: colors.radiant }]}>{draftRadiantLabel}</Text>
+                      {displayDraft.picks.filter(p => p.side === 'radiant').map(p => (
                         <View key={p.heroId} style={[styles.heroChip, { backgroundColor: colors.radiant + '1A', borderColor: colors.radiant + '44' }]}>
                           <Text style={[styles.heroName, { color: colors.radiant }]}>{p.heroName}</Text>
                         </View>
                       ))}
                     </View>
                     <View style={styles.draftSide}>
-                      <Text style={[styles.sideLabel, { color: colors.dire }]}>{match.team2.name}</Text>
-                      {draft.picks.filter(p => p.side === 'dire').map(p => (
+                      <Text style={[styles.sideLabel, { color: colors.dire }]}>{draftDireLabel}</Text>
+                      {displayDraft.picks.filter(p => p.side === 'dire').map(p => (
                         <View key={p.heroId} style={[styles.heroChip, { backgroundColor: colors.dire + '1A', borderColor: colors.dire + '44' }]}>
                           <Text style={[styles.heroName, { color: colors.dire }]}>{p.heroName}</Text>
                         </View>
@@ -672,7 +748,7 @@ export default function MatchDetailScreen() {
                 <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <SectionTitle title="Баны" colors={colors} />
                   <View style={styles.bansRow}>
-                    {draft.bans.map(b => (
+                    {displayDraft.bans.map(b => (
                       <View key={b.heroId} style={[styles.banChip, { backgroundColor: colors.muted, borderColor: colors.border }]}>
                         <Text style={[styles.banName, { color: colors.mutedForeground }]}>{b.heroName}</Text>
                       </View>
@@ -681,11 +757,29 @@ export default function MatchDetailScreen() {
                 </View>
 
                 <DraftScoreBlock
-                  radiantHeroIds={draft.picks.filter(p => p.side === 'radiant').map(p => Number(p.heroId)).filter(n => Number.isInteger(n) && n > 0)}
-                  direHeroIds={draft.picks.filter(p => p.side === 'dire').map(p => Number(p.heroId)).filter(n => Number.isInteger(n) && n > 0)}
+                  radiantHeroIds={displayDraft.picks.filter(p => p.side === 'radiant').map(p => Number(p.heroId)).filter(n => Number.isInteger(n) && n > 0)}
+                  direHeroIds={displayDraft.picks.filter(p => p.side === 'dire').map(p => Number(p.heroId)).filter(n => Number.isInteger(n) && n > 0)}
                   colors={colors}
                 />
               </>
+            ) : isPastMap ? (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.emptyCard}>
+                  <Feather name="map" size={28} color={colors.mutedForeground} />
+                  <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+                    Карта {draftMapTab} сыграна, но данные драфта ещё не готовы — считаются на бэке
+                  </Text>
+                </View>
+              </View>
+            ) : draftMapTab > curMapNumber || isBetweenMaps ? (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.emptyCard}>
+                  <Feather name="map" size={28} color={colors.mutedForeground} />
+                  <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
+                    Драфт карты {draftMapTab} появится когда стартует эта карта
+                  </Text>
+                </View>
+              </View>
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.emptyCard}>

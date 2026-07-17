@@ -112,6 +112,7 @@ Mobile (Expo) app для русскоязычных Dota 2 беттеров. Dar
 - `GET /api/matches/live` (cache 30s) — OpenDota + Stratz `/League/live` + PandaScore `/running` параллельно с 5s timeout. Перерыв между картами помечается `between_maps:true`.
 - `GET /api/matches/upcoming` (cache 60s) — PandaScore.
 - `GET /api/bookmakers/for-match?team1=&team2=[&team1Id=&team2Id=]` — in-memory lookup букмекерского кэша.
+- `GET /api/matches/series-drafts?team1Id=&team2Id=[&currentMatchId=&currentMapNumber=]` (cache 60s, пустой не кэшируется) — драфты сыгранных карт live BO3-серии: live_snapshots ∪ pro_matches (12ч, dedupe) → match_drafts → OD fallback. Мобилка зовёт с вкладки «Драфт».
 - `POST /api/auth/register|login|logout` (register принимает опц. `promoCode` — валидируется по `ref_codes`, невалидный молча игнорируется), `GET /api/auth/me Authorization: Bearer <token>` — email/password auth, scrypt N=16384, stateless токен с HMAC SESSION_SECRET, TTL 30 дней. Per-IP throttle 20/15min.
 - `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/whoami` — HttpOnly session cookie `aegis_admin_session` против `ADMIN_TOKEN`. Все `/api/admin/*` и `POST /api/analytics/retrain` требуют этой сессии.
 - `POST /api/admin/refresh-all` — сбрасывает все withCache (matches:live/upcoming/heroes), workaround для застрявшего TTL.

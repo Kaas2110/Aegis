@@ -966,3 +966,36 @@ totals-ladder, ml-predict, team-compare — всё OK) нашёл 2 бага, о
 
 Typecheck зелёный. Бэкап БД не пересобирался — фиксы code-only, свежий
 бэкап `backups/aegis-db.part-*.gz` от 2026-07-17 актуален.
+
+## 2026-07-17 (вечер) — Драфты сыгранных карт BO3-серии в мобилке
+
+**Баг:** на live BO3-серии вкладка «Драфт → Карта 1» показывала «Драфт карты 1
+появится когда стартует эта карта», хотя карта 1 уже сыграна (мобилка держала
+драфт только текущей live-карты).
+
+**Бэк:** новый `GET /api/matches/series-drafts?team1Id=&team2Id=[&currentMatchId=
+&currentMapNumber=]` в `routes/matches.ts` (обычный Express-роут, НЕ в openapi.yaml —
+как `/matches/live`). Сыгранные карты пары ищутся в окне 12ч из ДВУХ источников
+с dedupe по match_id: (1) `live_snapshots` (LiveWorker), (2) `pro_matches`
+(hourly ingest — покрывает серии, шедшие без OD live при 429/квоте; драфт
+подтянется в течение часа после восстановления квоты). Сортировка по времени
+старта, `currentMatchId` исключается (передаётся мобилкой ТОЛЬКО при
+status='live' — между картами OD держит id завершённой карты). Номеровка карт
+с конца: последняя сыгранная = currentMapNumber-1. Драфт карты:
+`match_drafts` → OpenDota `/matches/{id}` fallback; кэш `finishedDraftCache`
+(payload 30 мин / null 60s, FIFO 300) + `withCache` 60s (пустой `maps` не
+кэшируется).
+
+**Мобилка (`app/match/[id].tsx`):** state `seriesDrafts` (Map по mapNumber),
+fetch при activeTab='draft' && формат≠BO1 && curMap>1 && status live/between_maps.
+Рендер: текущая карта → `match.draft`; прошлая → драфт из series-drafts с
+подписями сторон по teamId ТОЙ карты (Radiant/Dire могли меняться местами);
+прошлая без данных → честное «Карта N сыграна, но данные драфта ещё не готовы»;
+будущая → «появится когда стартует». Никаких фейк-данных.
+
+Верифицировано: typecheck зелёный; curl happy-path (временная строка в
+`match_drafts` — вставлена/проверена/удалена, кэш сброшен рестартом),
+пустой ответ для пары без данных, валидация параметров. ⚠️ На момент фикса
+OD daily quota исчерпана (free mode) — для текущей серии FAL–VIC ни снапшотов,
+ни pro_matches: UI показывает честную заглушку, данные появятся после
+восстановления квоты.
