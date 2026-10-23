@@ -1,0 +1,46 @@
+PUBLIC PORTABLE COPY — 2026-10-23
+Status: designed / partially implemented / not fully integrated.
+This English translation preserves the decisions and recorded baseline of the
+local continuation document. Historical test counts, commits and parity counts
+are checkpoint evidence, not a new claim about this PR's latest head.
+
+APP means this repository root. W is the owner's separate private continuation
+and evidence workspace. Unless explicitly mapped below, outputs/, work/,
+AEGIS-*.txt and other evidence paths refer to W and are not included in this
+source commit. Databases, raw observations, real training fixtures, archives,
+keys, environment files and fitted weights are not published.
+
+Public entry points, relative to the repository root:
+- docs/continuation/START-HERE.txt
+- docs/continuation/Aegis-astra-to-sol-handoff-20261023-final.txt
+- docs/sol-feature-first-plan-20261023.txt
+- docs/feature-architecture-20261023.txt
+PLAN.txt, AEGIS-SOL-PLAN-2026-10-23.txt and the revised local plan refer to the
+same plan; its public copy is docs/sol-feature-first-plan-20261023.txt.
+The architecture document's public copy is docs/feature-architecture-20261023.txt.
+Other catalogues, reviews and machine-readable evidence remain in W. Obtain
+missing evidence through the owner; do not claim it exists in this checkout.
+
+Missing private artifacts do not authorize new training, provider calls,
+restarting paid tasks or removing STOP files, budgets or acceptance gates.
+Use available source and synthetic technical checks, and record evidence gaps.
+
+--- ORIGINAL DOCUMENT, TRANSLATED WITHOUT CHANGING ITS DECISIONS ---
+
+AEGIS — SOL CONTINUATION PACKAGE, 2026-10-23 FINAL
+
+Start with Aegis-astra-to-sol-handoff-20261023-final.txt, then PLAN.txt.
+Architecture: Aegis-architecture-decisions-20261023.txt.
+Catalogue: Aegis-unified-feature-catalogue-20261023.txt.
+Read the relevant families first; do not reread the entire catalogue at every step.
+The verified reviews and current Graphify status are included alongside these files.
+Machine-readable registry/evidence remain in the original W/work directory; the
+catalogues provide their paths.
+
+This package contains no raw data, databases, secrets or weights. Their absence in
+another environment does not authorize repeating provider calls/training or
+removing STOP files.
+
+Recorded source state: PR2 head6f56141f...,889/889 byte-identical;
+main/Graphify74bed2e. Use one PR per completed block. Training remains paused until
+the full architecture/feature work is complete.

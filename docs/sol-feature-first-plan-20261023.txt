@@ -1,0 +1,318 @@
+PUBLIC PORTABLE COPY — 2026-10-23
+Status: designed / partially implemented / not fully integrated.
+This English translation preserves the decisions and recorded baseline of the
+local continuation document. Historical test counts, commits and parity counts
+are checkpoint evidence, not a new claim about this PR's latest head.
+
+APP means this repository root. W is the owner's separate private continuation
+and evidence workspace. Unless explicitly mapped below, outputs/, work/,
+AEGIS-*.txt and other evidence paths refer to W and are not included in this
+source commit. Databases, raw observations, real training fixtures, archives,
+keys, environment files and fitted weights are not published.
+
+Public entry points, relative to the repository root:
+- docs/continuation/START-HERE.txt
+- docs/continuation/Aegis-astra-to-sol-handoff-20261023-final.txt
+- docs/sol-feature-first-plan-20261023.txt
+- docs/feature-architecture-20261023.txt
+PLAN.txt, AEGIS-SOL-PLAN-2026-10-23.txt and the revised local plan refer to the
+same plan; its public copy is docs/sol-feature-first-plan-20261023.txt.
+The architecture document's public copy is docs/feature-architecture-20261023.txt.
+Other catalogues, reviews and machine-readable evidence remain in W. Obtain
+missing evidence through the owner; do not claim it exists in this checkout.
+
+Missing private artifacts do not authorize new training, provider calls,
+restarting paid tasks or removing STOP files, budgets or acceptance gates.
+Use available source and synthetic technical checks, and record evidence gaps.
+
+--- ORIGINAL DOCUMENT, TRANSLATED WITHOUT CHANGING ITS DECISIONS ---
+
+AEGIS — DETAILED SOL PLAN FOLLOWING ASTRA'S REVIEW
+Revision: 23 October 2026.
+Priority: finish the sources, architecture and entire agreed feature scope first; then complete technical acceptance. Model training and quality evaluation remain paused.
+
+This document replaces the previous work sequence in AEGIS-SOL-PLAN-2026-10-23.txt. Completed checks, earlier reports and artifacts are retained. Their existence is not an instruction to repeat training.
+
+HOW TO RESUME
+
+Read first:
+1. outputs/Aegis-architecture-decisions-20261023.txt — Astra's accepted decisions. They define the architecture; this document describes its implementation.
+2. outputs/Aegis-unified-feature-catalogue-20261023.txt and work/unified-feature-registry-20261023-r1/ — the completed feature inventory and its machine-readable files. Integration and admission of the combined feature set are not yet complete. Before continuing, verify the manifest, hashes and subsequent source changes; a complete catalogue does not mean a production-ready model.
+3. outputs/Aegis-Astra-history-live-review-20261023.txt — gaps between historical generators, feature consumers and the legacy training path.
+4. outputs/Aegis-Astra-alignment-review-20261023.txt — decisions on missing GLG phase information and late confirmation that a record belongs to a match.
+5. outputs/Aegis-local-GitHub-parity-20261023.txt and outputs/Aegis-Graphify-current-status-20261023.txt — source and index status. Check the current commit and diff: an old report does not establish the freshness of new changes.
+
+Main paths:
+W = <private continuation workspace W>
+APP = <repository root APP>
+Runtime = <private local runtime directory>
+
+The actual files in APP are the canonical local working version. Load keys only through the established local mechanisms; never print them or copy them into reports, GitHub or Graphify.
+
+WHAT IS ALLOWED NOW
+
+Checks of code, temporal joins, data identity, units and vector reproducibility are allowed. Bounded reads of already saved data are allowed. A new source pilot is permitted only for a specific evidence gap, with its own request and time limits.
+
+Until Steam, the architecture integration, the complete catalogue and technical feature admission are finished, do NOT run:
+- model training, HPO, ablation or metric-driven feature selection;
+- probability calibration or new ML quality evaluations;
+- old training queues merely to discover their status;
+- automatic promotion of candidates into public predictions.
+
+Do not refresh the archive before every technical test. Do not resume manually stopped tasks, remove STOP files or locks, or revive expired leases. If no useful independent work remains, save the continuation checkpoint and end active work instead of polling status continuously.
+
+EXISTING FOUNDATION
+
+- Strict component folds with a 24-hour embargo and boundary precision of 1 ns, head identity v2, whole-intent receipts, the technical dataset compiler and an initial adapter checkpoint are installed. The earlier requirement for 40 fits does not mean 40 fits were completed.
+- Raw Steam packet and provenance retention, the diagnostic table and observation-sequence reading are implemented. Current schemas: Roshan — 871 values; player/economy v2 — 36,726 columns including masks; the combined Steam bundle v2 — 38,468 columns. These are schema sizes, not evidence of completeness or model quality.
+- A frozen history producer and DB reader exist; duration measures are separated for team, player, hero and player–hero. Before this revision, 125 combined and 7 independent technical checks passed.
+- Automatic history-context creation at draft time, persistent storage and reuse, integration of rich C1/C2 features with Steam, and the entire operational path for serving the new models are NOT complete.
+- Source PR1 was merged with separate owner authorization. This does not authorize future merges. Create one PR per completed block of work; an individual edit within a block does not require a new PR or immediate publication.
+- Old fits, partial artifacts and calibrations are retained. Inspected validation folds cannot be relabelled as an independent holdout.
+
+WORK SEQUENCE
+
+S0: sources and PR → S1: full catalogue → S2: Steam and input provenance → S3: temporal contracts → S4: history storage and cache → S5: historical families → S6: dynamic families → S7: shared generator → S8: prediction targets and routing → S9: journal and application path → S10: technical acceptance and handoff to Astra.
+
+S11 may proceed in parallel if it does not interfere with the main path. S12 is future model work and is currently paused. S13 covers later admission and release, outside the current authorization.
+
+At significant intermediate milestones, save a local continuation checkpoint: completed work, changed files, input and source hashes, check results, remaining limitations and the exact next action. Add the PR URL after publishing the block. An intermediate checkpoint does not require an automatic GitHub or Graphify update. Do not declare an entire stage complete because one test passed.
+
+S0. CANONICAL SOURCES AND ONE PR PER COMPLETED BLOCK
+
+First inspect the current APP files, other agents' unfinished edits, job status and the current remote main. Do not run reset/clean over working changes. An old local Git HEAD may not describe the actual APP.
+
+Within the current block, local working source and the saved continuation checkpoint remain authoritative. Main and the Graphify index may explicitly lag behind: record this in status rather than synchronizing the cloud after every edit. Save intermediate local checkpoints when meaningful progress is made.
+
+When the agreed block of work is complete:
+1. Record its scope and before/after hashes.
+2. Check the actual changed APP files.
+3. Transfer only source, configuration examples, synthetic tests and documentation into an isolated checkout based on current main.
+4. Review the diff and exclusion of secrets, databases, raw archives, weights, runtime and build outputs.
+5. Create one PR for the entire completed block and attach it to the chat. If a PR for this block is already open, update its branch; do not open a new PR for each subsequent edit. Do not bundle an unfinished mixture of independent work into one block.
+
+Compare Git blobs directly with current APP. Distinguish byte equality, CRLF/LF differences and semantic differences. The parity report must state its scope and commit; it does not cover databases, weights or node_modules. If a required source file is outside the allowlist, review it instead of silently excluding it.
+
+After a separately authorized merge of the completed block, check the new main/tree, then the Graphify index update and several changed symbols. While the block is in progress, the PR is unmerged or the index is stale, local files and the checkpoint take precedence over the graph. Do not create a new project or delete the old one merely to refresh the index.
+
+Block completion criterion: a reproducible parity report and an APP → one PR/commit mapping exist; all publishable changes in the completed block are included or have an explicit reason for deferral. Intermediate working edits in an unfinished block may remain local. The rules are recorded in AGENTS/documentation. A new merge requires current owner authorization.
+
+S1. COMPLETE UNIFIED FEATURE CATALOGUE
+
+Read the completed outputs/Aegis-unified-feature-catalogue-20261023.txt and work/unified-feature-registry-20261023-r1/{CATALOGUE-INDEX,FAMILY-REGISTRY,TWELVE-TARGET-MATRIX,VERIFICATION}.json. The saved inventory covers 14 schemas — 13 earlier schemas and the combined Steam vector — with 79 families and 12 targets. It contains 465,359 column occurrences and 203,558 distinct name spellings. This is not the width of a future model or evidence that the features are semantically unique. Do not rebuild the completed catalogue without an identified reason.
+
+Before integration, reconcile hashes and subsequent changes with the older catalogues, Steam v2, rich postdraft/C1/C2, ProfileBuilder and the owner's proposals. Alternative feature sets must not be added together and presented as the size of one model. An identical name with a different formula or version is a conflict requiring an explicit resolution. Inventory is complete; implementing the unified producer, integrating all families and obtaining technical admission remain tasks in this plan.
+
+For each feature or formally specified family, the registry contains:
+- stable ID and name, family, version and formula;
+- type, units, inputs and dependencies;
+- source, source profile and time basis;
+- population, patch/letter revision, history window and minimum support;
+- missing-data and fallback calculation policies;
+- availability evidence, producer path, permitted phases and targets;
+- implementation status: ready, integration required, planned or availability unproven;
+- exact links to pinned older catalogues and column names.
+
+Record the 12 logical targets:
+PRE_MAP_WIN, PRE_KILLS, PRE_DURATION;
+POST_MAP_WIN, POST_KILLS, POST_DURATION;
+LIVE_MAP_WIN, LIVE_KILLS, LIVE_DURATION;
+SERIES_PRE, SERIES_BETWEEN, SERIES_LIVE.
+
+These are 12 semantic prediction routes, not a requirement to store exactly 12 weight files. SERIES_BETWEEN and SERIES_LIVE use a shared family of rich contextual series predictions; the postdraft state belongs to SERIES_LIVE with an explicit postdraft phase. Physical separation into models or experts is decided later. The old 8 families/10 heads/40 fits belong to the earlier execution protocol; the new target matrix must not be treated as already implemented in it.
+
+Target               | When the route is available                  | Predicted event
+PRE_MAP_WIN          | Before the map draft is known                | Map winner
+PRE_KILLS            | Before the map draft is known                | Final map kills
+PRE_DURATION         | Before the map draft is known                | Final map duration
+POST_MAP_WIN         | Complete draft received                      | Map winner
+POST_KILLS           | Complete draft received                      | Final map kills
+POST_DURATION        | Complete draft received                      | Final map duration
+LIVE_MAP_WIN         | Admissible current map state is available    | Current map winner
+LIVE_KILLS           | Admissible current map state is available    | Remaining and final map kills
+LIVE_DURATION        | Admissible current map state is available    | Remaining and final map duration
+SERIES_PRE           | Before the match/series starts               | Winner of the entire series
+SERIES_BETWEEN       | Between maps, without a current game packet  | Series winner using known map results
+SERIES_LIVE          | Full current-map draft, then its live state  | Series winner using current-map context
+
+All useful, causally available history may also be used in live predictions. PRE does not receive as-yet-unknown heroes of the current map. POST receives the observed draft, not an invented game state. LIVE combines history, draft and current observations. Previous maps in the series have a separate namespace and become available only after the corresponding results are actually received. Unknown future drafts are not filled with the current map's heroes.
+
+Preserve the broad families. Include interactions that are not yet implemented: player–hero–ally, patch meta, individual performance and form, Roshan/Aegis, economic and objective trajectories, item timings, and team behaviour after losing a map. Do not remove families because their overall correlation is weak; selection and ablation come later.
+
+Completion criterion: every old name is preserved or has a justified alias; every discussed family is represented; the schema prohibits fields from the wrong phase. A structural one-hot zero differs from missing data. A name's existence is not presented as evidence that its data is available. The full registry has passed technical review.
+
+S2. STEAM: COMPLETE CONTRACT AND CONFIRMED INPUTS
+
+Basis: outputs/Aegis-Steam-API-catalog-20261023.txt and work/steam-api-catalog-20261023-r1/. A list of 25 method/version combinations and protobuf schemas does not mean 25 working live feeds or 2,138 actually observed fields.
+
+For each required input, trace: declared in the schema → observed → retained in raw data → normalized → used in a feature. A missing handler in our code is different from a field missing at the provider. Preserve the original packet; version and test normalization changes.
+
+GLG scoreboard and RT/Terse are different profiles. Current state comes from one coherent packet. Do not fill a missing field with a newer value from another endpoint. A full profile change requires explicit switching and resetting the relevant temporal windows.
+
+Use saved packets first. Run a new pilot only for a specific gap and a suitable actual match; bound requests, runtime and logs. Account for expected polls, empty replies and errors. On 403/429, stop through the normal mechanism; do not switch IP, key or route to bypass the restriction.
+
+Completion criterion: the input has known units, source, time and identity; raw and normalized values agree under the contract. Missing, zero and invalid values are distinct. Unknown absolute latency does not become zero. Profile review is a genuine versioned artifact with evidence hashes, not an arbitrary reviewed=true.
+
+S3. TEMPORAL CONTRACTS AND HISTORICAL ALIGNMENT
+
+Basis: work/astra-alignment-review-20261023-r1/historicalAlignment.mjs and 17 technical tests. This is prepared staged code, not installed public admission.
+
+Add a separate bounded opt-in export of historical native candidates to historicalFactsDb, retaining the existing strict path. The producer checks profile, map, teams/heroes/accounts, clocks, availability and annotation. A missing phase is not rewritten as phase=5. Explicit non-live, invalid and terminal markers cannot be bypassed by a historical annotation.
+
+Separate:
+- eventTime/gameClock — the state to which a fact refers;
+- receivedAt/availableAt — when the fact was actually available to the system;
+- historyCutoffAt — the history boundary for this context;
+- predictionAt and targetIdentityKnownAt — calculation time and availability of the current identity;
+- alignmentAnnotationKnownAt — the time of late confirmation that the record aligns;
+- computedAt/ingestedAt — calculation/import time, which does not replace the original receipt.
+
+Late confirmation of start or duration is allowed for offline alignment validation, but does not become a predictor or move the cutoff. It does not authorize late outcome or roster data. Check file contents against hashes, not merely hexadecimal string format. The current map's final duration must not enter an early remaining-time feature; using it to select frames requires an explicit selection-bias report.
+
+Create an observed_draft contract triggered by first_complete_draft_receipt. A complete draft means ten confirmed selected heroes and sides, not necessarily public account_id values for all players. Do not wait for late start_time metadata to produce a static postdraft prediction. Do not create zero GPM values or false phase=5. If the first snapshot arrives mid-game, retain late_first_observation and exclude it from the postdraft/0-minute cohort.
+
+Offline replay uses the same recorded trigger. If it is absent, this is a separate reconstruction with another cutoff policy. Assumed end+300 seconds is not an actual receipt. Do not mix recorded and reconstructed cohorts as evidence of production reproducibility.
+
+Completion criterion: the previous confirmed_map_start_required rejection is reproducible; the new route allows only the specified late metadata. Future outcome/roster data is rejected even if it is late by just 1 ns. Clock absent/zero/positive remain distinct. Synthetic profile attestations are not copied into real manifests. There is no automatic admission to training or serving.
+
+S4. HISTORY STORAGE AND DRAFT-TIME CACHE
+
+Main locations: source-adapter/{historicalFactsDb,frozenPlayerContext,steamFeatureDbReader}.mjs, lib/db migrations, and integration near LiveWorker and PredictionJournal. Check existing tables before creating a new entity.
+
+Introduce append-only history_context_snapshots. Store id/contentHash; matchId, draftHash, rosterHash and sideIdentityHash; cutoffPolicy/historyCutoffAt; availabilityBasis; producer/schema versions; sourceSnapshotHash and patchEvidenceHash; generatedAt; values, masks, support and provenance.
+
+Concurrent creation of the same snapshot must produce one committed record. The context is immutable after it is written. The trigger creates it when the draft is complete; readers only retrieve its reference and data. The match-card open handler does not call a paid API. After a restart, the same reference produces the same vector.
+
+If the draft is known at t0 and account_id is disclosed at t1, create a new version with validFrom=t1 and a reason for the change. Its history remains as-of t0. A new export of missing history is permitted only if availableAt <= t0, with a new sourceSnapshotHash. Do not change old vectors. An unknown account leaves player-specific features missing; available hero/team features remain usable. An identity conflict without evidence suspends the dependent family.
+
+The learned-transform cache is additionally bound to learnedTransformStateSha256 and the specific TRAIN/fold/cohort. Identical column names with different learned states do not imply an identical key. This layer may remain empty until training is authorized; do not invent OOF values.
+
+Version historical facts by their availability time. Current hero_stats/player_hero_stats/player_ratings/team_form must not be joined to a past slice as if they already had their current values then. Raw live data, final labels and backfill are separated by purpose and provenance; a match's final result does not overwrite its old live observations.
+
+Completion criterion: 100 concurrent readers do not cause 100 exports/requests; appending future data does not change a past snapshot; the current map is excluded from its own history; late identity and restart behaviour are tested. DB queries and memory usage are bounded.
+
+S5. RICH HISTORY, INDIVIDUAL STRENGTH AND META
+
+Reuse and align the formulas in artifacts/ml-service/src/research/postdraft_full/{rich,causal,player,performance,wide_interactions}.py, ProfileBuilder and IndividualAppendix with the shared contract. Do not import a training runner into the production API. Move pure libraries and protocols into APP source, removing dependencies on the absolute W path.
+
+Implement the entire agreed scope while preserving the original groups:
+- player; player–hero; player–team; player–team–hero;
+- form, individual performance, deviation from an appropriate population reference, hero familiarity and recency of experience;
+- team style and its performance against different opponent styles;
+- heroes, pairs, counterpicks and conditional combinations of specific players and allied heroes;
+- meta with separate pro/Immortal populations, patch/subpatch, windows, sides and roles;
+- historical reference values and duration/kill distributions;
+- late tendency separately for team, player, hero and player on that hero.
+
+Every statistical feature includes support across distinct maps, effective count where necessary, the latest availability time of its dependencies, window, population and evidence. Evaluate a hero against an appropriate population spanning different teams, not only the current players' maps. An anonymous account does not exclude a known hero from the hero population. Two successful maps do not establish a combination's stable strength.
+
+Raw winrate, smoothed winrate and lift relative to a baseline are distinct features with explicit formulas. Separate deterministic computation over available history from a learned transform. Learned baselines, target encoding, latent strength and data-selected dictionaries require TRAIN-only state and correct OOF logic in future experiments. For now, specify and verify the contract; do not train that state. Fold/cohort binding is mandatory.
+
+The historical final GPM/damage of an earlier map is valid history, but is not a current measurement for the new map. Native GPM, earned gold and net worth are not interchangeable. Do not compute missing NW from gold_t or call NW/min observed GPM. Roles 1–5 are not inferred from array position or economic rank.
+
+In scripts/src/train-lightgbm.ts:449–470, replace the old peer_synergy join with an input carrying correct availability time, or block this legacy train path. Inspect similar current hero/player aggregates. One identified error is not a basis for declaring that all previous models leaked or rewriting their old metrics.
+
+STRATZ is not mandatory for the new Steam+history path. Preserve the old key, data and stop-on-403 behaviour. Do not disable old producers without checking dependencies. Refresh/phase-default/synergy/population debt is assigned to a separate Astra review and does not prevent specifying the full registry.
+
+Completion criterion: small manually checkable fixtures; +1 ns time boundaries; duplicates and partial populations; anonymous players with known heroes; different player/hero/ally combinations; letter patches. Families do not silently disappear from the registry.
+
+S6. DYNAMIC FEATURES AND THEIR INTERACTIONS
+
+Basis: playerHeroEconomyFeatures.mjs, roshanFeatures.mjs, steamFeatureBundle.mjs. Preserve existing IDs and formulas as versions. Do not silently supply a new schema to old weights.
+
+Groups: native NW/GPM/XPM, levels and items by player/hero/proven role/minute; five-player resource distribution; 60/180/300/600-second windows; leads, tempo changes, reversals and turnarounds; interactions with draft, form and style. Alive state, respawn, buyback, ultimate and objectives are used only when the required field is actually received.
+
+Roshan/Aegis: known or unknown state, time since death, respawn bounds, Aegis holder and side, lifetime, consumption, steal and Roshan kill ordinal. Link them to advantage, hero strength, objectives and historical finishing speed. A zero timer does not mean alive. An inferred interval is not an observed death. Postmatch information about a steal must not be moved into an early live frame. Rules carry patch, version, source and availability time.
+
+Completion criterion: a future frame/event does not change a past prefix; map/profile changes and clock rewinds reset the relevant windows; unknown fields remain missing. Convert seconds to minutes once; do not add current and remaining values twice. An uncertain interval does not become an invented exact time.
+
+S7. ONE LOGICAL GENERATOR AND PHASE PROJECTIONS
+
+Create one authoritative generation entry point, for example generateFeatureBundle(inputContract, historyContextRef, observationPrefix, registryVersion). Separate family modules may remain behind it. One producer does not mean one model for every task.
+
+The registry defines projections for the 12 targets. PRE receives available history and admissible series context; POST adds the observed draft; LIVE uses history, draft and coherent dynamics. A large shared catalogue does not mean every family is active in every row.
+
+The output includes ordered names, values, masks, types/units, schema hash, context/source references, cutoff policy and identity. Do not simply concatenate C1/C2/Steam vectors: explicitly reconcile overlapping meanings, formulas, masks, units and sources. Preserve a mapping table covering the entire original registry.
+
+Dataset export and in-app calculation use one producer. Future training reads its saved vectors instead of silently recomputing another version of the formulas. If an implementation in another language is required, prove equivalence with golden/parity checks. The Python adapter checks schema hash, order, dtype, missing representation and learned-state version; incompatible vectors are rejected.
+
+Completion criterion: offline and online produce the same vector from the same pinned inputs; reordering players does not change meaning; swapping Radiant/Dire changes orientation according to the contract; dependencies are checked against availableAt. An old model does not accept a new-version vector.
+
+S8. ALL PREDICTION TARGETS AND PHASE ROUTING
+
+Implement routing for the 12 targets in S1. The number of physical models/expert heads will be decided through later experiments. Do not preassign a mandatory separate weight file to every five-minute interval. Use one late-game group for 80+ minutes.
+
+Route states: draft unknown → PRE; complete observed draft → POST immediately; admissible game packet → LIVE; completed map → actual result. An arbitrary 60-second pause does not prove the phase. Having a technical route does not yet authorize public serving of a new candidate.
+
+The main card ALWAYS shows the probability of winning the entire match/series. Before the start, use SERIES_PRE. Once the current map's complete draft is available, use a rich contextual series model: first with the draft, then with the current raw and shared map features. Between maps, the same contextual family continues without a current live packet, using known previous-map results. Phase and semantic route are explicit; the number of weight files is not predetermined.
+
+Inputs to the contextual series family: frozen history; team/player strength, form and style; BO1/BO3/BO5 format; series score and current-map position; complete observed draft; admissible shared features of the current state and trajectory; detailed available data from previous completed maps. Past performance and map outcomes are allowed only after they actually become available. Unknown future-map heroes are not replaced with current heroes.
+
+Do not reduce the series prediction to an arithmetic transformation of the current map probability or only to the pair "score + map probability". A map prediction may be an additional input only with a compatible version and verified OOF/operational reproducibility; it does not replace the rich context. A team may be losing the current map and remain the series favourite. In BO1, the map and series describe the same outcome, and their outputs must agree. Once the series ends, display the actual result.
+
+The interface is already partly implemented; do not redesign it now. During future integration, verify that opening a match defaults to the current map with its winner prediction and kill/time totals. In BO1/BO3/BO5, the user may select an available past map and see its heroes and actual results. Do not substitute the current prediction into a past map. Do not reset manual map selection on every live update. A historical prediction may be shown only if a saved record exists and is clearly identified; a completed map primarily shows the actual result.
+
+For the main card and details, check target, seriesId, the selected mapId, map number, series score and format; none of these identifiers may be silently substituted when moving to the next map. These are future acceptance requirements, not claims that interface changes have been implemented now.
+
+PRE/POST totals describe final kills/time; LIVE describes remaining kills/time. All lines use one coherent distribution. Without a bookmaker, generate the grid from that distribution; when a bookmaker is selected, use its current events, lines and settlement rules, and calculate our probabilities on those lines. Handle atoms, the right tail and pushes: pOver + pUnder + pPush = 1. Bookmaker odds are not model probabilities.
+
+Completion criterion without new training: pinned diagnostic/synthetic artifacts confirm routing, CDF and delivery of the full series context. Check postdraft → live → between-maps → next draft, changes in current mapId with an unchanged seriesId, preservation of manual past-map selection, different map and series favourites, BO1 consistency, and cessation of forecasts for completed events. This verifies connectivity and contracts, not model accuracy, and is not automatic public promotion.
+
+Additional technical review task: a name-based classifier /(?:total_)?(?:kills|duration)(?:_|$)/ was found at artifacts/admin-web/src/pages/models.tsx:305,361,364. This is a Graphify advisory: the regex is confirmed to exist, but an erroneous scenario has not yet been reproduced. Sol must inspect the actual kind/target contracts of totals heads and construct a synthetic fixture. The choice of accuracy versus R²/MAE and other metrics must follow an explicit output type and metric contract, not the assumption that "kills/duration means regression". Do not change the interface or run a new ML evaluation now; first confirm or reject the issue through a technical check.
+
+S9. JOURNAL AND END-TO-END APPLICATION PATH
+
+Connect collector receipt → normalized DB → historyContextRef → producer → diagnostic model adapter → PredictionJournal → diagnostic API. Also inspect ServingPredictions, LiveWorker and the ML bridge, without enabling candidates publicly before separate admission.
+
+The journal stores the exact vector and missing masks; model and schema versions; raw/observation/context/learned-state hashes; map/series ID; actual receipt and game clock; cutoff policy and basis; phase and source profile; field availability and rejection reason. The current label is not part of the feature payload. The API does not invent confidence or freshness.
+
+Retain the existing user interface; verify its behaviour when integrating models instead of starting a separate redesign. The main card shows the series; details default to the current map and its totals, with the option to select a past map. If calculation is unavailable, show only the exact Russian UI text «Прогноз недоступен» ("Prediction unavailable"). Keep technical reasons in diagnostics, without long banners. Bookmaker selection persists across launches.
+
+Completion criterion: one diagnostic calculation can be traced through the entire API path to the actual model input; target, seriesId, mapId, score and format match across the producer, journal, API and relevant screen. Stale packets do not overwrite a newer prediction; restart and repeated requests do not change the result; opening a card does not trigger provider polling. The main card does not receive a current-map prediction in place of a series prediction; a completed event shows the actual result.
+
+S10. TECHNICAL FEATURE ADMISSION AND HANDOFF TO ASTRA
+
+Prepare a single manifest: registry version/hash; exact phase/target mapping; provenance evidence and missing policies; producer/projection versions; causal/unit/integration/parity checks; current APP-to-PR parity; measured coverage and limitations; a short list of unresolved external inputs.
+
+For timely joint coverage, the denominator includes expected observations by map, time and phase, including missing polls, empty responses and errors. Structural one-hot zeros do not increase coverage. Distinguish value presence, freshness of a recorded receipt and actual event-to-application latency. 8,176 complete frames out of 8,619 retained frames is 94.86% of that archive, not proof of timely 95% coverage.
+
+If a family is included in the maximal registry but unavailable in the serving profile, retain its specification and mark the profile incomplete/blocked. Do not substitute unavailable values or silently turn the broad model into a compact one. Insufficient historical support differs from a missing live field; fallback policies are explicit.
+
+Until this stage, new ML fits and quality evaluations must remain at 0. After completing feasible work, hand the architecture, catalogue, evidence and remaining limitations to Astra. Record the transition to model work separately; an old lease is not new authorization.
+
+S11. PARALLEL TECHNICAL TASKS
+
+Move pure modules into APP instead of importing them from W; retain real raw fixtures separately. Verify Android CNG with reproducible clean generation in a disposable checkout, a pinned lockfile and a local test profile. Move manual native changes into source plugins and compare the result. Do not publish local build outputs, local.properties or signing configuration.
+
+Make the Windows wrappers Build-AegisAndroidLocal, Import-AegisAndroidEnv and android-short-cxx portable without private configuration. At meaningful milestones, update the local architecture context and checkpoint; synchronize publishable instructions and verified Graphify notes at block completion, not after each edit. After an authorized merge, verify index freshness. A remember acknowledgement is not reviewed/recall confirmation. Do not upload databases, raw data or weights for indexing. The backup issue is closed; do not revisit it.
+
+S12. FUTURE MODEL EXPERIMENTS — CURRENTLY PAUSED
+
+Only after finishing the architecture, full catalogue, technical admission and a separately recorded transition to ML:
+- pin the dataset; perform HPO within TRAIN using temporal inner splits;
+- preserve map/series/component groups and the 24-hour embargo; use OOF for learned priors/encodings;
+- reserve an independent holdout until final selection; do not call inspected folds independent;
+- evaluate the agreed broad model first, with ablation later on predefined cohorts;
+- do not refresh maps for every experiment without a concrete reason.
+
+Winner: evaluate PRE/POST/LIVE separately and at minutes 5/10/15/.../80+; report map/component counts; all, equal, and strong-equal team cohorts; accuracy, Brier, log loss, calibration, coverage and uncertainty. Take the snapshot no later than the checkpoint minute, without interpolation from the future. Frames from one map are not independent matches.
+
+Totals: by phase/minute, evaluate the full CDF/survival, discrete kill probability mass, NLL/proper scores, MAE, interval coverage and width, tails, and probabilities on bookmaker lines including pushes. MAE does not imply a symmetric interval with a specified probability. Evaluate series separately by PRE/BETWEEN/LIVE and BO format.
+
+Compare a unified model with minute/interactions against phase experts on identical splits/checkpoints; use one group for 80+. Account for the already completed 6 HPO fits and 8 head calibrations using existing artifacts, without rerunning them as supposedly unfinished. Those older results do not validate the new feature schema.
+
+Resources after admission: one native fit at a time, four threads, up to 16 GB aggregate training memory and at least 4 GiB free memory; an owned JobObject; respect manual STOP files, disabled tasks and locks. Each new bounded stage receives a separate lease; expired leases are not automatically resumed.
+
+S13. LATER PUBLIC ADMISSION AND RELEASE
+
+Sequence: diagnostic quality/latency/coverage checks → candidate review → explicitly authorized public activation → targeted web/Android QA → HTTPS, signing, privacy and store materials → separate RuStore approval. Merging a PR does not admit a model. Passing unit tests does not prove prediction accuracy.
+
+UNCHANGED LIMITS
+
+OpenDota: 100 requests per minute, up to $20 for the archive and up to $20 total per month, including the archive. Do not reset the ledger or bypass 403/429. Respect the owner's manual stops. Preserve the old STRATZ primary token and stop-on-limit behaviour; STRATZ is optional for the new core. Do not print or publish keys. Purchases, changing the chat model and releasing the application require a direct request. The old heartbeat for the owner's absence on 20 October is obsolete.
+
+WHEN SOL SHOULD RETURN AN ISSUE TO ASTRA
+
+Escalate a new semantic conflict between sources/clocks, an inability to reconcile point-in-time availability with the operational stream, discovered leakage or substantial selection bias, a need to change the statistical target/OOF protocol, or inability to meet the required coverage for important families in a specified profile.
+
+Sol handles routine refactoring, migrations, tests, cache, PRs and the described adapters independently. Before handing over an issue, save a minimal reproduction, expected and actual results, input hashes and possible resolutions. If the problem is external, continue independent authorized work.
