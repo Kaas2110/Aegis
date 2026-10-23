@@ -1,0 +1,99 @@
+Aegis Sol r2 — source-safe architectural review summary for Astra
+Date: 2026-10-23. Supplement to the accepted architecture and r1 review.
+
+Problem and decisions
+The initial source foundation preserved contracts but did not compute a broad
+shared feature vector. r2 adds actual deterministic historical/dynamic/series
+formula producers and a common diagnostic entry. It does not relabel old weights
+or activate a candidate. Prior map player performance is read from existing parsed
+JSON only under an explicit flag; current metrics stay in one coherent live profile.
+
+A single arbitrary strength coefficient was rejected: its weights have no trained
+or expert-validated meaning. Keep separate raw/smoothed form, player-hero lift,
+population residuals, native economy, historical late/finishing tendency and their
+explicit interactions. Later boosting can learn conditional effects after the
+feature gate. No family was selected or discarded by ML correlation/performance.
+Positions are not economic rank. Anonymous accounts retain hero/team population
+statistics while unavailable player-specific values are missing.
+
+A broad vector does not make every coordinate available. All 79 families and 12
+logical targets remain explicit. POST begins at observed draft, LIVE requires its
+own packet contract. No zero-valued GPM is fabricated to fill the draft phase.
+Series context is oriented by team IDs and passed to a series target, not obtained
+by copying or arithmetically transforming the map win probability.
+
+Independent findings and corrections
+- Historical overall-player form was assigned to a draft-only family; use the
+  appropriate history family and preserve phase scopes.
+- Ward descriptors now use the actual retained obs_placed/sen_placed paths.
+- Series chronology originally allowed reversed/overlapping map times and a draft
+  before the last map ended. These cases now fail, including duration-implied overlap.
+- Prior-player attachment rejects known hero/account/side conflicts and duplicate
+  map conversion. Inputs/source pins are copied instead of freezing caller objects.
+- Latest-input availability includes current draft, history materialization, live
+  receipt and export time rather than treating native receipt as whole-vector time.
+- Equal-clock trajectory anchors originally reintroduced an earlier receipt,
+  creating a false5000-gold recovery. Slice from the selected latest anchor.
+- Unified provenance originally accepted an unrelated export on PRE, and omitted
+  minimum-support/window/component semantics from the common schema. Bind exact
+  facts/native/prefix and draft revision; reject observed-draft export for PRE;
+  include semantic parameters and component schema hashes.
+- The source primary must actually be present in the declared file inventory.
+- Asynchronous journal inputs are copied before awaits. Duplicate feature names
+  and broken trace-to-schema links are rejected; appending valid data cannot
+  overwrite a conflicting existing content-addressed file.
+
+Checks and interpretation
+The local private work directory contains exact manifests, source hashes, negative
+reproductions, corrected controls and suite outputs for root and each reviewer.
+Focused history/dynamic/export/root/journal suites exercise actual implementations
+using synthetic values. Canonical catalogue integration uses the actual accepted
+registry with synthetic pinned inputs; it is connectivity/schema evidence, not
+real-source availability or prediction quality. No accuracy claim can be inferred
+from feature counts. Old independently inspected holdouts stay historical.
+
+Remaining architectural questions
+1. Complete executable family inventory and old C1/C2 semantic adapters without
+   silently replacing a maximal target by a compact one.
+2. Supply genuine source/profile/rules/patch evidence and measure real coverage;
+   a host pin or reviewed=true field is not provider authentication.
+3. Finalize series-level historical identity between maps and detailed prior-map
+   features while preserving immutable t0 contexts and late result availability.
+4. Finish background history materialization/reference persistence and the
+   diagnostic consumer/application reader. Do not run heavy exports per card.
+5. Bound retained prefixes, schema memory and disk growth for real deployment;
+   synthetic average resource measurements are not a production SLA.
+6. Keep feature-first training pause until Astra accepts the complete gate.
+
+Public/private boundary
+Only code, synthetic tests and these source-safe descriptions belong in GitHub.
+Exact raw captures, source-value exports, private review fixtures, DBs, secrets,
+weights and local runtime state stay private. No scheduler or provider limits are
+changed. Completed-block merge authorization does not authorize serving/promotion.
+
+Additional connection review (24 October)
+The retained source pipeline now owns a bounded capture queue, verifies actual
+committed receipts/raw bytes, keeps the original draft prefix and materializes
+rich history once per stable identity revision. The durable revision index binds
+that revision to an immutable source reference across restarts. A prior version
+would have re-read changed DB facts after restart; its counterexample is preserved.
+An explicit new materialization generation is separate from ordinary polling.
+
+Source inspection found prefix mutation before replay, a missing STOP check after
+CAS, and nested cache aliases on duplicate receipts. Proposed prefixes are now
+admitted before commit; old receipts are rejected and true identity conflicts are
+quarantined. STOP is checked after source publication. Duplicate receipts own
+complete copies. A synthetic filesystem probe additionally reproduced child
+junction escape; the reader now requires plain canonical archive directories.
+
+A separate static TypeScript review verifies that the only executable change in
+the legacy LightGBM runner is an unconditional early guard for its known current
+peer_synergy temporal join. The runner was not imported or executed. Its transitive
+imports are not claimed to be generally isolated by this main-entry guard.
+
+This source connection remains opt-in. No production DB migration, Windows task,
+collector configuration, public API/model admission or app release is enabled.
+Before activation Astra must inspect source availability/coverage, all-family
+completeness, phase policy, between-map identity and real deployment resource
+bounds. Root preserves source hashes, actual test receipts and the precise next
+step in the private checkpoint rather than marking these gates complete.

@@ -1,0 +1,118 @@
+Aegis unified diagnostic feature runtime — implementation r2
+Date: 2026-10-23. Source-only, non-serving and non-training.
+
+One logical producer
+createUnifiedFeatureProducer compiles the accepted 14-catalogue, 79-family and
+12-target registry. Its generateFeatureBundle entry calls the same deterministic
+historical, dynamic and series formula modules for retained replay and a trusted
+background host. Multiple modules behind this entry are implementation boundaries,
+not alternative offline/online feature definitions. No HTTP request, DB read,
+weight loading or model fitting happens inside this producer.
+
+Inputs and availability
+- PRE uses a pinned prematch identity with known team/accounts and no current
+  heroes. Its declared availability is a host receipt, not provider attestation.
+- POST uses an opaque proof generated from actual pinned draft/facts/native bytes.
+  The first complete draft defines t0. Late account disclosure changes validFrom,
+  not t0. Serialized token lookalikes are rejected.
+- LIVE adds a coherent raw Steam GLG packet/prefix. Explicit phase5 is required
+  for this dynamic path; a positive clock with absent phase does not invent it.
+  AUTO can return POST with the live rejection recorded. Unknown clock is not 0.
+- BETWEEN currently uses pinned prior completed series-map receipts. A new
+  series-level historical identity adapter remains required; stale current-map
+  history is deliberately rejected rather than silently reused.
+- Source exports contain actual facts/native value bytes and successful bounded
+  local-read receipts. The export SHA is not a SQL hash. The current export
+  contract includes an observed draft and cannot attest a PRE identity.
+- The common result records the latest required input/materialization time.
+  Historical cutoff, game clock, raw receipt and decision time remain distinct.
+
+Implemented rich components
+historicalRelationalFeatures: 49,388 ordered value columns, 319 selectors,
+7/30/90-day windows, raw/smoothed/decayed outcomes, support and uncertainty,
+player/team/hero form, player-hero-team relations, conditional ally/player/hero
+pairs/triples and counters, duration/kills distributions and late tendencies.
+Prior-player native performance includes distinct GPM/XPM/NW/total gold/XP,
+farm, damage, healing and wards where those fields were retained. Missing fields
+remain null. No current-map final performance is joined as early information.
+The DB loader's includePlayerPerformance flag is opt-in and preserves the
+previous default SQL and exported values when false.
+
+observedDraftFeatureBundle appends 51,420 value columns with separate masks:
+hero/player economy x historical profile x minute; own/opponent comparisons;
+economic-rank comparisons (not inferred positions1-5); native player state;
+60/180/300/600s observed trajectories and form/style interactions; Roshan-related
+literal or evidence-qualified state x advantage/history. A corrected equal-clock
+anchor rule selects the latest receipt and excludes earlier equal-clock receipts.
+Unknown Roshan/Aegis/event semantics remain unknown without pinned rules/events.
+The legacy native38468 bundle is preserved separately, not blindly concatenated.
+
+seriesContextFeatures: one 42-column BO1/BO3/BO5 schema, known score/format,
+match point, prior-map details, kill/duration tempo, observed current-series
+recovery and draft continuity. Current-series recovery is not an inferred
+historical comeback skill. No future map or draft is fabricated. Prior-map
+chronology, durations, result availability and current-map identity are checked.
+Main-card routes are series targets; selected-map routes are map winner/totals.
+
+Output and evidence
+Each diagnostic route has ordered names, values, boolean missing masks and a
+schema reference. Canonical family eligibility and per-definition scopes jointly
+filter the phase. A separate exclusion ledger preserves unavailable definitions.
+Minimum support, history windows, component semantic hashes, source inventory and
+live rules/patch context participate in schema identity. Event receipt pins are
+row provenance. Host-declared source pins are not independent authentication.
+Every route has inferenceVector=null and false training/serving flags.
+
+encodeDiagnosticFeatureTrace pools equal value/mask vectors across heads and
+uses schema references, not full descriptors/history in every frame. The private
+filesystem diagnosticFeatureJournal splits common definition pools from small
+per-target schema headers, writes append-only content-addressed files and verifies
+schema/name/vector bindings both on append and load. Existing content conflicts
+are errors. Caller objects are copied before asynchronous work. It does not write
+predictions, open a service, apply a migration or register a scheduled task.
+
+Evidence limits and remaining gates
+The technical fixtures are synthetic. The 1000-map relational scaling probe is
+about 3.56s with an approximately 531MB process RSS snapshot and 40.5MB fully described
+component JSON; these are neither peak/max-input guarantees nor ML metrics.
+Calculate history once per immutable revision and reuse it. Native source profile
+coverage, absolute event delay and 95% timely joint availability remain unproved.
+All 79 families remain in the catalogue, but many have only partial executable
+coverage. C1/C2 semantic reconciliation, roles, versioned patch/pro/Immortal meta,
+conditional opponent-style and detailed historical series recovery are not complete.
+The current API serving path still uses existing models; these new diagnostic
+components are not installed weights and cannot claim new prediction accuracy.
+Astra must review remaining family/source/operational gates before any new fits.
+
+Retained-capture connection and restart policy (24 October addition)
+readCommittedSteamCapture verifies the named completion receipt, exact raw bytes
+and plain archive/raw/observations directories. createRetainedFeaturePipeline
+connects this retained input to the bounded DB loader, immutable source store,
+durable history revision index, one opaque history proof per revision, unified
+producer, background consumer and feature journal. It is an explicit host API,
+not an automatically enabled task or a card-request handler.
+
+The host supplies an owned DB port, an already initialized sourceStore and
+historyRevisions store, producer/registry, featureJournal, historyProfileSha256,
+clock and manual-stop/AbortSignal. Pin the actual reviewed history loader/profile
+revision; a hash-format check alone does not authenticate arbitrary host policy.
+The stable revision key binds original draft cutoff/identity, history profile,
+selection bounds and materializationGeneration. The default generation is initial.
+The existing reference is reused after restart; a changed mutable database is not
+silently re-read under that same key. Deliberate causal re-enrichment requires an
+explicit new generation/reference, never overwriting an old source export.
+
+A restart must replay the retained prefix from the original trigger. Starting
+from a later packet is a different, late first observation; it cannot reproduce
+the earlier context by guessing t0. Old vectors remain available through their
+saved schema/trace/source references. Newly materialized retrospective traces are
+labelled current local reconstruction, not predictions originally issued then.
+Out-of-order receipts do not poison accepted prefixes. Causal identity conflicts
+require manual review. STOP after source commit prevents heavy proof/generation.
+Content-addressed artifacts are retained if a later stage stops or fails.
+
+Training safety
+The legacy scripts/src/train-lightgbm.ts route is blocked at the beginning of
+main because its current peer_synergy join is not an as-of input. There is no
+environment bypass. This protects that known route; it is not proof about every
+other old model, and no historical metric has been retrospectively relabelled.

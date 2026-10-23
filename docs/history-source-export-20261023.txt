@@ -1,0 +1,116 @@
+AEGIS — IMMUTABLE HISTORY SOURCE EXPORT PROTOCOL, 2026-10-23
+
+STATUS AND PURPOSE
+Diagnostic source foundation only. No model fitting, quality evaluation, serving
+activation, provider request, production database write or migration is performed.
+This protocol closes the value-revision gap in which a SQL or selector hash could
+be mistaken for the hash of the historical values actually used. It does not
+independently approve the feature-first architecture or all feature families.
+
+PUBLIC INTERFACES
+historySourceExport.mjs:
+- collectDraftHistorySourceExport(db, options) wraps the existing bounded,
+  read-only observed-draft loader. options include matchId, computedAt,
+  draftPrefixInputs, maxMaps, maxFrames, includePlayerPerformance, signal and now.
+  includePlayerPerformance defaults to false for legacy compatibility. The host
+  may enable the reviewed extended loader in its diagnostic profile. Its 19
+  completed-prior-player metric values, native field names, player/hero/side and
+  knownAt are retained separately; performance availability is checked against t0
+  and the matching prior-map roster. GPM/NW/totalGold/goldSpent remain distinct.
+- encodeHistorySourceExport({...}) takes pinned draft/facts/native/read-receipt
+  bytes. It is a pure protocol encoder and replays the complete supplied draft
+  prefix before validating identity, chronology, selectors and collection state.
+- verifyHistorySourceExport(envelopeInput, options) verifies byte integrity,
+  canonical encoding and the same causal checks after transport or reload.
+  options bind expectedSourceSnapshotHash, matchId and decisionAt. recorded reads
+  require export materialization no later than the decision; reconstructed reads
+  permit later materialization while retaining the original history cutoff.
+
+historySourceExportStore.mjs:
+- createHistorySourceExportStore(explicitExistingPrivateDirectory) returns put
+  and load. put verifies the envelope, writes/syncs a private temporary file, then
+  publishes it by an exclusive atomic hard link. An existing content address is
+  checked and never overwritten. load verifies size/hash/schema and full causal
+  protocol again. References contain only contract, SHA256 and byte count; they
+  cannot supply an arbitrary filesystem path.
+- The directory is deliberately provided by the host, must already exist and
+  cannot be a symbolic link. No production data folder is chosen or created.
+  The adapter does not prevent an administrator from tampering with files; such
+  tampering is detected on every read. It is not a filesystem security boundary.
+
+CONTENT AND SOURCE IDENTITY
+sourceSnapshotHash is SHA256 of the actual canonical envelope UTF-8. The envelope
+retains the exact facts/native UTF-8, their byte counts and hashes, the pinned raw
+draft prefix and receipt metadata, the draft revision and selector sets, the
+first complete draft cutoff, identity-valid-from time, local read receipt and
+explicit collection states. SQL hashes remain ordinary metadata. They are never
+substituted for data hashes. Adding a prior source row or changing any retained
+value creates a different source hash even if SQL/selectors remain identical.
+
+The exported stable draftRevisionHash uses the same identity-revision body as
+historySnapshotIdentity: draft contract/map/cutoff/first-complete observation,
+revision, valid-from observation/time and identity. Account disclosure at t1 may
+change selectors and revision; historyCutoffAt remains t0. A new account cannot
+extend history to t1 or rewrite the previous retained byte artifact.
+
+The envelope source hash is passed to historySnapshotIdentity. Learned transform
+state remains a separate external TRAIN/split/fold/cohort binding in that identity;
+there is no implied learned state or test-set fitting in a source export.
+
+EMPTY, FAILED AND TRUNCATED SOURCES
+A complete empty facts population requires a successful bounded local query,
+an exact matching selection scope, zero retained fact rows and a matching read
+receipt. The candidate-native query is then skipped because the eligible prior
+map set is empty, and this reason is explicit. No pseudo map IDs, outcomes,
+zero-rate form features or fabricated support are added. The legacy v3 historical
+producer remains blocked with no_available_prior_maps on this empty population;
+this protocol preserves that behavior for a later explicit architecture review.
+
+Missing/failed sources retain null collections and unknown row counts. A
+truncated export is also unavailable and cannot be called a complete empty
+population. A second-query failure does not turn a partially returned loader
+attempt into a qualified pair of historical sources. Abort propagates instead of
+being cached/reclassified as empty. Error text and SQL parameters are not retained.
+
+The term verified_complete_empty_within_local_source means consistency of actual
+bytes, replayed selectors and the host's successful bounded read receipt. A pure
+encoder can consume host-created receipts; it cannot authenticate an arbitrary
+caller or prove that the local database covers every relevant upstream match.
+The DB port is a trusted host dependency. There is no provider signature,
+independent historical availability attestation or PostgreSQL MVCC snapshot claim.
+The envelope explicitly records this distinction and remains non-serving and
+non-training. Do not use a content hash as source authentication.
+
+NATIVE OBSERVATIONS AND CAUSALITY
+Retained native observations must belong to prior selected maps and be received
+no later than t0. Current-map rows and one-nanosecond future facts/rosters/native
+receipts are rejected. The envelope pins native candidates; it does not admit
+raw-free normalized metrics, infer a missing phase or bypass independent profile
+review. produceObservedDraftHistory still requires native raw replay/alignment.
+Additional original raw/alignment files are separate producer dependencies; their
+receipt/hash bindings must remain in the downstream context and component schema.
+
+BOUNDS
+The complete canonical envelope is at most 64 MiB. Every pinned JSON source is
+checked against exact byte count/SHA256 before use. Metadata receipt is at most
+256 KiB. Existing loader limits remain 50,000 prior maps and 20,000 native frames,
+defaulting to 20,000/10,000. Parsed JSON is limited to depth 40 and 8,000,000 nodes;
+the pinned draft replay keeps its own stricter prefix/raw-record bounds.
+
+ALTERNATIVES AND LIMITATIONS FOR ASTRA
+- Rejected SQL hash as immutable source revision: row contents can change without
+  changing a query. Rejected mutable DB location alone for the same reason.
+- Rejected fabricated successful empty rows on failures and pseudo static map IDs.
+- Chosen retained byte envelope plus optional append-only local CAS without a new
+  DB schema. The existing history snapshot SQL contract is preserved.
+- No repeatable-read/MVCC claim: facts and native collections are retained bounded
+  results, potentially read in separate statements. Causal validators still gate
+  each dependency. A future production consistency policy needs Astra review.
+- Canonical envelope bytes must be retained unchanged; reparsing and pretty-printing
+  yields a new transport representation and is rejected by this protocol version.
+- If the loader aborts after a successful first read but before returning its pair,
+  the source pair is unavailable. No partial-result recovery is inferred.
+- The CAS requires ordinary local filesystem hard-link support and fails clearly
+  on an unsupported filesystem. It does not silently downgrade to overwriting.
+- Feature support/empty-history admission, app activation and all-family completion
+  remain separate gates. Source-only technical tests are not ML accuracy evidence.
