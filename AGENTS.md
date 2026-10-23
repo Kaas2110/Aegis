@@ -40,16 +40,26 @@ same block. Record its exact head commit. Do not publish databases, API keys,
 environment files, raw observations, real training fixtures, archives, fitted
 weights or generated builds. Never blindly stage the whole local runtime.
 
-Use `scripts/source-parity/check_source_parity.py` with an immutable Git commit
-to compare current public working files with GitHub source. Record byte parity
-separately from line-ending equivalence. The checker does not fetch or publish;
-the reference commit must first be available locally. Report every remaining
-source difference. An open PR can match local source while `main` and its graph
-remain on an earlier commit.
+The owner clarified on 2026-10-23: after each completed, reviewed block, create
+or update its PR and merge it into main without asking again. Graphify refreshes
+automatically after merge. Relevant correctness and changed-file checks remain
+required. A full byte-by-byte source scan is not a routine block gate; reuse prior
+immutable evidence and run the parity checker only for a concrete divergence or
+synchronization concern. Its report distinguishes source bytes from line endings
+and excludes private/runtime data. An unfinished local block may lead main/graph.
+This standing source/documentation merge permission supersedes older per-PR
+approval wording. App release, public candidate promotion, purchases and app-store
+publication remain separate decisions.
 
-PR creation is not approval to merge, release, activate candidate models or
-publish to an app store. PR #1 was separately approved and merged on 2026-10-23;
-that approval does not grant automatic merge permission for later PRs.
+## Astra review record
+
+Astra is the architect and reviewer of Sol implementation. At each meaningful
+checkpoint and completed block, record the original problem, decisions and why,
+alternatives, exact changed paths, checks/results, actual versus synthetic evidence,
+limitations/risks, open architecture questions and next action. Preserve negative
+reproductions and their fixes. Passing technical tests does not by itself establish
+architectural acceptance, data coverage or model quality. Keep the full review pack
+in the local continuation workspace and a source-safe summary with the block PR.
 
 ## Graphify
 
@@ -60,8 +70,8 @@ local files, diffs and checkpoints remain authoritative. After one unavailable,
 stale or empty lookup, continue locally. Save meaningful intermediate progress
 locally; synchronize durable verified cloud context at block completion, not
 after every edit. Do not upload secrets or data to make the graph current.
-After a separately authorized merge of the completed block, verify the new
-index commit and relevant symbols.
+After a completed-block merge, confirm the automatic indexing result with a
+lightweight ready/commit check. Avoid a second manual rebuild or repeated full scan.
 
 ## Runtime boundaries
 

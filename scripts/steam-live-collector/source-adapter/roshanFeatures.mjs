@@ -6,7 +6,8 @@ import {createHash} from 'node:crypto';
 import {DYNAMIC_CONTRACT} from './dynamicFields.mjs';
 import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
-export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v2';
+import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v3';
 const finite=x=>typeof x==='number'&&Number.isFinite(x),nn=x=>finite(x)&&x>=0;
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const val=x=>x?.missing===false&&finite(x.value)?x.value:null;
@@ -17,7 +18,7 @@ function validateRules(r,patch,profile,at){
  if(!finite(r.respawnMinimumSeconds)||r.respawnMinimumSeconds<=0||!finite(r.respawnMaximumSeconds)||r.respawnMaximumSeconds<r.respawnMinimumSeconds||r.respawnMaximumSeconds>3600||!finite(r.aegisLifetimeSeconds)||r.aegisLifetimeSeconds<=0||r.aegisLifetimeSeconds>3600)return null;
  return r;
 }
-function emptyState(key){return {contract:FEATURE_CONTRACT,key,lastClock:null,lastKnownAt:null,lastTimer:null,death:null,lastLifeEvent:null,confirmedDeaths:[],seenEvents:[],aegis:null,lastEconomy:null};}
+function emptyState(key){return {contract:FEATURE_CONTRACT,key,lastClock:null,lastKnownAt:null,lastTimer:null,death:null,lastLifeEvent:null,confirmedDeaths:[],seenEvents:[],aegis:null,lastEconomy:null,economyIdentityKey:null};}
 function eventAllowed(e,o,clock,at){return e&&e.matchId===o.matchId&&e.sourceProfile===o.dynamic.sourceProfile&&proof(e.id)&&proof(e.evidenceRef)&&e.confirmed===true&&nn(e.gameTimeSeconds)&&e.gameTimeSeconds<=clock&&time(e.knownAt)!==null&&time(e.knownAt)<=at;}
 function economy(o){
  const result={};
@@ -60,6 +61,9 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  if(explicitNonLive){resetReasons.push('explicit_non_live_phase');s=emptyState(key);}
  const terminalOutcome=Array.isArray(o.sourceQualityReasons)&&o.sourceQualityReasons.includes('outcome_marker_present');
  if(terminalOutcome){resetReasons.push('terminal_outcome_present');s=emptyState(key);}
+ const identity=steamObservationIdentity(o);
+ if(identity.key===null){resetReasons.push('player_side_team_identity_invalid');s.lastEconomy=null;}
+ else if(s.economyIdentityKey!==null&&s.economyIdentityKey!==identity.key){resetReasons.push('player_side_team_identity_changed');s.lastEconomy=null;}
  const canAdvance=finite(clock)&&clock>=0&&!explicitNonLive&&!terminalOutcome;
  const timer=val(d.roshan?.respawnTimer),features={clock_seconds:clock,phase_code:val(d.phase),roshan_timer_raw:timer};
  let pairConsistent=null;
@@ -133,7 +137,7 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  const gates=['roshan_timer_raw','roshan_elapsed_since_confirmed_death','roshan_respawn_lower_seconds','roshan_respawn_upper_seconds','roshan_confirmed_countdown_seconds','roshan_inferred_death_game_clock_lower_seconds','roshan_inferred_death_game_clock_upper_seconds','roshan_inferred_elapsed_since_death_lower_seconds','roshan_inferred_elapsed_since_death_upper_seconds','aegis_lifetime_upper_seconds','aegis_holder_side','aegis_holder_nw'];
  const contextKeys=['clock_seconds',...Object.keys(econ),...Object.keys(features).filter(k=>k.startsWith('history_'))];
  for(const a of gates)for(const b of contextKeys){const v=finite(features[a])&&finite(features[b])?features[a]*features[b]:null;features[a+'__x__'+b]=finite(v)?v:null;}
- if(canAdvance){s.lastClock=clock;s.lastTimer=timer;s.lastEconomy=econ;s.lastKnownAt=knownAt;}
+ if(canAdvance){s.lastClock=clock;s.lastTimer=timer;s.lastEconomy=identity.key===null?null:econ;s.lastKnownAt=knownAt;s.economyIdentityKey=identity.key;}
  const missing=Object.fromEntries(Object.entries(features).map(([k,v])=>[k,v===null]));
  return {contract:FEATURE_CONTRACT,observationId:o.observationId,matchId:o.matchId,sourceProfile:d.sourceProfile,sourceInputHash:o.inputHash,rawSha256:o.source.capture.rawSha256,
   knownAt,gameClockSeconds:clock,patch,rulesVersion:r?.version??null,rulesAccepted:r!==null,timerSemanticsAccepted,historyContext:{accepted:history.accepted,reason:history.reason,mode:history.accepted?'prematch_frozen':null},

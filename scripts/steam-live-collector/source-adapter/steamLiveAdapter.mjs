@@ -5,9 +5,12 @@
 import {createHash} from 'node:crypto';
 import {DecimalNumber,parseLosslessJson} from './losslessJson.mjs';
 import {DYNAMIC_CONTRACT,dynamicPlayer,dynamicGame,draftFields} from './dynamicFields.mjs';
+import {instantNs} from './causalTime.mjs';
+import {nativeFieldEvidence,NATIVE_FIELD_EVIDENCE_CONTRACT} from './nativeFieldEvidence.mjs';
 
 export const CONTRACT='steam-live-scoreboard-candidate.v1';
 export const SOURCE_CONTRACT='steam-live-scoreboard-source.v1';
+export const NORMALIZATION_CONTRACT='steam-live-scoreboard-normalization.v2';
 export const SCHEMA_EVIDENCE=Object.freeze({status:'MEASURED_ONE_AUTHENTICATED_CAPTURE',measuredAuthenticatedSchema:true,
   evidenceSha256:'eefede1578ea99e75d0add41df3b928a479300145c3c0d5880497497bad60e5d',measuredUtc:'2026-10-19T19:43:40.274491+00:00',
   measuredGames:28,measuredScoreboards:28,measuredPlayerRecords:280,completenessOrLatencyGuarantee:false});
@@ -23,8 +26,7 @@ const finite=x=>typeof x==='number'&&Number.isFinite(x);
 const nonnegative=x=>finite(x)&&x>=0;
 const integer=x=>nonnegative(x)&&Number.isSafeInteger(x);
 function time(value,name){
-  if(typeof value!=='string'||value.length>64||!/(Z|[+-]\d\d:\d\d)$/.test(value)||!Number.isFinite(Date.parse(value)))throw Error('invalid_'+name);
-  return Date.parse(value);
+  const ns=instantNs(value);if(ns===null)throw Error('invalid_'+name);return ns;
 }
 export function decimalId(value,{anonymous=false}={}){
   if(anonymous&&(value===null||value===0||value==='0'||value===4294967295||value==='4294967295'))return null;
@@ -49,11 +51,12 @@ function scalar(x){
 function rawPick(raw,keys){
   const out={};for(const key of keys)if(own(raw,key))out[key]=scalar(raw[key]);return out;
 }
-function metric(raw,key,validate=nonnegative){
-  if(!own(raw,key))return {value:null,missing:true,status:'absent',sourceField:key,semantics:'UNCONFIRMED'};
-  if(raw[key]===null)return {value:null,missing:true,status:'null',sourceField:key,semantics:'UNCONFIRMED'};
+function metric(raw,key,validate=nonnegative,context){
+  const evidence=nativeFieldEvidence(key,context);
+  if(!own(raw,key))return {...evidence,value:null,missing:true,status:'absent',sourceField:key,semantics:'UNCONFIRMED'};
+  if(raw[key]===null)return {...evidence,value:null,missing:true,status:'null',sourceField:key,semantics:'UNCONFIRMED'};
   const value=scalar(raw[key]);
-  return {value:validate(value)?value:null,missing:!validate(value),status:validate(value)?'observed':'invalid',sourceField:key,semantics:'observed named provider field; no cross-field inference'};
+  return {...evidence,value:validate(value)?value:null,missing:!validate(value),status:validate(value)?'observed':'invalid',sourceField:key,semantics:'observed named provider field; no cross-field inference'};
 }
 const PLAYER_KEYS=['account_id','hero_id','player_slot','team_slot','level','gold_per_min','xp_per_min','net_worth','gold','net_gold',
   'item0','item1','item2','item3','item4','item5','has_buyback','buyback_cooldown','respawn_timer','kills','death','assists','last_hits','denies',
@@ -63,7 +66,7 @@ function player(raw,side,path,teamId,capture){
   if(!record(raw))throw Error('invalid_player_object');
   const accountId=account(raw.account_id),heroId=nullableId(raw,'hero_id',{anonymous:true});
   const items=Array.from({length:6},(_,i)=>{
-    const key=`item${i}`,item=metric(raw,key,integer),rawValue=own(raw,key)?scalar(raw[key]):null;
+    const key=`item${i}`,item=metric(raw,key,integer,{path,capture}),rawValue=own(raw,key)?scalar(raw[key]):null;
     if(typeof rawValue==='number'&&rawValue<0)item.status='negative_source_sentinel';
     return {providerField:key,...item,rawValue};
   });
@@ -72,8 +75,8 @@ function player(raw,side,path,teamId,capture){
   return {
     identity:{accountId,heroId,teamId,side,providerSteamPlayerSlot:null,providerPlayerSlotRaw:rawSlot,providerPlayerSlotSideCompatible:compatible,
       providerTeamSlotRaw:own(raw,'team_slot')?scalar(raw.team_slot):null,slotSemantics:'observed explicit player_slot; no team_slot conversion or role inference'},
-    level:metric(raw,'level',integer),goldPerMinute:metric(raw,'gold_per_min'),experiencePerMinute:metric(raw,'xp_per_min'),
-    netWorth:metric(raw,'net_worth'),gold:metric(raw,'gold'),netGoldRaw:metric(raw,'net_gold'),
+    level:metric(raw,'level',integer,{path,capture}),goldPerMinute:metric(raw,'gold_per_min',nonnegative,{path,capture}),experiencePerMinute:metric(raw,'xp_per_min',nonnegative,{path,capture}),
+    netWorth:metric(raw,'net_worth',nonnegative,{path,capture}),gold:metric(raw,'gold',nonnegative,{path,capture}),netGoldRaw:metric(raw,'net_gold',nonnegative,{path,capture}),
     observedItemFields:items,itemInventoryComplete:null,itemIdsSemantics:'raw observed IDs only; zero is preserved without empty-slot inference',
     buybackAvailable:null,buybackSemantics:'UNCONFIRMED; no inference from cooldown/gold/items',role:null,
     sourcePlayerPath:path,canJoinPlayerHistory:accountId!==null&&heroId!==null,
@@ -100,8 +103,9 @@ function normalizeGame(raw,index,capture,expected){
     const sourcePlayers=Array.isArray(data.players)?data.players:[];
     const normalized=sourcePlayers.map((p,j)=>player(p,side,`result.games[${index}].scoreboard.${side}.players[${j}]`,teamId,capture));
     players.push(...normalized);
-    sides[side]={teamId,score:metric(data,'score',integer),towerMaskRaw:metric(data,'tower_state',x=>integer(x)&&x<=0xffffffff),
-      barracksMaskRaw:metric(data,'barracks_state',x=>integer(x)&&x<=0xffffffff),buildingMaskSemantics:'UNCONFIRMED_OPAQUE_UINT32',
+    const metricContext={path:`result.games[${index}].scoreboard.${side}`,capture};
+    sides[side]={teamId,score:metric(data,'score',integer,metricContext),towerMaskRaw:metric(data,'tower_state',x=>integer(x)&&x<=0xffffffff,metricContext),
+      barracksMaskRaw:metric(data,'barracks_state',x=>integer(x)&&x<=0xffffffff,metricContext),buildingMaskSemantics:'UNCONFIRMED_OPAQUE_UINT32',
       players:normalized,rosterComplete:normalized.length===5&&normalized.every(p=>p.identity.accountId!==null&&p.identity.heroId!==null),
       playerArrayStatus:!own(data,'players')?'absent':data.players===null?'null':'observed',draft: draftFields(data,`result.games[${index}].scoreboard.${side}`,capture)};
     if(own(raw,side+'_team'))rawSource[side+'_team']=record(raw[side+'_team'])?rawPick(t,['team_id']):scalar(raw[side+'_team']);
@@ -113,19 +117,19 @@ function normalizeGame(raw,index,capture,expected){
   if(sides.radiant.teamId!==null&&sides.radiant.teamId===sides.dire.teamId)throw Error('same_team_identity');
   if(!Object.values(sides).every(s=>s.rosterComplete))quality.push('roster_incomplete');
   if(players.some(p=>p.identity.providerPlayerSlotRaw!==null&&!p.identity.providerPlayerSlotSideCompatible))quality.push('provider_player_slot_side_mismatch');
-  const clock=scoreboard?metric(scoreboard,'duration',x=>finite(x)&&x>=-3600):{value:null,missing:true,status:'absent',sourceField:'duration',semantics:'UNCONFIRMED'};
+  const clock=metric(scoreboard??{},'duration',x=>finite(x)&&x>=-3600,{path:`result.games[${index}].scoreboard`,capture});
   if(scoreboard&&own(scoreboard,'duration'))rawSource.scoreboard.duration=scalar(scoreboard.duration);
   if(scoreboard&&own(scoreboard,'roshan_respawn_timer'))rawSource.scoreboard.roshan_respawn_timer=scalar(scoreboard.roshan_respawn_timer);
   for(const side of ['radiant','dire'])if(record(rawSource.scoreboard?.[side]))for(const key of ['picks','bans']){
     const value=sides[side].draft[key];if(value.status==='observed')rawSource.scoreboard[side][key]=value.value.map(x=>({hero_id:x.rawValue}));
   }
-  const delay=metric(raw,'stream_delay_s');if(delay.value===null)quality.push('declared_delay_unknown');
+  const delay=metric(raw,'stream_delay_s',nonnegative,{path:`result.games[${index}]`,capture});if(delay.value===null)quality.push('declared_delay_unknown');
   if(delay.value!==null&&delay.value>300)quality.push('declared_delay_exceeds_300s');
   if(own(raw,'radiant_win')||own(raw,'winner')||own(raw,'final_score')||own(raw,'match_outcome'))quality.push('outcome_marker_present');
   if(Buffer.byteLength(canonical(rawSource))>MAX_SOURCE)throw Error('source_game_bytes_bound');
   const source={contract:SOURCE_CONTRACT,endpoint:capture.endpoint,endpointVersion:'v1',schemaEvidence:SCHEMA_EVIDENCE,capture,rawPacket:rawSource};
   const inputHash=sha(canonical(source));
-  return {contract:CONTRACT,dynamicContract:DYNAMIC_CONTRACT,dynamic:dynamicGame(raw,scoreboard,index,capture),status:'normalized_measured_schema_diagnostic',schemaEvidence:SCHEMA_EVIDENCE,matchId,serverSteamId,
+  return {contract:CONTRACT,normalizationContract:NORMALIZATION_CONTRACT,dynamicContract:DYNAMIC_CONTRACT,dynamic:dynamicGame(raw,scoreboard,index,capture),status:'normalized_measured_schema_diagnostic',schemaEvidence:SCHEMA_EVIDENCE,matchId,serverSteamId,
     lobbyId:nullableId(raw,'lobby_id'),leagueId:nullableId(raw,'league_id',{anonymous:true}),seriesId:nullableId(raw,'series_id',{anonymous:true}),
     providerGameClockSeconds:clock,providerTimestampRaw:rawPick(raw,['timestamp','last_update_time','time']),providerEventAt:null,
     providerTimestampUnits:null,declaredBroadcastDelaySeconds:delay,measuredEventToReceiptSeconds:null,
@@ -135,7 +139,7 @@ function normalizeGame(raw,index,capture,expected){
     rawFieldPresence:{scoreboard:!own(raw,'scoreboard')?'absent':raw.scoreboard===null?'null':'present',
       ...Object.fromEntries(GAME_KEYS.map(k=>[k,!own(raw,k)?'absent':raw[k]===null?'null':'present']))},
     sourceQualityReasons:quality,source,inputHash,observationId:sha(canonical({contract:SOURCE_CONTRACT,inputHash,receivedAt:capture.receivedAt})),
-    sourceSchemaHash:sha(canonical({contract:SOURCE_CONTRACT,dynamicContract:DYNAMIC_CONTRACT,schemaEvidence:SCHEMA_EVIDENCE,candidatePaths:'historical_scoreboard_nested_sides_dynamic_v1'})),
+    sourceSchemaHash:sha(canonical({contract:SOURCE_CONTRACT,normalizationContract:NORMALIZATION_CONTRACT,fieldEvidenceContract:NATIVE_FIELD_EVIDENCE_CONTRACT,dynamicContract:DYNAMIC_CONTRACT,schemaEvidence:SCHEMA_EVIDENCE,candidatePaths:'historical_scoreboard_nested_sides_dynamic_v1'})),
     eligibleForServing:false,eligibleForPromotion:false,modelFeatureMapping:null,prediction:null};
 }
 
