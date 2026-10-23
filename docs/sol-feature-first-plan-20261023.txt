@@ -67,7 +67,7 @@ EXISTING FOUNDATION
 - Raw Steam packet and provenance retention, the diagnostic table and observation-sequence reading are implemented. Current schemas: Roshan — 871 values; player/economy v2 — 36,726 columns including masks; the combined Steam bundle v2 — 38,468 columns. These are schema sizes, not evidence of completeness or model quality.
 - A frozen history producer and DB reader exist; duration measures are separated for team, player, hero and player–hero. Before this revision, 125 combined and 7 independent technical checks passed.
 - Automatic history-context creation at draft time, persistent storage and reuse, integration of rich C1/C2 features with Steam, and the entire operational path for serving the new models are NOT complete.
-- Source PR1 was merged with separate owner authorization. This does not authorize future merges. Create one PR per completed block of work; an individual edit within a block does not require a new PR or immediate publication.
+- Source PR1 and PR2 were merged with owner authorization. The latest 2026-10-23 owner instruction grants standing permission to merge reviewed completed-block source/documentation PRs without reconfirmation. Create one PR per completed block; individual edits do not require immediate publication. App release and public model activation remain separate.
 - Old fits, partial artifacts and calibrations are retained. Inspected validation folds cannot be relabelled as an independent holdout.
 
 WORK SEQUENCE
@@ -91,11 +91,11 @@ When the agreed block of work is complete:
 4. Review the diff and exclusion of secrets, databases, raw archives, weights, runtime and build outputs.
 5. Create one PR for the entire completed block and attach it to the chat. If a PR for this block is already open, update its branch; do not open a new PR for each subsequent edit. Do not bundle an unfinished mixture of independent work into one block.
 
-Compare Git blobs directly with current APP. Distinguish byte equality, CRLF/LF differences and semantic differences. The parity report must state its scope and commit; it does not cover databases, weights or node_modules. If a required source file is outside the allowlist, review it instead of silently excluding it.
+Use relevant correctness and changed-file checks at block completion. Do not routinely repeat a whole-tree byte-by-byte comparison. Reuse prior immutable evidence; use the existing source-parity checker only for a concrete divergence or synchronization concern. Any such audit states its scope/commit and distinguishes bytes, line endings and semantic differences; databases, weights and node_modules remain outside source scope.
 
-After a separately authorized merge of the completed block, check the new main/tree, then the Graphify index update and several changed symbols. While the block is in progress, the PR is unmerged or the index is stale, local files and the checkpoint take precedence over the graph. Do not create a new project or delete the old one merely to refresh the index.
+Under the latest standing owner authorization, merge each completed reviewed source/documentation block and let Graphify refresh automatically. Confirm the ready status and indexed commit with a lightweight check; no duplicate manual rebuild or full scan is required. While the block is in progress, the PR is unmerged or the index is stale, local files and the checkpoint take precedence over the graph. Do not create a new project or delete the old one merely to refresh the index.
 
-Block completion criterion: a reproducible parity report and an APP → one PR/commit mapping exist; all publishable changes in the completed block are included or have an explicit reason for deferral. Intermediate working edits in an unfinished block may remain local. The rules are recorded in AGENTS/documentation. A new merge requires current owner authorization.
+Block completion criterion: relevant correctness/changed-file evidence, an Astra review record and an APP → one PR/commit mapping exist; publishable changes are included or explicitly deferred. Intermediate working edits may remain local. Standing owner authorization covers reviewed block merges without asking again; public model promotion and release still require separate decisions. A full byte-parity audit is only for a concrete synchronization concern.
 
 S1. COMPLETE UNIFIED FEATURE CATALOGUE
 

@@ -2,7 +2,8 @@
 import {createHash} from 'node:crypto';
 import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
-export const CONTRACT='aegis.player-hero-native-economy-features.v2';
+import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+export const CONTRACT='aegis.player-hero-native-economy-features.v3';
 export const HERO_IDS=Object.freeze(Array.from({length:250},(_,i)=>i+1));
 const METRICS={native_nw:'netWorth',native_gpm:'goldPerMinute',native_xpm:'experiencePerMinute'};
 const CONTEXTS=['recentForm','heroForm','teamForm','aggression','lateTendency','playerLateTendency','heroLateTendency','playerHeroLateTendency'];
@@ -14,7 +15,7 @@ const canonical=x=>x===null||typeof x!=='object'?JSON.stringify(x):Array.isArray
 export const evidenceHash=x=>createHash('sha256').update(canonical(x)).digest('hex');
 const proof=x=>typeof x==='string'&&x.length>0&&x.length<=512;
 const digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
-const key=p=>p.identity.side+'|'+String(p.identity.accountId)+'|'+String(p.identity.heroId);
+const key=p=>p.identity.side+'|'+String(p.identity.teamId)+'|'+String(p.identity.accountId)+'|'+String(p.identity.heroId);
 function at(s){try{return instantNs(s);}catch{return null;}}
 function snapshot(o){
  const time=at(o?.source?.capture?.receivedAt),clock=value(o?.providerGameClockSeconds),profile=o?.dynamic?.sourceProfile;
@@ -26,7 +27,8 @@ function snapshot(o){
  if(SIDES.some(side=>!Array.isArray(o.sides?.[side]?.players)||o.sides[side].players.some(p=>p?.identity?.side!==side)))return null;
  const players=SIDES.flatMap(side=>o.sides[side].players);
  if(players.length!==10||SIDES.some(s=>players.filter(p=>p.identity.side===s).length!==5)||players.some(p=>!(typeof p.identity.accountId==='string'&&/^[1-9]\d{0,9}$/.test(p.identity.accountId)&&BigInt(p.identity.accountId)<4294967295n)||!Number.isSafeInteger(Number(p.identity.heroId))||Number(p.identity.heroId)<1)||new Set(players.map(p=>String(p.identity.accountId))).size!==10||new Set(players.map(p=>Number(p.identity.heroId))).size!==10)return null;
- return{o,time,clock,profile,players,byKey:new Map(players.map(p=>[key(p),p]))};
+ const identity=steamObservationIdentity(o);if(identity.key===null)return null;
+ return{o,time,clock,profile,players,identityKey:identity.key,byKey:new Map(players.map(p=>[key(p),p]))};
 }
 function contextFor(c,s){
  if(!c)return{valid:false,reason:'static_context_missing'};
@@ -49,6 +51,23 @@ function role(c,p){if(!c.valid)return null;const found=c.data.roles.filter(x=>x.
 function reference(c,p,metric,minute){if(!c.valid)return null;const candidates=c.data.heroMinuteReferences.filter(x=>String(x.heroId)===String(p.identity.heroId)&&x.metric===metric&&Number.isSafeInteger(x.minute)&&x.minute>=0&&x.minute<=minute&&minute-x.minute<=5&&Number.isSafeInteger(x.supportMaps)&&x.supportMaps>=1&&finite(x.mean)&&x.mean>=0&&finite(x.scale)&&x.scale>0&&proof(x.evidenceRef)&&at(x.latestHistoryAvailabilityAt)!==null&&at(x.latestHistoryAvailabilityAt)<=c.known);if(!candidates.length)return null;candidates.sort((a,b)=>b.minute-a.minute);return candidates.filter(x=>x.minute===candidates[0].minute).length===1?candidates[0]:null;}
 const median=a=>{const b=[...a].sort((x,y)=>x-y);return b[Math.floor(b.length/2)];};
 function summaries(players,field){const a=players.map(p=>value(p[field])).sort((x,y)=>(x??-1)-(y??-1));if(a.some(x=>x===null))return null;const sum=a.reduce((x,y)=>x+y,0);return{sum,mean:sum/5,median:median(a),min:Math.min(...a),max:Math.max(...a),top_share:sum>0?Math.max(...a)/sum:null,hhi:sum>0?a.reduce((x,y)=>x+(y/sum)**2,0):null};}
+function causalEconomyPrefix(history,s){
+ const ordered=history.map(o=>({o,time:at(o?.source?.capture?.receivedAt)})).filter(x=>x.time!==null&&x.time<=s.time&&x.o.observationId!==s.o.observationId)
+  .sort((a,b)=>a.time<b.time?-1:a.time>b.time?1:String(a.o.observationId).localeCompare(String(b.o.observationId)));
+ let accepted=[],lastClock=null;
+ for(const {o}of ordered){
+  const x=snapshot(o);
+  // A changed/invalid intervening roster is a barrier, even if identity later
+  // returns to an earlier value. Filtering out only the conflicting row leaks a
+  // pre-reset trajectory into an offline vector that online replay has cleared.
+  if(!x||x.o.matchId!==s.o.matchId||x.profile!==s.profile||x.identityKey!==s.identityKey){accepted=[];lastClock=null;continue;}
+  if(lastClock!==null&&x.clock<lastClock)accepted=[];
+  lastClock=x.clock;
+  if(x.clock>s.clock){accepted=[];continue;}
+  if(x.clock<s.clock)accepted.push(x);
+ }
+ return accepted.sort((a,b)=>b.clock-a.clock||(a.time>b.time?-1:a.time<b.time?1:0)||(a.o.observationId<b.o.observationId?-1:a.o.observationId>b.o.observationId?1:0));
+}
 export function featureNames(){
  const names=['native_economy.clock_seconds','native_economy.phase_explicit','native_economy.static_context_valid','native_economy.static_context_recorded','native_economy.roles_verified_count'];
  for(const metric of Object.keys(METRICS)){for(const side of SIDES)for(const stat of ['sum','mean','median','min','max','top_share','hhi'])names.push(`native_economy.team.${side}.${metric}.${stat}`);for(const stat of ['sum','mean','median','min','max','top_share','hhi'])names.push(`native_economy.team.diff.${metric}.${stat}`);}
@@ -66,7 +85,7 @@ export function projectPlayerHeroEconomy(observation,{staticContext=null,history
  const s=snapshot(observation);if(!s)throw Error('complete_coherent_economy_snapshot_required');
  if(s.players.some(p=>!HERO_IDS.includes(Number(p.identity.heroId))))throw Error('hero_dictionary_revision_required');
  const c=contextFor(staticContext,s),minute=s.clock/60,out={},put=(name,v)=>{out[name]=finite(v)?v:null;out[name+'__missing']=finite(v)?0:1;},teams={},terms=new Map(),roles=new Map();
- const past=history.map(snapshot).filter(x=>x&&x.o.matchId===s.o.matchId&&x.profile===s.profile&&x.time<=s.time&&x.clock<s.clock&&x.o.observationId!==s.o.observationId).sort((a,b)=>b.clock-a.clock||(a.time>b.time?-1:a.time<b.time?1:0)||(a.o.observationId<b.o.observationId?-1:a.o.observationId>b.o.observationId?1:0));
+ const past=causalEconomyPrefix(history,s);
  for(const side of SIDES)for(const[metric,field]of Object.entries(METRICS))teams[side+'|'+metric]=summaries(s.players.filter(p=>p.identity.side===side),field);
  put('native_economy.clock_seconds',s.clock);put('native_economy.phase_explicit',value(s.o.dynamic.phase));put('native_economy.static_context_valid',Number(c.valid));put('native_economy.static_context_recorded',c.valid?Number(c.basis==='recorded'):null);
  for(const p of s.players){const r=role(c,p);if(r!==null){const k=p.identity.side+'|'+r;roles.set(k,roles.has(k)?null:p);}const prof=profile(c,p),perMetric={};

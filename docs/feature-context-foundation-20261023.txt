@@ -1,0 +1,117 @@
+AEGIS — FEATURE CONTEXT FOUNDATION, 2026-10-23
+Status: diagnostic implementation foundation; full feature/serving integration remains incomplete.
+
+Problem and resulting behavior
+Historical features and current Steam measurements need a shared causal boundary.
+The legacy history path required ten public accounts and a confirmed pre-start
+freeze. A full draft can arrive without either. This block introduces a separate
+observed-draft history mode, shared historical calculations, immutable context
+storage and explicit source/phase/projection contracts. It preserves existing
+legacy gates rather than inventing accounts, start time or native economy.
+
+Registry and model boundaries
+The catalogue still contains 79 families across 14 alternative source schemas and
+12 logical prediction targets. These counts are not the width of one model.
+Executable definitions carry formula, units, missing/time/source policies, producer
+and learned-state bindings. Phase/target checks reject current labels and future
+phase inputs. Matching names do not establish equivalent semantics or an alias.
+No fitting, feature pruning, calibration or model-quality evaluation is included.
+
+The pure composition layer validates ordered definitions, component versions,
+input references, coherent live anchors and missing masks. Its default requires
+all target-eligible predictive families. Missing implementations return incomplete
+with no vector; it does not substitute a compact profile. A narrower technical
+profile is explicitly named and remains diagnostic. Caller declarations do not
+prove complete family formulas or authenticate source bytes; trusted upstream
+adapters and canonical reviewed inventories remain required.
+
+Canonical per-state eligibility for SERIES_LIVE is still needed: postdraft cannot
+receive current-live data. Verified empty historical populations also require a
+separate contract instead of invented source-map IDs. These are explicit gates,
+not silently resolved production policies. See the composition README.
+
+Source contracts
+Steam GLG and RT profiles remain separate. Native NW, GPM, XPM and earned gold are
+distinct. Native metrics gain explicit field lineage and units; timestamp order
+uses the original fractional precision. Changes in player/hero/side/team identity
+reset affected economy windows; array order does not. Map-level confirmed Roshan
+events survive an identity-only reset. Unknown Roshan timer semantics stays unknown.
+Normalization v2 and feature components v3 are explicit revisions; unchanged names
+and width do not make old weights compatible with new temporal formulas.
+
+Retained legacy observations are verified against full raw replay under one
+explicitly supported legacy schema. Compatibility transforms the generated expected
+object, never the stored row; values, removed fields and extra fields are checked.
+The new normalized projection is separate. Existing DB dedupe does not upgrade rows.
+
+Draft and historical alignment
+Ten selected heroes with explicit sides can trigger observed_draft without ten
+public accounts, a confirmed start or an observed clock. Raw-byte replay binds the
+derived admission fields. Unknown clock is not zero; positive first clock is late.
+A retained prefix without completeness evidence never claims zero-minute membership.
+Late account disclosure creates a context version valid from that later receipt,
+with history still frozen at the original first-complete-draft receipt.
+
+History algebra is shared with the legacy producer through historyCalculationCore.
+The new v3 wrapper replays a bounded pinned raw prefix and separates hero, team and
+known-player namespaces. Query scope coverage is checked per namespace. A causal
+but incomplete old query is insufficient for a newly disclosed player's full form.
+Every v3 native reference requires raw replay, including explicit phase5. Phase-
+absent historical candidates need separate reviewed evidence; no raw phase rewrite.
+
+The separate draft-aware DB loader replays the original prefix before selecting
+history. Unknown accounts stay absent; late identities only change selectors, not
+the t0 history boundary. It shares bounded prior-map SQL and row conversion with
+the strict legacy loader while retaining the latter's original admission gates.
+Returned outcome/receipt timestamps are checked again without discarding their
+available precision. SQL facts formatted to microseconds cannot recover precision
+already lost at ingestion; reconstruction is not original receipt attestation.
+Native JSON timestamps preserve their retained precision. Native rows remain
+candidates until their original bytes are supplied.
+
+Persistence
+history_context_snapshots is append-only. A stable identity revision, immutable
+cutoff, source/schema/producer/patch and learned TRAIN/fold/cohort state form its
+key. Advisory transaction locking precedes history calculation; local single-flight
+coalesces readers. Ordinary later frames do not change the cache key. Inputs and
+returned objects are copied across asynchronous ownership boundaries.
+
+The store owns completion time. Recorded reads cannot consume a snapshot before
+it was materialized; reconstructed reads are explicit. Pool/SQL/caller waits are
+bounded. Producers must cooperate with cancellation and bound their own loops;
+the library does not forcibly interrupt arbitrary JavaScript or release a connection
+while an unfinished builder could still use it. This requirement precedes collector
+integration. The migration is source-controlled, not applied by read functions.
+
+The real caller must bind sourceSnapshotHash to an immutable data export/revision.
+A hash of SQL or selector scope is not a hash of its rows. The integration test
+pins synthetic inputs explicitly; a general mutable-database revision mechanism
+has not been implemented or implicitly approved by this block.
+
+Validation and review
+Relevant synthetic tests cover phase/target isolation, temporal boundaries, source
+corruption, hidden accounts, late disclosure, legacy behavior and immutable replay.
+An actual local PostgreSQL test using only synthetic data checked 100 readers over
+8 store instances: one calculation and one committed snapshot, rejection of
+UPDATE/DELETE/TRUNCATE, and restart reference equality. It used a disposable schema;
+production tables were not read or changed. Full logs/hashes and the failing
+reproductions are retained in the owner's private continuation workspace under
+work/sol-feature-integration-20261023-r1/, with an ASTRA-REVIEW.txt reasoning pack.
+Synthetic/public fixtures contain no retained real provider responses.
+
+Remaining work and limitations
+The common rich C1/C2 family integration, executable definitions for all families,
+collector/API/model trace and actual serving profile admission are still pending.
+Source availability and 95% timely coverage need separate evidence; comparisons
+between endpoint clocks do not establish absolute event-to-application latency.
+No source test proves model accuracy. New models remain non-serving/non-training.
+Main match cards forecast the whole series; selected-map details forecast its winner
+and kill/duration totals. This block does not redesign that interface.
+
+Work record and publication
+Astra is the architect/reviewer. The private review pack records rationale,
+alternatives, exact paths, negative cases and fixes, synthetic versus actual
+evidence, limitations and next steps. Completed reviewed source blocks go through
+one PR and merge under standing owner authorization; Graphify refreshes on merge.
+Routine byte-by-byte whole-tree scans are not required. Credentials, raw captures,
+databases, private evidence, fitted weights and generated builds stay excluded.

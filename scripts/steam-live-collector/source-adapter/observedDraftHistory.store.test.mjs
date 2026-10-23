@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {produceObservedDraftHistory,PRODUCER_CONTRACT} from './observedDraftHistory.mjs';
+import {historySnapshotIdentity,createHistorySnapshotStore,verifyHistorySnapshot,SELECT_SNAPSHOT_SQL,INSERT_SNAPSHOT_SQL} from './historySnapshotStore.mjs';
+import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
+import {draftArgs,draftEntry} from './observedDraftHistory.fixtures.mjs';
+const identity=c=>historySnapshotIdentity({draftState:c.draftState,producerVersion:PRODUCER_CONTRACT,schemaHash:evidenceHash('synthetic-only-v3-context-schema'),sourceSnapshotHash:evidenceHash(c.producer.bindings),patchEvidenceHash:evidenceHash('synthetic-explicit-unknown-patch'),availabilityBasis:c.availabilityBasis});
+const stored=(store,c)=>store.getOrCreate(identity(c),{build:async()=>({featurePayload:c.featurePayload,dependencies:c.dependencies})});
+function fakePool(){const saved=new Map();return{async connect(){return{async query(sql,params=[]){
+ if(sql===SELECT_SNAPSHOT_SQL)return{rows:saved.has(params[0])?[{snapshot:structuredClone(saved.get(params[0]))}]:[]};
+ if(sql===INSERT_SNAPSHOT_SQL){if(saved.has(params[0]))return{rows:[]};const snapshot=JSON.parse(params[5]);saved.set(params[0],snapshot);return{rows:[{snapshot:structuredClone(snapshot)}]};}
+ if(['BEGIN','COMMIT','ROLLBACK'].includes(sql)||sql.startsWith('SELECT pg_advisory')||sql.startsWith('SELECT set_config'))return{rows:[]};
+ throw Error('unexpected_synthetic_sql');},release(){}};}};}
+const materializedAt='2026-10-23T12:31:00Z';
+test('v3 producer roundtrips through store-owned materialization time and causal dependencies',async()=>{const a=draftArgs(),c=produceObservedDraftHistory(a).context,store=createHistorySnapshotStore(fakePool(),{now:()=>materializedAt}),s=await stored(store,c);assert.equal(verifyHistorySnapshot(s,{matchId:a.matchId,decisionAt:materializedAt}).contentHash,s.contentHash);assert.equal(s.identity.historyCutoffAt,c.historyCutoffAt);assert.equal(s.generatedAt,materializedAt);assert.equal(s.eligibleForServing,false);assert.throws(()=>verifyHistorySnapshot(s,{matchId:a.matchId,decisionAt:a.computedAt}),/not_yet_materialized/);await assert.rejects(store.getOrCreate(identity(c),{generatedAt:c.computedAt,build:async()=>({})}),/materialization_clock_owned/);});
+test('new disclosed identity changes snapshot key while immutable cutoff and old payload remain',async()=>{const a=draftArgs(),store=createHistorySnapshotStore(fakePool(),{now:()=>materializedAt}),first=await stored(store,produceObservedDraftHistory(a).context),before=structuredClone(first);a.draftPrefixInputs.push(draftEntry({time:'2026-10-23T12:15:00Z',accounts:true}));const second=await stored(store,produceObservedDraftHistory(a).context);assert.notEqual(second.cacheKey,first.cacheKey);assert.equal(second.identity.historyCutoffAt,first.identity.historyCutoffAt);assert.equal(first.payload.featurePayload.players.length,0);assert.equal(second.payload.featurePayload.players.length,10);assert.deepEqual(first,before);});

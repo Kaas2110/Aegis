@@ -1,0 +1,23 @@
+// Synthetic contracts and values, never real match-quality evidence.
+import { digest, TARGET_IDS } from '../registry-contract.mjs';
+import { COMPONENT_CONTRACT, REF_CONTRACT, TARGET_IDENTITY_CONTRACT } from './feature-composer.mjs';
+export const SHA = 'a'.repeat(64), AT = '2026-10-23T12:00:00Z', CUTOFF = '2026-10-23T11:58:00Z';
+export function profile(familyIds) {
+  const body = { contract: 'aegis.diagnostic-feature-profile.v1', profileId: 'synthetic-bounded-technical-test.v1', familyIds };
+  return { ...body, profileHash: digest(body) };
+}
+export function fixture({ targetId = 'PRE_MAP_WIN', stateMode = 'PRE', familyId = 'H01', scope = 'prior_maps' } = {}) {
+  const history = ['prior_maps', 'previous_series_maps'].includes(scope), seriesId = targetId.startsWith('SERIES_') ? 'series:1' : null;
+  const mapId = ['SERIES_PRE', 'SERIES_BETWEEN'].includes(targetId) ? null : '90001';
+  const observed = ['POST', 'LIVE', 'observed_postdraft', 'observed_live'].includes(stateMode);
+  const targetIdentity = { contract: TARGET_IDENTITY_CONTRACT, mode: observed ? 'observed_map' : targetId === 'SERIES_BETWEEN' ? 'between_maps' : 'undrafted_context', mapId, seriesId, contextRevisionHash: observed ? null : SHA, contextRevisionKnownAt: observed ? null : CUTOFF, currentMapRevision: observed ? { sourceProfile: 'steam.GetLiveLeagueGames.v1.scoreboard', historyCutoffAt: CUTOFF, firstCompleteObservationId: SHA, revision: 0, validFromObservationId: SHA, validFrom: CUTOFF, draftHash: SHA, rosterHash: SHA, sideIdentityHash: SHA } : null };
+  const targetIdentityHash = digest(targetIdentity);
+  const definition = { contract: 'aegis.executable-feature-definition.v1', id: 'fixture.column', name: 'fixture.value', version: '1', familyId, formula: 'synthetic supplied component value', formulaVersion: 'fixture.v1', units: 'fraction', dtype: 'float64', missingPolicy: 'explicit_null_and_mask', timePolicy: 'input_available_at_or_before_decision', sourceProfile: 'synthetic.component.v1', learnedStatePolicy: 'none', semanticStatus: 'specified', inputScopes: [scope], allowedTargets: TARGET_IDS.filter(x => scope === 'previous_series_maps' ? ['SERIES_BETWEEN', 'SERIES_LIVE'].includes(x) : scope === 'current_live' ? ['LIVE_MAP_WIN', 'LIVE_KILLS', 'LIVE_DURATION', 'SERIES_LIVE'].includes(x) : scope === 'current_draft' ? x.startsWith('POST_') || x.startsWith('LIVE_') || x === 'SERIES_LIVE' : true), producer: { sourceSha256: SHA, symbol: 'syntheticFixture' } };
+  const spec = { id: 'fixture.component', contract: 'synthetic.component-output.v1', version: '1', sourceSha256: SHA, sourceInventory: [{ path: 'synthetic-producer.mjs', sha256: SHA }], normalizationContract: 'synthetic.normalization.v1', sourceProfile: definition.sourceProfile, featureIds: [definition.id], familyIds: [familyId], sourceProfiles: history ? [] : ['synthetic.source.v1'], historyProfiles: history ? ['synthetic.history.v1'] : [] };
+  const ref = { contract: REF_CONTRACT, kind: history ? 'history' : 'source', id: 'fixture.ref', sha256: SHA, bytes: 100, evidenceContract: history ? 'synthetic.frozen-context.v1' : 'synthetic.normalized-source.v1', evidenceRef: 'synthetic:fixture', sourceProfile: history ? 'synthetic.history.v1' : 'synthetic.source.v1', mapId, seriesId, targetIdentityHash, scope, availableAt: history ? CUTOFF : AT, materializedAt: history ? CUTOFF : AT };
+  if (history) Object.assign(ref, { historyCutoffAt: CUTOFF, validFrom: CUTOFF, maxFactAvailableAt: '2026-10-23T11:00:00Z', sourceMapIds: ['10001'], ...(scope === 'previous_series_maps' ? { sourceSeriesId: seriesId } : {}) });
+  if (scope === 'current_live') Object.assign(ref, { role: 'anchor', stateKey: SHA, gameClockSeconds: 900 });
+  const producer = Object.fromEntries(['contract', 'version', 'sourceSha256', 'normalizationContract', 'sourceProfile'].map(k => [k, spec[k]]));
+  const block = { contract: COMPONENT_CONTRACT, componentId: spec.id, componentSemanticHash: digest(spec), producer, mapId, seriesId, targetIdentityHash, availableAt: AT, historyCutoffAt: history ? CUTOFF : null, featureIds: [definition.id], values: [.6], missing: [false], sourceRefIds: history ? [] : [ref.id], historyRefIds: history ? [ref.id] : [] };
+  return { targetId, stateMode, mapId, seriesId, targetIdentity, decisionAt: AT, historyCutoffAt: history || observed ? CUTOFF : null, readMode: 'recorded', definitions: [definition], componentSpecs: [spec], componentBlocks: [block], familyImplementations: [{ familyId, status: 'implemented', definitionIds: [definition.id] }], sourceRefs: history ? [] : [ref], historyRefs: history ? [ref] : [], diagnosticProfile: profile([familyId]) };
+}
