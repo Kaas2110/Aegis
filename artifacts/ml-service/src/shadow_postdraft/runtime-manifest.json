@@ -1,0 +1,38 @@
+{
+  "contract": "postdraft_runtime_shadow_v1",
+  "candidateId": "postdraft-c80-history-scalars-diagnostic-v1",
+  "files": {
+    "__init__.py": "938a806a09775f8a147932d238be42cfae8160b5f084c213b8a18f2f0c0627ed",
+    "actor.py": "a3ab8a69b7211dc4798a772aa9b7cc8081ee4854d8bfa97a35e55c6ec3998097",
+    "pins.py": "7636694c107b2c784e664cb8810b82207081f1cb4c30ffd282362b5db05df3c6",
+    "refresh.py": "93b44efdffbc97c81672c57e365eabc41f2f31c1f799f79a0a7a9c72f0c1baa2",
+    "resource.py": "27c762220dc938aabcb584a6e154e6b0c70361e8930258ed11ab6b3615733cb5",
+    "router.py": "fa288cdae40e4943c9e7942db06e6c0f698620317be78e868ab02b1b525f59a9"
+  },
+  "featurePackageManifestSha256": "aa6d14c2e312ec0f39a78c49ebfb98acb8ca60ed4d6689dcaa64351175837639",
+  "modelSha256": "3b6c45e0d25dddeb4fbfbca899858cca21c0994c8b6caddc6f3931951007d968",
+  "featureSchemaHash": "6390c49ad76777a806d2bb45386e8d4d8d4a2884a6d82c554f90bbecde7d28ef",
+  "phase": "postdraft_and_first60seconds_map_winner_only",
+  "active": false,
+  "eligibleForServing": false,
+  "snapshotPolicy": "SHA-pinned local READ ONLY export every6h; atomic checked replacement; prior receipt generation retained180s; age24h cutoff; 4raw generations; no providers",
+  "endpoints": [
+    "POST /shadow/postdraft",
+    "POST /shadow/postdraft/warmup",
+    "GET /shadow/postdraft/status"
+  ],
+  "maximumThreads": 4,
+  "maxRssGiB": 4,
+  "minFreeGiB": 2,
+  "maxRequestBytes": 262144,
+  "maxResponseBytes": 1572864,
+  "refresh": {
+    "intervalSeconds": 21600,
+    "failureRetrySeconds": 900,
+    "retainRawGenerations": 4,
+    "localDatabaseOnly": true,
+    "disabledUnlessConfigured": true,
+    "sourceDatabaseWrites": false,
+    "reuseCheckedCurrentOnStartup": true
+  }
+}

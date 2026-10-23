@@ -48,6 +48,9 @@ type ModelRow = {
   testSampleSize: number | null;
   createdAt: string;
   isActive?: boolean;
+  validationStatus?: string;
+  promotionAllowed?: boolean;
+  evaluationMetrics?: { test_metrics_calibrated?: { natural_mae?: number | null; natural_rmse?: number | null } } | null;
 };
 
 function fmt(n: number | null | undefined, digits = 3): string {
@@ -299,6 +302,8 @@ function ModelTableRows({
       {models.map((m) => {
         const isExpanded = expandedId === m.id;
         const isActive = m.isActive === true;
+        const regression = /(?:total_)?(?:kills|duration)(?:_|$)/.test(m.kind);
+        const candidate = m.validationStatus === 'research_candidate' || m.promotionAllowed === false;
         const vf = parseVersionFamily(m.version);
         return (
           <Fragment key={m.id}>
@@ -341,6 +346,9 @@ function ModelTableRows({
                     <span className="font-mono text-[10px] text-muted-foreground">
                       {m.version} (ft: {m.featuresVersion})
                     </span>
+                    <span className="text-[10px] text-amber-400">
+                      {candidate ? 'Кандидат: публикация заблокирована до проверки' : 'Историческая модель: качество проходит повторную проверку'}
+                    </span>
                   </div>
                 </div>
               </TableCell>
@@ -350,10 +358,12 @@ function ModelTableRows({
                 </Badge>
               </TableCell>
               <TableCell className="text-right font-mono text-xs font-bold">
-                {fmt(m.testAccuracy)}
+                {regression ? `R²: ${fmt(m.testAccuracy)}` : fmt(m.testAccuracy)}
               </TableCell>
               <TableCell className="text-right font-mono text-xs">
-                {fmt(m.brierScore)}
+                {regression ? (m.evaluationMetrics?.test_metrics_calibrated?.natural_mae != null
+                  ? `MAE: ${fmt(m.evaluationMetrics.test_metrics_calibrated.natural_mae)} ${m.kind.includes('duration') ? 'сек' : 'уб.'}`
+                  : `RMSE (log): ${fmt(m.brierScore)}`) : fmt(m.brierScore)}
               </TableCell>
               <TableCell className="text-right font-mono text-xs text-muted-foreground">
                 {m.testSampleSize ?? "—"}
@@ -372,7 +382,7 @@ function ModelTableRows({
                     variant="outline"
                     className="rounded-none font-mono text-[10px] text-muted-foreground"
                   >
-                    shadow
+                    {candidate ? 'кандидат' : 'архив'}
                   </Badge>
                 )}
               </TableCell>
@@ -380,11 +390,11 @@ function ModelTableRows({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={isActive || activatePending}
+                  disabled={isActive || activatePending || candidate}
                   className="rounded-none font-mono text-[10px] h-7 px-2"
                   onClick={() => onActivate(m.id, m.kind, m.version)}
                   title={
-                    isActive
+                    candidate ? 'Нужны проверка качества и совпадения признаков обучения и прогноза' : isActive
                       ? "Уже активна"
                       : "Сделать активной (атомарно деактивирует конкурента того же kind+version-family)"
                   }

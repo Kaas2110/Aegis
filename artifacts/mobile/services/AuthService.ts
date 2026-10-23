@@ -6,6 +6,8 @@
  * При logout — токен стирается, требуется ввод email повторно.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch } from '../lib/api';
+import { createAccountDataClient } from './AccountDataClient';
 
 const TOKEN_KEY = '@dea_auth_token_v1';
 const USER_KEY = '@dea_auth_user_v1';
@@ -53,7 +55,7 @@ async function persist(token: string, user: AuthUser): Promise<void> {
   ]);
 }
 
-async function clearStored(): Promise<void> {
+export async function clearStoredAuth(): Promise<void> {
   cachedToken = null;
   await Promise.all([
     AsyncStorage.removeItem(TOKEN_KEY),
@@ -61,16 +63,12 @@ async function clearStored(): Promise<void> {
   ]);
 }
 
-function apiBase(): string {
-  // На вебе — относительный путь (тот же origin), на нативе — абсолютный через
-  // EXPO_PUBLIC_API_URL если задан, иначе тот же relative (в dev будет proxy).
-  const fromEnv = (globalThis as { process?: { env?: Record<string, string> } }).process?.env?.['EXPO_PUBLIC_API_URL'];
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
-  return '';
-}
+const accountClient = createAccountDataClient();
+export const exportAccountData = () => accountClient.exportData(cachedToken);
+export const deleteAccountOnServer = (password: string) => accountClient.deleteAccount(cachedToken, password);
 
 export async function register(email: string, password: string, promoCode?: string): Promise<AuthUser> {
-  const res = await fetch(`${apiBase()}/api/auth/register`, {
+  const res = await apiFetch('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(promoCode?.trim() ? { email, password, promoCode: promoCode.trim() } : { email, password }),
@@ -86,7 +84,7 @@ export async function register(email: string, password: string, promoCode?: stri
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {
-  const res = await fetch(`${apiBase()}/api/auth/login`, {
+  const res = await apiFetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -104,12 +102,12 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 export async function logout(): Promise<void> {
   const token = cachedToken;
   if (token) {
-    fetch(`${apiBase()}/api/auth/logout`, {
+    apiFetch('/api/auth/logout', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {}); // fire-and-forget
   }
-  await clearStored();
+  await clearStoredAuth();
 }
 
 export type FetchMeResult =
@@ -125,11 +123,11 @@ export type FetchMeResult =
 export async function fetchMe(): Promise<FetchMeResult> {
   if (!cachedToken) return { kind: 'no_token' };
   try {
-    const res = await fetch(`${apiBase()}/api/auth/me`, {
+    const res = await apiFetch('/api/auth/me', {
       headers: { Authorization: `Bearer ${cachedToken}` },
     });
     if (res.status === 401) {
-      await clearStored();
+      await clearStoredAuth();
       return { kind: 'invalid' };
     }
     if (!res.ok) return { kind: 'network' };

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../../lib/api';
 // Экран сводки матча (T9). Маршрут: /match/summary/<matchId>.
 // Использует /api/analytics/match-summary — prematch outcome, калибровка,
 // последние market predictions, агрегат live snapshots.
@@ -12,7 +13,7 @@ import { useColors } from '@/hooks/useColors';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { extractNumericMatchId } from '@/lib/matchId';
 
-const API_BASE = '/api';
+
 
 type Outcome = {
   modelVersion: string | null;
@@ -95,7 +96,7 @@ export default function MatchSummaryScreen() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/analytics/match-summary?matchId=${matchId}`)
+    apiFetch(`/api/analytics/match-summary?matchId=${matchId}`)
       .then(r => r.json())
       .then((j: SummaryResp & { error?: string }) => {
         if (cancelled) return;

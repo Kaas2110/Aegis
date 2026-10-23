@@ -12,9 +12,9 @@ import { Router, type IRouter } from 'express';
 import { db, refCodesTable, refClicksTable } from '@workspace/db';
 import { sql } from 'drizzle-orm';
 import { getAppSettings } from '../services/AppSettings';
+import { referralLanding } from '../lib/webDeploymentPolicy';
 
 const CODE_RE = /^[a-zA-Z0-9_-]{1,64}$/;
-const DEFAULT_REDIRECT = 'https://aegis.replit.app';
 
 // ── Анти-спам для публичного write-path ──────────────────────────────────────
 // Клики пишутся ТОЛЬКО для известных активных кодов (ограниченная кардинальность),
@@ -46,7 +46,7 @@ const router: IRouter = Router();
 router.get('/:code', async (req, res) => {
   const code = String(req.params['code'] ?? '').trim();
   const settings = await getAppSettings().catch(() => null);
-  const target = settings?.refRedirectUrl || DEFAULT_REDIRECT;
+  const target = referralLanding(settings?.refRedirectUrl);
 
   if (CODE_RE.test(code) && allowClickWrite(req.ip ?? 'unknown')) {
     // best-effort: ошибка записи не должна ломать редирект

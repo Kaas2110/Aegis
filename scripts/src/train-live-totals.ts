@@ -9,7 +9,7 @@
  *   live_total_duration : regression на log(final_duration_sec)
  *
  * Источник обучающих данных — JOIN `live_snapshots × pro_matches` где у
- * pro_matches есть финальный счёт и duration (т.е. матч закончен и tracked).
+ * pro_matches есть финальный счёт и duration; только source='live', до конца игры.
  *
  * Фичи (v1, 7 шт., только OpenDota-сторона; Stratz xpAdvantage/nwAdvantage
  * добавятся в v2 когда наполнится `live_snapshots` после T0.5a):
@@ -22,7 +22,7 @@
  * autocorrelation и выравнивает покрытие game_time'ов в обучающей выборке.
  *
  * Output: `model_versions` row с `kind` ∈ {live_total_kills, live_total_duration},
- * `engine='lightgbm'`, `featuresVersion=1`, атомарный swap per-market.
+ * `engine='lightgbm'`, `featuresVersion=1`, только inactive/unvalidated candidates.
  *
  * CLI:
  *   pnpm --filter @workspace/scripts run train:live-totals
@@ -41,6 +41,8 @@ import {
 } from '@workspace/db';
 import { sql, and, eq, inArray } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
+import { selectLiveBucketSnapshots } from './lib/live-training-samples';
 import {
   loadHeroBenchmarksMap, loadHeroItemPopularityMap,
   buildE1LiveTotalsFeatures, E1_LIVE_TOTALS_FEATURE_NAMES,
@@ -88,6 +90,7 @@ function pureFamily(m: LiveMarket): 'kills' | 'duration' {
 
 interface JoinRow {
   matchId: number;
+  source: string;
   gameTimeSec: number;
   radiantScore: number | null;
   direScore: number | null;
@@ -176,6 +179,7 @@ async function loadJoinedRows(sinceUnixMs: number): Promise<JoinRow[]> {
   const rows = await db
     .select({
       matchId: liveSnapshotsTable.matchId,
+      source: liveSnapshotsTable.source,
       gameTimeSec: liveSnapshotsTable.gameTimeSec,
       radiantScore: liveSnapshotsTable.radiantScore,
       direScore: liveSnapshotsTable.direScore,
@@ -190,20 +194,24 @@ async function loadJoinedRows(sinceUnixMs: number): Promise<JoinRow[]> {
     .from(liveSnapshotsTable)
     .innerJoin(proMatchesTable, eq(proMatchesTable.matchId, liveSnapshotsTable.matchId))
     .where(sql`${liveSnapshotsTable.capturedAt} > to_timestamp(${Math.floor(sinceUnixMs / 1000)})
+      AND ${liveSnapshotsTable.source} = 'live'
       AND ${liveSnapshotsTable.gameTimeSec} IS NOT NULL
       AND ${liveSnapshotsTable.gameTimeSec} >= 60
       AND ${proMatchesTable.duration} IS NOT NULL
       AND ${proMatchesTable.duration} > 0
       AND ${liveSnapshotsTable.gameTimeSec} < ${proMatchesTable.duration}
       AND ${proMatchesTable.radiantScore} IS NOT NULL
-      AND ${proMatchesTable.direScore} IS NOT NULL`);
+      AND ${proMatchesTable.direScore} IS NOT NULL`)
+    .orderBy(liveSnapshotsTable.matchId, liveSnapshotsTable.gameTimeSec, liveSnapshotsTable.capturedAt);
 
   const out: JoinRow[] = [];
   for (const r of rows) {
+    if (r.source !== 'live') continue;
     if (r.gameTimeSec == null || r.finalDuration == null) continue;
     if (r.finalRScore == null || r.finalDScore == null) continue;
     out.push({
       matchId: r.matchId,
+      source: r.source,
       gameTimeSec: r.gameTimeSec,
       radiantScore: r.radiantScore,
       direScore: r.direScore,
@@ -294,29 +302,7 @@ interface BuildCtx {
  * 60s apart почти идентичны) и выравнивает покрытие фаз матча.
  */
 function subsampleByBuckets(rows: JoinRow[]): JoinRow[] {
-  const byMatch = new Map<number, JoinRow[]>();
-  for (const r of rows) {
-    const list = byMatch.get(r.matchId) ?? [];
-    list.push(r);
-    byMatch.set(r.matchId, list);
-  }
-  const out: JoinRow[] = [];
-  for (const list of byMatch.values()) {
-    for (const centerMin of BUCKET_CENTERS_MIN) {
-      const centerSec = centerMin * 60;
-      let best: JoinRow | null = null;
-      let bestDist = Infinity;
-      for (const r of list) {
-        const d = Math.abs(r.gameTimeSec - centerSec);
-        if (d < bestDist) { bestDist = d; best = r; }
-      }
-      // не далее ±3 мин от центра bucket'а
-      if (best && bestDist <= 3 * 60) out.push(best);
-    }
-  }
-  // chronological order — критично для time-based train/test split
-  out.sort((a, b) => a.matchId - b.matchId || a.gameTimeSec - b.gameTimeSec);
-  return out;
+  return selectLiveBucketSnapshots(rows, BUCKET_CENTERS_MIN);
 }
 
 function buildSamples(market: LiveMarket, rows: JoinRow[], ctx: BuildCtx): Array<Sample & { matchId: number }> {
@@ -428,16 +414,11 @@ async function trainMarket(market: LiveMarket, samples: Array<Sample & { matchId
   }
 }
 
-async function activate(market: LiveMarket, r: TrainResponse, sinceDays: number): Promise<void> {
+async function saveCandidate(market: LiveMarket, r: TrainResponse, sinceDays: number): Promise<void> {
   const kind = KIND_BY_MARKET[market];
   const blob = Buffer.from(r.blob_b64, 'base64');
   const versionStem = `lgbm-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
-  await db.transaction(async (tx) => {
-    await tx
-      .update(modelVersionsTable)
-      .set({ isActive: false })
-      .where(and(eq(modelVersionsTable.kind, kind), eq(modelVersionsTable.isActive, true)));
-    await tx.insert(modelVersionsTable).values({
+  await saveLegacyCandidates(db, [{
       version: versionStem,
       kind,
       featuresVersion: 1,
@@ -467,13 +448,16 @@ async function activate(market: LiveMarket, r: TrainResponse, sinceDays: number)
         blobBytes: blob.length,
         featureNames: featureNamesFor(market),
       },
-      isActive: true,
-    });
+      isActive: false,
+    }], {
+    trainer: 'train-live-totals', seed: 42,
+    limitations: ['draft_variant_current_team_hero_aggregates_not_as_of', 'id_based_temporal_split', 'live_source_only', 'independent_interval_validation_required'],
   });
-  console.log(`  [live/${market}] ✅ activated ${versionStem} (blob=${blob.length}b)`);
+  console.log(`  [live/${market}] Saved inactive, unvalidated candidate ${versionStem}; active models unchanged`);
 }
 
 async function main(): Promise<void> {
+  assertCandidateOnlyArgs();
   const targets = parseMarkets();
   const sinceDays = parseInt(arg('since-days') ?? String(DEFAULT_SINCE_DAYS), 10);
   const minSamples = parseInt(arg('min-samples') ?? String(DEFAULT_MIN_SAMPLES), 10);
@@ -518,7 +502,7 @@ async function main(): Promise<void> {
     const samples = buildSamples(market, sampled, ctx);
     const r = await trainMarket(market, samples, minSamples);
     if (!r) continue;
-    await activate(market, r, sinceDays);
+    await saveCandidate(market, r, sinceDays);
     trained++;
   }
   console.log(`\n[train-live-totals] done — trained ${trained}/${targets.length}`);

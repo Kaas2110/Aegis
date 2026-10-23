@@ -24,29 +24,30 @@ import { useColors } from '@/hooks/useColors';
 interface OddsTileProps {
   shortLabel: string;          // П1 / П2
   outcomeLabel: string;        // Team Liquid / Больше 52.5
+  displayPercent?: number;
   modelProbability: number;    // 0..1
   marketProbability: number;   // 0..1 (для подробной аналитики)
   odds: number;
   bookmakerName: string;
-  edge: number;                // прогноз − рынок
-  ev: number;                  // ожидаемая ценность
-  confidence: number;          // 0..1
+  edge: number | null;                // прогноз − рынок
+  ev: number | null;                  // ожидаемая ценность
+  confidence: number | null;          // 0..1
   forceDetailed?: boolean;     // принудительно показать подробности (на экране матча)
   onPress?: () => void;
 }
 
 export function OddsTile({
   shortLabel, outcomeLabel, modelProbability,
-  odds, bookmakerName, ev,
+  odds, bookmakerName, ev, displayPercent,
   onPress,
 }: OddsTileProps) {
   const colors = useColors();
-  const modelPct = Math.round(modelProbability * 100);
+  const modelPct = displayPercent ?? Math.round(modelProbability * 100);
   const hasOdds = odds > 0;
   // «Уверенный» прогноз (≥60%) выделяем сильнее золотом — Dota inventory vibe.
   const isStrong = modelPct >= 60;
   // Положительный EV при наличии кэфа: зелёная подсветка коэффициента
-  const isPositiveEV = hasOdds && ev > 0;
+  const isPositiveEV = hasOdds && ev !== null && ev > 0;
 
   return (
     <TouchableOpacity
@@ -144,9 +145,9 @@ interface OddsTilesPairProps {
   oddsTeam1: number;
   oddsTeam2: number;
   bookmakerName: string;
-  edgeTeam1: number;
-  evTeam1: number;
-  confidence: number;
+  edgeTeam1: number | null;
+  evTeam1: number | null;
+  confidence: number | null;
   forceDetailed?: boolean;
   onPressTeam1?: () => void;
   onPressTeam2?: () => void;
@@ -159,8 +160,8 @@ export function OddsTilesPair({
 }: OddsTilesPairProps) {
   const modelProbTeam2 = 1 - modelProbTeam1;
   const fairProbTeam2 = 1 - fairProbTeam1;
-  const edgeTeam2 = modelProbTeam2 - fairProbTeam2;
-  const evTeam2 = modelProbTeam2 * (oddsTeam2 - 1) - (1 - modelProbTeam2);
+  const edgeTeam2 = edgeTeam1 === null ? null : modelProbTeam2 - fairProbTeam2;
+  const evTeam2 = evTeam1 === null ? null : modelProbTeam2 * oddsTeam2 - 1;
 
   return (
     <View style={pairStyles.row}>
@@ -183,6 +184,7 @@ export function OddsTilesPair({
         <OddsTile
           shortLabel="П2"
           outcomeLabel={team2Label}
+          displayPercent={100 - Math.round(modelProbTeam1 * 100)}
           modelProbability={modelProbTeam2}
           marketProbability={fairProbTeam2}
           odds={oddsTeam2}

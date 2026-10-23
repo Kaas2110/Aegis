@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { apiFetch } from '@/lib/api';
 
 type Mode = 'login' | 'register';
 
@@ -19,6 +20,8 @@ const ERROR_RU: Record<string, string> = {
   too_many_attempts:      'Слишком много попыток. Подождите 15 минут',
   internal_error:         'Ошибка сервера. Попробуйте позже',
   network:                'Нет связи с сервером',
+  api_url_required:       'Эта сборка не подключена к серверу.',
+  api_url_invalid:        'В этой сборке указан некорректный адрес сервера.',
 };
 
 function explainError(code: string): string {
@@ -44,9 +47,7 @@ export default function AuthScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const base = (globalThis as { process?: { env?: Record<string, string> } })
-          .process?.env?.['EXPO_PUBLIC_API_URL']?.replace(/\/$/, '') ?? '';
-        const res = await fetch(`${base}/api/client-config`);
+        const res = await apiFetch('/api/client-config');
         if (!res.ok) return;
         const cfg = (await res.json()) as { promoFieldEnabled?: boolean };
         if (!cancelled) setPromoEnabled(cfg.promoFieldEnabled === true);

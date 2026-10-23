@@ -1,5 +1,6 @@
+import { apiFetch } from '../../lib/api';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert, ActivityIndicator, Modal, TextInput, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -7,7 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { logProductEvent } from '@/services/logging/EventLogger';
+import { exportAccountData } from '@/services/AuthService';
+import { AccountRequestError, LOCAL_EXPORT_KEYS, selectLocalExport } from '@/services/AccountDataClient';
 import { DisclaimerBanner } from '@/components/DisclaimerBanner';
 
 interface Tier1Team {
@@ -29,7 +31,7 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
     if (!expanded || teams !== null || loading) return;
     setLoading(true);
     setError(null);
-    fetch('/api/teams/tier1?limit=50')
+    apiFetch('/api/teams/tier1?limit=50')
       .then(r => r.json())
       .then((data: { teams: Tier1Team[] }) => {
         setTeams(data.teams ?? []);
@@ -113,13 +115,26 @@ function FavoriteTeamsCard({ colors }: { colors: ReturnType<typeof import('@/hoo
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, setOnboarded, setAgeConfirmed } = useApp();
-  const { user, logout } = useAuth();
+  const { settings, updateSettings, setOnboarded } = useApp();
+  const { user, logout, deleteAccount } = useAuth();
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [privacyMessage, setPrivacyMessage] = useState('');
   // T004: админ-режим выдаётся ТОЛЬКО с сервера (app_users.is_admin через
   // админку). Свободного тогла в мобилке больше нет.
   const isAdmin = !!user?.isAdmin;
 
   async function handleLogout() {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Выйти из аккаунта? Чтобы войти снова, потребуется ввести email и пароль.')) {
+        await logout();
+        router.replace('/auth');
+      }
+      return;
+    }
     Alert.alert(
       'Выйти из аккаунта',
       'Чтобы войти снова, потребуется ввести email и пароль.',
@@ -157,30 +172,62 @@ export default function SettingsScreen() {
     return <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>{title}</Text>;
   }
 
+  function accountError(error: unknown): string {
+    const code = error instanceof AccountRequestError ? error.code : '';
+    if (code === 'invalid_password') return 'Неверный пароль. Данные аккаунта сохранены.';
+    if (code === 'unauthorized' || code === 'http_401') return 'Войдите в аккаунт ещё раз.';
+    if (error instanceof AccountRequestError && (error.retryAfterSeconds || code === 'rate_limited' || code === 'http_429')) return `Слишком много попыток. Повторите позже${error.retryAfterSeconds ? ` (через ${error.retryAfterSeconds} с)` : ''}.`;
+    if (code === 'origin_not_allowed') return 'Сервер не разрешает запрос с этого адреса приложения.';
+    return 'Не удалось завершить запрос. Проверьте связь с сервером и повторите.';
+  }
+
   async function handleDeleteAccount() {
-    Alert.alert(
-      'Удалить аккаунт',
-      'Все данные будут удалены. Это действие необратимо.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить',
-          style: 'destructive',
-          onPress: async () => {
-            await logProductEvent('account_deleted', 'settings');
-            await AsyncStorage.clear();
-            await setAgeConfirmed(false);
-            await setOnboarded(false);
-            router.replace('/onboarding');
-          },
-        },
-      ]
-    );
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const result = await deleteAccount(deletePassword);
+      setDeletePassword('');
+      setDeleteVisible(false);
+      if (!result.localDataCleared) {
+        const message = 'Аккаунт на сервере удалён. Очистить все данные на этом устройстве не удалось: удалите данные приложения в настройках устройства или браузера. Старые серверные журналы и резервные копии могут сохраняться.';
+        if (Platform.OS === 'web') window.alert(message); else Alert.alert('Аккаунт удалён', message);
+      }
+      router.replace('/onboarding');
+    } catch (error) {
+      setDeleteError(accountError(error));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleExportData() {
-    await logProductEvent('privacy_export_requested', 'settings');
-    Alert.alert('Экспорт данных', 'В MVP 1 данные хранятся локально в AsyncStorage. Функция полного экспорта доступна в следующих версиях.');
+    if (exporting) return;
+    setExporting(true);
+    setPrivacyMessage('');
+    try {
+      const serverAccount = await exportAccountData();
+      const deviceLocalData = selectLocalExport(await AsyncStorage.multiGet([...LOCAL_EXPORT_KEYS]));
+      const json = JSON.stringify({ formatVersion: 1, exportedAt: new Date().toISOString(), serverAccount, deviceLocalData, limitations: ['operational_logs_and_backups_not_included'] }, null, 2);
+      if (Platform.OS === 'web') {
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `aegis-data-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setPrivacyMessage('Файл данных подготовлен. Серверные журналы и резервные копии в него не входят.');
+      } else {
+        const result = await Share.share({ title: 'Данные Aegis', message: json });
+        if (result.action === Share.sharedAction) setPrivacyMessage('Данные переданы выбранному приложению. Серверные журналы и резервные копии не включены.');
+      }
+    } catch (error) {
+      setPrivacyMessage(accountError(error));
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -217,6 +264,7 @@ export default function SettingsScreen() {
           label="Аналитика и логирование"
           right={
             <Switch
+              accessibilityLabel="Аналитика и логирование"
               value={settings.analyticsConsent}
               onValueChange={v => updateSettings({ analyticsConsent: v })}
               trackColor={{ false: colors.muted, true: colors.primary + '88' }}
@@ -224,6 +272,7 @@ export default function SettingsScreen() {
             />
           }
         />
+        <Text style={[styles.privacyHint, { color: colors.mutedForeground }]}>По вашему согласию отправляем события использования и технические журналы. При отключении отправка прекращается, очередь очищается.</Text>
         <Row
           label="Только +ОЦ события"
           right={
@@ -246,7 +295,8 @@ export default function SettingsScreen() {
             />
           }
         />
-        <Row label="Экспортировать мои данные" onPress={handleExportData} />
+        <Row label={exporting ? 'Подготовка данных…' : 'Экспортировать мои данные'} onPress={handleExportData} />
+        {!!privacyMessage && <Text accessibilityRole="alert" style={[styles.privacyHint, { color: colors.mutedForeground }]}>{privacyMessage}</Text>}
       </View>
 
       <FavoriteTeamsCard colors={colors} />
@@ -269,7 +319,7 @@ export default function SettingsScreen() {
         {user && (
           <Row label="Выйти из аккаунта" onPress={handleLogout} />
         )}
-        <Row label="Удалить аккаунт и данные" onPress={handleDeleteAccount} danger />
+        <Row label="Удалить аккаунт и данные" onPress={() => {setDeleteError('');setDeletePassword('');setDeleteVisible(true);}} danger />
       </View>
 
       <DisclaimerBanner />
@@ -277,8 +327,25 @@ export default function SettingsScreen() {
       <View style={styles.version}>
         <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Aegis · 1.0.0</Text>
         <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Версия аналитики: 1.0.0</Text>
-        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · Коэффициенты: demo (до подключения API)</Text>
+        <Text style={[styles.versionText, { color: colors.mutedForeground }]}>Live-матчи: OpenDota · Источник и давность указаны в карточке</Text>
       </View>
+      <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => {if (!deleting) {setDeleteVisible(false);setDeletePassword('');}}}>
+        <View style={styles.modalBackdrop}>
+          <View accessibilityViewIsModal style={[styles.deleteDialog, {backgroundColor: colors.card, borderColor: colors.border}]}>
+            <Text style={[styles.dialogTitle, {color: colors.foreground}]}>Удаление аккаунта</Text>
+            <Text style={[styles.dialogText, {color: colors.mutedForeground}]}>Аккаунт будет удалён с сервера, вход в него станет недоступен. Настройки и журналы Aegis на этом устройстве будут очищены. Действие необратимо.</Text>
+            <Text style={[styles.dialogText, {color: colors.mutedForeground}]}>Старые серверные журналы и резервные копии могут сохраняться; это действие их не удаляет. Перед удалением можно выгрузить свои данные.</Text>
+            <TextInput accessibilityLabel="Пароль для удаления аккаунта" placeholder="Текущий пароль" placeholderTextColor={colors.mutedForeground} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="current-password" maxLength={200} editable={!deleting} value={deletePassword} onChangeText={setDeletePassword} style={[styles.passwordInput, {color: colors.foreground, borderColor: colors.border}]} />
+            {!!deleteError && <Text accessibilityRole="alert" style={[styles.dialogText, {color: colors.destructive}]}>{deleteError}</Text>}
+            <TouchableOpacity accessibilityRole="button" disabled={deleting || deletePassword.length < 6} onPress={handleDeleteAccount} style={[styles.dialogButton, {backgroundColor: colors.destructive, opacity: deleting || deletePassword.length < 6 ? 0.5 : 1}]}>
+              <Text style={styles.deleteButtonText}>{deleting ? 'Удаление…' : 'Удалить навсегда'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" disabled={deleting} onPress={() => {setDeleteVisible(false);setDeletePassword('');}} style={styles.dialogButton}>
+              <Text style={[styles.dialogText, {color: colors.foreground}]}>Отмена</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -295,6 +362,14 @@ const styles = StyleSheet.create({
   subLabel: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 3 },
   version: { alignItems: 'center', gap: 4, paddingTop: 8 },
   versionText: { fontFamily: 'Inter_400Regular', fontSize: 11 },
+  privacyHint: {fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, paddingHorizontal: 14, paddingVertical: 10},
+  modalBackdrop: {flex: 1, backgroundColor: '#000A', justifyContent: 'center', alignItems: 'center', padding: 20},
+  deleteDialog: {width: '100%', maxWidth: 460, padding: 20, borderRadius: 16, borderWidth: 1, gap: 14},
+  dialogTitle: {fontFamily: 'Inter_700Bold', fontSize: 20},
+  dialogText: {fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19},
+  passwordInput: {fontFamily: 'Inter_400Regular', fontSize: 15, padding: 14, borderWidth: 1, borderRadius: 10},
+  dialogButton: {minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10, padding: 12},
+  deleteButtonText: {fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff'},
 });
 
 const teamStyles = StyleSheet.create({

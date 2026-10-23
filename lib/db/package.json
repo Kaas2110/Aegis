@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./opendota": "./src/opendota.ts",
+    "./stratz": "./src/stratz.ts"
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",

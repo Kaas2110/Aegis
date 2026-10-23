@@ -1,0 +1,110 @@
+{
+  "contract": "full_postdraft_c80_future_snapshot_diagnostic_v1",
+  "packageRevision": 4,
+  "createdAt": "2026-10-13T18:12:36.200699+00:00",
+  "candidate": "C_history_scalars_corrected_fixed80",
+  "modelSha256": "3b6c45e0d25dddeb4fbfbca899858cca21c0994c8b6caddc6f3931951007d968",
+  "featureCount": 6668,
+  "trees": 80,
+  "featureBuilderImplemented": true,
+  "runtimeDiagnosticImplemented": true,
+  "originalV1Assets": "postdraft_corrected_c_diagnostic_v1 describes the earlier input gate only; model/schema/goldens unchanged",
+  "phase": "post_draft_map_winner / early_live_draft_context",
+  "clockSecondsSupport": [
+    -3600,
+    59
+  ],
+  "featureClock": "observation.receivedAt",
+  "maximumCacheAgeSeconds": 86400,
+  "maximumSnapshotAgeSeconds": 86400,
+  "maximumInferenceThreads": 4,
+  "snapshotPolicy": "one consistent RO snapshot; prior ingested/parsed/fetched <= cutoff; end+300 < cutoff; prediction receivedAt >= builtAt",
+  "currentInputs": [
+    "matchId",
+    "radiantTeamId",
+    "direTeamId",
+    "clockSeconds",
+    "five hero/account pairs per side",
+    "optional receipt-proven series context"
+  ],
+  "historyInputs": [
+    "pro_matches completed outcomes/teams/time/series",
+    "match_parsed schema3 prior scalar stats/logs",
+    "match_drafts fallback prior roster",
+    "pinned local hero key reference"
+  ],
+  "sourceHashes": {
+    "postdraft_input_contract.py": "59ec33119427c1e9cfc53efde140929d45d12c951ffc558279c0bcefc6b7876e",
+    "postdraft_full/builder.py": "1b9b9662ed7dd0b66713e3430a1d6107338b97164921e64eb5063540dbf582b1",
+    "postdraft_full/causal.py": "ae5de6d0bcd768cad4de3e381053547eb88f91a71dc27d0682542e3a4be64ee8",
+    "postdraft_full/export_snapshot.py": "9f4fc574a98aff34f9aa1b50616ca354cdf58e219cf5a8e6baa83d1edaa44359",
+    "postdraft_full/first_kill.py": "66005703c749897d848f7e2fb47d186d69fb4b621fc44b41204a76a276b02ab2",
+    "postdraft_full/journal_adapter.py": "a1d10d3242899fb9ec0ab90ec1dec2ea99d2f7e2c16e35607be56ef27d1f3938",
+    "postdraft_full/performance.py": "3c604390ef757494f0f4e46e49408fbc63d86e0eb1604efa5e5641a1604951a9",
+    "postdraft_full/player.py": "eaae0fec0f589ade654e2a80dab2c20dd977a80f2004987f77cbe50c468b132c",
+    "postdraft_full/rich.py": "e42a4dbc4ed0604dde676534cc31f809b120aea1e487667cb3c2c2716a5c9c12",
+    "postdraft_full/roster.py": "7e877bde987f9407cb880941f44f91db56f84e076cd08340238095cfa4f0e8a6",
+    "postdraft_full/temporal.py": "b1bc2f6127c71b095926becf90be0942182ce9470f23c17005863b2ea1f0aedc",
+    "postdraft_full/__init__.py": "f5e854c7901c10b6772f91cddf2ae6f05e66aa96f5d925f35fdaf56f77f9b881",
+    "assets/postdraft_corrected_c_diagnostic_v1/C_corrected_fixed80.model.txt": "3b6c45e0d25dddeb4fbfbca899858cca21c0994c8b6caddc6f3931951007d968",
+    "assets/postdraft_corrected_c_diagnostic_v1/FEATURE-SCHEMA.json": "6390c49ad76777a806d2bb45386e8d4d8d4a2884a6d82c554f90bbecde7d28ef",
+    "assets/postdraft_corrected_c_diagnostic_v1/MANIFEST.json": "2fbc3926ebd06a2ee090012db1a34750e0da376c7df1357c30ddc9ceac5053f4",
+    "assets/postdraft_corrected_c_diagnostic_v1/TRAIN-GOLDENS.json": "2ac7b1aa9f07f145e24e7eba276b48e7d98695da1ce3a70c7b1d9636e4b7adbb",
+    "postdraft_full/projection.py": "2af9015dd9546004bdf7688e401efb304b384c97bafb754a211d4c177e7fe539"
+  },
+  "verification": {
+    "inheritedRevision2HistoricalVerification": {
+      "fullTrainRows": 12,
+      "exactFeatureCells": 80016,
+      "savedProbabilityParity": true,
+      "unitTests": 29,
+      "actualBootstrapMaps": 32615,
+      "actualPostdraftDiagnosticPredictions": 0
+    },
+    "newPureTests": 5,
+    "existingRegressionTests": 29,
+    "savedTrainProbabilityGoldens": 12,
+    "offlineRecordedActualReplayMaps": 6,
+    "exactComparedFeatureCells": 40008,
+    "oldNewFloat32BitsEqual": true,
+    "recordedActualCanonicalVectorHashesEqual": true,
+    "recordedActualProbabilityBitsEqual": true,
+    "frozenHistoryStateUnchanged": true,
+    "oldReceiptsStillRefusedAfterRebuild": true,
+    "performanceEvidence": "offline internal vector replay only; no ASGI/TS/DB latency SLA",
+    "jsonbRepresentationLimitation": "JSONB numbers lose signed zero; recorded original vector hash is required for byte identity"
+  },
+  "active": false,
+  "eligibleForServing": false,
+  "prospectiveValidated": false,
+  "calibrationValidated": false,
+  "latencyValidated": false,
+  "coverage95Validated": false,
+  "fits": 0,
+  "postBootstrapReviewGuards": [
+    "snapshot cutoff age cannot be reset by cache rebuild",
+    "float32 overflow refused before prediction; no implicit NaN replacement"
+  ],
+  "limits": [
+    "historical model, no claimed observed 95% source coverage",
+    "cache uses in-process memory and raw pinned snapshot for restart",
+    "source TS hashes need dispatcher verification; Python hash differs in general from TS stableJson",
+    "current map final data forbidden; prior first kill is first confirmed enemy-hero event, completeness unproven",
+    "unknown series context retains frozen legacy zero defaults, explicitly reported; not a confirmed BO1"
+  ],
+  "parentPackageManifestSha256": "6a009138fe4aee94cc7494a0a4df28899b78c294d48b96ad859a301326298536",
+  "performanceChange": {
+    "historyProjection": "request-owned copy-on-read entries; no full-state deepcopy; no shared record mutations",
+    "modelReuse": "verified saved Booster reused, pinned package still checked every call; actor serializes inference",
+    "featureArithmeticChanged": false,
+    "snapshotPolicyChanged": false,
+    "modelChanged": false,
+    "schemaChanged": false,
+    "newProspectiveQualityClaim": false
+  },
+  "refreshExportBounds": {
+    "maxLineBytes": 2097152,
+    "maxBytes": 536870912,
+    "enforcedBeforeWrite": true
+  }
+}

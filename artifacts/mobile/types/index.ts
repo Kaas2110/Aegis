@@ -1,3 +1,4 @@
+import type { LiveDataQuality } from '../lib/liveFreshness';
 export type Language = 'ru' | 'en';
 
 export type UserRole = 'user' | 'admin';
@@ -19,11 +20,13 @@ export interface UserSettings {
 }
 
 export type MatchStatus = 'prematch' | 'live' | 'between_maps' | 'finished';
-export type BOFormat = 'BO1' | 'BO3' | 'BO5';
+export type BOFormat = 'BO1' | 'BO3' | 'BO5' | 'unknown';
 export type MapSide = 'radiant' | 'dire';
 
 export interface Team {
   id: string;
+  provider?: "opendota" | "pandascore";
+  openDotaId?: number;
   name: string;
   shortName: string;
   logoPlaceholder: string;
@@ -52,27 +55,29 @@ export interface DraftPick {
   heroId: string;
   heroName: string;
   side: MapSide;
-  order: number;
+  order: number | null;
 }
 
 export interface DraftBan {
   heroId: string;
   heroName: string;
   side: MapSide;
-  order: number;
+  order: number | null;
 }
 
 export interface Draft {
   picks: DraftPick[];
   bans: DraftBan[];
-  radiantSynergy: number;
-  direSynergy: number;
-  radiantCounter: number;
-  direCounter: number;
-  radiantScalingScore: number;
-  direScalingScore: number;
-  radiantEarlyGameScore: number;
-  direEarlyGameScore: number;
+  bansKnown?: boolean;
+  orderKnown?: boolean;
+  radiantSynergy: number | null;
+  direSynergy: number | null;
+  radiantCounter: number | null;
+  direCounter: number | null;
+  radiantScalingScore: number | null;
+  direScalingScore: number | null;
+  radiantEarlyGameScore: number | null;
+  direEarlyGameScore: number | null;
   comfortHeroes: { heroName: string; side: MapSide; masteryScore: number }[];
 }
 
@@ -83,6 +88,7 @@ export interface Draft {
 // UI должен скрывать null-поля, не рендерить плейсхолдеры.
 export interface LiveSnapshot {
   snapshotId: string;
+  fetchedAt?: string;
   gameTimeSeconds: number;
   radiantKills: number;
   direKills: number;
@@ -90,10 +96,10 @@ export interface LiveSnapshot {
   netWorthDire: number;
   xpRadiant: number | null;
   xpDire: number | null;
-  towersRadiant: number;       // декодируется из building_state
-  towersDire: number;
-  barracksRadiant: number;     // декодируется из building_state
-  barracksDire: number;
+  towersRadiant: number | null; // null until the upstream bit layout is verified
+  towersDire: number | null;
+  barracksRadiant: number | null;
+  barracksDire: number | null;
   roshanAlive: boolean | null;
   aegisHolder: MapSide | null;
   buybacksAvailableRadiant: number | null;
@@ -105,22 +111,29 @@ export interface LiveSnapshot {
 
 export interface Match {
   id: string;
+  source?: "opendota" | "pandascore";
+  openDotaMatchId?: number;
   team1: Team;
   team2: Team;
-  team1Side: MapSide;
-  team2Side: MapSide;
+  team1Side: MapSide | "unknown";
+  team2Side: MapSide | "unknown";
   tournamentName: string;
   tournamentTier: 1 | 2 | 3;
   format: BOFormat;
+  formatKnown?: boolean;
   status: MatchStatus;
   currentMapNumber: number;
   team1MapsWon: number;
   team2MapsWon: number;
   startTime: Date;
+  /** Verified series start; never the activation time of a later OD map. */
+  seriesStartsAt?: string;
   /** Время окончания матча (из deactivate_time OpenDota). Присутствует только для status='finished'. */
   finishedAt?: Date;
   currentMap?: MapState;
   liveSnapshot?: LiveSnapshot;
+  /** State progression quality; HTTP receipt does not establish event freshness. */
+  liveDataQuality?: LiveDataQuality;
   draft?: Draft;
   isFavorite: boolean;
 }
@@ -156,6 +169,11 @@ export type MarketType =
   | 'first_barracks';
 
 export interface BookmakerOdds {
+  expiresAt?: string;
+  scope?: 'series' | 'map';
+  mapNumber?: number;
+  sourceEventId?: string;
+  fetchedAt?: string;
   bookmakerId: string;
   bookmakerName: string;
   oddsTeam1: number;
@@ -176,13 +194,15 @@ export interface Prediction {
   modelProbability: number;
   calibratedProbability: number;
   marketFairProbability: number;
-  rawProbability: number;
-  edge: number;
-  ev: number;
-  confidence: number;
+  rawProbability: number | null;
+  edge: number | null;
+  ev: number | null;
+  confidence: number | null;
+  expiresAt?: string;
+  provenance?: {source: string; basis: string; qualityStatus: string; featuresVersion: number | null; modelCreatedAt?: string | null; modelVersions?: string[]; reportedBrierScore?: number | null; trainingDataAsOf?: string | null};
   modelVersion: string;
   featureSnapshotId: string;
-  calibrationMethod: 'none' | 'isotonic' | 'platt' | 'temperature_scaling';
+  calibrationMethod: string;
   createdAt: Date;
   freshnessScore: number;
   dataQualityScore: number;
@@ -256,11 +276,11 @@ export interface BacktestParams {
 
 export interface BacktestKpis {
   numberOfBets: number;
-  hitRate: number;
-  avgOdds: number;
-  profitUnits: number;
-  roi: number;
-  maxDrawdown: number;
+  hitRate: number | null;
+  avgOdds: number | null;
+  profitUnits: number | null;
+  roi: number | null;
+  maxDrawdown: number | null;
   brierScore: number | null;
 }
 
@@ -279,6 +299,9 @@ export interface BacktestConfBucket {
 
 export interface BacktestResult {
   ok: boolean;
+  state: 'quality_unavailable' | 'validated_subset';
+  oddsMode: 'synthetic_fair_odds';
+  validation: {policy: string; note: string; unvalidatedRecords: number; excludedReasons: Array<{reason: string; count: number}>};
   params: BacktestParams;
   kpis: BacktestKpis;
   equityCurve: BacktestEquityPoint[];

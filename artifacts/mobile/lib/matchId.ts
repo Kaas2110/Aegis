@@ -3,18 +3,22 @@
  * (`/api/analytics/match-summary?matchId=N`).
  *
  * Match.id формируется в `LiveDataService` как `${source}_${rawId}`:
- *   - `od_7898912345` — OpenDota live (raw.match_id или raw.lobby_id)
+ *   - `od_7898912345` — OpenDota live (only raw.match_id)
  *   - `up_<panda_event_id>` — PandaScore upcoming
- *   - fallback `od_${Date.now()}` или `up_${team1}_${team2}_${startMs}` —
- *     это «синтетика» БЕЗ настоящего match_id, для них summary бессмыслен.
+ *   - synth-* — no real match_id, so OD summaries are unavailable.
  *
- * Берём только канонические шаблоны `(od|up)_<digits>$`. Всё остальное
+ * Берём только канонический шаблон `od_<digits>$`. Всё остальное
  * (фолбэки/незнакомые префиксы) → null → caller прячет кнопку «Сводка».
  */
+export function positiveSafeId(value: unknown): number | null {
+  if ((typeof value !== 'number' && typeof value !== 'string') || !/^[1-9]\d*$/.test(String(value))) return null;
+  const id=Number(value);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
 export function extractNumericMatchId(matchId: string | undefined | null): number | null {
   if (!matchId) return null;
-  const m = String(matchId).match(/^(?:od|up)_(\d+)$/);
+  const m = String(matchId).match(/^od_([1-9]\d*)$/);
   if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  return positiveSafeId(m[1]);
 }

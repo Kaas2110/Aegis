@@ -4,7 +4,7 @@
  * Фичи (должно совпадать с train-live-model.ts):
  *   x0 = 1                                    bias
  *   x1 = (gameTimeSec - 1800) / 1800          нормализованная минута
- *   x2 = radiantLead / 10000                  net worth преимущество
+ *   x2 = radiantLead / 10000                  raw provider lead (legacy name nw_lead_norm)
  *   x3 = (radiantScore - direScore) / 15      разница убийств
  *   x4 = towerDiff / 11                       разница башен
  *   x5 = logit(prematchProb)                  прематч как приор
@@ -12,15 +12,22 @@
  *   x7 = has_draft                            1=драфт известен
  *   x8 = recency_days_norm                    0=сейчас, отрицательное=старший матч
  *
- * При отсутствии активной live-модели в БД → возвращает null (вызывающий код
- * должен использовать прематч-вероятность как fallback).
+ * Без проверенного serving-контракта возвращает null; прежняя строка БД
+ * сохраняется для диагностики. Публичный live не подменяется прематчем.
  */
 
 import { db, modelVersionsTable } from '@workspace/db';
 import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../lib/logger';
+import { LiveRegistryCache, validateLegacyLiveArtifact } from './liveWinnerRegistryGuard';
+import { hasRequiredLiveWinnerFields } from './liveWinnerRequiredInputs';
+import { validateLegacyLiveServingAdmission } from './legacyLiveServingAdmission';
+
+import {evidenceHash, predictionEvidence, type PredictionEvidence} from '../lib/predictionEvidence';
+const JOURNAL_FEATURE_NAMES = ['bias','game_time_norm','provider_lead_norm','kill_diff_norm','legacy_tower_diff_norm','prematch_logit','is_real_live','has_draft','recency_days_norm'];
 
 interface LoadedLiveModel {
+  artifactHash: string;
   version: string;
   algorithm: string;
   weights: number[]; // [w0..w8]
@@ -33,9 +40,15 @@ interface LoadedLiveModel {
   metadata: Record<string, unknown> | null;
 }
 
-let cached: LoadedLiveModel | null = null;
+const activeCache = new LiveRegistryCache<LoadedLiveModel>();
+type LegacyLiveDiagnostic = {version: string | null; status: 'not_loaded' | 'unavailable' | 'rejected' | 'admitted'; reason: string | null; approvalId?: string};
+let legacyDiagnostic: LegacyLiveDiagnostic = {version: null, status: 'not_loaded', reason: null};
+/** Diagnostics only; does not expose weights or turn a rejected row into a model. */
+export function getLegacyLiveModelDiagnostic(): LegacyLiveDiagnostic { return {...legacyDiagnostic}; }
+
 
 export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
+  const reload = activeCache.beginReload();
   try {
     const rows = await db
       .select()
@@ -45,21 +58,39 @@ export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
       .limit(1);
 
     if (rows.length === 0) {
-      logger.info('[LiveWinnerModel] No active live model — will fallback to prematch prob.');
-      cached = null;
-      return null;
+      if (activeCache.finishReload(reload, null)) {
+        legacyDiagnostic = {version: null, status: 'unavailable', reason: 'no_active_live_model'};
+        logger.info('[LiveWinnerModel] No admitted live model; live map estimate unavailable.');
+      }
+      return activeCache.get();
     }
 
     const m = rows[0];
+    const validation = validateLegacyLiveArtifact(m);
+    if (!validation.ok) {
+      if (activeCache.finishReload(reload, null)) {
+        legacyDiagnostic = {version: m.version, status: 'rejected', reason: validation.reason};
+        logger.warn({ version: m.version, engine: m.engine, reason: validation.reason },
+          '[LiveWinnerModel] Active row is unsupported by the legacy live loader');
+      }
+      return activeCache.get();
+    }
+    const admission = validateLegacyLiveServingAdmission(m);
+    if (!admission.ok) {
+      if (activeCache.finishReload(reload, null)) {
+        legacyDiagnostic = {version: m.version, status: 'rejected', reason: admission.reason};
+        logger.warn({version: m.version, reason: admission.reason},
+          '[LiveWinnerModel] Legacy artifact retained in registry but not admitted for live serving');
+      }
+      return activeCache.get();
+    }
     const w = m.weights as Record<string, number>;
-    // Support both old (6-weight) and new (9-weight) models gracefully.
-    cached = {
+    // Preserve the confirmed six/nine-weight logistic contracts only.
+    const loaded: LoadedLiveModel = {
+      artifactHash: evidenceHash({engine:'logreg',weights:w,features:JOURNAL_FEATURE_NAMES}),
       version: m.version,
       algorithm: m.algorithm,
-      weights: [
-        w.w0 ?? 0, w.w1 ?? 0, w.w2 ?? 0, w.w3 ?? 0, w.w4 ?? 0, w.w5 ?? 0,
-        w.w6 ?? 0, w.w7 ?? 0, w.w8 ?? 0,
-      ],
+      weights: validation.weights,
       trainAccuracy: m.trainAccuracy ?? 0,
       testAccuracy: m.testAccuracy ?? 0,
       brierScore: m.brierScore ?? 0,
@@ -68,20 +99,25 @@ export async function loadActiveLiveModel(): Promise<LoadedLiveModel | null> {
       loadedAt: new Date(),
       metadata: m.metadata ?? null,
     };
-    const dim = (m.features as string[] | null)?.length ?? 6;
-    logger.info(
-      { version: m.version, testAcc: cached.testAccuracy, brier: cached.brierScore, dim },
-      '[LiveWinnerModel] Active live model loaded',
-    );
-    return cached;
+    if (activeCache.finishReload(reload, loaded)) {
+      legacyDiagnostic = {version: m.version, status: 'admitted', reason: null, approvalId: admission.approvalId};
+      logger.info(
+        { version: m.version, testAcc: loaded.testAccuracy, brier: loaded.brierScore, dim: validation.dimensions },
+        '[LiveWinnerModel] Active live model loaded',
+      );
+    }
+    return activeCache.get();
   } catch (err) {
-    logger.error({ err }, '[LiveWinnerModel] Failed to load live model');
+    if (activeCache.failReload(reload)) {
+      legacyDiagnostic = {version: null, status: 'unavailable', reason: 'live_registry_read_failed'};
+      logger.error({ err }, '[LiveWinnerModel] Failed to load live model; cache cleared');
+    }
     return null;
   }
 }
 
 export function getActiveLiveModel(): LoadedLiveModel | null {
-  return cached;
+  return activeCache.get();
 }
 
 function sigmoid(z: number): number {
@@ -100,8 +136,7 @@ function logit(p: number): number {
 }
 
 // Должно совпадать с логикой в train-live-model.ts.
-function towerCountsFromBuildingState(bs: number | null | undefined): { r: number; d: number } {
-  if (bs == null || !Number.isFinite(bs)) return { r: 11, d: 11 };
+function towerCountsFromBuildingState(bs: number): { r: number; d: number } {
   let r = 0, d = 0;
   for (let i = 0; i < 11; i++) if (bs & (1 << i)) r++;
   for (let i = 11; i < 22; i++) if (bs & (1 << i)) d++;
@@ -133,14 +168,15 @@ export interface LiveSnapshotInput {
 export function predictLiveWinner(
   snap: LiveSnapshotInput,
   prematchProb: number,
-): { probRadiantWin: number; modelVersion: string; features: Record<string, number> } | null {
+): { probRadiantWin: number; modelVersion: string; evidence: PredictionEvidence; features: Record<string, number> } | null {
+  const cached = activeCache.get();
   if (!cached) return null;
-  if (snap.gameTimeSec == null || snap.gameTimeSec < 60) return null;
+  if (!hasRequiredLiveWinnerFields(snap)) return null;
   if (!Number.isFinite(prematchProb) || prematchProb <= 0 || prematchProb >= 1) return null;
 
   const towers = towerCountsFromBuildingState(snap.buildingState);
-  const radiantLead = snap.radiantLead ?? 0;
-  const killDiff = (snap.radiantScore ?? 0) - (snap.direScore ?? 0);
+  const radiantLead = snap.radiantLead;
+  const killDiff = snap.radiantScore - snap.direScore;
   const towerDiff = towers.r - towers.d;
 
   const x: number[] = [
@@ -164,6 +200,7 @@ export function predictLiveWinner(
 
   return {
     probRadiantWin: p,
+    evidence: predictionEvidence(cached.artifactHash, JOURNAL_FEATURE_NAMES.slice(0,dim), x.slice(0,dim)),
     modelVersion: cached.version,
     features: {
       bias: x[0],

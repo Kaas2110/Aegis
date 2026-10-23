@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * Загружает статистику героев в про-сцене.
  *
@@ -77,7 +78,8 @@ async function fetchCurrentPatch(): Promise<string | null> {
     if (!resp.ok) return null;
     const patches = (await resp.json()) as Array<{ name: string; date: string }>;
     return patches[patches.length - 1]?.name ?? null;
-  } catch {
+  } catch (error) {
+    if (error instanceof OdQuotaExhaustedError) throw error;
     return null;
   }
 }
@@ -108,6 +110,7 @@ async function main() {
       stratzWinMap = new Map(stratzRows.map(r => [r.heroId, { winCount: r.winCount, matchCount: r.matchCount }]));
       console.log(`[ingest-hero-stats] Stratz: ${stratzRows.length} heroes in PROFESSIONAL bracket`);
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) throw e;
       if (e instanceof StratzUnavailableError) {
         console.warn(`[ingest-hero-stats] Stratz unavailable (${e.message}), using OpenDota only`);
       } else {
@@ -120,6 +123,7 @@ async function main() {
         for (const h of heroConsts) phaseMap.set(h.id, computePhaseScores(h.roles));
         console.log(`[ingest-hero-stats] Stratz: roles for ${heroConsts.length} heroes → phase scores computed`);
       } catch (e) {
+        if (e instanceof OdQuotaExhaustedError) throw e;
         const msg = e instanceof Error ? e.message : String(e);
         console.warn(`[ingest-hero-stats] Stratz roles unavailable (${msg}), phase scores оставлены 0.5`);
       }

@@ -1,3 +1,6 @@
+import {eligibleTotalsModel} from './TotalsModelPolicy';
+import { parseMarketPredictionPayload } from './MarketPredictionPayload';
+import {absentLiveTotalsModelReason,liveTotalsInputRefusal,type LiveTotalsRefusal,type LiveTotalsSnapshot} from './LiveTotalsDiagnostics';
 /**
  * Market models inference (Wave 4 — LightGBM via ml-service).
  *
@@ -19,8 +22,7 @@
  *     trip только на сетевых/5xx/bad-payload, timeout retryable без trip'а.
  *   - Per-(rId,dId,market) кэш на 60s (одни и те же запросы внутри минуты
  *     повторяются часто — popular-markets + analytics route).
- *   - При любой ошибке возвращаем null → caller использует свой эвристический
- *     fallback.
+ *   - При ошибке возвращаем null: public serving показывает недоступность.
  */
 
 import { db, modelVersionsTable, teamsTable } from '@workspace/db';
@@ -30,7 +32,7 @@ import {
   loadTeamRostersMap, loadTeamHeroPoolMap, loadHeroBenchmarksMap,
   loadHeroItemPopularityMap, loadPlayerTotalsMap, loadPlayerCountsMap,
   loadPlayerWlProMap,
-  buildE1KillsFeatures, buildE1DurationFeatures, buildE1FbFeatures,
+  buildE1KillsFeatures, buildE1DurationFeatures,
   buildE1LiveTotalsFeatures,
   type TeamRostersMap, type TeamHeroPoolMap, type HeroBenchmarksMap,
   type HeroItemPopularityMap, type PlayerTotalsMap, type PlayerCountsMap,
@@ -132,7 +134,11 @@ export function buildLiveTotalsFeatures(s: {
 
 type TaskType = 'classification' | 'regression' | 'quantile';
 
+import {evidenceHash, predictionEvidence, type PredictionEvidence} from '../lib/predictionEvidence';
+
 interface LoadedMarket {
+  artifactHash: string;
+  featureNames: string[];
   kind: MarketKind;
   taskType: TaskType;
   blobB64: string;
@@ -155,6 +161,14 @@ interface RegressionResp {
 type PredictResp = ClassificationResp | RegressionResp;
 
 let cached: Map<MarketKind, LoadedMarket> = new Map();
+let registryEpoch=0;
+let modelRefusals=new Map<MarketKind,LiveTotalsRefusal|null>(ALL_MARKET_KINDS.map(k=>[k,'totals_model_registry_not_loaded']));
+export function getMarketModelRevision(): string {
+  return [...cached.values()].map(m => `${m.kind}:${m.version}`).sort().join('|');
+}
+export function isActiveMarketVersion(version: string, market?: string): boolean {
+  return [...cached.values()].some(m => m.version === version && (!market || m.kind === market || m.kind === market + '_with_draft'));
+}
 let teamRatings: Map<number, { rating: number; wins: number; losses: number }> = new Map();
 let lastTeamLoad = 0;
 
@@ -242,6 +256,7 @@ function tripCircuit(reason: string): void {
 
 /** Загрузить активные market-модели в кеш. Вызывать при старте api-server и после ретрейна. */
 export async function loadActiveMarketModels(): Promise<number> {
+  const epoch=++registryEpoch;
   try {
     const rows = await db
       .select()
@@ -254,12 +269,14 @@ export async function loadActiveMarketModels(): Promise<number> {
         ),
       );
     const next = new Map<MarketKind, LoadedMarket>();
+    const nextRefusals=new Map<MarketKind,LiveTotalsRefusal|null>(ALL_MARKET_KINDS.map(k=>[k,'totals_no_active_lightgbm_model']));
     for (const r of rows) {
       const kind = r.kind as MarketKind;
       if (!ALL_MARKET_KINDS.includes(kind)) continue;
       const blob = r.binaryBlob as Buffer | Uint8Array | null;
-      if (!blob) continue;
+      if (!blob || blob.byteLength===0) {nextRefusals.set(kind,'totals_artifact_missing');continue;}
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      if (!eligibleTotalsModel(kind,meta)) {nextRefusals.set(kind,'totals_validation_gate_rejected');logger.warn({kind,version:r.version}, '[MarketLgbm] totals withheld pending validated distribution contract');continue;}
       // Поддерживаем оба ключа: канонический task_type и legacy taskType.
       const tt = meta['task_type'] ?? meta['taskType'];
       const taskType: TaskType =
@@ -269,16 +286,27 @@ export async function loadActiveMarketModels(): Promise<number> {
       next.set(kind, {
         kind,
         taskType,
+        artifactHash: evidenceHash({blobB64: Buffer.from(r.binaryBlob!).toString('base64'), features:r.features}),
+        featureNames: r.features,
         version: r.version,
         blobB64: Buffer.isBuffer(blob) ? blob.toString('base64') : Buffer.from(blob).toString('base64'),
         loadedAt: Date.now(),
       });
+      nextRefusals.set(kind,null);
     }
+    // A slower preceding reload must not resurrect a version withdrawn by the latest reload.
+    if(epoch!==registryEpoch) return cached.size;
     cached = next;
+    modelRefusals=nextRefusals;
     predictCache.clear();
     logger.info({ loaded: Array.from(next.keys()) }, '[MarketLgbm] active market models loaded');
     return next.size;
   } catch (err) {
+    if(epoch!==registryEpoch) return cached.size;
+    // Fail closed: neither the cache nor diagnostics may pretend a failed registry refresh succeeded.
+    cached=new Map();
+    modelRefusals=new Map(ALL_MARKET_KINDS.map(k=>[k,'totals_model_registry_unavailable']));
+    predictCache.clear();
     logger.error({ err }, '[MarketLgbm] failed to load active market models');
     return 0;
   }
@@ -372,27 +400,8 @@ async function callMlPredict(blobB64: string, features: number[]): Promise<Predi
       tripCircuit(`ml-service ${res.status}: ${body.slice(0, 120)}`);
       return null;
     }
-    const data = (await res.json()) as {
-      task_type?: string;
-      raw_prob?: number;
-      calibrated_prob?: number;
-      mean?: number;
-      std?: number;
-    };
-    if (data.task_type === 'regression' || data.task_type === 'quantile') {
-      if (typeof data.mean !== 'number' || typeof data.std !== 'number') {
-        tripCircuit('ml-service bad regression/quantile payload'); return null;
-      }
-      return { task_type: data.task_type, mean: data.mean, std: data.std };
-    }
-    if (typeof data.calibrated_prob !== 'number') {
-      tripCircuit('ml-service bad classification payload'); return null;
-    }
-    return {
-      task_type: 'classification',
-      raw_prob: typeof data.raw_prob === 'number' ? data.raw_prob : data.calibrated_prob,
-      calibrated_prob: data.calibrated_prob,
-    };
+    // Missing residual dispersion disables this model, not every market's circuit.
+    return parseMarketPredictionPayload(await res.json());
   } catch (e) {
     // F9 (Phase 9): timeout НЕ открывает circuit. Это retryable single-request
     // failure (часто ловится при пересечении totals-ladder с тиком LiveWorker),
@@ -411,7 +420,8 @@ async function callMlPredict(blobB64: string, features: number[]): Promise<Predi
 
 interface CachedPrediction {
   ts: number;
-  firstBloodP: number | null;     // P(radiant wins fb-proxy)
+  versions: {totalKills: string | null; totalDuration: string | null};
+  firstBloodP: number | null;     // Disabled until first-blood labels are validated.
   totalKillsLogN: { mean: number; std: number } | null;
   totalDurationLogN: { mean: number; std: number } | null;
   // Квантильные оценки log(duration_sec) — α=0.25 / α=0.75. Используются
@@ -464,19 +474,19 @@ async function predictMarketCascade(
   withDraftKind: MarketKind,
   pureFeatures: number[],
   withDraftFeatures: number[] | null,
-): Promise<{ resp: PredictResp; tier: 'pure' | 'with_draft' } | null> {
+): Promise<{ resp: PredictResp; tier: 'pure' | 'with_draft'; version: string } | null> {
   if (withDraftFeatures) {
     const wd = cached.get(withDraftKind);
     if (wd) {
       const r = await callMlPredict(wd.blobB64, withDraftFeatures);
-      if (r) return { resp: r, tier: 'with_draft' };
+      if (r) return { resp: r, tier: 'with_draft', version: wd.version };
     }
   }
   const pure = cached.get(pureKind);
   if (!pure) return null;
   const r = await callMlPredict(pure.blobB64, pureFeatures);
   if (!r) return null;
-  return { resp: r, tier: 'pure' };
+  return { resp: r, tier: 'pure', version: pure.version };
 }
 
 /**
@@ -493,6 +503,7 @@ export async function predictMarketsFor(
 ): Promise<CachedPrediction> {
   const empty: CachedPrediction = {
     ts: Date.now(),
+    versions: {totalKills: null, totalDuration: null},
     firstBloodP: null,
     totalKillsLogN: null,
     totalDurationLogN: null,
@@ -521,7 +532,6 @@ export async function predictMarketsFor(
 
   // E1 фичи для with_draft tier'а. Если e1Maps не нужны (нет _with_draft моделей)
   // или ни одного hero pick нет — wdFeats остаётся null и каскад уйдёт в pure.
-  let wdFb: number[] | null = null;
   let wdKills: number[] | null = null;
   let wdDur: number[] | null = null;
   if (dh) {
@@ -533,18 +543,13 @@ export async function predictMarketsFor(
       const e1Dur = buildE1DurationFeatures({
         radiantPicks: dh.radiantPicks, direPicks: dh.direPicks, itemPop: e1.itemPop,
       });
-      const e1Fb = buildE1FbFeatures({
-        radiantPicks: dh.radiantPicks, direPicks: dh.direPicks,
-        benchmarks: e1.benchmarks, itemPop: e1.itemPop,
-      });
       wdKills = [...teamFeats, ...e1Kills];
       wdDur = [...teamFeats, ...e1Dur];
-      wdFb = [...teamFeats, ...e1Fb];
     }
   }
 
-  const [fbR, tkR, tdR, tdQ25R, tdQ75R] = await Promise.all([
-    predictMarketCascade('market_first_blood', 'market_first_blood_with_draft', teamFeats, wdFb),
+  // FB bundles remain loaded for comparison, but their invalid target is never called.
+  const [tkR, tdR, tdQ25R, tdQ75R] = await Promise.all([
     predictMarketCascade('market_total_kills', 'market_total_kills_with_draft', teamFeats, wdKills),
     predictMarketCascade('market_total_duration', 'market_total_duration_with_draft', teamFeats, wdDur),
     predictMarketCascade('market_total_duration_q25', 'market_total_duration_q25_with_draft', teamFeats, wdDur),
@@ -553,7 +558,8 @@ export async function predictMarketsFor(
 
   const out: CachedPrediction = {
     ts: Date.now(),
-    firstBloodP: fbR && fbR.resp.task_type === 'classification' ? fbR.resp.calibrated_prob : null,
+    versions: {totalKills: tkR?.version ?? null, totalDuration: tdR?.version ?? null},
+    firstBloodP: null,
     totalKillsLogN: tkR && tkR.resp.task_type === 'regression'
       ? { mean: tkR.resp.mean, std: Math.max(1e-3, tkR.resp.std) }
       : null,
@@ -563,7 +569,7 @@ export async function predictMarketsFor(
     totalDurationLogQ25: tdQ25R && tdQ25R.resp.task_type === 'quantile' ? tdQ25R.resp.mean : null,
     totalDurationLogQ75: tdQ75R && tdQ75R.resp.task_type === 'quantile' ? tdQ75R.resp.mean : null,
     tier: {
-      firstBlood: fbR?.tier ?? null,
+      firstBlood: null,
       totalKills: tkR?.tier ?? null,
       totalDuration: tdR?.tier ?? null,
       totalDurationQ25: tdQ25R?.tier ?? null,
@@ -609,12 +615,14 @@ export function getActiveMarketModelInfo(): Array<{ kind: MarketKind; taskType: 
  * T3.5 — live totals inference. Принимает текущий снапшот матча и возвращает
  * (mean, std) в log-пространстве для финального total_kills и duration_sec.
  * Caller должен делать exp(mean) чтобы получить point estimate, и использовать
- * std для непараметрической ladder/probability.
+ * std для параметрической ladder/probability.
  *
  * Возвращает null'ы если модели не загружены или ml-service недоступен.
  * Cache не используется (снапшот меняется каждые 60s, key взрывается).
  */
 export interface LiveTotalsPrediction {
+  unavailableReasons: {kills:LiveTotalsRefusal|null;duration:LiveTotalsRefusal|null};
+  evidence: {kills: PredictionEvidence | null; duration: PredictionEvidence | null};
   totalKillsLogN: { mean: number; std: number } | null;
   totalDurationLogN: { mean: number; std: number } | null;
   modelVersions: { kills: string | null; duration: string | null };
@@ -636,13 +644,7 @@ export interface LiveTotalsPrediction {
  * чтобы LiveWorker записал правильную версию в predictions.
  */
 export async function predictLiveTotalsFor(
-  snapshot: {
-    gameTimeSec: number;
-    radiantScore: number | null;
-    direScore: number | null;
-    radiantLead: number | null;
-    buildingState: number | null;
-  },
+  snapshot: LiveTotalsSnapshot,
   draftHint?: DraftHint & { radiantTeamId: number; direTeamId: number },
 ): Promise<LiveTotalsPrediction> {
   const lk = cached.get('live_total_kills');
@@ -651,17 +653,22 @@ export async function predictLiveTotalsFor(
   const ldWd = cached.get('live_total_duration_with_draft');
 
   const empty: LiveTotalsPrediction = {
+    unavailableReasons: {
+      kills:lk||lkWd?null:absentLiveTotalsModelReason([modelRefusals.get('live_total_kills'),modelRefusals.get('live_total_kills_with_draft')]),
+      duration:ld||ldWd?null:absentLiveTotalsModelReason([modelRefusals.get('live_total_duration'),modelRefusals.get('live_total_duration_with_draft')]),
+    },
+    evidence: {kills:null,duration:null},
     totalKillsLogN: null,
     totalDurationLogN: null,
     modelVersions: { kills: null, duration: null },
     tier: { kills: null, duration: null },
   };
-  if (cached.size === 0) return empty;
-  if (snapshot.gameTimeSec < 60) return empty; // pre-laning, фичи бессмысленны
+  const inputRefusal=liveTotalsInputRefusal(snapshot);
+  if(inputRefusal) return {...empty,unavailableReasons:{kills:inputRefusal,duration:inputRefusal}};
   if (!lk && !ld && !lkWd && !ldWd) return empty;
 
   // Pure features (всегда вычисляем — fallback).
-  const pureFeats = buildLiveTotalsFeatures(snapshot);
+  const pureFeats = buildLiveTotalsFeatures({...snapshot,gameTimeSec:snapshot.gameTimeSec!});
 
   // With-draft features (если возможно).
   let wdFeats: number[] | null = null;
@@ -687,30 +694,43 @@ export async function predictLiveTotalsFor(
     }
   }
 
-  const [killsRes, durRes] = await Promise.all([
+  const reasons={...empty.unavailableReasons};
+  let [killsRes, durRes] = await Promise.all([
     (async () => {
       if (wdFeats && lkWd) {
         const r = await callMlPredict(lkWd.blobB64, wdFeats);
-        if (r) return { resp: r, tier: 'with_draft' as const, version: lkWd.version };
+        if (r?.task_type==='regression') return { resp: r, kind: lkWd.kind, tier: 'with_draft' as const, version: lkWd.version, evidence: predictionEvidence(lkWd.artifactHash, lkWd.featureNames, wdFeats) };
+        reasons.kills=r?'totals_output_contract_mismatch':'totals_inference_unavailable';
       }
-      if (!lk) return null;
+      if (!lk) {reasons.kills??='totals_draft_context_unavailable';return null;}
       const r = await callMlPredict(lk.blobB64, pureFeats);
-      if (!r) return null;
-      return { resp: r, tier: 'pure' as const, version: lk.version };
+      if (!r || r.task_type!=='regression') {reasons.kills=r?'totals_output_contract_mismatch':'totals_inference_unavailable';return null;}
+      return { resp: r, kind: lk.kind, tier: 'pure' as const, version: lk.version, evidence: predictionEvidence(lk.artifactHash, lk.featureNames, pureFeats) };
     })(),
     (async () => {
       if (wdFeats && ldWd) {
         const r = await callMlPredict(ldWd.blobB64, wdFeats);
-        if (r) return { resp: r, tier: 'with_draft' as const, version: ldWd.version };
+        if (r?.task_type==='regression') return { resp: r, kind: ldWd.kind, tier: 'with_draft' as const, version: ldWd.version, evidence: predictionEvidence(ldWd.artifactHash, ldWd.featureNames, wdFeats) };
+        reasons.duration=r?'totals_output_contract_mismatch':'totals_inference_unavailable';
       }
-      if (!ld) return null;
+      if (!ld) {reasons.duration??='totals_draft_context_unavailable';return null;}
       const r = await callMlPredict(ld.blobB64, pureFeats);
-      if (!r) return null;
-      return { resp: r, tier: 'pure' as const, version: ld.version };
+      if (!r || r.task_type!=='regression') {reasons.duration=r?'totals_output_contract_mismatch':'totals_inference_unavailable';return null;}
+      return { resp: r, kind: ld.kind, tier: 'pure' as const, version: ld.version, evidence: predictionEvidence(ld.artifactHash, ld.featureNames, pureFeats) };
     })(),
   ]);
 
+  const stillLoaded=(value:NonNullable<typeof killsRes>)=>{
+    const current=cached.get(value.kind);
+    return !!current && current.version===value.version && current.artifactHash===value.evidence.modelHash
+      && current.featureNames.length===value.evidence.featureNames.length
+      && current.featureNames.every((name,index)=>name===value.evidence.featureNames[index]);
+  };
+  if(killsRes&&!stillLoaded(killsRes)) {killsRes=null;reasons.kills='totals_model_changed_during_inference';}
+  if(durRes&&!stillLoaded(durRes)) {durRes=null;reasons.duration='totals_model_changed_during_inference';}
+
   return {
+    unavailableReasons:{kills:killsRes?null:reasons.kills,duration:durRes?null:reasons.duration},
     totalKillsLogN: killsRes && killsRes.resp.task_type === 'regression'
       ? { mean: killsRes.resp.mean, std: Math.max(1e-3, killsRes.resp.std) } : null,
     totalDurationLogN: durRes && durRes.resp.task_type === 'regression'
@@ -719,6 +739,7 @@ export async function predictLiveTotalsFor(
       kills: killsRes?.version ?? null,
       duration: durRes?.version ?? null,
     },
+    evidence: {kills:killsRes?.evidence ?? null,duration:durRes?.evidence ?? null},
     tier: {
       kills: killsRes?.tier ?? null,
       duration: durRes?.tier ?? null,

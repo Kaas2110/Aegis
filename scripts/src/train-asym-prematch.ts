@@ -32,7 +32,7 @@
  *   [21] hero_draft_strength_diff      sum(globalWR(pick_R)) − sum(globalWR(pick_D))  (упрощённо)
  *
  * fv=1, kind='prematch_winner_asym', engine='lightgbm', единый bucket (без тиров).
- * Сохранение — атомарный swap всех активных строк с этим kind+engine.
+ * Сохранение — только inactive/unvalidated кандидат; активные строки не меняются.
  *
  * Запуск:
  *   pnpm --filter @workspace/scripts run train:asym-prematch
@@ -63,6 +63,7 @@ import {
 } from '@workspace/db';
 import { asc, gte, and, eq } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
 
 const TRAIN_WINDOW_DAYS = 365;
 const MIN_SAMPLES = 80;
@@ -196,6 +197,7 @@ async function trainBucket(samples: Sample[], featureNames: string[], label: str
 }
 
 async function main() {
+  assertCandidateOnlyArgs();
   console.log(`[train-asym-prematch] ml-service: ${ML_SERVICE_URL}`);
   try {
     const h = await fetch(`${ML_SERVICE_URL}/healthz`);
@@ -472,14 +474,7 @@ async function main() {
   const version = `lgbm-asym-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}-v1-prematch_winner_asym`;
 
   console.log(`\n[train-asym-prematch] Saving model ${version} …`);
-  await db.transaction(async tx => {
-    await tx.update(modelVersionsTable)
-      .set({ isActive: false })
-      .where(and(
-        eq(modelVersionsTable.kind, 'prematch_winner_asym'),
-        eq(modelVersionsTable.isActive, true),
-      ));
-    await tx.insert(modelVersionsTable).values({
+  await saveLegacyCandidates(db, [{
       version,
       kind: 'prematch_winner_asym',
       featuresVersion: 1,
@@ -514,10 +509,12 @@ async function main() {
         trainSeconds: r.train_seconds,
         blobBytes: blob.length,
       },
-      isActive: true,
-    });
+      isActive: false,
+    }], {
+    trainer: 'train-asym-prematch', seed: 42,
+    limitations: ['current_player_team_roster_aggregates_not_as_of', 'row_split_not_series_grouped', 'shared_early_stop_calibration_set'],
   });
-  console.log(`\n[train-asym-prematch] ✅ Saved ${version} test_acc=${(r.test_metrics_calibrated.accuracy * 100).toFixed(1)}% brier=${r.test_metrics_calibrated.brier.toFixed(4)} blob=${blob.length}b`);
+  console.log(`\n[train-asym-prematch] Saved inactive, unvalidated candidate ${version}; active models unchanged`);
   process.exit(0);
 }
 

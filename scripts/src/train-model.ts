@@ -5,17 +5,18 @@
  *   Волна 2: вторая «версия фичей» v2 = team(5) + hero/draft(7) = 12 фичей.
  *
  * Архитектура:
- *   1. Загружаем команды, матчи (последние 180 дней, avg Glicko ≥ MIN_AVG_GLICKO).
+ *   1. Загружаем команды, матчи (последние 365 дней, avg Glicko ≥ MIN_AVG_GLICKO).
  *   2. Загружаем драфты, hero_stats, matchups (для v2).
  *   3. Бакетируем матчи по тиру: T1 (avg ≥1400), T2 (1200..1400), T3 (<1200).
  *      Параллельно собираем общую "all" выборку для fallback.
  *   4. Для каждой featuresVersion (v1 = team only, v2 = team+hero):
  *        - 4 бакета (3 тира + fallback)
- *        - 80/10/10 split (хронологический, без leakage)
+ *        - 80/10/10 split (хронологический; current-aggregate leakage ещё не устранён)
  *        - тренируем logistic regression
  *        - фитим изотоническую калибровку на 10% holdout
- *   5. В одной транзакции деактивируем ВСЕ старые активные прематч-модели
- *      (по всем (kind, featuresVersion)) и вставляем все новые.
+ *   5. Сохраняем только inactive/unvalidated кандидатов, не меняя активные модели.
+ *      Публикация требует отдельного validated-manifest pipeline.
+ *      --seed N задаёт воспроизводимое перемешивание SGD (по умолчанию42).
  *
  * Если у бакета < MIN_SAMPLES_PER_TIER train samples — модель не тренируется,
  * lookup на инференсе упадёт в fallback того же featuresVersion. Если v2
@@ -38,6 +39,8 @@ import {
 } from '@workspace/db';
 import { asc, gte, and, eq, inArray } from 'drizzle-orm';
 import { fitIsotonic, applyCalibration, type CalibrationModel } from './lib/isotonic';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
+import { trainingSeed, seededRandom, shuffleInPlace } from './lib/training-random';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier } from './lib/tier';
 import {
   buildHeroFeatures,
@@ -65,6 +68,7 @@ import {
 } from './lib/team-extended';
 
 const TRAIN_WINDOW_DAYS = 365;
+const TRAINING_SEED = trainingSeed();
 const EPOCHS = 200;
 
 /** Возвращает Unix-timestamp начала тренировочного окна. */
@@ -167,13 +171,11 @@ function buildTeamFeatures(
 }
 
 function trainLogisticRegression(samples: Sample[], dim: number, label: string): number[] {
+  const random = seededRandom(TRAINING_SEED);
   const w = new Array<number>(dim).fill(0);
   for (let epoch = 0; epoch < EPOCHS; epoch++) {
     let totalLoss = 0;
-    for (let i = samples.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [samples[i], samples[j]] = [samples[j], samples[i]];
-    }
+    shuffleInPlace(samples, random);
     for (const s of samples) {
       const z = dot(w, s.features);
       const p = sigmoid(z);
@@ -318,6 +320,7 @@ function trainBucket(
 }
 
 async function main() {
+  assertCandidateOnlyArgs();
   // ── Загрузка команд ────────────────────────────────────────────────────
   console.log('[train-model] Loading teams …');
   const teamsRows = await db
@@ -735,6 +738,7 @@ async function main() {
       kind: r.kind,
       featuresVersion: r.featuresVersion,
       algorithm: 'logistic_regression',
+      engine: 'logreg',
       features: featureNames,
       weights,
       trainAccuracy: r.trainMetrics.acc,
@@ -760,32 +764,18 @@ async function main() {
         windowStartUnix: minStartTime,
         minAvgGlicko: MIN_AVG_GLICKO,
       },
-      isActive: true,
+      isActive: false,
     };
   }
 
   const toInsert = [...v1Results, ...v2Results, ...v3Results].map(bucketRowToInsert);
 
-  // ── Атомарный swap ────────────────────────────────────────────────────
-  // Деактивируем ВСЕ активные прематч-модели всех версий (v1 и v2). Затем
-  // вставляем новые. Constraint (kind, features_version WHERE active)
-  // защищает от race condition.
-  await db.transaction(async tx => {
-    await tx
-      .update(modelVersionsTable)
-      .set({ isActive: false })
-      .where(
-        and(
-          inArray(modelVersionsTable.kind, [...ALL_PREMATCH_KINDS]),
-          eq(modelVersionsTable.isActive, true),
-        ),
-      );
-    if (toInsert.length > 0) {
-      await tx.insert(modelVersionsTable).values(toInsert);
-    }
+  await saveLegacyCandidates(db, toInsert, {
+    trainer: 'train-model', seed: TRAINING_SEED,
+    limitations: ['current_aggregate_features_not_as_of', 'row_split_not_series_grouped', 'independent_temporal_validation_required'],
   });
 
-  console.log('\n[train-model] ✅ Saved models:');
+  console.log('\n[train-model] Saved inactive, unvalidated candidates (active models unchanged):');
   for (const r of toInsert) {
     console.log(
       `   - ${r.version} kind=${r.kind} v${r.featuresVersion} ` +

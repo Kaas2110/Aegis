@@ -1,44 +1,33 @@
-/**
- * Российские букмекеры — публичные мобильные/web JSON-эндпоинты.
- *
- * 6 РФ-источников: Fonbet, Лига Ставок, PARI, BetBoom, 1xStavka, Olimp.bet.
- * + 1 US-источник: Bovada (работает с Replit-IP без ключа).
- * Все API — публичные, без ключей.
- *
- * Управление:
- *   BOOKMAKERS_ENABLED=true   — включить (дефолт true, на Replit работает только Bovada)
- *
- * При выключенном флаге все эндпоинты возвращают HTTP 503 с понятным JSON-телом
- * (`{ enabled: false, error, hint }`).
- *
- * Реальность с не-РФ IP (Replit, 2026-05-18): все 6 РФ-источников блочат гео
- * (DNS / Cloudflare / HTML-челлендж). Тест с datacenter РФ-прокси не помог
- * (см. docs/laptop-deploy.md § Букмекеры). Прокси-логика убрана — ходим
- * напрямую отовсюду. РФ-буки оживут только на ноуте с домашним РФ-IP, и то
- * после починки 3 устаревших адаптеров (pari/betboom/olimp). Admin-эндпоинт
- * `POST /api/admin/bookmakers/probe` доступен для диагностики.
- *
- * ToS: использование этих API находится в серой зоне — пользователь предупреждён.
+/** Public bookmaker feeds. External polling is performed only by BookmakerWorker/admin refresh.
+ * Public routes read observations with source receipt times and exclude stale prices.
+ * Source URLs and schemas verified against official public sites on 2026-10-03.
  */
 import { Router, type IRouter } from 'express';
 import { getRandomUserAgent } from '../lib/userAgents';
 import { logger as bookmakerLogger } from '../lib/logger';
-import { normalizeTeamName, fuzzyTeamMatch, fuzzyPairMatch } from '../services/BookmakerMatcher';
+import { normalizeTeamName, orientBookmakerMarkets, unambiguousSourceEvents } from '../services/BookmakerMatcher';
+import {parseBovada, parseFonbetLine, parseOlimp} from '../services/BookmakerParsers';
+import {fetchBookmaker} from '../services/BookmakerTransport';
 
 const router: IRouter = Router();
 
-// Дефолт включён: с Replit-IP реально работает Bovada (US-IP, без ключа).
-// 6 РФ-букмекеров на Replit-IP заблокированы (гео/Cloudflare/DNS) — их адаптеры
-// возвращают пустой массив или ошибку, но фича в целом активна.
-// Жёсткое выключение: BOOKMAKERS_ENABLED=false.
+// Sources remain selectable; actual availability is reported separately.
 const BOOKMAKERS_ENABLED = process.env['BOOKMAKERS_ENABLED'] !== 'false';
+// An explicitly empty allowlist disables every source; only an unset variable
+// preserves the legacy behaviour of polling all adapters.
+const sourceAllowlistValue = process.env['BOOKMAKER_SOURCES'];
+const sourceAllowlist = sourceAllowlistValue === undefined
+  ? null
+  : new Set(sourceAllowlistValue.split(',').map(id => id.trim().toLowerCase()).filter(Boolean));
 
 const REQUEST_DELAY_MS = 1500;
 // TTL покрывает максимальный интервал BookmakerWorker (idle = 60 мин) + grace.
 // Воркер сам пишет в кэш каждые 3 мин (live) / 60 мин (idle), эндпоинты читают.
-// Если воркер мёртв — on-demand fetch отрабатывает после истечения TTL.
+// Если воркер остановлен, чтение возвращает stale; запросов по требованию нет.
 const CACHE_TTL_MS = 65 * 60_000;
+const FAILURE_CACHE_TTL_MS = 30_000;
 const FETCH_TIMEOUT_MS = 12_000;
+const RETRY_DELAY_MS = 1_000;
 
 // ---------- Unified shape ----------
 
@@ -50,6 +39,9 @@ export interface UnifiedMarketTotal {
   line: number;
   over: number;
   under: number;
+  scope?: 'series' | 'map';
+  map?: number;
+  unit?: 'kills' | 'minutes' | 'maps';
 }
 export interface UnifiedMarketBinary {
   yes: number;
@@ -84,6 +76,10 @@ export interface UnifiedBookmakerEvent {
     correctScore?: UnifiedMarketCorrectScore[];
   };
   updatedAt: string;
+  receivedAt?: string;
+  sourceUpdatedAt?: string | null;
+  scope?: 'series' | 'map';
+  expiresAt?: string;
 }
 
 interface SourceResponse {
@@ -91,6 +87,8 @@ interface SourceResponse {
   noData: boolean;
   events: UnifiedBookmakerEvent[];
   fetchedAt: string;
+  stale?: boolean;
+  unavailable?: boolean;
   error?: string;
   hint?: string;
 }
@@ -110,7 +108,8 @@ function rateLimit(source: string): boolean {
 function getCached(source: string): SourceResponse | null {
   const entry = cache[source];
   if (!entry) return null;
-  if (Date.now() - entry.fetchedAt > CACHE_TTL_MS) return null;
+  const ttl = entry.value.error ? FAILURE_CACHE_TTL_MS : CACHE_TTL_MS;
+  if (Date.now() - entry.fetchedAt >= ttl) return null;
   return entry.value;
 }
 
@@ -120,10 +119,7 @@ function setCached(source: string, value: SourceResponse): void {
 
 // ---------- HTTP ----------
 
-// Все источники (Bovada + 6 РФ-буков) ходим напрямую. Прокси-логика убрана
-// 2026-05-18 после теста shared РФ-прокси: ломал Bovada (US-IP-only),
-// не помогал ни одному из 6 РФ-буков (DNS / Cloudflare / устаревшие URL).
-// Для переезда на ноут см. docs/laptop-deploy.md § «Букмекеры».
+// Native fetch respects the process network configuration. No system proxy is changed.
 async function fetchWithProxy(url: string, extraHeaders: Record<string, string> = {}): Promise<Response> {
   const headers: Record<string, string> = {
     'User-Agent': getRandomUserAgent(),
@@ -134,12 +130,30 @@ async function fetchWithProxy(url: string, extraHeaders: Record<string, string> 
     ...extraHeaders,
   };
 
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  // The signal must remain active while adapters consume response.json()/text().
+  // Clearing a manual timer after headers leaves a stalled body unbounded.
+  const response = await fetchBookmaker(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  const contentType=response.headers.get('content-type') ?? '';
+  if(contentType.includes('text/html')) throw new Error('HTTP '+response.status+' unexpected_content_type:text/html (website/challenge, not an odds API)');
+  return response;
+}
+
+function isTransientSourceError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return true;
+  if (err instanceof TypeError && err.message === 'fetch failed') return true;
+  // Adapter HTTP failures carry their status; parsing errors/challenges and
+  // other 4xx responses deliberately receive no automatic retry.
+  return /\bHTTP (?:429|5\d{2})\b/.test(err.message);
+}
+
+async function fetchAdapterWithRetry(adapter: () => Promise<SourceResponse>): Promise<SourceResponse> {
   try {
-    return await fetch(url, { headers, signal: controller.signal });
-  } finally {
-    clearTimeout(tid);
+    return await adapter();
+  } catch (err) {
+    if (!isTransientSourceError(err)) throw err;
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    return adapter(); // At most two attempts, including body-read failures.
   }
 }
 
@@ -208,68 +222,11 @@ export function getSourceTrackers(): Record<string, { requestsTotal: number; res
 // ---------- Adapters ----------
 
 async function adapterFonbet(): Promise<SourceResponse> {
-  // Fonbet v1 line API. Factors array carries odds inline alongside event list.
-  // Factor ids (esports): "1"=П1(team1 wins), "2"=П2(team2 wins).
-  // Kill totals: "1751"=TotalO, "1752"=TotalU — pt field is the line value.
-  const url = 'https://line34.fonbet.ru/api/v1/line/sport/events?sport=12&count=100';
-  const resp = await fetchWithProxy(url, {
-    'Origin': 'https://www.fonbet.ru',
-    'Referer': 'https://www.fonbet.ru/sports/esports/',
-  });
-  if (!resp.ok) throw new Error(`Fonbet HTTP ${resp.status}`);
-  const raw = (await resp.json()) as {
-    events?: Array<{
-      id?: number | string;
-      name?: string;
-      team1?: string;
-      team2?: string;
-      startTime?: number;
-      sportId?: number;
-      // Flat factors array — field name is either "f" or "id" depending on API version
-      factors?: Array<{ f?: string | number; id?: string | number; v?: number; pt?: string | number }>;
-    }>;
-  };
-  const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
-    .filter((e) => (e.sportId === 12 || e.sportId === undefined))
-    .map((e) => {
-      const factors = e.factors ?? [];
-      const getFactor = (fid: string): number | null => {
-        const f = factors.find((x) => String(x.f ?? x.id ?? '') === fid);
-        return num(f?.v);
-      };
-      const t1 = getFactor('1');
-      const t2 = getFactor('2');
-
-      // Group kill-total factors by pt (line value)
-      const overFactors = factors.filter((x) => String(x.f ?? x.id ?? '') === '1751');
-      const underFactors = factors.filter((x) => String(x.f ?? x.id ?? '') === '1752');
-      const killsLines: UnifiedMarketTotal[] = [];
-      for (const o of overFactors) {
-        const line = num(o.pt);
-        const over = num(o.v);
-        const u = underFactors.find((x) => x.pt === o.pt);
-        const under = u ? num(u.v) : null;
-        if (line !== null && over !== null && under !== null) {
-          killsLines.push({ line, over, under });
-        }
-      }
-
-      return {
-        source: 'fonbet',
-        eventId: String(e.id ?? ''),
-        team1: e.team1 ?? '',
-        team2: e.team2 ?? '',
-        startsAt: e.startTime ? new Date(e.startTime * 1000).toISOString() : null,
-        status: 'unknown' as const,
-        markets: {
-          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
-          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
-        },
-        updatedAt: new Date().toISOString(),
-      };
-    })
-    .filter((e) => e.team1 && e.team2);
-  return { source: 'fonbet', noData: false, events, fetchedAt: new Date().toISOString() };
+  const resp=await fetchWithProxy(SOURCE_URLS.fonbet!, SOURCE_REFERERS.fonbet);
+  if(!resp.ok)throw new Error('Fonbet HTTP '+resp.status);
+  const raw=await resp.json(),receivedAt=new Date().toISOString();
+  const events=parseFonbetLine(raw,'fonbet',receivedAt);
+  return {source:'fonbet',noData:events.length===0,events,fetchedAt:receivedAt};
 }
 
 async function adapterLigaStavok(): Promise<SourceResponse> {
@@ -373,61 +330,11 @@ async function adapterLigaStavok(): Promise<SourceResponse> {
 }
 
 async function adapterPari(): Promise<SourceResponse> {
-  // PARI sportId 33 = esports, разделы Dota 2 фильтруем по названию tournament
-  const url = 'https://pari.ru/api/v3/line/events?sportId=33&take=200';
-  const resp = await fetchWithProxy(url, {
-    'Origin': 'https://pari.ru',
-    'Referer': 'https://pari.ru/cybersport/dota-2',
-  });
-  if (!resp.ok) throw new Error(`PARI HTTP ${resp.status}`);
-  const raw = (await resp.json()) as {
-    events?: Array<{ id?: string; team1?: string; team2?: string; startsAt?: string; tournamentName?: string; markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; coefficient?: number }> }> }>;
-  };
-  const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
-    .filter((e) => (e.tournamentName ?? '').toLowerCase().includes('dota'))
-    .map((e) => {
-      const mkts = e.markets ?? [];
-      const winnerMkt = mkts.find((m) => {
-        const n = (m.name ?? '').toLowerCase();
-        return n === 'победитель' || n === 'winner' || n.includes('победитель матча');
-      });
-      const t1 = num(winnerMkt?.outcomes?.[0]?.coefficient);
-      const t2 = num(winnerMkt?.outcomes?.[1]?.coefficient);
-
-      // Parse total kills market
-      const killsMkt = mkts.find((m) => {
-        const n = (m.name ?? '').toLowerCase();
-        return (n.includes('убийств') || n.includes('kill') || n.includes('фраг')) && (n.includes('тотал') || n.includes('total'));
-      });
-      const killsLines: UnifiedMarketTotal[] = [];
-      if (killsMkt?.outcomes && killsMkt.outcomes.length >= 2) {
-        for (let i = 0; i + 1 < killsMkt.outcomes.length; i += 2) {
-          const o = killsMkt.outcomes[i];
-          const u = killsMkt.outcomes[i + 1];
-          const lineMatch = (o?.name ?? '').match(/(\d+\.?\d*)/);
-          const line = lineMatch ? parseFloat(lineMatch[1]!) : null;
-          const over = num(o?.coefficient);
-          const under = num(u?.coefficient);
-          if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
-        }
-      }
-
-      return {
-        source: 'pari',
-        eventId: String(e.id ?? ''),
-        team1: e.team1 ?? '',
-        team2: e.team2 ?? '',
-        startsAt: e.startsAt ?? null,
-        status: 'unknown' as const,
-        markets: {
-          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
-          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
-        },
-        updatedAt: new Date().toISOString(),
-      };
-    })
-    .filter((e) => e.team1 && e.team2);
-  return { source: 'pari', noData: false, events, fetchedAt: new Date().toISOString() };
+  const resp=await fetchWithProxy(SOURCE_URLS.pari!, SOURCE_REFERERS.pari);
+  if(!resp.ok)throw new Error('PARI HTTP '+resp.status);
+  const raw=await resp.json(),receivedAt=new Date().toISOString();
+  const events=parseFonbetLine(raw,'pari',receivedAt);
+  return {source:'pari',noData:events.length===0,events,fetchedAt:receivedAt};
 }
 
 async function adapterBetBoom(): Promise<SourceResponse> {
@@ -536,229 +443,52 @@ async function adapter1xStavka(): Promise<SourceResponse> {
 }
 
 async function adapterOlimp(): Promise<SourceResponse> {
-  // Olimp.bet публичный эндпоинт
-  const url = 'https://www.olimp.bet/ru/api/lines/get_events?sport=cybersport&subsport=dota-2&take=200';
-  const resp = await fetchWithProxy(url, {
-    'Origin': 'https://www.olimp.bet',
-    'Referer': 'https://www.olimp.bet/ru/cybersport/dota-2',
-  });
-  if (!resp.ok) throw new Error(`Olimp HTTP ${resp.status}`);
-  const raw = (await resp.json()) as {
-    events?: Array<{
-      id?: string;
-      team1?: string;
-      team2?: string;
-      date?: string;
-      coef1?: number;
-      coef2?: number;
-      // Extended fields that Olimp may return
-      totals?: Array<{ name?: string; type?: string; value?: number; over?: number; under?: number }>;
-      firstBlood?: { yes?: number; no?: number; 1?: number; 2?: number };
-      markets?: Array<{ name?: string; outcomes?: Array<{ name?: string; coefficient?: number; value?: number }> }>;
-    }>;
-  };
-  const events: UnifiedBookmakerEvent[] = (raw.events ?? [])
-    .map((e) => {
-      const t1 = num(e.coef1);
-      const t2 = num(e.coef2);
-
-      // Parse kill totals from totals array or markets
-      const killsLines: UnifiedMarketTotal[] = [];
-      for (const t of e.totals ?? []) {
-        const n = (t.name ?? t.type ?? '').toLowerCase();
-        if (n.includes('убийств') || n.includes('kill') || n.includes('фраг')) {
-          const line = num(t.value);
-          const over = num(t.over);
-          const under = num(t.under);
-          if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
-        }
-      }
-      for (const m of e.markets ?? []) {
-        const n = (m.name ?? '').toLowerCase();
-        if ((n.includes('убийств') || n.includes('kill')) && (n.includes('тотал') || n.includes('total'))) {
-          const outcomes = m.outcomes ?? [];
-          for (let i = 0; i + 1 < outcomes.length; i += 2) {
-            const o = outcomes[i];
-            const u = outcomes[i + 1];
-            const lineMatch = (o?.name ?? '').match(/(\d+\.?\d*)/);
-            const line = lineMatch ? parseFloat(lineMatch[1]!) : null;
-            const over = num(o?.coefficient ?? o?.value);
-            const under = num(u?.coefficient ?? u?.value);
-            if (line !== null && over !== null && under !== null) killsLines.push({ line, over, under });
-          }
-        }
-      }
-
-      // Parse first blood
-      const fbRaw = e.firstBlood;
-      const fbYes = fbRaw ? (num(fbRaw.yes) ?? num((fbRaw as { 1?: number })[1])) : null;
-      const fbNo = fbRaw ? (num(fbRaw.no) ?? num((fbRaw as { 2?: number })[2])) : null;
-
-      return {
-        source: 'olimp',
-        eventId: String(e.id ?? ''),
-        team1: e.team1 ?? '',
-        team2: e.team2 ?? '',
-        startsAt: e.date ?? null,
-        status: 'unknown' as const,
-        markets: {
-          ...(t1 && t2 ? { winner: { team1: t1, team2: t2 } } : {}),
-          ...(killsLines.length > 0 ? { totalKills: killsLines } : {}),
-          ...(fbYes !== null && fbNo !== null ? { firstBlood: { yes: fbYes, no: fbNo } } : {}),
-        },
-        updatedAt: new Date().toISOString(),
-      };
-    })
-    .filter((e) => e.team1 && e.team2);
-  return { source: 'olimp', noData: false, events, fetchedAt: new Date().toISOString() };
-}
-
-// ── Bovada (US-licensed, public JSON, без ключа, проходит с Replit-IP) ──
-// Покрывает: winner серии (Moneyline @ Game), winner отдельных карт
-// (Moneyline @ Live Map N), тоталы карт в серии (Total @ Game), ТБ/ТМ киллов
-// (Under/Over Kills @ Live Map N), счёт серии (Correct Score), форы.
-// Используется как живой источник кэфов на Replit, где РФ-буки заблокированы.
-async function adapterBovada(): Promise<SourceResponse> {
-  const url =
-    'https://www.bovada.lv/services/sports/event/coupon/events/A/description/esports/dota-2';
-  const resp = await fetchWithProxy(url, {
-    Origin: 'https://www.bovada.lv',
-    Referer: 'https://www.bovada.lv/sports/esports/dota-2',
-  });
-  if (!resp.ok) throw new Error(`Bovada HTTP ${resp.status}`);
-  const raw = (await resp.json()) as Array<{
-    events?: Array<{
-      id?: string | number;
-      description?: string;
-      startTime?: number;
-      competitors?: Array<{ name?: string; home?: boolean }>;
-      displayGroups?: Array<{
-        description?: string;
-        markets?: Array<{
-          description?: string;
-          period?: { description?: string };
-          outcomes?: Array<{
-            description?: string;
-            price?: { decimal?: string | number; handicap?: string | number };
-          }>;
-        }>;
-      }>;
-    }>;
-  }>;
-
-  const events: UnifiedBookmakerEvent[] = [];
-  for (const chunk of raw) {
-    for (const e of chunk.events ?? []) {
-      const competitors = (e.competitors ?? []).map((c) => c.name ?? '').filter(Boolean);
-      if (competitors.length < 2) continue;
-      const t1Name = competitors[0]!;
-      const t2Name = competitors[1]!;
-
-      const winner: UnifiedMarketWinner | undefined = (() => {
-        for (const grp of e.displayGroups ?? []) {
-          for (const m of grp.markets ?? []) {
-            const mDesc = (m.description ?? '').toLowerCase();
-            const pDesc = (m.period?.description ?? '').toLowerCase();
-            // Period names: "Game" (prematch), "Live Game" (live), "Full Game", etc.
-            // Exclude per-map periods like "Map 1", "Live Map 2".
-            const isGameLevel = pDesc.includes('game') && !pDesc.includes('map');
-            if (mDesc === 'moneyline' && isGameLevel) {
-              const o1 = num(m.outcomes?.[0]?.price?.decimal);
-              const o2 = num(m.outcomes?.[1]?.price?.decimal);
-              if (o1 && o2) return { team1: o1, team2: o2 };
-            }
-          }
-        }
-        return undefined;
-      })();
-
-      const mapWinners: UnifiedMarketMapWinner[] = [];
-      const totalKills: UnifiedMarketTotal[] = [];
-      const totalMaps: UnifiedMarketTotal[] = [];
-      const correctScore: UnifiedMarketCorrectScore[] = [];
-
-      for (const grp of e.displayGroups ?? []) {
-        for (const m of grp.markets ?? []) {
-          const desc = (m.description ?? '').toLowerCase();
-          const period = (m.period?.description ?? '').toLowerCase();
-          const outcomes = m.outcomes ?? [];
-
-          // Map-level winner: "Moneyline" @ "Map N"
-          const mapMatch = period.match(/^map (\d+)$/);
-          if (mapMatch && desc === 'moneyline' && outcomes.length >= 2) {
-            const o1 = num(outcomes[0]?.price?.decimal);
-            const o2 = num(outcomes[1]?.price?.decimal);
-            if (o1 && o2) mapWinners.push({ map: Number(mapMatch[1]), team1: o1, team2: o2 });
-          }
-
-          // Total maps in series: "Total" @ "Game"
-          if (desc === 'total' && period === 'game') {
-            for (let i = 0; i < outcomes.length; i += 2) {
-              const over = outcomes[i];
-              const under = outcomes[i + 1];
-              const line = num(over?.price?.handicap);
-              const o = num(over?.price?.decimal);
-              const u = num(under?.price?.decimal);
-              if (line && o && u) totalMaps.push({ line, over: o, under: u });
-            }
-          }
-
-          // Per-map kills total: "Under/Over Kills" @ "Map N"
-          if (mapMatch && desc === 'under/over kills') {
-            for (let i = 0; i < outcomes.length; i += 2) {
-              const over = outcomes[i];
-              const under = outcomes[i + 1];
-              const line = num(over?.price?.handicap);
-              const o = num(over?.price?.decimal);
-              const u = num(under?.price?.decimal);
-              if (line && o && u) totalKills.push({ line, over: o, under: u });
-            }
-          }
-
-          // Correct score for series: "Correct Score" @ "Game"
-          if (desc === 'correct score' && period === 'game') {
-            for (const oc of outcomes) {
-              const score = (oc.description ?? '').replace(/\s+/g, '');
-              const price = num(oc.price?.decimal);
-              if (score && price) correctScore.push({ score, price });
-            }
-          }
-        }
-      }
-
-      const markets: UnifiedBookmakerEvent['markets'] = {};
-      if (winner) markets.winner = winner;
-      if (mapWinners.length) markets.mapWinners = mapWinners;
-      if (totalKills.length) markets.totalKills = totalKills;
-      if (totalMaps.length) markets.totalMaps = totalMaps;
-      if (correctScore.length) markets.correctScore = correctScore;
-
-      events.push({
-        source: 'bovada',
-        eventId: String(e.id ?? ''),
-        team1: t1Name,
-        team2: t2Name,
-        startsAt: e.startTime ? new Date(e.startTime).toISOString() : null,
-        status: 'unknown',
-        markets,
-        updatedAt: new Date().toISOString(),
-      });
+  const base='https://www.olimp.bet/api/v4/0';
+  const events: UnifiedBookmakerEvent[]=[];
+  // Both feeds are background-only. Full detail is bounded to 24 Dota events
+  // per feed/cycle, two in flight, so market completeness never causes a flood.
+  for(const phase of ['line','live'] as const){
+    const response=await fetchWithProxy(base+'/'+phase+'/sports-with-competitions-with-events?vids%5B%5D=112%3A',SOURCE_REFERERS.olimp);
+    if(!response.ok)throw new Error('Olimp HTTP '+response.status);
+    const raw=await response.json();
+    const receipt=new Date().toISOString();
+    const summaries=parseOlimp(raw,phase==='live',receipt);
+    for(let offset=0;offset<summaries.length;offset+=2){
+      const group=summaries.slice(offset,Math.min(offset+2,24));
+      if(!group.length)break;
+      const details=await Promise.all(group.map(async event=>{
+        const r=await fetchWithProxy(base+'/'+phase+'/events?'+new URLSearchParams({'vids[]':event.eventId+':',main:'false'}),SOURCE_REFERERS.olimp);
+        if(!r.ok)throw new Error('Olimp HTTP '+r.status);
+        return parseOlimp(await r.json(),phase==='live',new Date().toISOString());
+      }));
+      events.push(...details.flat());
+      if(offset+2<summaries.length && offset+2<24)await new Promise(resolve=>setTimeout(resolve,250));
     }
+    events.push(...summaries.slice(24));
   }
-  return { source: 'bovada', noData: events.length === 0, events, fetchedAt: new Date().toISOString() };
+  return {source:'olimp',noData:events.length===0,events,fetchedAt:new Date().toISOString()};
 }
+
+async function adapterBovada(): Promise<SourceResponse> {
+  const response=await fetchWithProxy(SOURCE_URLS.bovada!,SOURCE_REFERERS.bovada);
+  if(!response.ok)throw new Error('Bovada HTTP '+response.status);
+  const raw=await response.json(),receivedAt=new Date().toISOString();
+  const events=parseBovada(raw,receivedAt);
+  return {source:'bovada',noData:events.length===0,events,fetchedAt:receivedAt};
+}
+
 
 // URL-ы держим в отдельной таблице, чтобы probe-эндпоинт мог дёргать ровно тот
 // же URL что и адаптер (без парсинга).
 const SOURCE_URLS: Record<string, string> = {
-  fonbet: 'https://line34.fonbet.ru/api/v1/line/sport/events?sport=12&count=50',
+  fonbet: 'https://line-lb51.bk6bba-resources.com/events/listBase?scopeMarket=1600&lang=ru',
   liga_stavok:
     'https://line.ligastavok.ru/lsbets/api/v3/line/championships?sportFamilyKind=Esports&take=200',
-  pari: 'https://pari.ru/api/v3/line/events?sportId=33&take=200',
+  pari: 'https://line-lb51-w.pb06e2-resources.com/events/list?scopeMarket=2300&lang=ru',
   betboom: 'https://betboom.ru/api/v3/sports/40/line?take=200',
   x1stavka:
     'https://1xstavka.ru/LineFeed/Get1x2_VZip?sports=1620&count=200&lng=ru&mode=4&country=1&getEmpty=true',
-  olimp: 'https://www.olimp.bet/ru/api/lines/get_events?sport=cybersport&subsport=dota-2&take=200',
+  olimp: 'https://www.olimp.bet/api/v4/0/line/sports-with-competitions-with-events?vids%5B%5D=112%3A',
   bovada:
     'https://www.bovada.lv/services/sports/event/coupon/events/A/description/esports/dota-2',
 };
@@ -806,7 +536,10 @@ const SOURCE_NAMES: Record<string, string> = {
 };
 
 export const KNOWN_SOURCE_IDS = Object.keys(ADAPTERS);
-export function getAllSourceIds(): string[] { return Object.keys(ADAPTERS); }
+function isSourceAllowed(id: string): boolean {
+  return sourceAllowlist === null || sourceAllowlist.has(id);
+}
+export function getAllSourceIds(): string[] { return KNOWN_SOURCE_IDS.filter(isSourceAllowed); }
 export function isBookmakersEnabled(): boolean { return BOOKMAKERS_ENABLED; }
 export function getSourceName(id: string): string {
   return SOURCE_NAMES[id] ?? id;
@@ -828,8 +561,30 @@ function disabledResponse(source: string): SourceResponse {
   };
 }
 
+/** Read-only public view: a cache miss/expiry never polls a bookmaker. */
+export async function readSource(source: string): Promise<SourceResponse> {
+  if (!BOOKMAKERS_ENABLED) return disabledResponse(source);
+  if (!isSourceAllowed(source)) return {source, noData: true, events: [], fetchedAt: '', unavailable: true, error: 'SOURCE_DISABLED'};
+  const cached = cache[source];
+  if (!cached) return {source, noData: true, events: [], fetchedAt: '', unavailable: true, stale: true, error: 'background_feed_not_ready'};
+  return {...cached.value,
+    events:cached.value.events.map(event=>({...event,expiresAt:bookmakerEventExpiresAt(event)})),
+    stale: Boolean(cached.value.error) || Date.now() - cached.fetchedAt >= CACHE_TTL_MS};
+}
+
+/** Worker/admin refresh only. Public handlers use readSource. */
 export async function fetchSource(source: string, opts?: { force?: boolean }): Promise<SourceResponse> {
   if (!BOOKMAKERS_ENABLED) return disabledResponse(source);
+  if (KNOWN_SOURCE_IDS.includes(source) && !isSourceAllowed(source)) {
+    return {
+      source,
+      noData: true,
+      events: [],
+      fetchedAt: new Date().toISOString(),
+      error: 'SOURCE_DISABLED',
+      hint: 'Источник выключен настройкой BOOKMAKER_SOURCES на этом инстансе.',
+    };
+  }
 
   const cached = getCached(source);
   if (cached && !opts?.force) return cached;
@@ -858,7 +613,8 @@ export async function fetchSource(source: string, opts?: { force?: boolean }): P
 
   const startedAt = Date.now();
   try {
-    const result = await adapter();
+    const result = await fetchAdapterWithRetry(adapter);
+    if (result.error) throw new Error(result.error);
     const durationMs = Date.now() - startedAt;
     bookmakerLogger.info(
       { tag: 'bookmaker', source, events: result.events.length, durationMs, error: result.error ?? null },
@@ -872,18 +628,49 @@ export async function fetchSource(source: string, opts?: { force?: boolean }): P
     const errMsg = err instanceof Error ? err.message : String(err);
     { const c = getCounter(source); c.requestsTotal += 1; c.lastStatus = { ok: false, events: 0, error: errMsg, checkedAt: new Date().toISOString(), durationMs }; }
     bookmakerLogger.warn({ tag: 'bookmaker', source, durationMs, err: errMsg }, '[bookmaker] fetch failed');
+    const previous = cache[source]?.value;
     const fail: SourceResponse = {
       source,
-      noData: true,
-      events: [],
-      fetchedAt: new Date().toISOString(),
+      noData: !previous?.events.length,
+      events: previous?.events ?? [],
+      fetchedAt: previous?.fetchedAt ?? '',
+      stale: true,
+      unavailable: !previous?.fetchedAt,
       error: errMsg,
-      hint: 'Источник недоступен с текущего IP. РФ-буки требуют РФ-IP (см. docs/laptop-deploy.md § Букмекеры).',
+      hint: 'Источник не обновлён: см. точную ошибку HTTP, формата ответа или соединения. Предыдущие коэффициенты считаются устаревшими.',
     };
     // даже фейлы кэшируем коротко, чтобы не долбить упавший источник
     setCached(source, fail);
     return fail;
   }
+}
+
+// Aggregate response time must not masquerade as the source's receipt time.
+function latestSourceReceipt(sources: SourceResponse[]): string | null {
+  return sources.map(s => s.fetchedAt).filter(Boolean).sort().at(-1) ?? null;
+}
+
+/** Only valid current observations may be offered for odds/edge calculations. */
+const LIVE_QUOTE_MAX_AGE_MS=195_000; // 180s polling + bounded 15s network jitter.
+export function bookmakerEventExpiresAt(event: UnifiedBookmakerEvent, now=Date.now()): string {
+  const received=Date.parse(event.receivedAt??event.updatedAt);
+  if(!Number.isFinite(received))return '';
+  const scheduled=event.startsAt?Date.parse(event.startsAt):NaN;
+  const expires=event.status==='upcoming' && scheduled>now
+    ? Math.min(received+3_600_000,scheduled)
+    : received+LIVE_QUOTE_MAX_AGE_MS;
+  return new Date(expires).toISOString();
+}
+
+export function usableBookmakerEvents(source: SourceResponse): UnifiedBookmakerEvent[] {
+  if (source.error || source.unavailable || source.stale) return [];
+  const now=Date.now(), received=Date.parse(source.fetchedAt);
+  return source.events.filter(event=>{
+    const updated=Date.parse(event.updatedAt);
+    const expires=Date.parse(bookmakerEventExpiresAt(event,now));
+    return Number.isFinite(received) && Number.isFinite(updated)
+      && now-received>=0 && now-updated>=0 && now<expires;
+  });
 }
 
 // ---------- Routes ----------
@@ -904,7 +691,7 @@ router.get('/status', async (_req, res) => {
     const cached = cache[id]?.value;
     sources[id] = {
       name: SOURCE_NAMES[id] ?? id,
-      available: BOOKMAKERS_ENABLED,
+      available: BOOKMAKERS_ENABLED && isSourceAllowed(id) && !!cached && usableBookmakerEvents(cached).length>0,
       cached: !!getCached(id),
       ...(cached?.fetchedAt ? { lastFetchedAt: cached.fetchedAt } : {}),
       ...(cached ? { eventsCount: cached.events.length } : {}),
@@ -915,10 +702,11 @@ router.get('/status', async (_req, res) => {
   res.json({
     enabled: BOOKMAKERS_ENABLED,
     cacheTtlMs: CACHE_TTL_MS,
+    failureCacheTtlMs: FAILURE_CACHE_TTL_MS,
     sources,
     worker: getBookmakerWorkerStats(),
     note: BOOKMAKERS_ENABLED
-      ? 'Букмекерские источники активны. РФ-буки доступны только с РФ-IP (см. docs/laptop-deploy.md).'
+      ? 'Обновление выполняется только фоновым воркером. Доступность подтверждается корректным ответом источника; количество событий показывает фактическое покрытие Dota 2.'
       : 'Букмекерский функционал выключен. Установите BOOKMAKERS_ENABLED=true в ENV.',
   });
 });
@@ -930,6 +718,7 @@ router.get('/status', async (_req, res) => {
 // Используется мобилкой для отображаемых матчей: один lookup на матч (или
 // несколько в параллель, всё из in-memory кэша — без апстрим-нагрузки).
 router.get('/for-match', async (req, res) => {
+  const {sameTeamIdentity} = await import('../services/BookmakerMatcher');
   if (!BOOKMAKERS_ENABLED) {
     res.status(503).json({ enabled: false, error: 'BOOKMAKERS_ENABLED=false' });
     return;
@@ -943,7 +732,7 @@ router.get('/for-match', async (req, res) => {
     return;
   }
   const wantPair = pairKey(team1, team2);
-  const all = await Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s)));
+  const all = await Promise.all(getAllSourceIds().map((s) => readSource(s)));
   const sources: Array<{
     source: string;
     eventId: string;
@@ -951,25 +740,31 @@ router.get('/for-match', async (req, res) => {
     status: UnifiedBookmakerEvent['status'];
     markets: UnifiedBookmakerEvent['markets'];
     flipped: boolean;
+    updatedAt: string;
+    fetchedAt: string;
+    receivedAt: string;
+    scope: 'series' | 'map';
+    expiresAt: string;
   }> = [];
   for (const src of all) {
     if (!src.events.length) continue;
-    for (const ev of src.events) {
-      if (!fuzzyPairMatch(ev.team1, ev.team2, team1, team2)) continue;
+    for (const ev of usableBookmakerEvents(src)) {
+      const direct=sameTeamIdentity(ev.team1,team1)&&sameTeamIdentity(ev.team2,team2);
+      const reverse=sameTeamIdentity(ev.team1,team2)&&sameTeamIdentity(ev.team2,team1);
+      if (direct === reverse) continue;
+      const requestedStart = Date.parse(String(req.query.startsAt ?? ''));
+      const eventStart = ev.startsAt ? Date.parse(ev.startsAt) : NaN;
+      if (!Number.isFinite(requestedStart) || !Number.isFinite(eventStart) || Math.abs(requestedStart-eventStart)>2*3600000) continue;
       // Определяем ориентацию: совпадает ли ev.team1 с запрошенным team1 (fuzzy)
-      const sameOrder = fuzzyTeamMatch(ev.team1, team1);
-      const markets: UnifiedBookmakerEvent['markets'] = sameOrder
-        ? ev.markets
-        : {
-            ...(ev.markets.winner
-              ? { winner: { team1: ev.markets.winner.team2, team2: ev.markets.winner.team1 } }
-              : {}),
-            ...(ev.markets.totalKills ? { totalKills: ev.markets.totalKills } : {}),
-            ...(ev.markets.totalDuration ? { totalDuration: ev.markets.totalDuration } : {}),
-            ...(ev.markets.firstBlood ? { firstBlood: ev.markets.firstBlood } : {}),
-          };
+      const sameOrder = direct;
+      const markets=orientBookmakerMarkets(ev.markets,!sameOrder);
       sources.push({
         source: ev.source,
+        updatedAt: ev.updatedAt,
+        fetchedAt: src.fetchedAt,
+        receivedAt: ev.receivedAt ?? ev.updatedAt,
+        scope: ev.scope ?? 'series',
+        expiresAt: bookmakerEventExpiresAt(ev),
         eventId: ev.eventId,
         startsAt: ev.startsAt,
         status: ev.status,
@@ -979,14 +774,15 @@ router.get('/for-match', async (req, res) => {
     }
   }
   const sourcesPolled = all.map((s) => ({ source: s.source, events: s.events.length, error: s.error ?? null }));
+  const verifiedSources = unambiguousSourceEvents(sources);
   res.json({
     enabled: true,
-    found: sources.length > 0,
+    found: verifiedSources.length > 0,
     team1,
     team2,
     team1Id,
     team2Id,
-    sources,
+    sources: verifiedSources,
     sourcesPolled,
   });
 });
@@ -1025,13 +821,14 @@ router.get('/merged/dota2', async (_req, res) => {
     });
     return;
   }
-  const all = await Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s)));
+  const all = await Promise.all(getAllSourceIds().map((s) => readSource(s)));
   const byPair = new Map<string, MergedEvent>();
   for (const src of all) {
     if (!src.events.length) continue;
-    for (const ev of src.events) {
+    for (const ev of usableBookmakerEvents(src)) {
       const orientation = normalizeTeamName(ev.team1) < normalizeTeamName(ev.team2);
-      const key = pairKey(ev.team1, ev.team2);
+      if (!ev.startsAt || !Number.isFinite(Date.parse(ev.startsAt))) continue;
+      const key = pairKey(ev.team1, ev.team2)+'|'+ev.startsAt;
       const team1 = orientation ? ev.team1 : ev.team2;
       const team2 = orientation ? ev.team2 : ev.team1;
       const winner = ev.markets.winner
@@ -1064,7 +861,8 @@ router.get('/merged/dota2', async (_req, res) => {
   }
   res.json({
     enabled: true,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: latestSourceReceipt(all),
+    stale: all.some(source => source.stale || source.error),
     count: byPair.size,
     events: Array.from(byPair.values()),
   });
@@ -1165,11 +963,12 @@ router.get('/all/dota2', async (_req, res) => {
     });
     return;
   }
-  const results = await Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s)));
+  const results = await Promise.all(getAllSourceIds().map((s) => readSource(s)));
   res.json({
     enabled: true,
     sources: results,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: latestSourceReceipt(results),
+    stale: results.some(source => source.stale || source.error),
   });
 });
 
@@ -1216,7 +1015,7 @@ router.get('/matched/dota2', async (req, res) => {
 
   // Тянем все источники + наши матчи параллельно
   const [all, liveData, upcomingData] = await Promise.all([
-    Promise.all(Object.keys(ADAPTERS).map((s) => fetchSource(s))),
+    Promise.all(getAllSourceIds().map((s) => readSource(s))),
     loopbackGet<unknown>('/api/matches/live'),
     loopbackGet<unknown>('/api/matches/upcoming'),
   ]);
@@ -1248,7 +1047,7 @@ router.get('/matched/dota2', async (req, res) => {
   // Объединяем все букмекерские события в один плоский массив
   const bookmakerEvents: UnifiedBookmakerEvent[] = [];
   for (const src of all) {
-    bookmakerEvents.push(...src.events);
+    bookmakerEvents.push(...usableBookmakerEvents(src));
   }
 
   // Конвертируем PandaScore-формат матчей в OurMatch
@@ -1289,7 +1088,8 @@ router.get('/matched/dota2', async (req, res) => {
       team2Name: t2,
       team1Id: typeof m['team_id_radiant'] === 'number' ? (m['team_id_radiant'] as number) : undefined,
       team2Id: typeof m['team_id_dire'] === 'number' ? (m['team_id_dire'] as number) : undefined,
-      startsAt: null, // live уже идёт — окно ±2ч не применяем
+      startsAt: null, // No verified series start: do not attach series odds to this map.
+      scope: 'map',
       isLive: true,
     };
   }
@@ -1306,7 +1106,7 @@ router.get('/matched/dota2', async (req, res) => {
     [m.team1Name, m.team2Name]
       .map(n => n.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, ''))
       .sort()
-      .join('::');
+      .join('::')+'::'+m.matchId;
   const pushUnique = (m: OurMatch): void => {
     if (m.psMatchId != null && seenPsIds.has(m.psMatchId)) return;
     const key = pairKey(m);
@@ -1331,9 +1131,9 @@ router.get('/matched/dota2', async (req, res) => {
 
   // Неприматченные букмекерские события (нет в нашей БД матчей)
   const matchedEventIds = new Set(
-    matched.flatMap(g => g.bookmakerSources.map(s => s.eventId)),
+    matched.flatMap(g => g.bookmakerSources.map(s => s.source+':'+s.eventId)),
   );
-  const unmatched = bookmakerEvents.filter(ev => !matchedEventIds.has(ev.eventId));
+  const unmatched = bookmakerEvents.filter(ev => !matchedEventIds.has(ev.source+':'+ev.eventId));
 
   const sourcesPolled = all.map((s) => ({ source: s.source, events: s.events.length, error: s.error ?? null }));
 
@@ -1352,7 +1152,8 @@ router.get('/matched/dota2', async (req, res) => {
   );
   res.json({
     enabled: true,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: latestSourceReceipt(all),
+    stale: all.some(source => source.stale || source.error),
     sourcesPolled,
     count: matched.length,
     matched,
@@ -1368,7 +1169,7 @@ for (const id of Object.keys(ADAPTERS)) {
       res.status(503).json(disabledResponse(id));
       return;
     }
-    const result = await fetchSource(id);
+    const result = await readSource(id);
     res.json(result);
   });
 }

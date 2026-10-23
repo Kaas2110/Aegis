@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * backfill:live-snapshots
  *
@@ -59,17 +60,13 @@ async function fetchMatchDetail(matchId: number): Promise<OpenDotaMatchDetail | 
       console.warn(`  [backfill] ${matchId}: not found`);
       return null;
     }
-    if (resp.status === 429) {
-      console.warn(`  [backfill] rate limited — sleeping 15s`);
-      await sleep(15_000);
-      return null;
-    }
     if (!resp.ok) {
       console.warn(`  [backfill] ${matchId}: HTTP ${resp.status}`);
       return null;
     }
     return (await resp.json()) as OpenDotaMatchDetail;
   } catch (err) {
+    if (err instanceof OdQuotaExhaustedError) throw err;
     console.warn(`  [backfill] ${matchId}: fetch error — ${(err as Error).message}`);
     return null;
   }

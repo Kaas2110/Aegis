@@ -35,7 +35,7 @@ export const KNOWN_INTEGRATIONS: IntegrationDescriptor[] = [
     label: 'Stratz API',
     description: 'Основной источник picks/bans, account_ids и hero-stats (Captains Mode). 250 req/min / 20k req/day на токен. Поддерживается пул через запятую: tok1,tok2,tok3 — лимиты на токен суммируются (×N throughput).',
     docUrl: 'https://stratz.com/api',
-    howToGet: 'Войдите через Steam на stratz.com → раздел API → «Generate Token». Токен выдаётся мгновенно, бесплатно. Для пула: зарегистрируйте дополнительные Steam-аккаунты и получите по токену с каждого — впишите через запятую.',
+    howToGet: 'Войдите через Steam на stratz.com → раздел API → «Generate Token». Укажите один основной токен. Aegis отправляет обязательный User-Agent: STRATZ_API и соблюдает общий локальный лимит запросов.',
     category: 'data-source',
     sensitive: true,
   },
@@ -175,36 +175,9 @@ export function getApiKey(envName: string): string {
   return process.env[envName] ?? '';
 }
 
-// ---------------------------------------------------------------------------
-// Stratz multi-token pool
-// ---------------------------------------------------------------------------
-// `STRATZ_TOKEN` поддерживает comma-separated пул (см. scripts/src/lib/stratz.ts).
-// В api-server используется для одного «лёгкого» вызова `/League/live` раз в 60s,
-// поэтому здесь достаточно простого round-robin без cooldown-логики — если
-// один токен сорвался, на следующем тике возьмём следующий, а ingest-скрипты
-// (где основная нагрузка) сами разруливают 429 через свой пул.
-
-let stratzRrIndex = 0;
-
-/**
- * Возвращает один токен Stratz из пула (round-robin между вызовами).
- * Если пул пуст — возвращает пустую строку (caller проверяет).
- */
+/** Primary STRATZ token only. Additional accounts never multiply the budget. */
 export function getStratzToken(): string {
-  // Собираем пул из STRATZ_TOKEN (может быть comma-sep), STRATZ_TOKEN_2 … _10
-  const seen = new Set<string>();
-  const tokens: string[] = [];
-  const envNames = ['STRATZ_TOKEN', ...Array.from({ length: 9 }, (_, i) => `STRATZ_TOKEN_${i + 2}`)];
-  for (const name of envNames) {
-    const raw = getApiKey(name);
-    for (const tok of raw.split(',').map((s) => s.trim())) {
-      if (tok.length > 0 && !seen.has(tok)) { seen.add(tok); tokens.push(tok); }
-    }
-  }
-  if (tokens.length === 0) return '';
-  const token = tokens[stratzRrIndex % tokens.length]!;
-  stratzRrIndex = (stratzRrIndex + 1) % tokens.length;
-  return token;
+  return getApiKey('STRATZ_TOKEN').split(',')[0]!.trim();
 }
 
 /** Прогревает кеш на старте api-server. Не fatal при ошибке. */

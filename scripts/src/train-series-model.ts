@@ -22,7 +22,7 @@
  *   12 pick_strangeness_b
  *
  * Label: A выигрывает серию. Обучение через ml-service POST /train
- * (classification + isotonic calibration), атомарный swap kind='series_mid'.
+ * (classification + isotonic calibration), inactive/unvalidated candidate kind='series_mid'.
  *
  * Анти-leakage: drop-rate считается по ВСЕМ сериям минус вклад текущей серии.
  *
@@ -41,6 +41,7 @@ import {
 } from '@workspace/db';
 import { eq, and, inArray } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? 'http://localhost:8090';
 const ML_TOKEN_FILE = '/tmp/aegis_ml_token';
@@ -95,6 +96,7 @@ function mapWinnerTeamId(m: MapEntry): number {
 }
 
 async function main(): Promise<void> {
+  assertCandidateOnlyArgs();
   const minIdx = process.argv.indexOf('--min-samples');
   const minSamples = minIdx !== -1 && process.argv[minIdx + 1]
     ? parseInt(process.argv[minIdx + 1], 10) : MIN_SAMPLES_DEFAULT;
@@ -410,10 +412,7 @@ async function main(): Promise<void> {
 
   const blob = Buffer.from(data.blob_b64, 'base64');
   const version = `lgbm-${KIND}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
-  await db.transaction(async (tx) => {
-    await tx.update(modelVersionsTable).set({ isActive: false })
-      .where(and(eq(modelVersionsTable.kind, KIND), eq(modelVersionsTable.isActive, true)));
-    await tx.insert(modelVersionsTable).values({
+  await saveLegacyCandidates(db, [{
       version,
       kind: KIND,
       featuresVersion: 1,
@@ -438,10 +437,12 @@ async function main(): Promise<void> {
         blobBytes: blob.length,
         globalDropRate,
       },
-      isActive: true,
-    });
+      isActive: false,
+    }], {
+    trainer: 'train-series-model', seed: 42,
+    limitations: ['future_series_drop_rate', 'future_rating_snapshot_fallback', 'current_player_hero_aggregates', 'shared_early_stop_calibration_set'],
   });
-  console.log(`[train-series-model] ✅ activated ${version} (blob=${blob.length}b)`);
+  console.log(`[train-series-model] Saved inactive, unvalidated candidate ${version} (blob=${blob.length}b); active models unchanged`);
   process.exit(0);
 }
 

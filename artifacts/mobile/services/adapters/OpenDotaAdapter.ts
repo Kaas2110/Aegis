@@ -1,6 +1,8 @@
+import { apiFetch } from '../../lib/api';
+import { readLiveDataQuality, observedLiveStateEligible } from '../../lib/liveFreshness';
 import type { RealLiveMatchData, RealUpcomingMatchData } from './types';
 
-const API_BASE = '/api/matches';
+
 
 export class OpenDotaAdapter {
   id = 'opendota';
@@ -8,7 +10,7 @@ export class OpenDotaAdapter {
 
   async isAvailable(): Promise<boolean> {
     try {
-      const resp = await fetch(`${API_BASE}/live`);
+      const resp = await apiFetch(`/api/matches/live`);
       if (!resp.ok) return false;
       const data = (await resp.json()) as { sources?: Array<{ source?: string; error?: string }> };
       const src = data.sources?.find(s => s.source === 'opendota');
@@ -19,7 +21,7 @@ export class OpenDotaAdapter {
   }
 
   async fetchLiveMatches(): Promise<{ noData: boolean; data: RealLiveMatchData[] }> {
-    const resp = await fetch(`${API_BASE}/live`);
+    const resp = await apiFetch(`/api/matches/live`);
     const result = (await resp.json()) as {
       noData: boolean;
       sources: Array<{ source: string; data: unknown; error?: string }>;
@@ -38,6 +40,7 @@ export class OpenDotaAdapter {
 
     // Real OpenDota /api/live fields (no scoreboard — flat structure)
     const normalized: RealLiveMatchData[] = (rawData as Array<{
+      live_freshness?: unknown;
       match_id?: number;
       team_name_radiant?: string;
       team_name_dire?: string;
@@ -48,7 +51,7 @@ export class OpenDotaAdapter {
       dire_score?: number;
       game_time?: number;
       spectators?: number;
-    }>).map(m => ({
+    }>).filter(m => observedLiveStateEligible(readLiveDataQuality(m.live_freshness))).map(m => ({
       matchId: String(m.match_id ?? 'unknown'),
       team1: m.team_name_radiant ?? 'Без названия',
       team2: m.team_name_dire ?? 'Без названия',
@@ -60,11 +63,11 @@ export class OpenDotaAdapter {
       source: this.id,
     }));
 
-    return { noData: false, data: normalized };
+    return { noData: normalized.length === 0, data: normalized };
   }
 
   async fetchUpcomingMatches(): Promise<{ noData: boolean; data: RealUpcomingMatchData[] }> {
-    const resp = await fetch(`${API_BASE}/upcoming`);
+    const resp = await apiFetch(`/api/matches/upcoming`);
     const result = (await resp.json()) as {
       noData: boolean;
       data: RealUpcomingMatchData[];

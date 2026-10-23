@@ -33,10 +33,13 @@ import {
 } from '../services/SchedulerWorker';
 import { getModelAccuracyMetrics, pruneLiveSnapshots } from '../services/OutcomeTracker';
 import { getHeartbeats as getWorkerHeartbeats } from '../services/workerHeartbeats';
+import { prematchValidationCte, PREMATCH_VALIDATION_POLICY } from '../lib/prematchValidation';
 import { currentFeatureViewFor } from '@workspace/db';
+import { modelPromotionDecision } from '../services/ModelPromotionPolicy';
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
+import { pnpmCommand } from '../lib/processCommand';
 import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, getSourceTrackers, ENV_NAME_TO_SOURCE, type SourceProbeResult } from './bookmakers';
 import { clearResponseCache } from '../lib/responseCache';
 import {
@@ -60,6 +63,12 @@ import {
 } from '@workspace/db';
 import { desc, eq, sql } from 'drizzle-orm';
 import { getOdUsageStats } from '../lib/openDotaUrl';
+import { readCandidatePlannerCurrent } from '../services/CandidatePlannerCurrent';
+import { exactHazardCurrent, readReviewedExactHazard } from '../services/ExactHazardCurrent';
+import { readServingOutcomeMetadata } from '../services/ServingOutcomeGuard';
+import { readProviderFeed } from '../services/ProviderFeeds';
+import { readSource, usableBookmakerEvents } from './bookmakers';
+import { pool } from '@workspace/db';
 
 // ── F3: In-memory job store for one-shot admin script runs ──────────────────
 interface AdminJob {
@@ -105,6 +114,25 @@ const router: IRouter = Router();
 
 // Cookie session required (see adminAuth.ts).
 router.use(requireAdminSession);
+
+// Read saved planning status only; this GET never invokes collection or training.
+router.get('/candidate-planner/current', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(readCandidatePlannerCurrent());
+});
+
+// Authenticated, read-only inspection of an explicitly pinned saved candidate.
+// No input paths/odds, no model dispatch, no provider refresh and no response cache.
+router.get('/exact-hazard/current', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const result = await exactHazardCurrent(req.query, {
+    readSaved: readReviewedExactHazard,
+    outcome: id => readServingOutcomeMetadata(pool, id),
+    readFeed: readProviderFeed,
+    readEvents: async id => usableBookmakerEvents(await readSource(id)),
+  });
+  res.json(result);
+});
 
 router.get('/settings', async (_req, res) => {
   const settings = await getAppSettings(true);
@@ -607,11 +635,11 @@ router.get('/models', async (_req, res) => {
 
 /**
  * GET /api/admin/od-usage
- * Расход OpenDota API-ключа (in-memory счётчик, сбрасывается при рестарте).
- * Точный счёт — на api.opendota.com/dashboard.
+ * Общий персистентный бюджет OpenDota для local API и scripts.
  */
-router.get('/od-usage', (_req, res) => {
-  res.json(getOdUsageStats());
+router.get('/od-usage', async (_req, res) => {
+  try { res.json(await getOdUsageStats()); }
+  catch { res.status(503).json({ error: 'OpenDota budget ledger unavailable' }); }
 });
 
 /**
@@ -689,12 +717,14 @@ router.get('/coverage', async (_req, res) => {
       .from(liveSnapshotsTable)
       .where(sql`${liveSnapshotsTable.capturedAt} >= ${ts24hAgo}`),
 
-    // Prematch outcomes (для разблокировки live-train)
-    db.select({
-      total: sql<number>`COUNT(*)::int`,
-      last30d: sql<number>`COUNT(*) FILTER (WHERE ${prematchOutcomesTable.predictedAt} >= NOW() - INTERVAL '30 days')::int`,
-    })
-      .from(prematchOutcomesTable),
+    // Keep raw coverage separate from the causally validated quality subset.
+    db.execute(sql`${prematchValidationCte()}
+      SELECT COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE predicted_at >= NOW() - INTERVAL '30 days')::int AS "last30d",
+        COUNT(*) FILTER (WHERE validation_reason = 'validated')::int AS validated,
+        COUNT(*) FILTER (WHERE validation_reason = 'validated' AND actual_radiant_win IS NOT NULL)::int AS "validatedResolved",
+        COUNT(*) FILTER (WHERE validation_reason <> 'validated')::int AS unvalidated
+      FROM prematch_validation`).then(result => result.rows as Array<{total: number; last30d: number; validated: number; validatedResolved: number; unvalidated: number}>),
   ]);
 
   const dc = draftsCoverage[0] ?? {};
@@ -751,7 +781,13 @@ router.get('/coverage', async (_req, res) => {
       total: os.total ?? 0,
       last30d: os.last30d ?? 0,
       liveTrainReadyThreshold: 200,
-      liveTrainReady: (os.total ?? 0) >= 200,
+      validated: os.validated ?? 0,
+      validatedResolved: os.validatedResolved ?? 0,
+      unvalidated: os.unvalidated ?? 0,
+      validationPolicy: PREMATCH_VALIDATION_POLICY,
+      liveTrainReady: false,
+      sampleThresholdMet: (os.validatedResolved ?? 0) >= 200,
+      liveTrainReadyReason: 'A row-count threshold alone does not validate live training features or temporal splits',
     },
     generatedAt: now.toISOString(),
   });
@@ -896,8 +932,8 @@ router.post('/jobs/run', (req, res) => {
   adminJobs.set(jobId, job);
 
   const [cmd, cmdArgs] = isShell
-    ? ['bash', [SHELL_SCRIPTS[script]!]] as const
-    : ['pnpm', ['--filter', '@workspace/scripts', 'run', script, ...safeArgs]] as const;
+    ? [process.execPath, [path.join(ADMIN_WORKSPACE_ROOT, 'scripts/run-pipeline.mjs'), script === 'sh:daily' ? 'daily' : 'enrichment']]
+    : pnpmCommand(['--filter', '@workspace/scripts', 'run', script, ...safeArgs]);
   const child = spawn(cmd, cmdArgs, {
     cwd: ADMIN_WORKSPACE_ROOT,
     env: process.env,
@@ -966,12 +1002,18 @@ router.get('/models/history', async (_req, res) => {
       hardMatchBrier: modelVersionsTable.hardMatchBrier,
       hardMatchCount: modelVersionsTable.hardMatchCount,
       isActive: modelVersionsTable.isActive,
+      metadata: modelVersionsTable.metadata,
       createdAt: modelVersionsTable.createdAt,
     })
     .from(modelVersionsTable)
     .orderBy(desc(modelVersionsTable.createdAt))
     .limit(50);
-  res.json({ models: rows });
+  res.json({ models: rows.map(({ metadata, ...row }) => ({
+    ...row,
+    validationStatus: metadata?.validationStatus ?? 'legacy_unvalidated',
+    promotionAllowed: modelPromotionDecision(row.kind,metadata).allowed,
+    evaluationMetrics: metadata?.metrics ?? null,
+  })) });
 });
 
 /**
@@ -986,6 +1028,12 @@ router.post('/models/:id/activate', async (req, res) => {
   const [target] = await db.select().from(modelVersionsTable).where(eq(modelVersionsTable.id, id)).limit(1);
   if (!target) { res.status(404).json({ error: 'model not found' }); return; }
   if (target.isActive) { res.json({ ok: true, alreadyActive: true, activatedId: id, kind: target.kind, engine: target.engine, version: target.version }); return; }
+  const promotion=modelPromotionDecision(target.kind,target.metadata);
+  if(!promotion.allowed){
+    res.status(409).json({ error: 'Этот кандидат ещё не прошёл проверку и не может использоваться для прогнозов.',
+      code: 'MODEL_NOT_VALIDATED',reason:promotion.reason });
+    return;
+  }
 
   await db.transaction(async (tx) => {
     await tx.update(modelVersionsTable)

@@ -41,7 +41,7 @@ async function main() {
     } catch (e) {
       if (e instanceof OdQuotaExhaustedError) {
         console.warn(`[od-hero-benchmarks] ${e.message} — прерываю цикл (failed=${failed})`);
-        break;
+        throw e;
       }
       failed++;
       if (failed <= 5) console.warn(`[od-hero-benchmarks] hero=${heroId} ${(e as Error).message}`);

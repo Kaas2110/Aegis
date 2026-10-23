@@ -3,7 +3,7 @@
  *
  * Поведение для production-deploy «поставил → работает»:
  *  - Каждые 24h: tick — проверка патча, daily refresh (lightweight ingest+compute),
- *    sliding window prune, прюнинг live_snapshots, decision retrain.
+ *    выбор окна обучения и decision retrain. История данных сохраняется.
  *  - Cold start (БД пустая → нет pro_matches): немедленный full retrain pipeline.
  *  - Новый патч: планирует full retrain через 7 дней (даём мете устаканиться).
  *  - Иначе: full retrain раз в 30 дней.
@@ -19,23 +19,25 @@
  */
 
 import { spawn } from 'node:child_process';
+import { pnpmCommand } from '../lib/processCommand';
 import path from 'node:path';
 import { db, schedulerStateTable, proMatchesTable } from '@workspace/db';
 import { recordHeartbeat } from './workerHeartbeats';
-import { eq, lt, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { loadActiveModel } from './PredictionModel';
 import { loadActiveMarketModels } from './MarketLgbm';
 import { loadActiveLiveModel } from './LiveWinnerModel';
 import { loadActiveAsymLiveModel } from './AsymLiveModel';
-import { pruneLiveSnapshots } from './OutcomeTracker';
+import { trainingSinceUnix } from './TrainingWindow';
 import { getAppSettings } from './AppSettings';
 import { withOpenDotaKey, tryAcquireOd } from '../lib/openDotaUrl';
+import { openDotaBackgroundFetch as fetch } from '@workspace/db/opendota';
 
 const DEFAULT_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа — fallback если БД недоступна
 const PATCH_DELAY_DAYS = 7;                     // ждать 7 дней после нового патча
 const REGULAR_RETRAIN_DAYS = 30;                // плановое переобучение раз в месяц
-const TRAIN_WINDOW_DAYS = 365;                  // скользящее окно: храним и тренируем на матчах за 12 мес.
+const TRAIN_WINDOW_DAYS = 365;                  // фильтр обучающей выборки, не срок хранения архива
 const PATCH_API = 'https://api.opendota.com/api/constants/patch';
 
 // Путь к корню workspace, где лежит package.json со scripts.
@@ -108,7 +110,8 @@ async function fetchCurrentPatch(): Promise<OpenDotaPatch | null> {
  * Если запрос патчей не удался — возвращает только windowCutoff.
  */
 async function computeTrainSinceUnix(windowDays: number, maxPatches: number): Promise<number> {
-  const windowCutoff = Math.floor(Date.now() / 1000) - windowDays * 86_400;
+  const windowNowMs = Date.now();
+  const windowCutoff = trainingSinceUnix(windowDays, windowNowMs);
   try {
     if (!tryAcquireOd('background')) throw new Error('OD free budget exhausted');
     const resp = await fetch(withOpenDotaKey(PATCH_API), { headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' } });
@@ -121,7 +124,7 @@ async function computeTrainSinceUnix(windowDays: number, maxPatches: number): Pr
     const patchCutoffMs = Date.parse(sorted[idx].date);
     if (!Number.isFinite(patchCutoffMs)) return windowCutoff;
     const patchCutoff = Math.floor(patchCutoffMs / 1000);
-    const effective = Math.max(windowCutoff, patchCutoff);
+    const effective = trainingSinceUnix(windowDays, windowNowMs, patchCutoff);
     logger.info(
       { windowDays, maxPatches, windowCutoff, patchCutoff, effective, patchName: sorted[idx].name },
       '[Scheduler] computeTrainSinceUnix',
@@ -142,9 +145,10 @@ function runPnpmScript(
   opts: { timeoutMs?: number } = {},
 ): Promise<{ code: number; tail: string; timedOut: boolean }> {
   return new Promise((resolve) => {
+    const [command, commandArgs] = pnpmCommand(['--filter', '@workspace/scripts', 'run', scriptName, ...args]);
     const child = spawn(
-      'pnpm',
-      ['--filter', '@workspace/scripts', 'run', scriptName, ...args],
+      command,
+      commandArgs,
       {
         cwd: WORKSPACE_ROOT,
         env: process.env,
@@ -337,18 +341,13 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
     stepResults['ingest:players-heroes'] = await runScriptSafe('ingest:players-heroes', 'ingest:players-heroes');
     stepResults['ingest:leagues'] = await runScriptSafe('ingest:leagues', 'ingest:leagues', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
 
-    // ── Phase 2: sliding window prune ────────────────────────────────────
+    // ── Phase 2: training window, without deleting the historical corpus ──
     const pipelineSettings = await getAppSettings();
     const trainWindowDaysCfg = pipelineSettings.trainWindowDays ?? TRAIN_WINDOW_DAYS;
-    const cutoffSec = Math.floor(Date.now() / 1000) - trainWindowDaysCfg * 24 * 60 * 60;
-    const deleted = await db
-      .delete(proMatchesTable)
-      .where(lt(proMatchesTable.startTime, cutoffSec))
-      .returning({ matchId: proMatchesTable.matchId });
-    logger.info(
-      { deleted: deleted.length, cutoff: new Date(cutoffSec * 1000).toISOString() },
-      '[Scheduler] sliding window prune',
-    );
+    // Retention is independent of training selection. These rows may be the
+    // only historical dataset available for reproducible comparisons or a
+    // wider future window. Archival/deletion requires a separately verified
+    // archive-and-restore workflow; this scheduler is not such a workflow.
 
     // ── Phase 3: compute (производные таблицы) — все non-fatal ───────────
     stepResults['compute:recent-form'] = await runScriptSafe('compute:recent-form', 'compute:recent-form', [], { timeoutMs: SCRIPT_FAST_TIMEOUT_MS });
@@ -372,7 +371,7 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
       // следующее переобучение отложится на 30 дней и пропуски моделей замаскируются.
       await updateState({
         lastIngestAt: new Date(),
-        notes: { reason, completedAt: new Date().toISOString(), stepResults, prunedOldMatches: deleted.length, dataOnly: true, trainingSkipped: skipTrainingReason },
+        notes: { reason, completedAt: new Date().toISOString(), stepResults, prunedOldMatches: 0, retention: 'archive_preserved', dataOnly: true, trainingSkipped: skipTrainingReason },
       });
       return true;
     }
@@ -476,7 +475,8 @@ async function runRetrainPipeline(reason: string): Promise<boolean> {
         completedAt: new Date().toISOString(),
         trainTail,
         stepResults,
-        prunedOldMatches: deleted.length,
+        prunedOldMatches: 0,
+        retention: 'archive_preserved',
         windowDays: TRAIN_WINDOW_DAYS,
       },
     });
@@ -621,18 +621,10 @@ async function tickOnce(): Promise<void> {
     );
   }
 
-  // 2.5. Раз в сутки чистим live_snapshots по настройке prune_days из app_settings.
-  //      Эта таблица растёт быстро (~1 строка/мин/матч), а исторические данные
-  //      о результатах хранятся отдельно в prematch_outcomes (никогда не чистится).
-  try {
-    const settings = await getAppSettings();
-    const pruned = await pruneLiveSnapshots(settings.liveSnapshotPruneDays);
-    if (pruned > 0) {
-      logger.info({ pruned, days: settings.liveSnapshotPruneDays }, '[Scheduler] daily live_snapshots prune');
-    }
-  } catch (err) {
-    logger.warn({ err: String(err) }, '[Scheduler] live_snapshots prune failed');
-  }
+  // 2.5. Preserve live_snapshots: final outcomes cannot reconstruct the real
+  // in-game feature history. No automatic seven-day deletion is allowed here
+  // without a separately verified archive. liveSnapshotPruneDays is not an
+  // authorization to destroy the only live training corpus.
 
   // 3. Проверяем — пора ли переобучать
   const decision = await shouldRetrainNow(state);

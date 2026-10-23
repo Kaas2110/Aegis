@@ -10,6 +10,11 @@ out-tsc
 
 # dependencies
 node_modules
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
 
 # IDEs and editors
 /.idea
@@ -47,3 +52,26 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local runtime state and fitted candidates are distributed separately.
+/backups/
+/attached_assets/
+/exports/
+**/dist-before-*/
+**/__pycache__/
+*.py[cod]
+*.dump
+*.sqlite*
+*.parquet
+*.npz
+*.npy
+*.joblib
+*.pkl
+*.onnx
+*.log
+artifacts/ml-service/src/research/assets/
+artifacts/ml-service/src/shadow_live_winner/assets/
+artifacts/ml-service/src/shadow_series_rich/assets/models/
+artifacts/ml-service/src/shadow_wide/artifacts/
+artifacts/ml-service/src/research/fixtures/temporal_hero_kills.json
+artifacts/ml-service/tests/fixtures/*train-goldens.json

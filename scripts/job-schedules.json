@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "timezone": "Europe/Moscow",
+  "note": "Windows runs the hourly public-data refresh, including daily Valve-primary and OpenDota-secondary patch catalog checks and at most 8 missing match details, through the shared OpenDota budget. Public Valve checks have their own cooldown and do not use OpenDota quota. Patch checks have an internal 24-hour success cooldown and 1-hour failure retry; they do not enable model training. The separately authorized paid-backfill Windows task runs every10minutes with the shared spend and rate caps; other pipelines remain manual. run-pipeline.mjs executes one pipeline and never installs timers.",
+  "pipelines": {
+    "daily": {
+      "enabled": false,
+      "schedule": {
+        "kind": "daily",
+        "time": "00:30"
+      },
+      "source": "run-daily.sh",
+      "continueOnError": true,
+      "steps": [
+        {
+          "script": "ingest:teams"
+        },
+        {
+          "script": "ingest:missing-teams"
+        },
+        {
+          "script": "ingest:matches",
+          "args": [
+            "5"
+          ]
+        },
+        {
+          "script": "ingest:leagues"
+        },
+        {
+          "script": "ingest:hero-stats"
+        },
+        {
+          "script": "ingest:hero-matchups"
+        },
+        {
+          "script": "ingest:hero-synergy"
+        },
+        {
+          "script": "compute:recent-form"
+        },
+        {
+          "script": "compute:h2h"
+        },
+        {
+          "script": "compute:player-glicko"
+        },
+        {
+          "script": "compute:team-extended"
+        },
+        {
+          "script": "compute:bo3-series"
+        }
+      ]
+    },
+    "hourly": {
+      "enabled": true,
+      "schedule": {
+        "kind": "hourly",
+        "minute": 5
+      },
+      "source": "run-hourly.sh",
+      "continueOnError": true,
+      "steps": [
+        {
+          "script": "patch:check",
+          "optional": true,
+          "skippedExitCodes": [
+            10
+          ]
+        },
+        {
+          "script": "ingest:matches",
+          "args": [
+            "3"
+          ]
+        },
+        {
+          "script": "refresh:match-details",
+          "args": [
+            "8"
+          ]
+        },
+        {
+          "script": "patch:assign",
+          "optional": true,
+          "skippedExitCodes": [
+            10
+          ]
+        },
+        {
+          "script": "compute:recent-form"
+        },
+        {
+          "script": "compute:bo3-series"
+        },
+        {
+          "script": "candidate:plan",
+          "optional": true,
+          "skippedExitCodes": [
+            10
+          ]
+        }
+      ]
+    },
+    "enrichment": {
+      "enabled": false,
+      "schedule": {
+        "kind": "weekly",
+        "weekday": "Sunday",
+        "time": "02:00"
+      },
+      "source": "run-enrichment-pipeline.sh",
+      "continueOnError": true,
+      "steps": [
+        {
+          "script": "ingest:drafts"
+        },
+        {
+          "script": "ingest:players-heroes"
+        },
+        {
+          "script": "compute:player-glicko"
+        },
+        {
+          "script": "compute:recent-form"
+        },
+        {
+          "script": "compute:h2h"
+        },
+        {
+          "script": "compute:team-extended"
+        },
+        {
+          "script": "ingest:od-scenarios"
+        },
+        {
+          "script": "ingest:od-player-peers"
+        },
+        {
+          "script": "ingest:od-distributions"
+        },
+        {
+          "script": "ingest:od-pro-players"
+        },
+        {
+          "script": "ingest:od-hero-benchmarks"
+        },
+        {
+          "script": "ingest:od-hero-item-popularity"
+        },
+        {
+          "script": "ingest:od-team-rosters"
+        },
+        {
+          "script": "ingest:od-team-hero-pools"
+        },
+        {
+          "script": "ingest:od-player-totals"
+        },
+        {
+          "script": "ingest:od-player-counts"
+        },
+        {
+          "script": "ingest:od-player-wl-pro"
+        }
+      ]
+    },
+    "replay-once": {
+      "enabled": false,
+      "schedule": {
+        "kind": "interval",
+        "minutes": 30
+      },
+      "source": "one iteration of run-replay-parse-loop.sh",
+      "continueOnError": true,
+      "note": "The original limits are retained as explicit knobs, not a safe shared daily quota. Keep automatic execution disabled until the request budget is approved.",
+      "steps": [
+        {
+          "script": "parse:request",
+          "args": [
+            "--",
+            "--limit",
+            {
+              "env": "AEGIS_REPLAY_REQUEST_LIMIT",
+              "default": 100,
+              "min": 1,
+              "max": 500
+            },
+            "--since-days",
+            {
+              "env": "AEGIS_REPLAY_SINCE_DAYS",
+              "default": 180,
+              "min": 1,
+              "max": 3650
+            }
+          ]
+        },
+        {
+          "script": "ingest:parsed",
+          "args": [
+            "--",
+            "--limit",
+            {
+              "env": "AEGIS_REPLAY_INGEST_LIMIT",
+              "default": 200,
+              "min": 1,
+              "max": 500
+            }
+          ]
+        }
+      ]
+    },
+    "drafts-backfill": {
+      "enabled": false,
+      "schedule": {
+        "kind": "manual"
+      },
+      "source": "run-drafts-backfill.sh",
+      "continueOnError": false,
+      "steps": [
+        {
+          "script": "ingest:drafts",
+          "args": [
+            "--",
+            "--all-365d"
+          ]
+        }
+      ]
+    },
+    "parse-cycle": {
+      "enabled": false,
+      "schedule": {
+        "kind": "manual"
+      },
+      "source": "scripts/package.json parse:cycle",
+      "continueOnError": false,
+      "steps": [
+        {
+          "script": "parse:request",
+          "args": [
+            "--",
+            "--limit",
+            {
+              "env": "AEGIS_PARSE_CYCLE_LIMIT",
+              "default": 500,
+              "min": 1,
+              "max": 500
+            }
+          ]
+        },
+        {
+          "name": "wait-for-parser",
+          "waitSeconds": {
+            "env": "AEGIS_PARSE_WAIT_SECONDS",
+            "default": 90,
+            "min": 0,
+            "max": 3600
+          }
+        },
+        {
+          "script": "ingest:parsed",
+          "args": [
+            "--",
+            "--limit",
+            {
+              "env": "AEGIS_PARSE_CYCLE_LIMIT",
+              "default": 500,
+              "min": 1,
+              "max": 500
+            }
+          ]
+        }
+      ]
+    },
+    "paid-backfill": {
+      "enabled": true,
+      "schedule": {
+        "kind": "interval",
+        "minutes": 10
+      },
+      "continueOnError": false,
+      "steps": [
+        {
+          "script": "backfill:paid",
+          "optional": true,
+          "skippedExitCodes": [
+            10
+          ]
+        }
+      ]
+    }
+  }
+}

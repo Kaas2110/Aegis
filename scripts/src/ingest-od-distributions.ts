@@ -54,6 +54,7 @@ async function main() {
       }
       console.log(`[od-distributions] distributions saved: ${Object.keys(dist).join(', ')}`);
     } catch (err) {
+      if (err instanceof OdQuotaExhaustedError) throw err;
       console.warn(`[od-distributions] distributions FAILED: ${err}`);
     }
   } else {
@@ -96,7 +97,7 @@ async function main() {
     } catch (err) {
       if (err instanceof OdQuotaExhaustedError) {
         console.warn(`[od-distributions] ${err.message} — прерываю цикл (saved=${saved} failed=${failed})`);
-        break;
+        throw err;
       }
       failed++;
       console.warn(`[od-distributions] hero=${heroId} durations FAILED: ${err}`);

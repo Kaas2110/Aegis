@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 /**
  * Клиент админ-эндпоинтов API.
  * Токен (X-Admin-Token) хранится локально в AsyncStorage и редактируется из
@@ -6,7 +7,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE = '/api';
+
 const TOKEN_KEY = 'admin_token_v1';
 
 let cached: string | null = null;
@@ -26,7 +27,7 @@ export async function setAdminToken(token: string): Promise<void> {
 
 async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = await getAdminToken();
-  return fetch(`${API_BASE}${path}`, {
+  return apiFetch(`/api${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -68,6 +69,7 @@ export async function updateAdminSettings(
 }
 
 export interface ModelMetrics {
+  validation?: {state: 'quality_unavailable' | 'validated_subset'; policy: string; note: string; unvalidatedRecords: number; excludedReasons: Array<{reason: string; count: number}>};
   totalPredictions: number;
   resolved: number;
   pending: number;
@@ -137,7 +139,7 @@ export async function fetchPopularMarkets(params: {
     team2Name: params.team2Name,
     format: params.format ?? 'BO3',
   });
-  const r = await fetch(`${API_BASE}/analytics/popular-markets?${q}`);
+  const r = await apiFetch(`/api/analytics/popular-markets?${q}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }

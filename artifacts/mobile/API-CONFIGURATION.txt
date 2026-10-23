@@ -1,0 +1,30 @@
+API configuration for Aegis mobile
+
+All runtime API clients use lib/api.ts (web) or lib/api.native.ts (Android/iOS).
+The shared lib/apiConfig.ts validates the public server origin and API paths.
+Auth, live matches, forecasts, settings, logs, admin requests, comparisons,
+summaries and draft/totals requests use the same API configuration.
+
+Web: no EXPO_PUBLIC_API_URL means same-origin /api requests. An explicit HTTP(S)
+origin can be supplied if needed; browser CORS still applies.
+
+Native: EXPO_PUBLIC_API_URL is required. Missing or invalid configuration rejects
+the request and never falls back to localhost or a relative URL. Set the public
+server address in the build environment, or copy .env.example to .env.local in
+artifacts/mobile. Expo embeds it during bundling, so changing it requires a new
+bundle/build. The code intentionally uses process.env.EXPO_PUBLIC_API_URL with
+direct dot notation, not globalThis.process or bracket lookup.
+
+USB development example: EXPO_PUBLIC_API_URL=http://127.0.0.1:8080 with
+adb reverse tcp:8080 tcp:8080 and the local API running. This explicit test URL
+does not enable Android cleartext networking; that policy belongs to the local
+Android build profile. A store build needs the deployed HTTPS API address.
+
+The value may be https://host.example or https://host.example/api. A trailing
+slash is normalized. User/password, query tokens, fragments, unrelated base
+paths and non-HTTP(S) schemes are rejected. EXPO_PUBLIC_* values are public in
+the delivered app: never use private API/provider/admin credentials here.
+
+References:
+https://docs.expo.dev/guides/environment-variables/
+https://docs.expo.dev/router/advanced/platform-specific-modules/

@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * Загружает матрицу матчапов героев hero-vs-hero.
  *
@@ -206,6 +207,7 @@ async function runOpenDota(
       await upsertODHero(rows);
       pairs += rows.length;
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) throw e;
       failed++;
       console.warn(
         `\n[ingest-hero-matchups] OD hero ${h.heroId} (${h.name}) failed: ${(e as Error).message}`,
@@ -251,6 +253,7 @@ async function main() {
       );
       process.exit(0);
     } catch (e) {
+      if (e instanceof OdQuotaExhaustedError) throw e;
       const msg = (e as Error).message;
       if (e instanceof StratzUnavailableError) {
         if (noFallback) {

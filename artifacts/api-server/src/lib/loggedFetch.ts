@@ -13,6 +13,7 @@
  * warn/error, плюс пробрасываются вверх. Вызывающий сам решает что с этим делать.
  */
 import { logger } from './logger';
+import { openDotaFetch as fetch } from '@workspace/db/opendota';
 
 export interface LoggedFetchOptions {
   method?: string;

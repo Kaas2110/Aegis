@@ -1,0 +1,17 @@
+{
+  "contract": "hazard_totals_expanded_runtime_shadow_v1",
+  "candidateId": "hazard-draft1006-map-totals-user-requested-v1",
+  "candidateOrigin": "user_requested_expanded",
+  "selectedByValidation": false,
+  "historicalValidationSelection": {
+    "kills": "state6",
+    "duration": "state6"
+  },
+  "files": {
+    "__init__.py": "ad59239c378aeebf4044c9d3dfb17f501156ffab0466c8ebfc042842ac008968",
+    "pins.py": "7912601c7e8374b6b924c136eea5cad823c968ef53c6384c615221f484829495",
+    "resource.py": "27c762220dc938aabcb584a6e154e6b0c70361e8930258ed11ab6b3615733cb5",
+    "router.py": "0a515b3854186ea8cad346996559f9fbf14e145a26086ef0f1e8b9f019d62ee6",
+    "runtime.py": "666c2175caebee4db1877dc910f9844c2b84f113214715a1dbe25aa1e717f7a3"
+  }
+}

@@ -15,7 +15,11 @@ import { db, modelVersionsTable } from '@workspace/db';
 import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 
+import {evidenceHash, predictionEvidence, type PredictionEvidence} from '../lib/predictionEvidence';
+const JOURNAL_FEATURE_NAMES = ['bias','game_time_norm','provider_lead_norm','kill_diff_norm','legacy_tower_diff_norm','prematch_logit','is_real_live','has_draft','recency_days_norm'];
+
 interface LoadedAsymLiveModel {
+  artifactHash: string;
   version: string;
   algorithm: string;
   weights: number[];
@@ -51,6 +55,7 @@ export async function loadActiveAsymLiveModel(): Promise<LoadedAsymLiveModel | n
     const m = rows[0];
     const w = m.weights as Record<string, number>;
     cached = {
+      artifactHash: evidenceHash({engine:'logreg',weights:w,features:JOURNAL_FEATURE_NAMES}),
       version: m.version,
       algorithm: m.algorithm,
       weights: [
@@ -117,7 +122,7 @@ export interface AsymLiveSnapshotInput {
 export function predictAsymLiveWinner(
   snap: AsymLiveSnapshotInput,
   prematchProb: number,
-): { probRadiantWin: number; modelVersion: string; features: Record<string, number> } | null {
+): { probRadiantWin: number; modelVersion: string; evidence: PredictionEvidence; features: Record<string, number> } | null {
   if (!cached) return null;
   if (snap.gameTimeSec == null || snap.gameTimeSec < 60) return null;
   if (!Number.isFinite(prematchProb) || prematchProb <= 0 || prematchProb >= 1) return null;
@@ -147,6 +152,7 @@ export function predictAsymLiveWinner(
 
   return {
     probRadiantWin: p,
+    evidence: predictionEvidence(cached.artifactHash, JOURNAL_FEATURE_NAMES.slice(0,dim), x.slice(0,dim)),
     modelVersion: cached.version,
     features: {
       bias: x[0],

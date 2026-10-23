@@ -42,8 +42,8 @@ import joblib
 import lightgbm as lgb
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException
+from .training_admission import require_legacy_http_training_admission, training_admission_status
 from pydantic import BaseModel, Field
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.isotonic import IsotonicRegression
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -98,10 +98,18 @@ class TrainRequest(BaseModel):
     feature_names: list[str]
     task_type: Literal["classification", "regression", "quantile"] = "classification"
     # Для task_type="quantile": квантиль [0,1]. 0.5 = медиана (= regression median).
-    alpha: float = 0.5
+    alpha: float = Field(default=0.5, gt=0, lt=1)
     train: list[TrainSample]
     calib: list[TrainSample]
     test: list[TrainSample]
+    # Calibration must never select the stopping iteration. Older callers without
+    # this split use a fixed tree count, leaving calib independent of fitting.
+    validation: list[TrainSample] = Field(default_factory=list)
+    calibration: Literal["none", "isotonic"] = "none"
+    min_calibration_samples: int = Field(default=1000, ge=1000)
+    target_transform: Literal["identity", "log", "log1p"] = "identity"
+    n_jobs: int = Field(default=1, ge=1, le=4)
+    random_seed: int = 42
     # Гиперпараметры. Дефолты из ML_ROADMAP.md §4.5.
     num_leaves: int = 31
     learning_rate: float = 0.05
@@ -124,6 +132,16 @@ class TrainMetrics(BaseModel):
     log_loss: float
     brier: float
     n: int
+    # Legacy aliases above remain for old clients. New code must use these
+    # task-specific names; RMSE is not a Brier score and R2 is not accuracy.
+    metric_type: str = "classification"
+    rmse: float | None = None
+    mae: float | None = None
+    r2: float | None = None
+    natural_rmse: float | None = None
+    natural_mae: float | None = None
+    pinball: float | None = None
+    quantile_coverage: float | None = None
 
 
 class TrainResponse(BaseModel):
@@ -168,6 +186,8 @@ def _serialize_bundle(
     feature_names: list[str],
     task_type: str = "classification",
     residual_std: float | None = None,
+    target_transform: str = "identity",
+    random_seed: int = 42,
 ) -> bytes:
     buf = io.BytesIO()
     joblib.dump(
@@ -178,6 +198,8 @@ def _serialize_bundle(
             "calibrator": calibrator,
             "feature_names": feature_names,
             "residual_std": residual_std,
+            "target_transform": target_transform,
+            "random_seed": random_seed,
             "lightgbm_version": lgb.__version__,
         },
         buf,
@@ -232,7 +254,8 @@ def _metrics(probs: np.ndarray, labels: np.ndarray) -> TrainMetrics:
     return TrainMetrics(accuracy=acc, log_loss=ll, brier=brier, n=n)
 
 
-def _reg_metrics(preds: np.ndarray, labels: np.ndarray) -> TrainMetrics:
+def _reg_metrics(preds: np.ndarray, labels: np.ndarray,
+                 transform: str = "identity", alpha: float | None = None) -> TrainMetrics:
     """Метрики регрессии. accuracy = pseudo-R² (1 - SSE/SST), brier = RMSE."""
     n = len(labels)
     if n == 0:
@@ -242,7 +265,16 @@ def _reg_metrics(preds: np.ndarray, labels: np.ndarray) -> TrainMetrics:
     mae = float(np.mean(np.abs(err)))
     sst = float(np.sum((labels - labels.mean()) ** 2))
     r2 = float(1.0 - (np.sum(err ** 2) / sst)) if sst > 1e-9 else 0.0
-    return TrainMetrics(accuracy=r2, log_loss=mae, brier=rmse, n=n)
+    inverse = np.exp if transform == "log" else np.expm1 if transform == "log1p" else lambda x: x
+    natural_error = inverse(preds) - inverse(labels)
+    residual = labels - preds
+    return TrainMetrics(accuracy=r2, log_loss=mae, brier=rmse, n=n,
+        metric_type="quantile" if alpha is not None else "regression",
+        rmse=rmse, mae=mae, r2=r2,
+        natural_rmse=float(np.sqrt(np.mean(natural_error ** 2))),
+        natural_mae=float(np.mean(np.abs(natural_error))),
+        pinball=float(np.maximum(alpha * residual, (alpha - 1) * residual).mean()) if alpha is not None else None,
+        quantile_coverage=float((labels <= preds).mean()) if alpha is not None else None)
 
 
 # ── FastAPI app ─────────────────────────────────────────────────────────
@@ -258,6 +290,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Aegis ML Service", version="0.1.0", lifespan=lifespan)
 
+# Authenticated diagnostic route; independent of the serving model registry.
+from .shadow_live_winner.router import create_live_winner_router
+app.include_router(create_live_winner_router(require_token))
+from .shadow_postdraft.router import create_postdraft_router
+app.include_router(create_postdraft_router(require_token))
+from .shadow_hazard.router import create_hazard_router
+app.include_router(create_hazard_router(require_token))
+from .shadow_wide.router import create_wide_router
+app.include_router(create_wide_router(require_token))
+
+# Read-only C2 diagnostics consume root-pinned local evidence; serving stays separate.
+from .shadow_wide_c2.router import create_c2_local_router
+app.include_router(create_c2_local_router(require_token))
+
+
+@app.get("/diagnostics/training-admission", dependencies=[Depends(require_token)])
+def legacy_http_training_status():
+    return training_admission_status()
 
 @app.get("/ml/healthz")
 @app.get("/healthz")
@@ -270,13 +320,21 @@ def healthz() -> dict[str, str | int]:
     }
 
 
-@app.post("/ml/train", response_model=TrainResponse, dependencies=[Depends(require_token)])
-@app.post("/train", response_model=TrainResponse, dependencies=[Depends(require_token)])
+@app.post("/ml/train", response_model=TrainResponse, dependencies=[Depends(require_token), Depends(require_legacy_http_training_admission)])
+@app.post("/train", response_model=TrainResponse, dependencies=[Depends(require_token), Depends(require_legacy_http_training_admission)])
 def train(req: TrainRequest) -> TrainResponse:
     if not req.train:
         raise HTTPException(400, "empty train set")
-    if any(len(s.features) != len(req.feature_names) for s in req.train):
-        raise HTTPException(400, "feature dim mismatch in train set")
+    if not req.feature_names or len(set(req.feature_names)) != len(req.feature_names):
+        raise HTTPException(400, "feature names must be nonempty and unique")
+    for split_name in ("train", "validation", "calib", "test"):
+        for sample in getattr(req, split_name):
+            if len(sample.features) != len(req.feature_names):
+                raise HTTPException(400, f"feature dim mismatch in {split_name} set")
+            if not np.isfinite(sample.label) or any(np.isinf(v) for v in sample.features):
+                raise HTTPException(400, f"invalid numeric value in {split_name} set")
+            if req.task_type == "classification" and sample.label not in (0, 1):
+                raise HTTPException(400, f"classification label must be 0 or 1 in {split_name}")
 
     t0 = time.perf_counter()
 
@@ -290,11 +348,13 @@ def train(req: TrainRequest) -> TrainResponse:
     y_calib = np.array([s.label for s in req.calib], dtype=y_dtype) if req.calib else np.empty(0, dtype=y_dtype)
     X_test = np.array([s.features for s in req.test], dtype=np.float64) if req.test else np.empty((0, X_train.shape[1]))
     y_test = np.array([s.label for s in req.test], dtype=y_dtype) if req.test else np.empty(0, dtype=y_dtype)
+    X_validation = np.array([s.features for s in req.validation], dtype=np.float64) if req.validation else np.empty((0, X_train.shape[1]))
+    y_validation = np.array([s.label for s in req.validation], dtype=y_dtype) if req.validation else np.empty(0, dtype=y_dtype)
 
     if not (is_reg or is_quantile) and len(np.unique(y_train)) < 2:
         raise HTTPException(400, "train set has only one class")
 
-    use_eval = len(X_calib) >= 10 and (is_reg or is_quantile or len(np.unique(y_calib)) >= 2)
+    use_eval = len(X_validation) >= 10 and (is_reg or is_quantile or len(np.unique(y_validation)) >= 2)
     callbacks = []
     if use_eval and req.early_stopping_rounds > 0:
         callbacks.append(lgb.early_stopping(req.early_stopping_rounds, verbose=False))
@@ -311,9 +371,9 @@ def train(req: TrainRequest) -> TrainResponse:
             feature_fraction=req.feature_fraction,
             bagging_fraction=0.9,
             bagging_freq=5,
-            random_state=42,
+            random_state=req.random_seed,
             verbose=-1,
-            n_jobs=1,
+            n_jobs=req.n_jobs,
         )
     elif is_reg:
         model = lgb.LGBMRegressor(
@@ -325,9 +385,9 @@ def train(req: TrainRequest) -> TrainResponse:
             feature_fraction=req.feature_fraction,
             bagging_fraction=0.9,
             bagging_freq=5,
-            random_state=42,
+            random_state=req.random_seed,
             verbose=-1,
-            n_jobs=1,
+            n_jobs=req.n_jobs,
         )
     else:
         model = lgb.LGBMClassifier(
@@ -339,16 +399,16 @@ def train(req: TrainRequest) -> TrainResponse:
             feature_fraction=req.feature_fraction,
             bagging_fraction=0.9,
             bagging_freq=5,
-            random_state=42,
+            random_state=req.random_seed,
             verbose=-1,
-            n_jobs=1,
+            n_jobs=req.n_jobs,
         )
 
-    eval_metric = "rmse" if (is_reg or is_quantile) else "binary_logloss"
+    eval_metric = "quantile" if is_quantile else "rmse" if is_reg else "binary_logloss"
     if use_eval:
         model.fit(
             X_train, y_train,
-            eval_set=[(X_calib, y_calib)],
+            eval_set=[(X_validation, y_validation)],
             eval_metric=eval_metric,
             callbacks=callbacks,
         )
@@ -363,27 +423,25 @@ def train(req: TrainRequest) -> TrainResponse:
         # Для quantile: std не имеет смысла (квантиль сам задаёт интервал),
         # оставляем None.
         if is_reg:
-            ref_X = X_calib if len(X_calib) >= 5 else X_train
-            ref_y = y_calib if len(X_calib) >= 5 else y_train
-            ref_pred = model.predict(ref_X)
-            residuals = ref_y - ref_pred
-            residual_std = float(np.std(residuals, ddof=1)) if len(residuals) >= 2 else 0.0
+            if len(X_calib) >= 5:
+                residuals = y_calib - model.predict(X_calib)
+                residual_std = float(np.std(residuals, ddof=1))
 
         train_pred = model.predict(X_train)
-        train_metrics = _reg_metrics(train_pred, y_train)
+        train_metrics = _reg_metrics(train_pred, y_train, req.target_transform, req.alpha if is_quantile else None)
         calib_metrics = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
         if len(X_calib) > 0:
             calib_pred = model.predict(X_calib)
-            calib_metrics = _reg_metrics(calib_pred, y_calib)
+            calib_metrics = _reg_metrics(calib_pred, y_calib, req.target_transform, req.alpha if is_quantile else None)
         test_metrics_raw = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
         test_metrics_calibrated = TrainMetrics(accuracy=0, log_loss=0, brier=0, n=0)
         if len(X_test) > 0:
             test_pred = model.predict(X_test)
-            test_metrics_raw = _reg_metrics(test_pred, y_test)
+            test_metrics_raw = _reg_metrics(test_pred, y_test, req.target_transform, req.alpha if is_quantile else None)
             test_metrics_calibrated = test_metrics_raw
         baseline_acc = float(y_test.mean()) if len(y_test) > 0 else 0.0
     else:
-        if len(X_calib) >= 20 and len(np.unique(y_calib)) >= 2:
+        if req.calibration == "isotonic" and len(X_calib) >= req.min_calibration_samples and len(np.unique(y_calib)) >= 2:
             raw_calib_probs = model.predict_proba(X_calib)[:, 1]
             calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
             calibrator.fit(raw_calib_probs, y_calib)
@@ -436,7 +494,8 @@ def train(req: TrainRequest) -> TrainResponse:
             )
 
     blob = _serialize_bundle(model, calibrator, req.feature_names,
-                             task_type=req.task_type, residual_std=residual_std)
+                             task_type=req.task_type, residual_std=residual_std,
+                             target_transform=req.target_transform, random_seed=req.random_seed)
     blob_b64 = base64.b64encode(blob).decode("ascii")
 
     elapsed = time.perf_counter() - t0
@@ -488,10 +547,16 @@ def predict(req: PredictRequest) -> PredictResponse:
 
     if task_type in ("regression", "quantile"):
         mean = float(model.predict(X)[0])
-        std = float(bundle.get("residual_std") or 0.0) if task_type == "regression" else 0.0
+        # Missing uncertainty is unknown, not zero uncertainty.
+        std = float(bundle["residual_std"]) if task_type == "regression" and bundle.get("residual_std") is not None else None
         return PredictResponse(mean=mean, std=std, task_type=task_type)  # type: ignore[arg-type]
 
     raw = float(model.predict_proba(X)[0, 1])
     cal = float(calibrator.predict(np.array([raw]))[0]) if calibrator is not None else raw
     cal = max(0.0, min(1.0, cal))
     return PredictResponse(raw_prob=raw, calibrated_prob=cal, task_type="classification")
+
+
+# Authenticated rich-series diagnostic reader; public prediction guards unchanged.
+from .shadow_series_rich.router import create_series_diagnostic_router
+app.include_router(create_series_diagnostic_router(require_token))

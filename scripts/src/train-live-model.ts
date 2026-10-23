@@ -20,8 +20,11 @@
 
 import { db, modelVersionsTable } from '@workspace/db';
 import { sql, and, eq } from 'drizzle-orm';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
+import { trainingSeed, seededRandom, shuffleInPlace } from './lib/training-random';
 
 const FEATURES_VERSION = 8;
+const TRAINING_SEED = trainingSeed();
 const DIM = 9;
 
 interface Sample {
@@ -62,13 +65,11 @@ function dot(w: number[], x: number[]): number {
 }
 
 function trainLogisticRegression(samples: Sample[], dim: number): number[] {
+  const random = seededRandom(TRAINING_SEED);
   const w = new Array(dim).fill(0);
   for (let epoch = 0; epoch < EPOCHS; epoch++) {
     let totalLoss = 0;
-    for (let i = samples.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [samples[i], samples[j]] = [samples[j], samples[i]];
-    }
+    shuffleInPlace(samples, random);
     for (const s of samples) {
       const z = dot(w, s.features);
       const p = sigmoid(z);
@@ -103,6 +104,7 @@ function evaluate(samples: Sample[], w: number[]): { acc: number; logLoss: numbe
 }
 
 async function main() {
+  assertCandidateOnlyArgs();
   console.log('[train-live-model] Joining live_snapshots × prematch_outcomes (fv=8) …');
 
   const nowUnix = Math.floor(Date.now() / 1000);
@@ -125,10 +127,12 @@ async function main() {
     LEFT JOIN prematch_outcomes po ON po.match_id = ls.match_id
     LEFT JOIN match_drafts md ON md.match_id = ls.match_id
     WHERE pm.radiant_win IS NOT NULL
+      AND ls.source = 'live'
       AND ls.game_time_sec IS NOT NULL
       AND ls.game_time_sec >= 60
       AND ls.game_time_sec <= 7200
-    ORDER BY pm.start_time ASC, ls.match_id, ls.game_time_sec
+      AND ls.game_time_sec < pm.duration
+    ORDER BY pm.start_time ASC, ls.match_id, ls.game_time_sec, ls.captured_at
     LIMIT 200000
   `);
 
@@ -266,15 +270,12 @@ async function main() {
   const weights: Record<string, number> = {};
   for (let i = 0; i < w.length; i++) weights[`w${i}`] = w[i];
 
-  await db.transaction(async tx => {
-    await tx
-      .update(modelVersionsTable)
-      .set({ isActive: false })
-      .where(and(eq(modelVersionsTable.kind, 'live_winner'), eq(modelVersionsTable.isActive, true)));
-    await tx.insert(modelVersionsTable).values({
+  await saveLegacyCandidates(db, [{
       version,
       kind: 'live_winner',
+      featuresVersion: FEATURES_VERSION,
       algorithm: 'logistic_regression_live',
+      engine: 'logreg',
       features: [
         'bias', 'game_time_norm', 'nw_lead_norm', 'kill_diff_norm', 'tower_diff_norm',
         'prematch_logit', 'is_real_live', 'has_draft', 'recency_days_norm',
@@ -304,11 +305,13 @@ async function main() {
         gapSeconds: gapSec,
         bucketingSeconds: 180,
       },
-      isActive: true,
-    });
+      isActive: false,
+    }], {
+    trainer: 'train-live-model', seed: TRAINING_SEED,
+    limitations: ['historical_prematch_prior_provenance_unverified', 'independent_calibration_required', 'live_source_only'],
   });
 
-  console.log(`[train-live-model] ✅ Live model ${version} saved (fv=${FEATURES_VERSION}, composite=${testMetrics.composite.toFixed(4)}).`);
+  console.log(`[train-live-model] Inactive, unvalidated candidate ${version} saved (fv=${FEATURES_VERSION}); active models unchanged.`);
   process.exit(0);
 }
 

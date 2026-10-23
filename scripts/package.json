@@ -30,7 +30,9 @@
     "backfill:live-snapshots": "tsx ./src/backfill-live-snapshots.ts",
     "parse:request": "tsx ./src/parse-request.ts",
     "ingest:parsed": "tsx ./src/ingest-parsed.ts",
-    "parse:cycle": "tsx ./src/parse-request.ts -- --limit 500 && echo '[parse:cycle] Ждём 90s пока OD обработает запросы...' && sleep 90 && tsx ./src/ingest-parsed.ts -- --limit 500",
+    "refresh:match-details": "tsx ./src/refresh-match-details.ts",
+    "patch:check": "tsx ./src/check-patch-catalog.ts",
+    "parse:cycle": "node ./run-pipeline.mjs parse-cycle",
     "import:snapshot": "tsx ./src/import-snapshot.ts",
     "test:stratz": "tsx ./src/test-stratz.ts",
     "ingest:od-scenarios": "tsx ./src/ingest-od-scenarios.ts",
@@ -44,7 +46,16 @@
     "ingest:od-player-totals": "tsx ./src/ingest-od-player-totals.ts",
     "ingest:od-player-counts": "tsx ./src/ingest-od-player-counts.ts",
     "ingest:od-player-wl-pro": "tsx ./src/ingest-od-player-wl-pro.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:training": "tsx --test ./src/lib/training-safety.test.ts",
+    "test:detail-refresh": "tsx --test ./src/lib/detail-refresh.test.ts",
+    "test:patch-catalog": "tsx --test ./src/lib/patch-catalog.test.ts ./src/lib/valve-patch-catalog.test.ts && node --test ./src/lib/patch-pipeline.test.mjs",
+    "patch:assign": "tsx ./src/materialize-match-patches.ts",
+    "test:patch-assignment": "tsx --test ./src/lib/match-patch-resolver.test.ts",
+    "backfill:paid": "tsx ./src/paid-backfill.ts",
+    "opendota:policy": "tsx ./src/configure-opendota-paid.ts",
+    "candidate:plan": "node candidate-planner/plan-rich-candidates.mjs",
+    "steam:diagnostic": "node steam-live-collector/run.mjs"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",

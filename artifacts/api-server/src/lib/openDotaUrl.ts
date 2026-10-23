@@ -1,213 +1,82 @@
-/**
- * Helper для добавления OpenDota API key к URL + бюджетный guard free-режима.
- *
- * Режим (free/premium) управляется:
- *   1. env OPENDOTA_USE_PREMIUM (если задан — приоритет, как на ноуте из .env);
- *   2. app_settings.opendota_premium (тогл на дашборде админки, hot-reload ≤30s);
- *   3. дефолт — free.
- * Premium дополнительно требует OPENDOTA_API_KEY в env.
- *
- * Free tier: 60 req/min, 3000 req/day на IP (429 не тарифицируются).
- * Premium: 3000 req/min (50 req/s), $0.0001/req.
- *
- * Бюджетный guard (только free-режим):
- *   - минутное окно: максимум 55 req/min (запас от лимита 60);
- *   - дневной cap: app_settings.od_daily_limit (дефолт 3000);
- *   - фоновые вызовы ('background': OutcomeTracker, SchedulerWorker)
- *     дополнительно ограничены часовым бюджетом dailyLimit/24, чтобы квота
- *     размазывалась на весь день и user-facing путь ('user': live-роуты,
- *     LiveWorker) не оставался без квоты к вечеру.
- *
- * Использование:
- *   if (!tryAcquireOd('user')) { ...skip/фолбэк... }
- *   const r = await fetch(withOpenDotaKey(`${OPENDOTA_BASE}/matches/${id}`));
- *
- * Счётчики in-memory (сбрасываются при рестарте) — для точного учёта
- * см. dashboard api.opendota.com.
- */
-
-interface DayBucket {
-  count: number;
-  date: string; // YYYY-MM-DD
-}
-
-// До 30 суток rolling history
-const HISTORY_DAYS = 30;
-const dailyBuckets: Map<string, DayBucket> = new Map();
-
-// Минутное скользящее окно (timestamps последних вызовов)
-const MINUTE_LIMIT_FREE = 55;
-let minuteWindow: number[] = [];
-
-// Часовой бакет для фоновых вызовов (free-режим)
-let hourKey = '';
-let hourCount = 0;
-
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function currentHourKey(): string {
-  return new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
-}
-
-function pruneMinuteWindow(now: number): void {
-  const cutoff = now - 60_000;
-  if (minuteWindow.length && minuteWindow[0]! < cutoff) {
-    minuteWindow = minuteWindow.filter((t) => t >= cutoff);
-  }
-}
-
-function recordOdCall(): void {
-  const key = todayKey();
-  const existing = dailyBuckets.get(key);
-  if (existing) {
-    existing.count++;
-  } else {
-    dailyBuckets.set(key, { count: 1, date: key });
-    // Прунинг старых дней
-    const keys = [...dailyBuckets.keys()].sort();
-    while (keys.length > HISTORY_DAYS) {
-      const oldest = keys.shift()!;
-      dailyBuckets.delete(oldest);
-    }
-  }
-  const now = Date.now();
-  pruneMinuteWindow(now);
-  minuteWindow.push(now);
-  const hk = currentHourKey();
-  if (hk !== hourKey) {
-    hourKey = hk;
-    hourCount = 0;
-  }
-  hourCount++;
-}
-
-// ── Runtime-конфиг из app_settings (пушится AppSettings-сервисом) ─────────
-let dbPremium: boolean | null = null;
-let dbDailyLimit = 3000;
-
-export function setOdRuntimeConfig(cfg: { premium: boolean | null; dailyLimit: number }): void {
-  dbPremium = cfg.premium;
-  if (Number.isFinite(cfg.dailyLimit) && cfg.dailyLimit > 0) dbDailyLimit = cfg.dailyLimit;
-}
-
+/** Shared PostgreSQL policy is authoritative; URL builders never attach keys. */
+import {
+  openDotaLedger,
+  OD_LIMITS,
+  OD_PAID_CEILING,
+  effectiveOdProfile
+} from '@workspace/db/opendota';
+export function setOdRuntimeConfig(_cfg: { premium: boolean | null; dailyLimit: number }): void {}
 export type OdPremiumSource = 'env' | 'db' | 'default';
-
-function premiumDecision(): { premium: boolean; source: OdPremiumSource } {
-  const hasKey = !!process.env.OPENDOTA_API_KEY;
-  const env = process.env.OPENDOTA_USE_PREMIUM;
-  if (env !== undefined && env !== '') {
-    return { premium: env === 'true' && hasKey, source: 'env' };
-  }
-  if (dbPremium !== null) {
-    return { premium: dbPremium && hasKey, source: 'db' };
-  }
-  return { premium: false, source: 'default' };
-}
-
+// Legacy pacing hint only; spend/authentication is decided atomically per request.
 export function isOpenDotaPremium(): boolean {
-  return premiumDecision().premium;
+  return !!process.env.OPENDOTA_API_KEY;
 }
-
-// ── Бюджетный guard ────────────────────────────────────────────────────────
+export function hasOpenDotaKey(): boolean {
+  return !!process.env.OPENDOTA_API_KEY;
+}
 export type OdCallKind = 'user' | 'background';
-
-function hourlyBudget(): number {
-  return Math.max(25, Math.floor(dbDailyLimit / 24));
-}
-
-/**
- * Проверяет, можно ли сейчас сделать OD-запрос (free-режим).
- * НЕ потребляет бюджет — учёт делает withOpenDotaKey() при реальном вызове.
- * Premium — всегда true.
- */
-export function tryAcquireOd(kind: OdCallKind): boolean {
-  if (isOpenDotaPremium()) return true;
-  const now = Date.now();
-  pruneMinuteWindow(now);
-  if (minuteWindow.length >= MINUTE_LIMIT_FREE) return false;
-  const todayCount = dailyBuckets.get(todayKey())?.count ?? 0;
-  if (todayCount >= dbDailyLimit) return false;
-  if (kind === 'background') {
-    const hk = currentHourKey();
-    const used = hk === hourKey ? hourCount : 0;
-    if (used >= hourlyBudget()) return false;
-  }
+export function tryAcquireOd(_kind: OdCallKind): boolean {
   return true;
 }
-
-export interface OdUsageStats {
-  today: number;
-  last7d: number;
-  last30d: number;
-  estimatedCostUsdToday: number;
-  estimatedCostUsdLast30d: number;
-  hasKey: boolean;
-  premium: boolean;
-  premiumSource: OdPremiumSource;
-  freeBudget: {
-    dailyLimit: number;
-    usedToday: number;
-    minuteUsed: number;
-    minuteLimit: number;
-    hourUsed: number;
-    hourBudget: number;
-  };
-  history: Array<{ date: string; count: number; estimatedCostUsd: number }>;
-  note: string;
-}
-
-const COST_PER_REQ = 0.0001; // $0.0001 за запрос
-
-export function getOdUsageStats(): OdUsageStats {
-  const today = todayKey();
-  const todayCount = dailyBuckets.get(today)?.count ?? 0;
-
-  const sortedDays = [...dailyBuckets.values()].sort((a, b) => a.date.localeCompare(b.date));
-
-  const nowMs = Date.now();
-  const last7dCutoff = new Date(nowMs - 7 * 86400_000).toISOString().slice(0, 10);
-  const last7d = sortedDays.filter((d) => d.date >= last7dCutoff).reduce((s, d) => s + d.count, 0);
-  const last30d = sortedDays.reduce((s, d) => s + d.count, 0);
-
-  pruneMinuteWindow(nowMs);
-  const decision = premiumDecision();
-
-  return {
-    today: todayCount,
-    last7d,
-    last30d,
-    estimatedCostUsdToday: +(todayCount * COST_PER_REQ).toFixed(4),
-    estimatedCostUsdLast30d: +(last30d * COST_PER_REQ).toFixed(4),
-    hasKey: decision.premium,
-    premium: decision.premium,
-    premiumSource: decision.source,
-    freeBudget: {
-      dailyLimit: dbDailyLimit,
-      usedToday: todayCount,
-      minuteUsed: minuteWindow.length,
-      minuteLimit: MINUTE_LIMIT_FREE,
-      hourUsed: currentHourKey() === hourKey ? hourCount : 0,
-      hourBudget: hourlyBudget(),
-    },
-    history: sortedDays.map((d) => ({
-      date: d.date,
-      count: d.count,
-      estimatedCostUsd: +(d.count * COST_PER_REQ).toFixed(4),
-    })),
-    note: 'In-memory only — сбрасывается при рестарте api-server. Точный счёт на api.opendota.com.',
-  };
-}
-
 export function withOpenDotaKey(url: string): string {
-  recordOdCall();
-  if (!isOpenDotaPremium()) return url;
-  const key = process.env.OPENDOTA_API_KEY!;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}api_key=${encodeURIComponent(key)}`;
+  return url;
 }
-
-export function hasOpenDotaKey(): boolean {
-  return isOpenDotaPremium();
+export async function getOdUsageStats() {
+  const { state, now } = await openDotaLedger.snapshot();
+  const todayKey = new Date(now).toISOString().slice(0, 10),
+    month = todayKey.slice(0, 7);
+  const cutoff7 = new Date(now - 6 * 86400_000).toISOString().slice(0, 10),
+    cutoff30 = new Date(now - 29 * 86400_000).toISOString().slice(0, 10);
+  const days = [...new Set([...Object.keys(state.days), ...Object.keys(state.paid?.days ?? {})])]
+    .filter((d) => d >= cutoff30)
+    .sort();
+  const history = days.map((date) => {
+    const free = state.days[date] ?? { calls: 0, units: 0 };
+    const paidUnits = state.paid?.days[date] ?? 0;
+    return {
+      date,
+      count: free.calls + paidUnits,
+      quotaUnits: free.units + paidUnits,
+      freeUnits: free.units,
+      paidUnits,
+      estimatedCostUsd: paidUnits * OD_PAID_CEILING.usdPerUnit
+    };
+  });
+  const today = history.find((d) => d.date === todayKey);
+  const premium = effectiveOdProfile(state, now) === 'paid';
+  return {
+    today: today?.count ?? 0,
+    last7d: history.filter((d) => d.date >= cutoff7).reduce((n, d) => n + d.count, 0),
+    last30d: history.reduce((n, d) => n + d.count, 0),
+    estimatedCostUsdToday: today?.estimatedCostUsd ?? 0,
+    estimatedCostUsdLast30d: history.reduce((n, d) => n + d.estimatedCostUsd, 0),
+    hasKey: hasOpenDotaKey(),
+    premium,
+    premiumSource: 'db' as OdPremiumSource,
+    freeBudget: {
+      dailyLimit: OD_LIMITS.daily,
+      usedToday: state.days[todayKey]?.units ?? 0,
+      minuteUsed: state.recent.reduce((n, d) => n + d.units, 0),
+      minuteLimit: premium ? state.paid!.minute : OD_LIMITS.minute,
+      hourUsed: state.backgroundHour.units,
+      hourBudget: OD_LIMITS.backgroundHour
+    },
+    paidBudget: state.paid
+      ? {
+          enabled: state.paid.enabled,
+          activeMode: premium ? 'paid' : 'free',
+          monthlyUnits: state.paid.months[month]?.units ?? 0,
+          monthlyLimitUnits: state.paid.monthlyLimitUnits,
+          monthlyCostUsd: (state.paid.months[month]?.units ?? 0) * 0.0001,
+          archiveUnits: state.paid.archiveUnits,
+          archiveLimitUnits: state.paid.archiveLimitUnits,
+          archiveCostUsd: state.paid.archiveUnits * 0.0001,
+          minuteLimit: state.paid.minute
+        }
+      : null,
+    blockedUntil: state.blockedUntil > now ? new Date(state.blockedUntil).toISOString() : null,
+    blockedReason: state.blockedUntil > now ? state.blockedReason : null,
+    history,
+    note: 'Shared persistent ledger; UTC calendar month. Monthly $20 cap includes archive; lifetime archive $20. Conservative charge before every attempt; replay POST reserves10units. Monetary exhaustion uses unkeyed free with independent counters; upstream403/429 never triggers fallback. Other programs/account charges are not counted.'
+  };
 }

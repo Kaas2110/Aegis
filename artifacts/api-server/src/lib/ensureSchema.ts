@@ -15,6 +15,7 @@ import path from 'node:path';
 import { db } from '@workspace/db';
 import { sql } from 'drizzle-orm';
 import { logger } from './logger';
+import { pnpmCommand } from './processCommand';
 
 // Критичные таблицы, без которых сервер не сможет работать.
 // Если хоть одной нет — запускаем drizzle-kit push (idempotent).
@@ -32,9 +33,10 @@ const WORKSPACE_ROOT = path.resolve(process.cwd(), '../..');
 
 function runDbPush(timeoutMs = 60_000): Promise<{ code: number; tail: string }> {
   return new Promise((resolve) => {
+    const [command, args] = pnpmCommand(['--filter', '@workspace/db', 'run', 'push']);
     const child = spawn(
-      'pnpm',
-      ['--filter', '@workspace/db', 'run', 'push'],
+      command,
+      args,
       { cwd: WORKSPACE_ROOT, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     const buf: string[] = [];

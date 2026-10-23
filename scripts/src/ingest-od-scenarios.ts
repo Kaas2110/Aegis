@@ -73,6 +73,7 @@ async function main() {
       saved++;
       console.log(`[od-scenarios] misc → ${Array.isArray(data) ? data.length : 1} rows`);
     } catch (err) {
+      if (err instanceof OdQuotaExhaustedError) throw err;
       failed++;
       console.warn(`[od-scenarios] misc FAILED: ${err}`);
     }
@@ -81,7 +82,7 @@ async function main() {
     skipped++;
   }
 
-  outer: for (let i = 0; i < heroIds.length; i++) {
+  for (let i = 0; i < heroIds.length; i++) {
     const heroId = heroIds[i]!;
 
     for (const scenarioType of ['itemTimings', 'laneRoles'] as const) {
@@ -95,7 +96,7 @@ async function main() {
       } catch (err) {
         if (err instanceof OdQuotaExhaustedError) {
           console.warn(`[od-scenarios] ${err.message} — прерываю цикл (saved=${saved} failed=${failed})`);
-          break outer;
+          throw err;
         }
         failed++;
         console.warn(`[od-scenarios] hero=${heroId} type=${scenarioType} FAILED: ${err}`);

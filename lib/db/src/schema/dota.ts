@@ -137,13 +137,14 @@ export const matchParseQueueTable = pgTable('match_parse_queue', {
 // Одна строка на матч. Все JSONB поля — копия соответствующих секций из
 // OpenDota /api/matches/{id} после успешного парса (version != null).
 //
-// payloadSchemaVersion инкрементируется когда меняем структуру payload —
-// позволяет вычислять «нужно ли реингестить» при эволюции фичей.
+// payloadSchemaVersion определяет базовый совместимый контракт и управляет реингестом.
+// Необязательный networth_t — совместимое дополнение v3: доступность проверяется
+// по самому ряду и его times, а не по версии. Его отсутствие не запускает реингест.
 //
 // players: Array<10>, каждый элемент:
 //   { player_slot, account_id, hero_id, gold_t[], xp_t[], lh_t[], dn_t[],
 //     kills_log[], buyback_log[], purchase_log[], lane_role, is_roaming,
-//     obs_log[], sen_log[], ability_upgrades_arr[] }
+//     obs_log[], sen_log[], ability_upgrades_arr[], networth_t?: number[] | null }
 // objectives: Array<{ time, type, slot?, key?, team? }> — towers, roshans, aegis, FB
 // teamfights: Array<{ start, end, last_death, deaths, players[] }>
 // draftTimings: Array<{ order, pick, active_team, hero_id, player_slot,
@@ -151,7 +152,7 @@ export const matchParseQueueTable = pgTable('match_parse_queue', {
 export const matchParsedTable = pgTable('match_parsed', {
   matchId: bigint('match_id', { mode: 'number' }).primaryKey(),
   parsedAt: timestamp('parsed_at', { withTimezone: true }).notNull().defaultNow(),
-  // Версия структуры payload (наша, не OD). Бамп при изменении набора сохраняемых полей.
+  // Версия базового контракта (наша, не OD); optional series требуют отдельной проверки.
   payloadSchemaVersion: integer('payload_schema_version').notNull().default(1),
   // Версия парсера OpenDota (поле `version` из /matches/{id}).
   odVersion: integer('od_version'),

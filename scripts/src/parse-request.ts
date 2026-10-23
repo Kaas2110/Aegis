@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * parse-request — T0.7 stage 1.
  *
@@ -53,12 +54,13 @@ async function requestParse(matchId: number): Promise<{ jobId: number | null; er
       signal: AbortSignal.timeout(15_000),
     });
     if (!r.ok) {
-      const body = await r.text().catch(() => '');
-      return { jobId: null, error: `HTTP ${r.status} ${body.slice(0, 120)}` };
+      await r.body?.cancel().catch(() => {});
+      return { jobId: null, error: `HTTP ${r.status}` };
     }
     const json = (await r.json()) as { job?: { jobId?: number } };
     return { jobId: json.job?.jobId ?? null, error: null };
   } catch (e) {
+    if (e instanceof OdQuotaExhaustedError) throw e;
     return { jobId: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
@@ -96,30 +98,13 @@ async function main(): Promise<void> {
   }
 
   let ok = 0, failed = 0;
-  let consecutive429 = 0;
   for (let i = 0; i < todo.length; i++) {
     const matchId = todo[i].matchId;
     const { jobId, error } = await requestParse(matchId);
     const status = error ? 'failed' : 'queued';
 
-    // FREE MODE: при 429 не жжём квоту дальше — пауза 65s; после 3 подряд
-    // 429-пауз прерываем тик целиком (квота минуты/дня исчерпана, доберём позже).
-    // ВАЖНО: при 429 НЕ пишем строку в queue — иначе матч получит status='failed'
-    // и навсегда выпадет из дефолтного селектора (blackhole). Матч останется
-    // eligible и будет добран следующим тиком.
-    if (error && /429/.test(error)) {
-      consecutive429++;
-      if (consecutive429 >= 3) {
-        console.warn(`  [parse-request] 3× 429 подряд — квота исчерпана, прерываю тик (обработано ${i + 1}/${todo.length})`);
-        break;
-      }
-      console.warn(`  [parse-request] 429 — пауза 65s (попытка ${consecutive429}/3), матч ${matchId} не помечаю failed`);
-      await sleep(65_000);
-      i--; // повторить тот же матч после паузы
-      continue;
-    } else if (!error) {
-      consecutive429 = 0;
-    }
+    // Shared quota/403/429 errors leave requestParse by throwing, before any
+    // queue write: a deferred match must remain eligible for the next job.
 
     await db.insert(matchParseQueueTable)
       .values({ matchId, status, jobId, lastError: error, attempts: 1 })

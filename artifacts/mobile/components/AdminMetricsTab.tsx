@@ -43,16 +43,19 @@ export function AdminMetricsTab() {
   }
   if (!data) return null;
 
-  const accPct = data.accuracy != null ? `${(data.accuracy * 100).toFixed(1)}%` : '—';
-  const brier = data.brierScore != null ? data.brierScore.toFixed(3) : '—';
+  const qualityAvailable = data.validation?.state === 'validated_subset';
+  const accPct = qualityAvailable && data.accuracy != null ? `${(data.accuracy * 100).toFixed(1)}%` : '—';
+  const brier = qualityAvailable && data.brierScore != null ? data.brierScore.toFixed(3) : '—';
 
   return (
     <View style={{ gap: 12 }}>
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '44' }]}>
-        <Text style={[styles.title, { color: colors.foreground }]}>Out-of-sample точность модели</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>Качество подтверждённых прогнозов</Text>
         <Text style={[styles.text, { color: colors.mutedForeground }]}>
-          Считается по прематч-предсказаниям, для которых уже известен реальный исход (таблица prematch_outcomes). Не путать с train/test точностью при обучении модели — это РЕАЛЬНАЯ точность в проде.
+          Учитываются прогнозы, подтверждённые до старта матча, с известным исходом. Проверка времени прогноза сама по себе не доказывает отсутствие утечки данных при обучении модели.
         </Text>
+        <Text style={[styles.text, {color: colors.mutedForeground}]}>{data.validation?.note ?? 'Проверка истории прогнозов недоступна.'}{'\n'}Непроверенных записей исключено: {data.validation?.unvalidatedRecords ?? '—'}.</Text>
+        {!qualityAvailable && <Text style={[styles.text, {color: colors.warning}]}>Качество пока нельзя оценить: подтверждённого набора нет.</Text>}
         <View style={styles.bigRow}>
           <View style={styles.bigCell}>
             <Text style={[styles.bigVal, { color: colors.primary }]}>{accPct}</Text>
@@ -63,17 +66,17 @@ export function AdminMetricsTab() {
             <Text style={[styles.bigLab, { color: colors.mutedForeground }]}>Brier ↓</Text>
           </View>
           <View style={styles.bigCell}>
-            <Text style={[styles.bigVal, { color: colors.foreground }]}>{data.resolved}</Text>
+            <Text style={[styles.bigVal, { color: colors.foreground }]}>{data.validation ? data.resolved : '—'}</Text>
             <Text style={[styles.bigLab, { color: colors.mutedForeground }]}>Резолвов</Text>
           </View>
           <View style={styles.bigCell}>
-            <Text style={[styles.bigVal, { color: colors.warning }]}>{data.pending}</Text>
+            <Text style={[styles.bigVal, { color: colors.warning }]}>{data.validation ? data.pending : '—'}</Text>
             <Text style={[styles.bigLab, { color: colors.mutedForeground }]}>Ждут</Text>
           </View>
         </View>
       </View>
 
-      {data.byModel.length > 0 && (
+      {qualityAvailable && data.byModel.length > 0 && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>По версиям модели</Text>
           {data.byModel.map(m => (
@@ -90,7 +93,7 @@ export function AdminMetricsTab() {
         </View>
       )}
 
-      {data.recent.length > 0 && (
+      {qualityAvailable && data.recent.length > 0 && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>Последние резолвы</Text>
           {data.recent.slice(0, 10).map(r => {
