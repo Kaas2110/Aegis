@@ -44,3 +44,26 @@ This source change does not enable or restart any Windows task or expired lease.
 Run the synthetic unit tests with node --test steamFeatureBundle.test.mjs.
 They test causality, fixed schema and archive/DB algebra, not predictive accuracy.
 Production dataset admission, model training and promotion are separate stages.
+
+Frozen history producer (same date)
+produceFrozenPlayerContext builds pinned v2 history from prior-map facts: player
+and team win fractions, player-on-hero win fraction, team kills/minute as a stated
+pace proxy, and fraction of long games. It uses distinct-map support (default 5),
+30/90-day windows and explicit definitions. Native hero-minute reference mean/SD
+uses preceding snapshots from completed prior maps, separate source fields and
+units; final OpenDota GPM or earned gold are not substituted. Contradictory native
+team/player identity is rejected. Newly rebuilt history is labelled reconstruction.
+Missing confirmed start produces a blocked context; unknown roles are not guessed.
+
+loadHistoricalContextInputs reads bounded existing pro_matches/match_parsed data
+as of the freeze, with explicit player_slot side identity, plus separately selected
+native Steam observations. It returns exact pinned UTF-8 inputs for the pure
+producer. DB timestamps are reconstruction evidence, not independent attestation
+of original per-field availability. It does not call data providers or start jobs.
+
+The retained 8619-row GLG corpus has no explicit phase field. The conservative
+native-reference policy requiring explicit numeric IN_PROGRESS therefore admits
+no frames from it. This is a current policy/data gap, not proof that retrospective
+references are impossible: a later reviewed profile/clock/phase reconstruction
+can use past completed-map evidence known before the target map. Do not silently
+weaken current admission or claim joint timely >=95% from this source inventory.
