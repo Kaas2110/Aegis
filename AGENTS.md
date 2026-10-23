@@ -1,5 +1,15 @@
 # Aegis source and feature architecture
 
+## Documentation language
+
+Write all new or substantively updated project documentation in English,
+including plans, architecture notes, reports, handoffs, durable Graphify notes
+and PR titles/descriptions. Communicate with the owner in Russian in chat.
+Translate a document into Russian only on explicit request. Translate existing
+prose when substantively updating its document; do not bulk-translate historical
+evidence as a separate work block. Preserve identifiers, quoted evidence and
+product localization. Owner preference recorded on 2026-10-23.
+
 ## Current implementation order
 
 Read `docs/feature-architecture-20261023.txt` and

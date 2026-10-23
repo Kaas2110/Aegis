@@ -1,0 +1,136 @@
+PUBLIC PORTABLE COPY — 2026-10-23
+Status: designed / partially implemented / not fully integrated.
+This English translation preserves the decisions and recorded baseline of the
+local continuation document. Historical test counts, commits and parity counts
+are checkpoint evidence, not a new claim about this PR's latest head.
+
+APP means this repository root. W is the owner's separate private continuation
+and evidence workspace. Unless explicitly mapped below, outputs/, work/,
+AEGIS-*.txt and other evidence paths refer to W and are not included in this
+source commit. Databases, raw observations, real training fixtures, archives,
+keys, environment files and fitted weights are not published.
+
+Public entry points, relative to the repository root:
+- docs/continuation/START-HERE.txt
+- docs/continuation/Aegis-astra-to-sol-handoff-20261023-final.txt
+- docs/sol-feature-first-plan-20261023.txt
+- docs/feature-architecture-20261023.txt
+PLAN.txt, AEGIS-SOL-PLAN-2026-10-23.txt and the revised local plan refer to the
+same plan; its public copy is docs/sol-feature-first-plan-20261023.txt.
+The architecture document's public copy is docs/feature-architecture-20261023.txt.
+Other catalogues, reviews and machine-readable evidence remain in W. Obtain
+missing evidence through the owner; do not claim it exists in this checkout.
+
+Missing private artifacts do not authorize new training, provider calls,
+restarting paid tasks or removing STOP files, budgets or acceptance gates.
+Use available source and synthetic technical checks, and record evidence gaps.
+
+--- ORIGINAL DOCUMENT, TRANSLATED WITHOUT CHANGING ITS DECISIONS ---
+
+DOCUMENTATION LANGUAGE UPDATE — 2026-10-23
+Write new and substantively updated documentation in English; use Russian in chat.
+Translate a document into Russian only on explicit request. Existing historical
+documents remain evidence; translate their prose when substantively updating them.
+Carry this preference into APP/AGENTS.md and the next completed-block PR.
+
+AEGIS — FINAL ASTRA → SOL HANDOFF, 2026-10-23
+
+Status: the architectural decisions and plan for this stage are ready. The complete
+shared pipeline is not yet implemented. Sol can continue with the implementation
+described below.
+
+READ IN THIS ORDER
+1. outputs/Aegis-architecture-decisions-20261023.txt.
+2. AEGIS-SOL-PLAN-2026-10-23.txt — the rewritten detailed S0–S13 plan.
+3. outputs/Aegis-unified-feature-catalogue-20261023.txt (start with the introduction
+   and the families relevant to the task).
+4. outputs/Aegis-Graphify-current-status-20261023.txt.
+5. As needed for the task: Aegis-Astra-history-live-review-20261023.txt and
+   Aegis-Astra-alignment-review-20261023.txt in outputs.
+
+LATEST OWNER REQUIREMENTS
+- Complete the full feature set and correct source integration first. No new fits,
+  HPO, ablation, calibration or model-quality evaluation before that gate passes.
+- Use one logical producer and shared offline/online formulas. Each model receives
+  the phase/target-eligible projection of the common catalogue, with a schema hash
+  and explicit missing-value rules.
+- History is useful in live too: player, hero, player×hero, team, pairs, styles and
+  meta. History is frozen as of its cutoff; current-map dynamics come from one
+  coherent Steam packet.
+- The main screen always shows the probability of winning the entire match/series.
+  From the draft onward, contextual series prediction uses the full rich context,
+  score/BO format and previous maps. p_map is only an additional validated input,
+  not a substitute for the full series model.
+- Inside the match card: select the current map by default and show its winner
+  prediction and kill/time totals. Users can choose a past map to inspect its
+  heroes/result; preserve their manual selection. This UI is partly implemented:
+  do not redesign it now; verify it during integration.
+- Use one PR per completed block. Graphify first helps locate relevant code and
+  relationships; then inspect the required current code. Do not reread the entire
+  project without a reason.
+
+COMPLETED IN THIS STAGE
+1. Architecture reviewed: observed_draft, first_complete_draft_receipt, immutable
+   context references, event/receipt/decision/annotation times, late identity,
+   learned-transform + TRAIN/fold cache binding and current-label isolation.
+2. Legacy/history gaps reviewed. Frozen context is not yet invoked automatically
+   throughout the working pipeline. The existing rich C1/C2 paths still need to
+   be unified.
+3. Historical alignment helper prepared: 17/17 technical tests passed. In the
+   retained pilot, 58 frames covered two maps. All 45 observed clocks exactly
+   matched the raw Steam clock; 13 missing clocks were not converted to zeros.
+   This does not measure latency or establish 95% coverage.
+4. Catalogue: 79 families, 14 source schemas and 12 logical targets. All old names
+   are preserved. The 465359 occurrences / 203558 distinct name spellings are NOT
+   the width of one model. Formulas, dependencies, sources, statuses, gaps and a
+   complete name-membership index are included.
+5. STRATZ review: the new Steam+history path does not require STRATZ. The old key,
+   data and upstream403 stop are preserved. Legacy meta/synergy provenance and
+   fallback debt remain; do not delete tables or resume the blocked transport.
+6. PR1 merged: main74bed2e..., graph ready with 7701 nodes / 17469 edges. The new
+   functions were verified.
+7. A portable read-only source checker is installed in APP: 31 synthetic tests
+   passed. The checker does not modify Git refs, fetch, call providers or run fits.
+8. This block was published in PR2 (8 source files),
+   head6f56141f4afef52a72e83cf063f5eb71b26136f9. The result was 889/889 included
+   public source files byte-identical to PR2. PR2 is NOT merged; the main graph
+   remains on74bed2e... and does not yet include the PR2 documents/checker.
+
+FIRST SOL BLOCK
+Check the S0 baseline without repeating every old test. Then verify the S1 registry
+and resolve identical-name/formula conflicts, collect S2 field evidence, and
+implement S3 observed draft and historical alignment. Next implement S4 persistent
+as-of snapshots/cache and S5 rich history. Follow the detailed plan in small,
+verifiable stages. Do not start with HPO, new training or an archive refresh.
+
+SPECIFIC REMAINING WORK
+- Unify the generators, connect frozen context to the collector/API, and persist
+  references. Add conditional player/hero pairs, historical norms and the remaining
+  catalogue gaps.
+- Confirm the exact semantics of Roshan timer/alive/death/respawn bounds/Aegis.
+  Do not present raw0 or a timer with unknown semantics as an exact fact.
+- Establish timely joint coverage in the real stream and separately measure
+  absolute latency. Comparing endpoint clocks does not measure delay from the
+  actual match event.
+- Verify map/series/total routing and diagnostic metrics. The Graphify advisory
+  about the models.tsx regex requires its own synthetic fixture; it is not a
+  completed fix.
+- Portability of external runtime wrappers and clean Android regeneration are not
+  yet established. Expo/plugin sources were checked; generated native files were
+  not published.
+- Technically verify all-family offline/online parity, immutable replay, restart,
+  unknown identities, source time, current-label mutation and series boundaries.
+- After completing the feature gate, obtain a separate Astra review. Only then run
+  the later planned experiments on frozen data with independent temporal splits.
+
+BOUNDARIES
+This stage performed 0 new fits/ML evaluations/provider probes, 0 schedule changes
+and 0 removals of manual STOP files/locks. The archive and quota counters were not
+reset. OpenDota:100/min, $20 archive and $20 monthly total including archive.
+Do not bypass403/429. One native fit, 4threads, up to16GiB and at least4GiB free
+apply only when training is authorized again. App publication, model promotion,
+purchases and new merges are not authorized. No automatic PR2 merge was performed.
+
+This handoff does not claim new-model accuracy, completion of the whole project or
+95% coverage. Do not present historical exploratory metrics as current production
+performance.

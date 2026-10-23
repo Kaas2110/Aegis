@@ -1,298 +1,318 @@
-ПУБЛИЧНАЯ ПЕРЕНОСИМАЯ ВЕРСИЯ — 23 ОКТЯБРЯ 2026
-Статус: designed / partially implemented / not fully integrated.
-Архитектурные решения приняты для реализации. Перечисленные технические результаты относятся к сохранённым контрольным точкам; они не подтверждают завершение общего producer, качество моделей или публичный допуск.
+PUBLIC PORTABLE COPY — 2026-10-23
+Status: designed / partially implemented / not fully integrated.
+This English translation preserves the decisions and recorded baseline of the
+local continuation document. Historical test counts, commits and parity counts
+are checkpoint evidence, not a new claim about this PR's latest head.
 
-APP в этом документе означает корень репозитория. W — отдельное закрытое рабочее пространство для продолжения задачи и доказательств. Указанные outputs/, work/, AEGIS-*.txt и другие локальные evidence artifacts относятся к W, если явно не названы файлами этого репозитория. Они приведены по имени для прослеживаемости и НЕ включены в source commit. В репозитории доступны public docs и исходники; БД, raw-наблюдения, настоящие обучающие fixtures, архивы, ключи, environment files и веса не публикуются.
+APP means this repository root. W is the owner's separate private continuation
+and evidence workspace. Unless explicitly mapped below, outputs/, work/,
+AEGIS-*.txt and other evidence paths refer to W and are not included in this
+source commit. Databases, raw observations, real training fixtures, archives,
+keys, environment files and fitted weights are not published.
 
-Отсутствие закрытого артефакта в checkout не разрешает повторное обучение, новый опрос поставщика или восстановление платной задачи. Использовать доступные исходники и синтетические технические тесты, указать недостающее доказательство и согласовать доступ через владельца. Не снимать STOP, ограничения бюджета или gates ради воспроизведения отчёта.
-AEGIS — ПОДРОБНЫЙ ПЛАН SOL ПОСЛЕ РАЗБОРА ASTRA
-Редакция: 23 октября 2026 года.
-Приоритет: сначала источники, архитектура и весь согласованный набор признаков; затем техническая приёмка. Обучение и оценка качества моделей пока остановлены.
+Public entry points, relative to the repository root:
+- docs/continuation/START-HERE.txt
+- docs/continuation/Aegis-astra-to-sol-handoff-20261023-final.txt
+- docs/sol-feature-first-plan-20261023.txt
+- docs/feature-architecture-20261023.txt
+PLAN.txt, AEGIS-SOL-PLAN-2026-10-23.txt and the revised local plan refer to the
+same plan; its public copy is docs/sol-feature-first-plan-20261023.txt.
+The architecture document's public copy is docs/feature-architecture-20261023.txt.
+Other catalogues, reviews and machine-readable evidence remain in W. Obtain
+missing evidence through the owner; do not claim it exists in this checkout.
 
-Этот документ заменяет прежний порядок работ в AEGIS-SOL-PLAN-2026-10-23.txt. Выполненные проверки, старые отчёты и артефакты сохраняются. Их наличие не является командой повторить обучение.
+Missing private artifacts do not authorize new training, provider calls,
+restarting paid tasks or removing STOP files, budgets or acceptance gates.
+Use available source and synthetic technical checks, and record evidence gaps.
 
-КАК ПРОДОЛЖИТЬ РАБОТУ
+--- ORIGINAL DOCUMENT, TRANSLATED WITHOUT CHANGING ITS DECISIONS ---
 
-Сначала прочитать:
-1. docs/feature-architecture-20261023.txt — принятые решения Astra. Они определяют архитектуру; данный документ описывает их реализацию.
-2. outputs/Aegis-unified-feature-catalogue-20261023.txt и work/unified-feature-registry-20261023-r1/ — завершённая инвентаризация признаков и её машиночитаемые файлы. Интеграция и допуск общего набора пока не завершены. Перед продолжением сверить manifest, хеши и последующие изменения исходников; готовность каталога не означает готовность рабочей модели.
-3. outputs/Aegis-Astra-history-live-review-20261023.txt — разрывы между историческими генераторами, потребителями признаков и старым путём обучения.
-4. outputs/Aegis-Astra-alignment-review-20261023.txt — решения по отсутствующей фазе GLG и позднему подтверждению соответствия записи матчу.
-5. outputs/Aegis-local-GitHub-parity-20261023.txt и outputs/Aegis-Graphify-current-status-20261023.txt — состояние исходников и индекса. Проверять текущие commit и diff: старый отчёт не подтверждает свежесть новых изменений.
+AEGIS — DETAILED SOL PLAN FOLLOWING ASTRA'S REVIEW
+Revision: 23 October 2026.
+Priority: finish the sources, architecture and entire agreed feature scope first; then complete technical acceptance. Model training and quality evaluation remain paused.
 
-Основные пути:
-W = отдельная закрытая папка продолжения работы и доказательств; не часть репозитория
-APP = корень текущего репозитория исходников Aegis
-Runtime = отдельно подготовленное локальное окружение; не публикуется в репозитории
+This document replaces the previous work sequence in AEGIS-SOL-PLAN-2026-10-23.txt. Completed checks, earlier reports and artifacts are retained. Their existence is not an instruction to repeat training.
 
-Каноническая локальная рабочая версия — фактические файлы APP. Ключи загружать только штатными локальными средствами, не печатать и не переносить в отчёты, GitHub или Graphify.
+HOW TO RESUME
 
-ЧТО РАЗРЕШЕНО СЕЙЧАС
+Read first:
+1. outputs/Aegis-architecture-decisions-20261023.txt — Astra's accepted decisions. They define the architecture; this document describes its implementation.
+2. outputs/Aegis-unified-feature-catalogue-20261023.txt and work/unified-feature-registry-20261023-r1/ — the completed feature inventory and its machine-readable files. Integration and admission of the combined feature set are not yet complete. Before continuing, verify the manifest, hashes and subsequent source changes; a complete catalogue does not mean a production-ready model.
+3. outputs/Aegis-Astra-history-live-review-20261023.txt — gaps between historical generators, feature consumers and the legacy training path.
+4. outputs/Aegis-Astra-alignment-review-20261023.txt — decisions on missing GLG phase information and late confirmation that a record belongs to a match.
+5. outputs/Aegis-local-GitHub-parity-20261023.txt and outputs/Aegis-Graphify-current-status-20261023.txt — source and index status. Check the current commit and diff: an old report does not establish the freshness of new changes.
 
-Разрешены проверки кода, временных соединений, идентичности данных, единиц измерения и воспроизводимости векторов. Можно ограниченно читать уже сохранённые данные. Новый пилот источника допустим только для конкретного пробела в доказательствах, с отдельными пределами запросов и времени.
+Main paths:
+W = <private continuation workspace W>
+APP = <repository root APP>
+Runtime = <private local runtime directory>
 
-До завершения Steam, архитектурного стыка, полного каталога и технического допуска признаков НЕ запускать:
-- обучение моделей, HPO, ablation или подбор признаков по метрикам;
-- калибровку вероятностей и новую оценку качества ML;
-- старые очереди обучения ради выяснения их состояния;
-- автоматическое включение кандидатов в публичные прогнозы.
+The actual files in APP are the canonical local working version. Load keys only through the established local mechanisms; never print them or copy them into reports, GitHub or Graphify.
 
-Не обновлять архив перед каждым техническим тестом. Не возобновлять вручную остановленные задачи, не удалять STOP и locks, не оживлять истёкшие leases. Если полезной независимой работы нет, сохранить точку продолжения и закончить активную работу, а не опрашивать статус непрерывно.
+WHAT IS ALLOWED NOW
 
-ОСНОВА, КОТОРАЯ УЖЕ ЕСТЬ
+Checks of code, temporal joins, data identity, units and vector reproducibility are allowed. Bounded reads of already saved data are allowed. A new source pilot is permitted only for a specific evidence gap, with its own request and time limits.
 
-- Установлены строгие component folds с embargo 24 часа и точностью границ до 1 нс, head identity v2, whole-intent receipts, технический dataset compiler и начальный checkpoint адаптеров. Прежние 40 требуемых fits не означают 40 завершённых обучений.
-- Работают сохранение исходных Steam-пакетов и происхождения данных, диагностическая таблица и чтение последовательности наблюдений. Текущие схемы: Roshan — 871 значение; player/economy v2 — 36 726 колонок с масками; общий Steam bundle v2 — 38 468 колонок. Это размеры схем, а не доказательство заполненности или качества модели.
-- Есть frozen history producer и DB reader; разделены показатели длительности для команды, игрока, героя и пары игрок–герой. До этой редакции прошли 125 совместных и 7 независимых технических проверок.
-- Пока НЕ завершены автоматическое создание исторического контекста при драфте, его постоянное хранение и повторное использование, объединение богатых C1/C2-признаков со Steam и весь рабочий путь выдачи новых моделей.
-- PR1 с исходниками был слит с отдельным разрешением владельца. Это не разрешение на любые будущие merge. На каждый завершённый блок работ создаётся один PR; отдельная правка внутри блока не требует нового PR или немедленной публикации.
-- Старые fits, частичные артефакты и калибровки сохраняются. Просмотренные проверочные folds нельзя переименовывать в независимый holdout.
+Until Steam, the architecture integration, the complete catalogue and technical feature admission are finished, do NOT run:
+- model training, HPO, ablation or metric-driven feature selection;
+- probability calibration or new ML quality evaluations;
+- old training queues merely to discover their status;
+- automatic promotion of candidates into public predictions.
 
-ПОРЯДОК РАБОТЫ
+Do not refresh the archive before every technical test. Do not resume manually stopped tasks, remove STOP files or locks, or revive expired leases. If no useful independent work remains, save the continuation checkpoint and end active work instead of polling status continuously.
 
-S0: исходники и PR → S1: полный каталог → S2: Steam и происхождение входов → S3: временные контракты → S4: историческое хранилище и cache → S5: исторические семейства → S6: динамические семейства → S7: общий генератор → S8: цели прогнозов и маршрутизация → S9: журнал и путь приложения → S10: техническая приёмка и передача Astra.
+EXISTING FOUNDATION
 
-S11 можно выполнять параллельно, если он не мешает основному пути. S12 — будущая работа с моделями, сейчас на паузе. S13 — последующий допуск и выпуск, вне текущего разрешения.
+- Strict component folds with a 24-hour embargo and boundary precision of 1 ns, head identity v2, whole-intent receipts, the technical dataset compiler and an initial adapter checkpoint are installed. The earlier requirement for 40 fits does not mean 40 fits were completed.
+- Raw Steam packet and provenance retention, the diagnostic table and observation-sequence reading are implemented. Current schemas: Roshan — 871 values; player/economy v2 — 36,726 columns including masks; the combined Steam bundle v2 — 38,468 columns. These are schema sizes, not evidence of completeness or model quality.
+- A frozen history producer and DB reader exist; duration measures are separated for team, player, hero and player–hero. Before this revision, 125 combined and 7 independent technical checks passed.
+- Automatic history-context creation at draft time, persistent storage and reuse, integration of rich C1/C2 features with Steam, and the entire operational path for serving the new models are NOT complete.
+- Source PR1 was merged with separate owner authorization. This does not authorize future merges. Create one PR per completed block of work; an individual edit within a block does not require a new PR or immediate publication.
+- Old fits, partial artifacts and calibrations are retained. Inspected validation folds cannot be relabelled as an independent holdout.
 
-На важных промежуточных этапах сохранять локальную точку продолжения: что сделано, какие файлы изменены, хеши входов и исходников, результаты проверок, оставшиеся ограничения и точное следующее действие. PR URL добавляется после публикации блока. Промежуточная фиксация не требует автоматического обновления GitHub или Graphify. Не объявлять весь этап завершённым по одному прошедшему тесту.
+WORK SEQUENCE
 
-S0. КАНОНИЧЕСКИЕ ИСХОДНИКИ И PR НА ЗАВЕРШЁННЫЙ БЛОК
+S0: sources and PR → S1: full catalogue → S2: Steam and input provenance → S3: temporal contracts → S4: history storage and cache → S5: historical families → S6: dynamic families → S7: shared generator → S8: prediction targets and routing → S9: journal and application path → S10: technical acceptance and handoff to Astra.
 
-Сначала проверить текущие APP-файлы, незавершённые правки других агентов, состояние заданий и актуальную удалённую main. Не выполнять reset/clean поверх рабочих изменений. Старый локальный Git HEAD может не описывать фактический APP.
+S11 may proceed in parallel if it does not interfere with the main path. S12 is future model work and is currently paused. S13 covers later admission and release, outside the current authorization.
 
-Внутри текущего блока основными остаются локальные рабочие исходники и сохранённая точка продолжения. Main и индекс Graphify могут явно отставать: фиксировать это в статусе, не подгонять облако под каждую правку. Промежуточные локальные фиксации делать при существенном результате.
+At significant intermediate milestones, save a local continuation checkpoint: completed work, changed files, input and source hashes, check results, remaining limitations and the exact next action. Add the PR URL after publishing the block. An intermediate checkpoint does not require an automatic GitHub or Graphify update. Do not declare an entire stage complete because one test passed.
 
-По завершении согласованного блока работ:
-1. Зафиксировать его границы и хеши до/после.
-2. Проверить фактические изменённые файлы APP.
-3. Перенести только исходники, примеры конфигурации, синтетические тесты и документацию в изолированный checkout от свежей main.
-4. Проверить diff и исключение секретов, БД, raw-архивов, весов, runtime и сборочных результатов.
-5. Создать один PR для всего законченного блока и прикрепить его к чату. Если для этого блока уже открыт PR, обновить его ветку; не открывать новый PR на каждую последующую правку. Не объединять в блок незаконченную смесь независимых работ.
+S0. CANONICAL SOURCES AND ONE PR PER COMPLETED BLOCK
 
-Сравнивать Git blobs с текущим APP напрямую. Различать совпадение байтов, различия CRLF/LF и смысловые различия. Отчёт о паритете должен указывать scope и commit; он не распространяется на БД, веса или node_modules. Если найден нужный исходник вне allowlist, провести review, а не молча исключить его.
+First inspect the current APP files, other agents' unfinished edits, job status and the current remote main. Do not run reset/clean over working changes. An old local Git HEAD may not describe the actual APP.
 
-После отдельно разрешённого merge законченного блока проверить новый main/tree, затем обновление индекса Graphify и несколько изменённых символов. Пока блок выполняется, PR не слит или индекс отстаёт, локальные файлы и checkpoint важнее графа. Не создавать новый проект и не удалять старый ради обновления индекса.
+Within the current block, local working source and the saved continuation checkpoint remain authoritative. Main and the Graphify index may explicitly lag behind: record this in status rather than synchronizing the cloud after every edit. Save intermediate local checkpoints when meaningful progress is made.
 
-Критерий завершения блока: есть воспроизводимый отчёт о паритете и привязка APP → один PR/commit; все публикуемые изменения законченного блока вошли в него либо имеют явную причину отсрочки. Рабочие промежуточные правки незавершённого блока могут оставаться локальными. Правила закреплены в AGENTS/документации. Новый merge требует актуального разрешения владельца.
+When the agreed block of work is complete:
+1. Record its scope and before/after hashes.
+2. Check the actual changed APP files.
+3. Transfer only source, configuration examples, synthetic tests and documentation into an isolated checkout based on current main.
+4. Review the diff and exclusion of secrets, databases, raw archives, weights, runtime and build outputs.
+5. Create one PR for the entire completed block and attach it to the chat. If a PR for this block is already open, update its branch; do not open a new PR for each subsequent edit. Do not bundle an unfinished mixture of independent work into one block.
 
-S1. ПОЛНЫЙ ЕДИНЫЙ КАТАЛОГ ПРИЗНАКОВ
+Compare Git blobs directly with current APP. Distinguish byte equality, CRLF/LF differences and semantic differences. The parity report must state its scope and commit; it does not cover databases, weights or node_modules. If a required source file is outside the allowlist, review it instead of silently excluding it.
 
-Прочитать готовые outputs/Aegis-unified-feature-catalogue-20261023.txt и work/unified-feature-registry-20261023-r1/{CATALOGUE-INDEX,FAMILY-REGISTRY,TWELVE-TARGET-MATRIX,VERIFICATION}.json. Сохранённая инвентаризация охватывает 14 схем — 13 прежних и общий Steam-вектор, 79 семейств и 12 целей. В ней 465 359 перечислений колонок и 203 558 различных написаний имён. Это не ширина будущей модели и не доказательство семантической уникальности признаков. Повторно собирать готовый каталог без обнаруженной причины не нужно.
+After a separately authorized merge of the completed block, check the new main/tree, then the Graphify index update and several changed symbols. While the block is in progress, the PR is unmerged or the index is stale, local files and the checkpoint take precedence over the graph. Do not create a new project or delete the old one merely to refresh the index.
 
-Перед интеграцией сверить хеши и последующие изменения со старыми каталогами, Steam v2, rich postdraft/C1/C2, ProfileBuilder и предложениями владельца. Альтернативные наборы нельзя складывать и выдавать за размер одной модели. Одинаковое имя с разной формулой или версией — конфликт, требующий явного решения. Инвентаризация завершена; реализация объединённого producer, интеграция всех семейств и технический допуск остаются задачами этого плана.
+Block completion criterion: a reproducible parity report and an APP → one PR/commit mapping exist; all publishable changes in the completed block are included or have an explicit reason for deferral. Intermediate working edits in an unfinished block may remain local. The rules are recorded in AGENTS/documentation. A new merge requires current owner authorization.
 
-Для каждого признака или формально заданного семейства registry содержит:
-- устойчивый ID и имя, семейство, версию и формулу;
-- тип, единицы, входы и зависимости;
-- источник, профиль источника и временную основу;
-- популяцию, патч/буквенную ревизию, окно истории и минимальную поддержку;
-- правила отсутствующих данных и резервного расчёта;
-- доказательство доступности, путь producer, допустимые фазы и цели;
-- статус реализации: готово, требуется интеграция, запланировано или доступность не доказана;
-- точную связь с закреплёнными старыми каталогами и именами колонок.
+S1. COMPLETE UNIFIED FEATURE CATALOGUE
 
-Зафиксировать 12 логических целей:
+Read the completed outputs/Aegis-unified-feature-catalogue-20261023.txt and work/unified-feature-registry-20261023-r1/{CATALOGUE-INDEX,FAMILY-REGISTRY,TWELVE-TARGET-MATRIX,VERIFICATION}.json. The saved inventory covers 14 schemas — 13 earlier schemas and the combined Steam vector — with 79 families and 12 targets. It contains 465,359 column occurrences and 203,558 distinct name spellings. This is not the width of a future model or evidence that the features are semantically unique. Do not rebuild the completed catalogue without an identified reason.
+
+Before integration, reconcile hashes and subsequent changes with the older catalogues, Steam v2, rich postdraft/C1/C2, ProfileBuilder and the owner's proposals. Alternative feature sets must not be added together and presented as the size of one model. An identical name with a different formula or version is a conflict requiring an explicit resolution. Inventory is complete; implementing the unified producer, integrating all families and obtaining technical admission remain tasks in this plan.
+
+For each feature or formally specified family, the registry contains:
+- stable ID and name, family, version and formula;
+- type, units, inputs and dependencies;
+- source, source profile and time basis;
+- population, patch/letter revision, history window and minimum support;
+- missing-data and fallback calculation policies;
+- availability evidence, producer path, permitted phases and targets;
+- implementation status: ready, integration required, planned or availability unproven;
+- exact links to pinned older catalogues and column names.
+
+Record the 12 logical targets:
 PRE_MAP_WIN, PRE_KILLS, PRE_DURATION;
 POST_MAP_WIN, POST_KILLS, POST_DURATION;
 LIVE_MAP_WIN, LIVE_KILLS, LIVE_DURATION;
 SERIES_PRE, SERIES_BETWEEN, SERIES_LIVE.
 
-Это 12 смысловых маршрутов прогнозирования, а не требование хранить ровно 12 файлов весов. SERIES_BETWEEN и SERIES_LIVE используют общее семейство богатого контекстного прогноза серии; состояние после драфта входит в SERIES_LIVE с явной фазой postdraft. Физическое разделение на модели или experts определяется позже. Старые 8 семейств/10 голов/40 fits относятся к прежнему исполнительному протоколу; новую матрицу целей нельзя считать уже внедрённой в него.
+These are 12 semantic prediction routes, not a requirement to store exactly 12 weight files. SERIES_BETWEEN and SERIES_LIVE use a shared family of rich contextual series predictions; the postdraft state belongs to SERIES_LIVE with an explicit postdraft phase. Physical separation into models or experts is decided later. The old 8 families/10 heads/40 fits belong to the earlier execution protocol; the new target matrix must not be treated as already implemented in it.
 
-Цель                 | Когда доступен маршрут                     | Какое событие предсказывает
-PRE_MAP_WIN          | До известного драфта карты                  | Победителя карты
-PRE_KILLS            | До известного драфта карты                  | Итоговые убийства карты
-PRE_DURATION         | До известного драфта карты                  | Итоговую длительность карты
-POST_MAP_WIN         | Получен полный драфт                        | Победителя карты
-POST_KILLS           | Получен полный драфт                        | Итоговые убийства карты
-POST_DURATION        | Получен полный драфт                        | Итоговую длительность карты
-LIVE_MAP_WIN         | Есть допустимое текущее состояние карты     | Победителя текущей карты
-LIVE_KILLS           | Есть допустимое текущее состояние карты     | Оставшиеся и итоговые убийства карты
-LIVE_DURATION        | Есть допустимое текущее состояние карты     | Оставшуюся и итоговую длительность карты
-SERIES_PRE           | До начала матча/серии                       | Победителя всей серии
-SERIES_BETWEEN       | Между картами, без текущего игрового пакета  | Победителя всей серии с известными итогами карт
-SERIES_LIVE          | Полный драфт текущей карты, затем её live    | Победителя всей серии с текущим контекстом карты
+Target               | When the route is available                  | Predicted event
+PRE_MAP_WIN          | Before the map draft is known                | Map winner
+PRE_KILLS            | Before the map draft is known                | Final map kills
+PRE_DURATION         | Before the map draft is known                | Final map duration
+POST_MAP_WIN         | Complete draft received                      | Map winner
+POST_KILLS           | Complete draft received                      | Final map kills
+POST_DURATION        | Complete draft received                      | Final map duration
+LIVE_MAP_WIN         | Admissible current map state is available    | Current map winner
+LIVE_KILLS           | Admissible current map state is available    | Remaining and final map kills
+LIVE_DURATION        | Admissible current map state is available    | Remaining and final map duration
+SERIES_PRE           | Before the match/series starts               | Winner of the entire series
+SERIES_BETWEEN       | Between maps, without a current game packet  | Series winner using known map results
+SERIES_LIVE          | Full current-map draft, then its live state  | Series winner using current-map context
 
-Вся полезная причинно доступная история может использоваться и в live. PRE не получает ещё неизвестных героев текущей карты. POST получает наблюдаемый драфт, но не выдуманное игровое состояние. LIVE соединяет историю, драфт и текущие наблюдения. Предыдущие карты серии имеют отдельное пространство имён и доступны только после фактического получения соответствующих результатов. Неизвестный будущий драфт не заполняется героями текущей карты.
+All useful, causally available history may also be used in live predictions. PRE does not receive as-yet-unknown heroes of the current map. POST receives the observed draft, not an invented game state. LIVE combines history, draft and current observations. Previous maps in the series have a separate namespace and become available only after the corresponding results are actually received. Unknown future drafts are not filled with the current map's heroes.
 
-Сохранить широкие семейства. Отразить в каталоге также пока не реализованные взаимодействия: игрок–герой–союзник, мета патча, индивидуальная эффективность и форма, Roshan/Aegis, траектории экономики и объектов, тайминги предметов, поведение команды после проигранной карты. Не удалять семейства из-за слабой общей корреляции; подбор и ablation будут позже.
+Preserve the broad families. Include interactions that are not yet implemented: player–hero–ally, patch meta, individual performance and form, Roshan/Aegis, economic and objective trajectories, item timings, and team behaviour after losing a map. Do not remove families because their overall correlation is weak; selection and ablation come later.
 
-Критерий завершения: каждое прежнее имя сохранено либо имеет обоснованный alias; каждое обсуждённое семейство учтено; схема запрещает поля неправильной фазы. Структурный ноль one-hot отличается от missing. Наличие имени не выдаётся за наличие данных. Полный registry прошёл технический review.
+Completion criterion: every old name is preserved or has a justified alias; every discussed family is represented; the schema prohibits fields from the wrong phase. A structural one-hot zero differs from missing data. A name's existence is not presented as evidence that its data is available. The full registry has passed technical review.
 
-S2. STEAM: ПОЛНЫЙ КОНТРАКТ И ПОДТВЕРЖДЁННЫЕ ВХОДЫ
+S2. STEAM: COMPLETE CONTRACT AND CONFIRMED INPUTS
 
-Основа: outputs/Aegis-Steam-API-catalog-20261023.txt и work/steam-api-catalog-20261023-r1/. Список 25 сочетаний метода/версии и protobuf-схемы не означает 25 рабочих live-потоков или 2 138 реально наблюдаемых полей.
+Basis: outputs/Aegis-Steam-API-catalog-20261023.txt and work/steam-api-catalog-20261023-r1/. A list of 25 method/version combinations and protobuf schemas does not mean 25 working live feeds or 2,138 actually observed fields.
 
-Для каждого нужного входа пройти цепочку: заявлен в схеме → наблюдался → сохранён в raw → нормализован → использован в признаке. Отсутствующий обработчик в нашем коде отличается от отсутствующего поля у поставщика. Исходный пакет сохранять; изменения нормализации версионировать и проверять.
+For each required input, trace: declared in the schema → observed → retained in raw data → normalized → used in a feature. A missing handler in our code is different from a field missing at the provider. Preserve the original packet; version and test normalization changes.
 
-GLG scoreboard и RT/Terse — разные профили. Текущее состояние берётся из одного согласованного пакета. Нельзя дополнять отсутствующее поле более свежим значением другого endpoint. Полная смена профиля требует явного переключения и сброса соответствующих временных окон.
+GLG scoreboard and RT/Terse are different profiles. Current state comes from one coherent packet. Do not fill a missing field with a newer value from another endpoint. A full profile change requires explicit switching and resetting the relevant temporal windows.
 
-Сначала использовать сохранённые пакеты. Новый пилот проводить только для конкретного пробела и подходящего реального матча; ограничить запросы, длительность и логи. Учитывать ожидаемые опросы, пустые ответы и ошибки. При 403/429 — штатная остановка, без смены IP, ключа или маршрута для обхода.
+Use saved packets first. Run a new pilot only for a specific gap and a suitable actual match; bound requests, runtime and logs. Account for expected polls, empty replies and errors. On 403/429, stop through the normal mechanism; do not switch IP, key or route to bypass the restriction.
 
-Критерий завершения: у входа известны единицы, источник, время и идентичность; raw и normalized совпадают по правилам. Missing, ноль и некорректное значение различаются. Неизвестная абсолютная задержка не превращается в нулевую. Проверка профиля оформлена настоящим версионным артефактом с хешами доказательств, а не произвольным reviewed=true.
+Completion criterion: the input has known units, source, time and identity; raw and normalized values agree under the contract. Missing, zero and invalid values are distinct. Unknown absolute latency does not become zero. Profile review is a genuine versioned artifact with evidence hashes, not an arbitrary reviewed=true.
 
-S3. ВРЕМЕННЫЕ КОНТРАКТЫ И ИСТОРИЧЕСКОЕ ВЫРАВНИВАНИЕ
+S3. TEMPORAL CONTRACTS AND HISTORICAL ALIGNMENT
 
-Основа: work/astra-alignment-review-20261023-r1/historicalAlignment.mjs и 17 технических тестов. Это подготовленный staged-код, не установленный публичный допуск.
+Basis: work/astra-alignment-review-20261023-r1/historicalAlignment.mjs and 17 technical tests. This is prepared staged code, not installed public admission.
 
-Добавить отдельный ограниченный opt-in экспорт исторических native-кандидатов в historicalFactsDb, сохранив прежний строгий путь. Producer проверяет профиль, карту, команды/героев/аккаунты, часы, доступность и аннотацию. Отсутствующая фаза не переписывается в phase=5. Явные non-live, invalid и terminal markers не обходятся исторической аннотацией.
+Add a separate bounded opt-in export of historical native candidates to historicalFactsDb, retaining the existing strict path. The producer checks profile, map, teams/heroes/accounts, clocks, availability and annotation. A missing phase is not rewritten as phase=5. Explicit non-live, invalid and terminal markers cannot be bypassed by a historical annotation.
 
-Разделить:
-- eventTime/gameClock — к какому состоянию относится факт;
-- receivedAt/availableAt — когда факт реально был доступен системе;
-- historyCutoffAt — границу истории для данного контекста;
-- predictionAt и targetIdentityKnownAt — момент расчёта и доступность текущей идентичности;
-- alignmentAnnotationKnownAt — время позднего подтверждения соответствия записи;
-- computedAt/ingestedAt — время вычисления/импорта, которое не заменяет исходный receipt.
+Separate:
+- eventTime/gameClock — the state to which a fact refers;
+- receivedAt/availableAt — when the fact was actually available to the system;
+- historyCutoffAt — the history boundary for this context;
+- predictionAt and targetIdentityKnownAt — calculation time and availability of the current identity;
+- alignmentAnnotationKnownAt — the time of late confirmation that the record aligns;
+- computedAt/ingestedAt — calculation/import time, which does not replace the original receipt.
 
-Позднее подтверждение старта или длительности допустимо для офлайн-проверки соответствия, но не становится предиктором и не сдвигает cutoff. Оно не разрешает использовать поздний outcome или roster. Проверять содержимое файлов по хешам, а не только формат шестнадцатеричной строки. Итоговая длительность текущей карты не попадает в раннее remaining time; отбор кадров с её помощью требует явного отчёта о смещении выборки.
+Late confirmation of start or duration is allowed for offline alignment validation, but does not become a predictor or move the cutoff. It does not authorize late outcome or roster data. Check file contents against hashes, not merely hexadecimal string format. The current map's final duration must not enter an early remaining-time feature; using it to select frames requires an explicit selection-bias report.
 
-Создать observed_draft контракт с триггером first_complete_draft_receipt. Полный драфт означает десять подтверждённых выбранных героев и стороны, а не обязательную публичность всех account_id. Не ждать позднего start_time ради статического прогноза после драфта. Не создавать нулевые GPM или ложную phase=5. Если первый снимок получен посреди игры, сохранить late_first_observation и не относить его к postdraft/0-minute когорте.
+Create an observed_draft contract triggered by first_complete_draft_receipt. A complete draft means ten confirmed selected heroes and sides, not necessarily public account_id values for all players. Do not wait for late start_time metadata to produce a static postdraft prediction. Do not create zero GPM values or false phase=5. If the first snapshot arrives mid-game, retain late_first_observation and exclude it from the postdraft/0-minute cohort.
 
-Офлайн-повтор использует тот же записанный триггер. Если его нет, это отдельная реконструкция с другой cutoff policy. Предполагаемое end+300 секунд не является реальным receipt. Recorded и reconstructed cohorts не смешиваются как подтверждение боевой воспроизводимости.
+Offline replay uses the same recorded trigger. If it is absent, this is a separate reconstruction with another cutoff policy. Assumed end+300 seconds is not an actual receipt. Do not mix recorded and reconstructed cohorts as evidence of production reproducibility.
 
-Критерий завершения: прежний confirmed_map_start_required воспроизводится; новый маршрут разрешает только оговорённую позднюю метаинформацию. Future outcome/roster даже на 1 нс отклоняется. Clock absent/zero/positive различаются. Синтетический profile attestation не копируется в настоящие manifests. Автоматического допуска к обучению или выдаче нет.
+Completion criterion: the previous confirmed_map_start_required rejection is reproducible; the new route allows only the specified late metadata. Future outcome/roster data is rejected even if it is late by just 1 ns. Clock absent/zero/positive remain distinct. Synthetic profile attestations are not copied into real manifests. There is no automatic admission to training or serving.
 
-S4. ИСТОРИЧЕСКОЕ ХРАНИЛИЩЕ И CACHE ПО ДРАФТУ
+S4. HISTORY STORAGE AND DRAFT-TIME CACHE
 
-Основные места: source-adapter/{historicalFactsDb,frozenPlayerContext,steamFeatureDbReader}.mjs, миграции lib/db, интеграция рядом с LiveWorker и PredictionJournal. Сверить существующие таблицы перед созданием новой сущности.
+Main locations: source-adapter/{historicalFactsDb,frozenPlayerContext,steamFeatureDbReader}.mjs, lib/db migrations, and integration near LiveWorker and PredictionJournal. Check existing tables before creating a new entity.
 
-Ввести append-only history_context_snapshots. Сохранять id/contentHash; matchId, draftHash, rosterHash и sideIdentityHash; cutoffPolicy/historyCutoffAt; availabilityBasis; версии producer/schema; sourceSnapshotHash и patchEvidenceHash; generatedAt; значения, маски, поддержку и происхождение.
+Introduce append-only history_context_snapshots. Store id/contentHash; matchId, draftHash, rosterHash and sideIdentityHash; cutoffPolicy/historyCutoffAt; availabilityBasis; producer/schema versions; sourceSnapshotHash and patchEvidenceHash; generatedAt; values, masks, support and provenance.
 
-Конкурентное создание одного снимка должно приводить к одной committed-записи. После записи контекст неизменяем. Триггер создаёт его при полном драфте; читатели только получают ссылку и данные. Обработчик открытия карточки не вызывает платный API. После перезапуска та же ссылка даёт тот же вектор.
+Concurrent creation of the same snapshot must produce one committed record. The context is immutable after it is written. The trigger creates it when the draft is complete; readers only retrieve its reference and data. The match-card open handler does not call a paid API. After a restart, the same reference produces the same vector.
 
-Если драфт известен в t0, а account_id раскрыт в t1, создать новую версию с validFrom=t1 и причиной изменения. История этой версии остаётся as-of t0. Допустим новый экспорт недостающей истории, только если availableAt <= t0, с новым sourceSnapshotHash. Старые векторы не менять. Неизвестный account оставляет player-specific признаки missing; доступные hero/team-признаки сохраняются. Конфликт идентичности без доказательства приостанавливает зависимое семейство.
+If the draft is known at t0 and account_id is disclosed at t1, create a new version with validFrom=t1 and a reason for the change. Its history remains as-of t0. A new export of missing history is permitted only if availableAt <= t0, with a new sourceSnapshotHash. Do not change old vectors. An unknown account leaves player-specific features missing; available hero/team features remain usable. An identity conflict without evidence suspends the dependent family.
 
-Cache обученных преобразований дополнительно связывается с learnedTransformStateSha256 и конкретным TRAIN/fold/cohort. Одинаковые имена колонок при разных обученных состояниях не означают одинаковый ключ. До разрешённого обучения этот слой может быть пустым; OOF-значения не выдумывать.
+The learned-transform cache is additionally bound to learnedTransformStateSha256 and the specific TRAIN/fold/cohort. Identical column names with different learned states do not imply an identical key. This layer may remain empty until training is authorized; do not invent OOF values.
 
-Хранить версии исторических фактов по времени их доступности. Текущие hero_stats/player_hero_stats/player_ratings/team_form нельзя присоединять к прошлому срезу как будто они тогда уже были такими. Raw live, итоговые labels и backfill разделяются по назначению и происхождению; итог матча не перезаписывает его старые live-наблюдения.
+Version historical facts by their availability time. Current hero_stats/player_hero_stats/player_ratings/team_form must not be joined to a past slice as if they already had their current values then. Raw live data, final labels and backfill are separated by purpose and provenance; a match's final result does not overwrite its old live observations.
 
-Критерий завершения: 100 одновременных читателей не создают 100 выгрузок/запросов; добавление будущих данных не меняет прошлый снимок; текущая карта исключена из своей истории; late identity и restart проверены. Запросы к БД и потребление памяти ограничены.
+Completion criterion: 100 concurrent readers do not cause 100 exports/requests; appending future data does not change a past snapshot; the current map is excluded from its own history; late identity and restart behaviour are tested. DB queries and memory usage are bounded.
 
-S5. БОГАТАЯ ИСТОРИЯ, ИНДИВИДУАЛЬНАЯ СИЛА И МЕТА
+S5. RICH HISTORY, INDIVIDUAL STRENGTH AND META
 
-Переиспользовать и привести к общему контракту формулы artifacts/ml-service/src/research/postdraft_full/{rich,causal,player,performance,wide_interactions}.py, ProfileBuilder и IndividualAppendix. Не импортировать runner обучения в рабочий API. Чистые библиотеки и протоколы перенести в исходники APP, убрав зависимости от абсолютного пути W.
+Reuse and align the formulas in artifacts/ml-service/src/research/postdraft_full/{rich,causal,player,performance,wide_interactions}.py, ProfileBuilder and IndividualAppendix with the shared contract. Do not import a training runner into the production API. Move pure libraries and protocols into APP source, removing dependencies on the absolute W path.
 
-Реализовать весь согласованный scope, сохраняя исходные группы:
-- игрок; игрок–герой; игрок–команда; игрок–команда–герой;
-- форма, индивидуальная эффективность, отклонение от подходящей популяционной нормы, привычность героя и давность опыта;
-- стиль команды и её результат против разных стилей соперника;
-- герои, пары, контрпики и условные сочетания конкретных игроков и героев союзников;
-- мета с отдельными pro/Immortal популяциями, patch/subpatch, окнами, сторонами и ролями;
-- исторические нормы, распределения длительности и убийств;
-- late tendency отдельно для команды, игрока, героя и игрока на герое.
+Implement the entire agreed scope while preserving the original groups:
+- player; player–hero; player–team; player–team–hero;
+- form, individual performance, deviation from an appropriate population reference, hero familiarity and recency of experience;
+- team style and its performance against different opponent styles;
+- heroes, pairs, counterpicks and conditional combinations of specific players and allied heroes;
+- meta with separate pro/Immortal populations, patch/subpatch, windows, sides and roles;
+- historical reference values and duration/kill distributions;
+- late tendency separately for team, player, hero and player on that hero.
 
-Каждый статистический признак сопровождается поддержкой по различным картам, effective count при необходимости, временем последней доступной зависимости, окном, популяцией и доказательством. Герой оценивается по подходящей популяции разных команд, а не только по картам текущих игроков. Анонимный account не исключает известного героя из популяции героя. Две удачные карты не выдаются за устойчивую силу сочетания.
+Every statistical feature includes support across distinct maps, effective count where necessary, the latest availability time of its dependencies, window, population and evidence. Evaluate a hero against an appropriate population spanning different teams, not only the current players' maps. An anonymous account does not exclude a known hero from the hero population. Two successful maps do not establish a combination's stable strength.
 
-Raw winrate, сглаженный winrate и преимущество относительно baseline — разные признаки с явными формулами. Отделить детерминированный расчёт по доступной истории от обучаемого преобразования. Learned baseline, target encoding, latent strength и выбираемый по данным словарь требуют TRAIN-only состояния и корректной OOF-логики в будущих экспериментах. Сейчас описывается и проверяется контракт, а не обучается это состояние. Fold/cohort binding обязателен.
+Raw winrate, smoothed winrate and lift relative to a baseline are distinct features with explicit formulas. Separate deterministic computation over available history from a learned transform. Learned baselines, target encoding, latent strength and data-selected dictionaries require TRAIN-only state and correct OOF logic in future experiments. For now, specify and verify the contract; do not train that state. Fold/cohort binding is mandatory.
 
-Исторический финальный GPM/damage прошлой карты допустим как история, но не является текущим показателем новой карты. Native GPM, earned gold и net worth не подменяют друг друга. Не вычислять отсутствующий NW из gold_t и не объявлять NW/min наблюдаемым GPM. Роль 1–5 не выводится из места в массиве или экономического ранга.
+The historical final GPM/damage of an earlier map is valid history, but is not a current measurement for the new map. Native GPM, earned gold and net worth are not interchangeable. Do not compute missing NW from gold_t or call NW/min observed GPM. Roles 1–5 are not inferred from array position or economic rank.
 
-В scripts/src/train-lightgbm.ts:449–470 прежний peer_synergy join заменить входом с корректным временем доступности либо заблокировать этот legacy train path. Проверить аналогичные текущие агрегаты героев/игроков. Нельзя на основании одной найденной ошибки объявлять все прежние модели протёкшими или переписывать их старые метрики.
+In scripts/src/train-lightgbm.ts:449–470, replace the old peer_synergy join with an input carrying correct availability time, or block this legacy train path. Inspect similar current hero/player aggregates. One identified error is not a basis for declaring that all previous models leaked or rewriting their old metrics.
 
-STRATZ не обязателен для нового Steam+history пути. Старый ключ, данные и остановку по 403 сохранить. Не отключать старые producers без проверки зависимостей. Долги refresh/phase-default/synergy/population вынесены в отдельный review Astra и не мешают описать полный registry.
+STRATZ is not mandatory for the new Steam+history path. Preserve the old key, data and stop-on-403 behaviour. Do not disable old producers without checking dependencies. Refresh/phase-default/synergy/population debt is assigned to a separate Astra review and does not prevent specifying the full registry.
 
-Критерий завершения: небольшие вручную проверяемые fixtures; границы времени +1 нс; дубликаты и частичные популяции; анонимные игроки с известными героями; разные player/hero/ally сочетания; буквенные патчи. Семейства не исчезают молча из registry.
+Completion criterion: small manually checkable fixtures; +1 ns time boundaries; duplicates and partial populations; anonymous players with known heroes; different player/hero/ally combinations; letter patches. Families do not silently disappear from the registry.
 
-S6. ДИНАМИЧЕСКИЕ ПРИЗНАКИ И ИХ ВЗАИМОДЕЙСТВИЯ
+S6. DYNAMIC FEATURES AND THEIR INTERACTIONS
 
-Основа: playerHeroEconomyFeatures.mjs, roshanFeatures.mjs, steamFeatureBundle.mjs. Существующие ID и формулы сохранять как версии. Новую схему нельзя незаметно подставлять старым весам.
+Basis: playerHeroEconomyFeatures.mjs, roshanFeatures.mjs, steamFeatureBundle.mjs. Preserve existing IDs and formulas as versions. Do not silently supply a new schema to old weights.
 
-Группы: native NW/GPM/XPM, уровни и предметы по игроку/герою/доказанной роли/минуте; распределение ресурсов пяти игроков; окна 60/180/300/600 секунд; преимущества, изменения темпа, откаты и перевороты; связи с драфтом, формой и стилем. Состояние жизни, respawn, buyback, ultimate и объекты используются только при настоящем получении нужного поля.
+Groups: native NW/GPM/XPM, levels and items by player/hero/proven role/minute; five-player resource distribution; 60/180/300/600-second windows; leads, tempo changes, reversals and turnarounds; interactions with draft, form and style. Alive state, respawn, buyback, ultimate and objectives are used only when the required field is actually received.
 
-Roshan/Aegis: известное или неизвестное состояние, время после смерти, границы возрождения, владелец и сторона Aegis, срок действия, расходование, кража и порядковое убийство Roshan. Связать их с преимуществом, силой героев, объектами и исторической скоростью завершения. Нулевой таймер не означает alive. Расчётный интервал не является наблюдаемой смертью. Послематчевую информацию о краже нельзя переносить в ранний live-кадр. Правила имеют патч, версию, источник и время доступности.
+Roshan/Aegis: known or unknown state, time since death, respawn bounds, Aegis holder and side, lifetime, consumption, steal and Roshan kill ordinal. Link them to advantage, hero strength, objectives and historical finishing speed. A zero timer does not mean alive. An inferred interval is not an observed death. Postmatch information about a steal must not be moved into an early live frame. Rules carry patch, version, source and availability time.
 
-Критерий завершения: будущий кадр/событие не меняет прошлый префикс; смена карты/профиля и откат часов сбрасывают нужные окна; неизвестные поля остаются missing. Секунды переводятся в минуты один раз; текущее и оставшееся не складываются дважды. Неопределённый интервал не превращается в придуманное точное время.
+Completion criterion: a future frame/event does not change a past prefix; map/profile changes and clock rewinds reset the relevant windows; unknown fields remain missing. Convert seconds to minutes once; do not add current and remaining values twice. An uncertain interval does not become an invented exact time.
 
-S7. ОДИН ЛОГИЧЕСКИЙ ГЕНЕРАТОР И ФАЗОВЫЕ ПРОЕКЦИИ
+S7. ONE LOGICAL GENERATOR AND PHASE PROJECTIONS
 
-Создать одну авторитетную точку генерации, например generateFeatureBundle(inputContract, historyContextRef, observationPrefix, registryVersion). За ней могут оставаться отдельные модули семейств. Один producer не означает одну модель на все задачи.
+Create one authoritative generation entry point, for example generateFeatureBundle(inputContract, historyContextRef, observationPrefix, registryVersion). Separate family modules may remain behind it. One producer does not mean one model for every task.
 
-Из registry формируются проекции для 12 целей. PRE получает доступную историю и допустимый контекст серии; POST добавляет наблюдаемый драфт; LIVE использует историю, драфт и согласованную динамику. Большой общий каталог не означает, что каждое семейство активно в каждой строке.
+The registry defines projections for the 12 targets. PRE receives available history and admissible series context; POST adds the observed draft; LIVE uses history, draft and coherent dynamics. A large shared catalogue does not mean every family is active in every row.
 
-Выход содержит упорядоченные имена, значения, маски, типы/единицы, schema hash, ссылки на контекст/источники, cutoff policy и идентичность. Нельзя просто склеить C1/C2/Steam-векторы: совпадающие смыслы, формулы, маски, единицы и источники согласовать явно. Сохранить таблицу соответствий всему исходному registry.
+The output includes ordered names, values, masks, types/units, schema hash, context/source references, cutoff policy and identity. Do not simply concatenate C1/C2/Steam vectors: explicitly reconcile overlapping meanings, formulas, masks, units and sources. Preserve a mapping table covering the entire original registry.
 
-Экспорт датасета и расчёт в приложении используют один producer. Будущее обучение читает сохранённые векторы этого producer, не пересчитывая скрыто другую версию формул. Если необходима реализация на другом языке, равенство доказывается golden/parity проверками. Python-адаптер проверяет schema hash, порядок, dtype, представление missing и версию learned state; несовместимый вектор отклоняется.
+Dataset export and in-app calculation use one producer. Future training reads its saved vectors instead of silently recomputing another version of the formulas. If an implementation in another language is required, prove equivalence with golden/parity checks. The Python adapter checks schema hash, order, dtype, missing representation and learned-state version; incompatible vectors are rejected.
 
-Критерий завершения: офлайн и онлайн получают одинаковый вектор из одних закреплённых входов; перестановка игроков не меняет смысл; смена Radiant/Dire меняет ориентацию по контракту; зависимости проверены по availableAt. Старая модель не принимает вектор новой версии.
+Completion criterion: offline and online produce the same vector from the same pinned inputs; reordering players does not change meaning; swapping Radiant/Dire changes orientation according to the contract; dependencies are checked against availableAt. An old model does not accept a new-version vector.
 
-S8. ВСЕ ЦЕЛИ ПРОГНОЗОВ И МАРШРУТИЗАЦИЯ ПО ФАЗЕ
+S8. ALL PREDICTION TARGETS AND PHASE ROUTING
 
-Реализовать маршрутизацию 12 целей из S1. Число физических моделей/expert heads определяется позднее экспериментами. Не создавать заранее отдельный обязательный файл весов на каждые пять минут. Для 80+ минут предусмотрена одна поздняя группа.
+Implement routing for the 12 targets in S1. The number of physical models/expert heads will be decided through later experiments. Do not preassign a mandatory separate weight file to every five-minute interval. Use one late-game group for 80+ minutes.
 
-Состояния маршрута: драфт не известен → PRE; полный наблюдаемый драфт → POST сразу; допустимый игровой пакет → LIVE; завершённая карта → фактический результат. Произвольная пауза 60 секунд не является доказательством фазы. Наличие технического маршрута пока не разрешает выдачу нового кандидата публике.
+Route states: draft unknown → PRE; complete observed draft → POST immediately; admissible game packet → LIVE; completed map → actual result. An arbitrary 60-second pause does not prove the phase. Having a technical route does not yet authorize public serving of a new candidate.
 
-Главная карточка ВСЕГДА показывает вероятность победы во всём матче/серии. До начала используется SERIES_PRE. После появления полного драфта текущей карты работает богатая контекстная модель серии: сначала с драфтом, затем с текущими исходными и общими признаками карты. Между картами это же контекстное семейство продолжает работать без текущего live-пакета, используя известные итоги предыдущих карт. Фаза и semantic route явные; число файлов весов заранее не фиксируется.
+The main card ALWAYS shows the probability of winning the entire match/series. Before the start, use SERIES_PRE. Once the current map's complete draft is available, use a rich contextual series model: first with the draft, then with the current raw and shared map features. Between maps, the same contextual family continues without a current live packet, using known previous-map results. Phase and semantic route are explicit; the number of weight files is not predetermined.
 
-Входы контекстного семейства серии: frozen history; сила, форма и стиль команд/игроков; формат BO1/BO3/BO5; счёт серии и положение текущей карты; полный наблюдаемый драфт; допустимые общие признаки её текущего состояния и траектории; подробные доступные данные предыдущих завершённых карт. Прошлые performance и исходы карт допускаются только после фактической доступности. Неизвестные герои будущей карты не заменяются текущими.
+Inputs to the contextual series family: frozen history; team/player strength, form and style; BO1/BO3/BO5 format; series score and current-map position; complete observed draft; admissible shared features of the current state and trajectory; detailed available data from previous completed maps. Past performance and map outcomes are allowed only after they actually become available. Unknown future-map heroes are not replaced with current heroes.
 
-Нельзя свести серию к арифметическому преобразованию вероятности текущей карты или только к паре «счёт + map probability». Прогноз карты может быть дополнительным входом лишь с согласованной версией и подтверждённой OOF/рабочей воспроизводимостью; он не заменяет богатый контекст. Команда может проигрывать текущую карту и оставаться фаворитом серии. Для BO1 карта и серия описывают один исход, и выдача должна быть согласованной. После окончания серии показывается фактический результат.
+Do not reduce the series prediction to an arithmetic transformation of the current map probability or only to the pair "score + map probability". A map prediction may be an additional input only with a compatible version and verified OOF/operational reproducibility; it does not replace the rich context. A team may be losing the current map and remain the series favourite. In BO1, the map and series describe the same outcome, and their outputs must agree. Once the series ends, display the actual result.
 
-Интерфейс уже частично реализован; сейчас его не переделывать. При будущей интеграции проверить, что по умолчанию внутри матча открывается текущая карта с её прогнозом победителя и тоталами убийств/времени. В BO1/BO3/BO5 пользователь может выбрать доступную прошлую карту и увидеть её героев и фактические результаты. Текущий прогноз нельзя подставлять в прошлую карту. Ручной выбор карты не должен сбрасываться при каждом live-обновлении. Исторический прогноз можно показать только при наличии сохранённой записи и с явным обозначением; завершённая карта прежде всего показывает факт.
+The interface is already partly implemented; do not redesign it now. During future integration, verify that opening a match defaults to the current map with its winner prediction and kill/time totals. In BO1/BO3/BO5, the user may select an available past map and see its heroes and actual results. Do not substitute the current prediction into a past map. Do not reset manual map selection on every live update. A historical prediction may be shown only if a saved record exists and is clearly identified; a completed map primarily shows the actual result.
 
-Для главной и деталей проверять target, seriesId, выбранный mapId, номер карты, счёт и формат серии; ни один из этих идентификаторов нельзя молча подменить при переходе к следующей карте. Это требования будущей приёмки, а не утверждение о сделанных сейчас правках интерфейса.
+For the main card and details, check target, seriesId, the selected mapId, map number, series score and format; none of these identifiers may be silently substituted when moving to the next map. These are future acceptance requirements, not claims that interface changes have been implemented now.
 
-Тоталы PRE/POST описывают итоговые kills/time, LIVE — оставшиеся kills/time. Все линии используют единое согласованное распределение. В режиме без БК сетка генерируется из него; при выбранной БК берутся её актуальные события, линии и правила расчёта, а наши вероятности вычисляются на этих линиях. Учитывать атомы, правый хвост и возврат: pOver + pUnder + pPush = 1. Коэффициент БК не является вероятностью модели.
+PRE/POST totals describe final kills/time; LIVE describes remaining kills/time. All lines use one coherent distribution. Without a bookmaker, generate the grid from that distribution; when a bookmaker is selected, use its current events, lines and settlement rules, and calculate our probabilities on those lines. Handle atoms, the right tail and pushes: pOver + pUnder + pPush = 1. Bookmaker odds are not model probabilities.
 
-Критерий завершения без нового обучения: закреплённые диагностические/синтетические артефакты подтверждают маршрутизацию, CDF и передачу полного контекста серии. Проверить postdraft → live → between-maps → следующий драфт, смену текущего mapId при неизменном seriesId, сохранение ручного выбора прошлой карты, несовпадение фаворитов карты и серии, согласованность BO1 и прекращение прогноза завершённого события. Это проверка связности и контрактов, не отчёт о точности моделей и не автоматический public promotion.
+Completion criterion without new training: pinned diagnostic/synthetic artifacts confirm routing, CDF and delivery of the full series context. Check postdraft → live → between-maps → next draft, changes in current mapId with an unchanged seriesId, preservation of manual past-map selection, different map and series favourites, BO1 consistency, and cessation of forecasts for completed events. This verifies connectivity and contracts, not model accuracy, and is not automatic public promotion.
 
-Дополнительная задача технического review: в artifacts/admin-web/src/pages/models.tsx:305,361,364 обнаружен классификатор по имени /(?:total_)?(?:kills|duration)(?:_|$)/. Это advisory Graphify, наличие regex подтверждено, но ошибочный сценарий пока не воспроизведён. Sol должен проверить реальные kind/target контракты голов тоталов и построить синтетический fixture. Выбор accuracy либо R²/MAE и других метрик должен опираться на явный тип выхода и metric contract, а не на предположение «kills/duration означает регрессию». Сейчас интерфейс не исправлять и новую оценку ML не запускать; сначала подтвердить или отклонить проблему технической проверкой.
+Additional technical review task: a name-based classifier /(?:total_)?(?:kills|duration)(?:_|$)/ was found at artifacts/admin-web/src/pages/models.tsx:305,361,364. This is a Graphify advisory: the regex is confirmed to exist, but an erroneous scenario has not yet been reproduced. Sol must inspect the actual kind/target contracts of totals heads and construct a synthetic fixture. The choice of accuracy versus R²/MAE and other metrics must follow an explicit output type and metric contract, not the assumption that "kills/duration means regression". Do not change the interface or run a new ML evaluation now; first confirm or reject the issue through a technical check.
 
-S9. ЖУРНАЛ И ПОЛНЫЙ ПУТЬ ПРИЛОЖЕНИЯ
+S9. JOURNAL AND END-TO-END APPLICATION PATH
 
-Связать collector receipt → normalized DB → historyContextRef → producer → диагностический model adapter → PredictionJournal → диагностический API. Проверить также ServingPredictions, LiveWorker и ML bridge, не включая кандидатов публично без отдельного допуска.
+Connect collector receipt → normalized DB → historyContextRef → producer → diagnostic model adapter → PredictionJournal → diagnostic API. Also inspect ServingPredictions, LiveWorker and the ML bridge, without enabling candidates publicly before separate admission.
 
-Журнал хранит точный вектор и missing masks; версии модели и схемы; хеши raw/observation/context/learned state; map/series ID; фактический receipt и game clock; cutoff policy и basis; фазу и source profile; доступность полей и причину отказа. Текущий label не входит в feature payload. API не придумывает confidence или свежесть.
+The journal stores the exact vector and missing masks; model and schema versions; raw/observation/context/learned-state hashes; map/series ID; actual receipt and game clock; cutoff policy and basis; phase and source profile; field availability and rejection reason. The current label is not part of the feature payload. The API does not invent confidence or freshness.
 
-Существующий пользовательский интерфейс сохраняется; при подключении моделей проверить его поведение, а не начинать отдельный редизайн. Главная карточка показывает серию; внутри по умолчанию текущая карта и её тоталы, с возможностью выбрать прошлую карту. При невозможности расчёта текст только «Прогноз недоступен». Технические причины сохраняются для диагностики, без длинных баннеров. Выбор БК сохраняется между запусками.
+Retain the existing user interface; verify its behaviour when integrating models instead of starting a separate redesign. The main card shows the series; details default to the current map and its totals, with the option to select a past map. If calculation is unavailable, show only the exact Russian UI text «Прогноз недоступен» ("Prediction unavailable"). Keep technical reasons in diagnostics, without long banners. Bookmaker selection persists across launches.
 
-Критерий завершения: один диагностический расчёт прослеживается через весь API-путь до фактического model input; target, seriesId, mapId, счёт и формат совпадают в producer, журнале, API и нужном экране. Устаревшие пакеты не перетирают новый прогноз; restart и повторный запрос не меняют результат; открытие карточки не запускает опрос поставщика. Главная не получает прогноз текущей карты вместо прогноза серии; завершённое событие показывает факт.
+Completion criterion: one diagnostic calculation can be traced through the entire API path to the actual model input; target, seriesId, mapId, score and format match across the producer, journal, API and relevant screen. Stale packets do not overwrite a newer prediction; restart and repeated requests do not change the result; opening a card does not trigger provider polling. The main card does not receive a current-map prediction in place of a series prediction; a completed event shows the actual result.
 
-S10. ТЕХНИЧЕСКИЙ ДОПУСК ПРИЗНАКОВ И ПЕРЕДАЧА ASTRA
+S10. TECHNICAL FEATURE ADMISSION AND HANDOFF TO ASTRA
 
-Подготовить единый manifest: версия/хеш registry; точное соответствие фазам и целям; доказательства происхождения и правила missing; версии producer/projections; causal/unit/integration/parity проверки; паритет текущего APP с PR; измеренное покрытие и ограничения; короткий список нерешённых внешних входов.
+Prepare a single manifest: registry version/hash; exact phase/target mapping; provenance evidence and missing policies; producer/projection versions; causal/unit/integration/parity checks; current APP-to-PR parity; measured coverage and limitations; a short list of unresolved external inputs.
 
-Для timely joint coverage знаменатель включает ожидавшиеся наблюдения по картам, времени и фазам, включая пропуски, пустые ответы и ошибки. Структурные нули one-hot не повышают покрытие. Различать наличие значения, свежесть сохранённого receipt и реальную задержку от события. 8 176 полных кадров из 8 619 сохранённых — 94,86% этого архива, а не доказательство своевременных 95%.
+For timely joint coverage, the denominator includes expected observations by map, time and phase, including missing polls, empty responses and errors. Structural one-hot zeros do not increase coverage. Distinguish value presence, freshness of a recorded receipt and actual event-to-application latency. 8,176 complete frames out of 8,619 retained frames is 94.86% of that archive, not proof of timely 95% coverage.
 
-Если семейство включено в максимальный registry, но недоступно в боевом профиле, сохранить его описание и пометить профиль как неполный/заблокированный. Не подставлять недоступные значения и не скрытно превращать широкую модель в компактную. Историческая недостаточная поддержка отличается от пропуска live-поля; резервные правила указываются явно.
+If a family is included in the maximal registry but unavailable in the serving profile, retain its specification and mark the profile incomplete/blocked. Do not substitute unavailable values or silently turn the broad model into a compact one. Insufficient historical support differs from a missing live field; fallback policies are explicit.
 
-До этого этапа новых ML fits и quality evaluation — 0. После закрытия выполнимой работы передать Astra архитектуру, каталог, доказательства и оставшиеся ограничения. Переход к моделям фиксируется отдельно; старый lease не считается новым разрешением.
+Until this stage, new ML fits and quality evaluations must remain at 0. After completing feasible work, hand the architecture, catalogue, evidence and remaining limitations to Astra. Record the transition to model work separately; an old lease is not new authorization.
 
-S11. ПАРАЛЛЕЛЬНЫЕ ТЕХНИЧЕСКИЕ ЗАДАЧИ
+S11. PARALLEL TECHNICAL TASKS
 
-Переносить чистые модули в APP вместо импорта из W; реальные raw fixtures оставлять отдельно. Android CNG проверять воспроизводимой чистой генерацией в одноразовом checkout с закреплённым lockfile и локальным тестовым профилем. Ручные native-изменения переводить в source plugins, сравнивая результат. Не публиковать локальные build outputs, local.properties и signing configuration.
+Move pure modules into APP instead of importing them from W; retain real raw fixtures separately. Verify Android CNG with reproducible clean generation in a disposable checkout, a pinned lockfile and a local test profile. Move manual native changes into source plugins and compare the result. Do not publish local build outputs, local.properties or signing configuration.
 
-Windows-обёртки Build-AegisAndroidLocal, Import-AegisAndroidEnv и android-short-cxx сделать переносимыми без частной конфигурации. На существенных этапах обновлять локальный архитектурный контекст и checkpoint; публикуемые инструкции и подтверждённые заметки Graphify синхронизировать при завершении блока, не после каждой правки. После разрешённого merge проверить свежесть индекса. Ответ remember не равен reviewed/recall. Не отправлять БД, raw-данные или веса ради индекса. Вопрос резервных копий закрыт — к нему не возвращаться.
+Make the Windows wrappers Build-AegisAndroidLocal, Import-AegisAndroidEnv and android-short-cxx portable without private configuration. At meaningful milestones, update the local architecture context and checkpoint; synchronize publishable instructions and verified Graphify notes at block completion, not after each edit. After an authorized merge, verify index freshness. A remember acknowledgement is not reviewed/recall confirmation. Do not upload databases, raw data or weights for indexing. The backup issue is closed; do not revisit it.
 
-S12. БУДУЩИЕ ЭКСПЕРИМЕНТЫ С МОДЕЛЯМИ — СЕЙЧАС ПАУЗА
+S12. FUTURE MODEL EXPERIMENTS — CURRENTLY PAUSED
 
-Только после завершения архитектуры, полного каталога, технического допуска и отдельного перехода к ML:
-- закрепить датасет; проводить HPO внутри TRAIN с временными внутренними разбиениями;
-- сохранять map/series/component группы и embargo 24 часа; OOF для обученных priors/encodings;
-- оставить независимый holdout до окончательного выбора; не выдавать просмотренные folds за независимые;
-- сначала проверять согласованную широкую модель, ablation проводить позже на заранее описанных когортах;
-- не обновлять карты для каждого эксперимента без конкретной причины.
+Only after finishing the architecture, full catalogue, technical admission and a separately recorded transition to ML:
+- pin the dataset; perform HPO within TRAIN using temporal inner splits;
+- preserve map/series/component groups and the 24-hour embargo; use OOF for learned priors/encodings;
+- reserve an independent holdout until final selection; do not call inspected folds independent;
+- evaluate the agreed broad model first, with ablation later on predefined cohorts;
+- do not refresh maps for every experiment without a concrete reason.
 
-Победитель: отдельно PRE/POST/LIVE и минуты 5/10/15/.../80+; число карт/компонент; все, равные и сильные равные команды; accuracy, Brier, log loss, калибровка, покрытие и неопределённость. Снимок берётся не позже контрольной минуты, без интерполяции из будущего. Кадры одной карты не считаются независимыми матчами.
+Winner: evaluate PRE/POST/LIVE separately and at minutes 5/10/15/.../80+; report map/component counts; all, equal, and strong-equal team cohorts; accuracy, Brier, log loss, calibration, coverage and uncertainty. Take the snapshot no later than the checkpoint minute, without interpolation from the future. Frames from one map are not independent matches.
 
-Тоталы: по фазе/минуте проверять полное CDF/survival, дискретную массу kills, NLL/proper scores, MAE, покрытие и ширину интервалов, хвосты и вероятности на линиях БК с возвратом. MAE не означает симметричный интервал с заданной вероятностью. Серии проверяются отдельно по PRE/BETWEEN/LIVE и BO-форматам.
+Totals: by phase/minute, evaluate the full CDF/survival, discrete kill probability mass, NLL/proper scores, MAE, interval coverage and width, tails, and probabilities on bookmaker lines including pushes. MAE does not imply a symmetric interval with a specified probability. Evaluate series separately by PRE/BETWEEN/LIVE and BO format.
 
-Сравнить общую модель с minute/interactions и фазовых experts на одинаковых splits/checkpoints; для 80+ одна группа. Учесть уже готовые 6 HPO fits и 8 калибровок голов по существующим артефактам, не перезапуская их как якобы незавершённые. Эти старые результаты не подтверждают новую схему признаков.
+Compare a unified model with minute/interactions against phase experts on identical splits/checkpoints; use one group for 80+. Account for the already completed 6 HPO fits and 8 head calibrations using existing artifacts, without rerunning them as supposedly unfinished. Those older results do not validate the new feature schema.
 
-Ресурсы после допуска: один native fit одновременно, четыре потока, до 16 ГБ суммарной памяти обучения и не менее 4 ГиБ свободной памяти; owned JobObject; соблюдение ручных STOP, disabled tasks и locks. Каждая новая ограниченная стадия получает отдельный lease; истёкшие не возобновляются автоматически.
+Resources after admission: one native fit at a time, four threads, up to 16 GB aggregate training memory and at least 4 GiB free memory; an owned JobObject; respect manual STOP files, disabled tasks and locks. Each new bounded stage receives a separate lease; expired leases are not automatically resumed.
 
-S13. ПОСЛЕДУЮЩИЙ ПУБЛИЧНЫЙ ДОПУСК И ВЫПУСК
+S13. LATER PUBLIC ADMISSION AND RELEASE
 
-Последовательность: диагностическая проверка качества/задержки/покрытия → review кандидата → явно разрешённая публичная активация → целевой web/Android QA → HTTPS, подпись, privacy и материалы магазина → отдельный допуск к RuStore. Merge PR не означает допуск модели. Прошедшие unit tests не доказывают точность прогнозов.
+Sequence: diagnostic quality/latency/coverage checks → candidate review → explicitly authorized public activation → targeted web/Android QA → HTTPS, signing, privacy and store materials → separate RuStore approval. Merging a PR does not admit a model. Passing unit tests does not prove prediction accuracy.
 
-НЕИЗМЕННЫЕ ОГРАНИЧЕНИЯ
+UNCHANGED LIMITS
 
-OpenDota: 100 запросов в минуту, до $20 на архив и до $20 за месяц суммарно, включая архив. Ledger не сбрасывать; 403/429 не обходить. Ручные остановки владельца соблюдать. Старый STRATZ primary token и остановку по ограничениям сохранить; он необязателен для нового ядра. Ключи не печатать и не публиковать. Покупки, смена модели чата и выпуск приложения требуют прямого запроса. Старый heartbeat на время отсутствия владельца 20 октября неактуален.
+OpenDota: 100 requests per minute, up to $20 for the archive and up to $20 total per month, including the archive. Do not reset the ledger or bypass 403/429. Respect the owner's manual stops. Preserve the old STRATZ primary token and stop-on-limit behaviour; STRATZ is optional for the new core. Do not print or publish keys. Purchases, changing the chat model and releasing the application require a direct request. The old heartbeat for the owner's absence on 20 October is obsolete.
 
-КОГДА SOL ВОЗВРАЩАЕТ ВОПРОС ASTRA
+WHEN SOL SHOULD RETURN AN ISSUE TO ASTRA
 
-Обращаться при новом смысловом конфликте источников/часов, невозможности совместить доступность по времени и рабочий поток, обнаруженной утечке или существенном смещении выборки, необходимости изменить статистическую цель/OOF-протокол либо недостижимости требуемого покрытия важных семейств в заданном профиле.
+Escalate a new semantic conflict between sources/clocks, an inability to reconcile point-in-time availability with the operational stream, discovered leakage or substantial selection bias, a need to change the statistical target/OOF protocol, or inability to meet the required coverage for important families in a specified profile.
 
-Обычные рефакторинги, миграции, тесты, cache, PR и описанные адаптеры Sol закрывает самостоятельно. Перед передачей вопроса сохранить минимальное воспроизведение, ожидаемый и фактический результат, хеши входов и варианты решения. Если проблема внешняя, продолжать независимую разрешённую работу.
-
-
+Sol handles routine refactoring, migrations, tests, cache, PRs and the described adapters independently. Before handing over an issue, save a minimal reproduction, expected and actual results, input hashes and possible resolutions. If the problem is external, continue independent authorized work.
