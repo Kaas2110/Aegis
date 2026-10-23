@@ -7,7 +7,7 @@ Raw response bodies and original receipt times remain separate from later ingest
 advanceSteamFeatureBundle(state, observation, options) is the shared pure archive
 and DB projection. loadSteamFeatureBundlePrefix reads a bounded, as-of DB prefix
 and invokes it without outcome joins or future interpolation. The schema contains
-33,158 columns: 31,416 player-economy columns (including masks), plus 871 Roshan
+38,468 columns: 36,726 player-economy columns (including masks), plus 871 Roshan
 values and 871 masks. These are feature columns, not 33,158 independent signals.
 
 Native net worth, GPM and XPM are separate quantities. No substitution of NW/min
@@ -67,3 +67,21 @@ no frames from it. This is a current policy/data gap, not proof that retrospecti
 references are impossible: a later reviewed profile/clock/phase reconstruction
 can use past completed-map evidence known before the target map. Do not silently
 weaken current admission or claim joint timely >=95% from this source inventory.
+
+Hero late-game context update, 2026-10-23
+Team lateTendency remains unchanged. Three separate 90-day fractions of maps
+lasting at least 40 minutes are now added: playerLateTendency (any hero for the
+player), heroLateTendency (that hero across players/teams), playerHeroLateTendency
+(the exact player on that hero). Each requires distinct-map support; absent or
+insufficient evidence remains missing. These are historical duration tendencies,
+not claims about causal late-game strength or guaranteed advantage at minute 40.
+
+The broad hero fraction requires an explicit complete local-source selection
+scope that includes the target heroes beyond the target players and teams.
+Unknown/old team-account-only scope cannot prove the broad hero statistic.
+The DB reader adds hero relevance, exports only needed identity fields, and
+rejects truncated cohorts. The source universe is the local parsed pro-match
+archive, not every Dota match worldwide. Source/roster availability is preserved.
+Player-economy feature contract and the coherent bundle are v2; old columns are
+retained and the three new contexts add 5310 columns including missing masks.
+Existing models do not automatically consume this new schema and were not fitted.

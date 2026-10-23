@@ -5,7 +5,7 @@ import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
 
-export const PRODUCER_CONTRACT='aegis.frozen-player-context-producer.v1';
+export const PRODUCER_CONTRACT='aegis.frozen-player-context-producer.v2';
 export const FACTS_CONTRACT='aegis.prior-map-facts.v1';
 export const NATIVE_CONTRACT='aegis.pinned-native-economy-observations.v1';
 const DAY=86400n*1000000000n,MAX_BYTES=64*1024*1024,MAX_MAPS=100000,MAX_FRAMES=20000;
@@ -55,8 +55,18 @@ function mapRecord(x,known,currentMap,audit,index){
   if(new Set(valid.map(p=>p.accountId)).size!==valid.length||new Set(valid.map(p=>p.heroId)).size!==valid.length||['radiant','dire'].some(side=>valid.filter(p=>p.side===side).length>5))count(audit,'factsInvalidPlayerRoster');
   else {players=valid;if(valid.length!==x.players.length)count(audit,'factsUnknownPlayerIdentity');}
  }else if(x.players?.length)count(audit,playersAt!==null&&playersAt>known?'factsPlayersNotYetKnown':'factsPlayerAvailabilityUnproven');
+ // Hero history needs an observed hero and explicit side, not a public account ID.
+ // It has a separate availability gate: a draft may be known before the final outcome.
+ const explicitHeroes=Object.hasOwn(x,'heroes');
+ const heroesKnownAt=explicitHeroes?x.heroesKnownAt:x.playersKnownAt,heroesAt=instantNs(heroesKnownAt);
+ let heroRoster=[];const heroInput=explicitHeroes?x.heroes:x.players;
+ if(Array.isArray(heroInput)&&heroInput.length<=10&&heroesAt!==null&&heroesAt<=known){
+  const valid=heroInput.filter(h=>object(h)&&hero(h.heroId)&&['radiant','dire'].includes(h.side)).map(h=>({heroId:Number(h.heroId),side:h.side}));
+  if(new Set(valid.map(h=>h.heroId)).size!==valid.length||['radiant','dire'].some(side=>valid.filter(h=>h.side===side).length>5)||players.some(p=>!valid.some(h=>h.heroId===p.heroId&&h.side===p.side)))count(audit,'factsInvalidHeroRoster');
+  else{heroRoster=valid;if(valid.length!==heroInput.length)count(audit,'factsUnknownHeroIdentity');}
+ }else if(heroInput?.length)count(audit,heroesAt!==null&&heroesAt>known?'factsHeroesNotYetKnown':'factsHeroAvailabilityUnproven');
  const kills={radiant:x.radiantKills,dire:x.direKills};for(const s of ['radiant','dire'])if(!Number.isSafeInteger(kills[s])||kills[s]<0)kills[s]=null;
- return{...x,players,ended,available,playersAt,index,kills};
+ return{...x,players,heroRoster,heroesKnownAt,heroesAt,ended,available,playersAt,index,kills};
 }
 function nativeFrame(x,map,known,audit){
  const cap=x?.source?.capture,at=instantNs(cap?.receivedAt),clock=x?.providerGameClockSeconds;
@@ -88,6 +98,14 @@ function statistics(rows,{minimumSupport,definition,windowDays,units,value}){
  return result;
 }
 function latestInstants(rows){let latest=null,text=null;for(const row of rows){if(latest===null||row.at>latest){latest=row.at;text=row.iso;}}return text;}
+function heroScope(data,target,known){
+ const s=data.scope,reject=reason=>({verified:false,reason,population:'conditional_provided_maps_only'});
+ if(!object(s)||s.contract!=='aegis.prior-map-selection-scope.v1')return reject('hero_source_scope_missing');
+ if(s.sourceUniverse!=='local_pro_matches_join_match_parsed'||s.selection!=='target_teams_or_accounts_or_heroes'||s.windowDays!==90||instantNs(s.asOf)!==known)return reject('hero_source_scope_selection_or_cutoff');
+ if(s.completeWithinSource!==true||s.truncated!==false||s.rowCount!==data.maps.length||!digest(s.selectionSqlSha256)||!proof(s.queryEvidenceRef))return reject('hero_source_scope_completeness_unproven');
+ if(!Array.isArray(s.targetHeroIds)||s.targetHeroIds.some(x=>!Number.isInteger(x)||x<1||x>250)||new Set(s.targetHeroIds).size!==s.targetHeroIds.length||target.players.some(p=>!s.targetHeroIds.includes(Number(p.heroId))))return reject('hero_source_scope_hero_coverage');
+ return{verified:true,reason:null,population:'local_available_parsed_pro_known_hero_maps_90d',sourceUniverse:s.sourceUniverse,scopeSha256:evidenceHash(s),queryEvidenceRef:s.queryEvidenceRef,selectionSqlSha256:s.selectionSqlSha256};
+}
 
 export function produceFrozenPlayerContext({target,factsInput,nativeInput,roleProofs=[],minimumSupport=5}={}){
  if(!Number.isSafeInteger(minimumSupport)||minimumSupport<3||minimumSupport>1000)throw Error('minimum_support_3_to_1000');
@@ -104,6 +122,7 @@ export function produceFrozenPlayerContext({target,factsInput,nativeInput,rolePr
  const teams=['radiant','dire'].map(side=>new Set(roster.filter(p=>p.side===side).map(p=>p.teamId)));
  if(teams.some(s=>s.size!==1)||[...teams[0]][0]!==null&&[...teams[0]][0]===[...teams[1]][0])return blocked('target_team_identity_inconsistent',audit,bindings);
  if(!Array.isArray(roleProofs)||roleProofs.length>10)throw Error('roles_bound');
+ const heroCohort=heroScope(facts.data,target,known);audit.heroCohortScope=heroCohort;
  const ids=new Set();for(const x of facts.rows){if(positiveId(x?.matchId)){if(ids.has(x.matchId))throw Error('duplicate_map_fact');ids.add(x.matchId);}}
  const all=facts.rows.map((x,i)=>mapRecord(x,known,target.matchId,audit,i)).filter(Boolean);
  const maps=all.filter(x=>x.ended>=known-90n*DAY).sort(byId),byMap=new Map(maps.map(x=>[x.matchId,x]));audit.eligiblePriorMaps=maps.length;audit.factsOlderThan90Days=all.length-maps.length;
@@ -114,15 +133,20 @@ export function produceFrozenPlayerContext({target,factsInput,nativeInput,rolePr
   const teamRows=p.teamId===null?[]:maps.filter(m=>m.radiantTeamId===p.teamId||m.direTeamId===p.teamId).map(map=>{const side=map.radiantTeamId===p.teamId?'radiant':'dire';return{map,at:map.available,iso:map.outcomeKnownAt,won:map.radiantWon===(side==='radiant'),kills:map.kills[side]};});
   const within=(rows,days)=>rows.filter(r=>r.map.ended>=known-BigInt(days)*DAY),win=rows=>rows.reduce((n,r)=>n+Number(r.won),0)/rows.length;
   const recent=within(playerRows,30),heroRows=within(playerRows,90).filter(r=>r.heroId===p.heroId),team=within(teamRows,30),pace=team.filter(r=>r.kills!==null),late=within(teamRows,90);
+  const playerLate=within(playerRows,90),heroLate=maps.filter(m=>m.heroRoster.some(x=>x.heroId===p.heroId)).map(map=>({map,at:map.heroesAt>map.available?map.heroesAt:map.available,iso:map.heroesAt>map.available?map.heroesKnownAt:map.outcomeKnownAt}));
   const stat=(rows,definition,windowDays,units,value)=>statistics(rows,{minimumSupport,definition,windowDays,units,value});
+  const lateStat=(rows,definition,population,cohortQualified=true)=>{const r=statistics(rows,{minimumSupport:Math.max(5,minimumSupport),definition,windowDays:90,units:'fraction',value:xs=>xs.reduce((n,x)=>n+Number(x.map.durationSeconds>=2400),0)/xs.length});r.latestHistoryAvailabilityAt=latestInstants(rows);r.population=population;r.cohortQualified=cohortQualified;if(!cohortQualified){r.value=null;r.reason=heroCohort.reason;}return r;};
   const stats={
    recentForm:stat(recent,'aegis.player_win_fraction_30d.v1',30,'fraction',win),
    heroForm:stat(heroRows,'aegis.player_hero_win_fraction_90d.v1',90,'fraction',win),
    teamForm:stat(team,'aegis.team_win_fraction_30d.v1',30,'fraction',win),
    aggression:stat(pace,'aegis.team_mean_kills_per_minute_30d.proxy.v1',30,'kills_per_played_minute',rows=>rows.reduce((n,r)=>n+r.kills/(r.map.durationSeconds/60),0)/rows.length),
-   lateTendency:stat(late,'aegis.team_fraction_duration_at_least_40min_90d.v1',90,'fraction',rows=>rows.reduce((n,r)=>n+Number(r.map.durationSeconds>=2400),0)/rows.length)
+   lateTendency:stat(late,'aegis.team_fraction_duration_at_least_40min_90d.v1',90,'fraction',rows=>rows.reduce((n,r)=>n+Number(r.map.durationSeconds>=2400),0)/rows.length),
+   playerLateTendency:lateStat(playerLate,'aegis.player_fraction_duration_at_least_40min_90d.v1','available_prior_maps_of_player_90d'),
+   heroLateTendency:lateStat(heroLate,'aegis.hero_fraction_duration_at_least_40min_90d.v1',heroCohort.population,heroCohort.verified),
+   playerHeroLateTendency:lateStat(heroRows,'aegis.player_hero_fraction_duration_at_least_40min_90d.v1','available_prior_maps_of_player_on_hero_90d')
   };
-  const union=[...recent,...heroRows,...team,...pace,...late];union.forEach(r=>use(r.map));
+  const union=[...recent,...heroRows,...team,...pace,...late,...playerLate,...heroLate];union.forEach(r=>use(r.map));
   players.push({...p,supportMaps:new Set(union.map(r=>r.map.matchId)).size,latestHistoryAvailabilityAt:latestInstants(union),evidenceRef:`${facts.ref}#player/${p.accountId}/hero/${p.heroId}`,values:Object.fromEntries(Object.entries(stats).map(([k,v])=>[k,v.value])),definitions:Object.fromEntries(Object.entries(stats).map(([k,v])=>[k,v.definition])),statistics:stats});
  }
  const observedIds=new Map(),frames=[];
@@ -144,7 +168,7 @@ export function produceFrozenPlayerContext({target,factsInput,nativeInput,rolePr
  const roles=acceptedRoles.filter(r=>!duplicateRoleKeys.has(r.accountId));audit.rolesRejectedAmbiguous=acceptedRoles.length-roles.length;
  if(!used.size)return blocked('no_history_for_target_roster_or_heroes',audit,bindings);
  const sourceMatches=[...used.values()].sort(byId).map(m=>({matchId:m.matchId,endedAt:m.endedAt,outcomeKnownAt:m.outcomeKnownAt,evidenceRef:m.evidenceRef,sourceFactsSha256:facts.pin.sha256,sourceRowIndex:m.index}));
- const context={contract:'aegis.frozen-team-style-context.v2',mode:'prematch_frozen',matchId:target.matchId,knownAt:target.knownAt,frozenBeforeMapAt:target.frozenBeforeMapAt,mapStartEvidence:{...start},sourceMatches,availabilityBasis:'historical_reconstruction',evidenceRef:`${PRODUCER_CONTRACT}:${facts.pin.sha256.slice(0,32)}:${native.pin.sha256.slice(0,32)}`,featurePayload:{players,roles,heroMinuteReferences:references},producer:{contract:PRODUCER_CONTRACT,minimumSupport,bindings,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,asOfReconstructionIsNotOriginalRecordedPrediction:true}};
+ const context={contract:'aegis.frozen-team-style-context.v2',mode:'prematch_frozen',matchId:target.matchId,knownAt:target.knownAt,frozenBeforeMapAt:target.frozenBeforeMapAt,mapStartEvidence:{...start},sourceMatches,availabilityBasis:'historical_reconstruction',evidenceRef:`${PRODUCER_CONTRACT}:${facts.pin.sha256.slice(0,32)}:${native.pin.sha256.slice(0,32)}`,featurePayload:{players,roles,heroMinuteReferences:references},producer:{contract:PRODUCER_CONTRACT,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),bindings,heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,asOfReconstructionIsNotOriginalRecordedPrediction:true}};
  context.contentHash=evidenceHash(context);const accepted=validateFrozenHistory(context,{matchId:target.matchId,receivedAt:target.receivedAt});if(!accepted.accepted)throw Error('generated_context_failed_shared_validator:'+accepted.reason);
  audit.sourceMatches=sourceMatches.length;audit.nativeFramesAdmitted=frames.length;audit.nativeMapHeroMinuteSelected=selected.size;audit.heroMinuteReferenceGroups=references.length;audit.profileValuesPresent=players.reduce((n,p)=>n+Object.values(p.values).filter(finite).length,0);audit.profiles=players.length;
  return{contract:PRODUCER_CONTRACT,status:'produced_reconstruction',context,audit,bindings,APIcalls:0,nativeFits:0,publicPromotion:false};

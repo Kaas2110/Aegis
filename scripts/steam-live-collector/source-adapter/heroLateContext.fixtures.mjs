@@ -1,0 +1,5 @@
+import {fixture,args,frame,pinned} from './frozenPlayerContext.fixtures.mjs';
+import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
+export {args,frame,pinned};
+export function qualify(f){f.facts.scope={contract:'aegis.prior-map-selection-scope.v1',sourceUniverse:'local_pro_matches_join_match_parsed',asOf:f.target.knownAt,windowDays:90,selection:'target_teams_or_accounts_or_heroes',targetTeamIds:['100','200'],targetAccountIds:f.target.players.map(p=>p.accountId),targetHeroIds:f.target.players.map(p=>Number(p.heroId)),completeWithinSource:true,truncated:false,rowCount:f.facts.maps.length,queryEvidenceRef:'synthetic-reviewed-OR-hero-query',selectionSqlSha256:evidenceHash('synthetic SELECT team OR account OR hero; bounded entire result')};return f;}
+export function cohortFixture(){const f=fixture();const others=f.facts.maps.map((m,i)=>({...structuredClone(m),matchId:String(20001+i),durationSeconds:1800,radiantTeamId:'300',direTeamId:'400',players:m.players.map(p=>({...p,accountId:String(Number(p.accountId)+1000)})),evidenceRef:'synthetic-other-team-hero-map-'+i}));f.facts.maps.push(...others);return qualify(f);}

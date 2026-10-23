@@ -4,7 +4,7 @@
 import {createHash} from 'node:crypto';
 import {advanceRoshanFeatures,FEATURE_CONTRACT} from './roshanFeatures.mjs';
 import {projectPlayerHeroEconomy,featureNames,CONTRACT as ECONOMY_CONTRACT} from './playerHeroEconomyFeatures.mjs';
-export const BUNDLE_CONTRACT='aegis.steam-coherent-feature-bundle.v1';
+export const BUNDLE_CONTRACT='aegis.steam-coherent-feature-bundle.v2';
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const clock=o=>o?.providerGameClockSeconds?.missing===false?o.providerGameClockSeconds.value:null;
 const EXPECTED_ECONOMY_ERRORS=new Set(['complete_coherent_economy_snapshot_required','hero_dictionary_revision_required']);

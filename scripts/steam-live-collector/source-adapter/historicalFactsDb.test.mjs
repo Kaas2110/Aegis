@@ -9,6 +9,7 @@ test('DB facts use explicit slots and exact pinned bytes, never array position',
  const a=fact();a.players.reverse();const r=await loadHistoricalContextInputs(port([a]),{target});
  const data=JSON.parse(r.factsInput.utf8),p=data.maps[0].players.find(p=>p.accountId==='6');assert.equal(p.side,'dire');
  assert.equal(data.maps[0].outcomeKnownAt,'2026-10-22T20:05:00.123456Z');
+ assert.equal(data.maps[0].heroesKnownAt,data.maps[0].playersKnownAt);
  assert.equal(r.factsInput.pin.sha256,createHash('sha256').update(r.factsInput.utf8).digest('hex'));assert.equal(r.factsInput.pin.bytes,Buffer.byteLength(r.factsInput.utf8));
  assert.equal(r.audit.availabilityBasis,'database_timestamp_reconstruction');assert.equal(r.eligibleForTraining,false);
  assert.equal(JSON.parse(r.nativeInput.utf8).observations.length,0);
@@ -30,7 +31,17 @@ test('an empty history yields pinned empty data and no native fanout',async()=>{
  let calls=0;const r=await loadHistoricalContextInputs({query:async()=>{calls++;return{rows:[]};}},{target});
  assert.equal(calls,1);assert.equal(r.audit.maps,0);assert.equal(JSON.parse(r.factsInput.utf8).maps.length,0);
 });
+test('hero history is selected across teams with an explicit complete local-source scope',async()=>{
+ const db={query:async(sql,args)=>{if(sql.includes('FROM pro_matches')){assert.ok(sql.includes("j.player->>'hero_id'=ANY($5::text[])"));assert.deepEqual(args[4],Array.from({length:10},(_,i)=>String(i+1)));assert.equal(args[5],20001);return{rows:[fact()]};}return{rows:[]};}};
+ const r=await loadHistoricalContextInputs(db,{target}),s=JSON.parse(r.factsInput.utf8).scope;
+ assert.equal(s.selection,'target_teams_or_accounts_or_heroes');assert.equal(s.completeWithinSource,true);assert.equal(s.truncated,false);assert.equal(s.rowCount,1);assert.equal(s.sourceUniverse,'local_pro_matches_join_match_parsed');assert.equal(s.selectionSqlSha256.length,64);
+});
+test('unknown or duplicate hero identity cannot claim complete hero selection',async()=>{
+ const p=structuredClone(target);p.players[0].heroId=null;await assert.rejects(loadHistoricalContextInputs(port([]),{target:p}),/hero_identity/);
+ const q=structuredClone(target);q.players[0].heroId=2;await assert.rejects(loadHistoricalContextInputs(port([]),{target:q}),/hero_identity/);
+});
 test('unknown slots or anonymous IDs do not turn into a player identity',async()=>{
  const a=fact();a.players.push({account_id:10,hero_id:10,player_slot:64},{account_id:4294967295,hero_id:11,player_slot:1});
  const r=await loadHistoricalContextInputs(port([a]),{target});assert.equal(JSON.parse(r.factsInput.utf8).maps[0].players.length,2);
+ const m=JSON.parse(r.factsInput.utf8).maps[0];assert.equal(m.heroes.length,3);assert.ok(m.heroes.some(h=>h.heroId==='11'));
 });
