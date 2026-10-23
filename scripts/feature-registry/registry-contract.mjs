@@ -8,7 +8,7 @@ const TARGET_CONTRACTS=Object.fromEntries(TARGET_IDS.map(id=>[id,{
  target:id.startsWith('SERIES_')?'series_team1_win':id.endsWith('_WIN')?'map_radiant_win':id.endsWith('_KILLS')?(id.startsWith('LIVE_')?'remaining_kills_distribution':'map_total_kills_distribution'):(id.startsWith('LIVE_')?'remaining_duration_seconds_distribution':'map_total_duration_seconds_distribution')
 }]));
 const SHA = /^[a-f0-9]{64}$/;
-const SCOPES = new Set(['prior_maps','current_draft','current_live','series_context','previous_series_maps','current_map_label','candidate_axis','presentation']);
+const SCOPES = new Set(['prior_maps','current_identity','current_draft','current_live','series_context','previous_series_maps','current_map_label','candidate_axis','presentation']);
 function fail(reason) { throw new Error(reason); }
 function text(v, name) { if(typeof v!=='string'||!v.trim()) fail('required:'+name); }
 function unique(v, name) { if(!Array.isArray(v)||v.some(x=>typeof x!=='string'||!x)||new Set(v).size!==v.length) fail('unique_strings:'+name); }

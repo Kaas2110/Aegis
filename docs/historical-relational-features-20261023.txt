@@ -1,0 +1,100 @@
+AEGIS HISTORICAL RELATIONAL FEATURE COMPONENT
+23 October 2026. Diagnostic implementation; no model fit or serving admission.
+
+Purpose
+
+historicalRelationalFeatures.mjs implements deterministic prior-map statistics
+for the shared feature producer. It preserves separate information about each
+player, hero, team and conditional combination. It does not invent a single
+weighted "true strength" score or infer farm roles from roster order.
+
+Inputs and phases
+
+produceHistoricalRelationalFeatures receives a validated observed-draft history
+context and the exact pinned prior-map fact bytes to which that context is bound.
+The original first-complete-draft history cutoff remains fixed. A later account
+disclosure does not move the cutoff. Context validation establishes semantic
+integrity, not independent receipt authentication; actual raw replay belongs
+upstream. The dynamic bridge retains its own opaque proof of that replay.
+
+producePrematchHistoricalRelationalFeatures uses a separate pinned
+aegis.prematch-history-target.v1 input: matchId, knownAt, historyCutoffAt, explicit
+team sides and optional known accounts. Current heroId must be null. This is a
+host-declared PRE identity receipt, explicitly not independently authenticated.
+No fake observed draft is created. Selected-hero columns remain null/masked and
+carry current_draft scope so the PRE projection can exclude them. Known accounts
+are sorted for deterministic slots; up to five unknown placeholders per side
+are allowed. No slot is a role or strength rank.
+
+Both routes exclude the current map, require prior outcomes and every used
+roster/performance fact to be available by the declared cutoff, distinguish
+exact nanosecond boundaries, and require a complete bounded selector scope.
+Unknown accounts do not erase available team/hero history. Hero populations use
+known heroes across the selected local parsed professional population, including
+anonymous players. This does not claim full population coverage, role adjustment,
+Immortal/pub coverage or a causal effect of a pick.
+
+Implemented deterministic scope
+
+There are 319 logical selectors with 7-, 30- and 90-day windows: team and direct
+team opponent; player; player-hero; player-team; player-team-hero; hero; team-hero;
+ally player pair; player-on-hero with ally player; player-on-hero with ally hero;
+exact two-player/two-hero pair; hero pair; hero triple; exact three-player/hero
+combination; cross-side hero, player and player-on-hero counters.
+
+Each selector has distinct-map support, recency-weight effective count, raw and
+fixed Beta(10,10) smoothed win fractions, exponentially decayed fractions,
+binomial uncertainty, previous-map duration and total-kill distributions,
+late-game fractions, win/loss-conditioned duration, team kill pace and recency.
+Smoothing is deterministic; it is not learned target encoding. Statistics below
+minimum support remain missing. Zero observed support does not prove that the
+entity never played: the population is the explicitly available parsed cohort.
+
+The optional heroPerformances namespace uses the exact
+aegis.prior-player-native-performance.v1 field contract and native source mapping.
+It supplies previous-map GPM, XPM, KDA components, last hits, denies, damage,
+healing, level, final net worth, total gold/XP, wards and gold spent when retained.
+Per-minute values and efficiency ratios have explicit formulas. Native GPM,
+final net worth and total gold remain distinct. Missing gold_spent stays missing.
+The 32 native/derived metrics produce prior player, player-on-hero, team and hero
+profiles, player-on-hero minus self, player-on-hero minus hero population, and a
+population sample-SD normalization. The team scalar mean requires all five heroes
+to have that metric; a four-player average is not relabelled as a complete team.
+
+The fixed v1 schema has 49,388 ordered values with separate null masks. Profiles
+expose 208 player, 105 team and 38 hero keys with support and units. No feature
+was selected by predictive correlation. This new component does not claim to be
+an exact numerical port of all older Python research vectors. Their pinned names
+and the full 79-family catalogue remain preserved in the registry; unsupported
+and partially implemented families retain their explicit status.
+
+Output and practical use
+
+Every ordered descriptor records family, formula version, units, input scope,
+window, support reference and latest dependency availability. The semantic schema
+hash includes phase, formulas, fixed smoothing, support policy and native field
+mapping. Exact supporting map IDs/times are retained once in a deduplicated
+supportRows pool. Receipt authenticity must not be inferred from a hash alone.
+
+Compute this component once per immutable history/identity revision, not on each
+live poll or card view. Reuse compact values, masks and schema/context references.
+The fully described diagnostic object is large and is not a proposed mobile API
+response. A synthetic 1,000-map scaling probe is development evidence only; it
+does not establish a hard latency/memory bound for the maximum input. A production
+cache builder still needs appropriate bounded execution and failure handling.
+
+Open scope
+
+Independent personal MMR, learned opponent/role adjustment, patch-letter meta,
+Immortal population, ban history, hero mechanics, item/ward timing, buyback events,
+and finishing speed conditioned on an earlier lead require additional supported
+inputs or future TRAIN-bound state. Win-conditioned previous duration is a useful
+descriptive proxy, not evidence that a team closes a known gold lead quickly.
+No current-map final scalar, current-map outcome or future-map draft is admitted.
+
+Technical synthetic checks cover exact formulas; map and player permutation;
+current/future and duplicate exclusion; +1 ns gates; anonymous populations;
+conditional pair/triple/counter identity; metric units, known zero and missing;
+partial/complete cohort rules; PRE phase boundaries; content/schema integrity;
+and provenance deduplication. No provider call, model training, HPO, calibration,
+quality evaluation or public promotion was performed for this component.

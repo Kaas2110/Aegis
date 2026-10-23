@@ -1,0 +1,64 @@
+Aegis durable retained-history revision references
+2026-10-24. Diagnostic source infrastructure only.
+
+await createRetainedHistoryRevisionStore(directory, {
+  shouldContinue=()=>true, signal=null, deadlineMs=15000, now=Date.now
+}) returns {getOrCreate(keySha256,builder),load(keySha256)}.
+
+getOrCreate receives a lowercase SHA256 key and an async builder returning exactly
+{reference,sourceSnapshotHash}. reference is the actual historySourceExport
+reference: {contract:'aegis.history-source-export-reference.v1',sha256,bytes}.
+The builder receives {keySha256,signal,deadlineAtMillis,shouldContinue}.
+Result: {contract:'aegis.retained-history-revision-pointer.v1',key,reference,
+sourceSnapshotHash,created}. load returns the same shape with created=false or
+null when no pointer exists. No raw body, DB row, model, schema or feature data
+may be placed inside the pointer.
+
+The host chooses/creates a private absolute LOCAL directory before construction.
+It must already exist as a plain folder, including its ancestors. The store does
+not open paths supplied in references. Existing files are checked on every read.
+Never use this folder as a public source asset or accept a directory from a client.
+
+The key is a host architecture decision. Bind the stable first-complete-draft
+identity/revision plus an explicit loader profile/version and its source-selection
+options. A changed account/roster revision needs a new key at the original t0.
+A clock tick, current observation hash or unrelated current match state must not
+rotate it. To resume after restart, recover/replay the ORIGINAL draft prefix;
+starting from an arbitrary latest receipt cannot recover its original t0/key.
+An intentional new historical generation/profile requires a new key.
+
+On a hit the immutable pointer is returned BEFORE calling any builder or mutable
+DB/source reader. The host then calls sourceStore.load(reference) to verify the
+actual original source export and its identity/availability. Pointer integrity is
+not proof that referenced bytes exist or that provider timestamps are authentic.
+Never replace a failed/tampered old pointer by querying current DB values silently.
+
+On a miss: single-flight within an instance, exclusive <key>.lock directory
+across instances/processes, an owned random nonce record, then another pointer
+check before building. Only the owner may release its exact nonce lock. No stale
+age, dead PID, timeout or STOP authorizes stealing/deleting another lock. Failed
+ownership publication leaves a lock for explicit review. A successful concurrent
+winner prevents every later waiter from materializing again. Failed explicit
+requests can be attempted later; only one builder owns a given key at a time.
+
+The reference-only pointer is at most 8 KiB and includes its own version/key/content
+hash. A private synced temporary file is atomically hard-linked into the fixed
+destination. Existing pointers are immutable: a conflicting publication fails;
+only this operation's temporary file and matching owned lock may be removed.
+Filesystem administrators can still change files. This is verified integrity and
+coordination, not isolation against a malicious filesystem administrator/race.
+
+Deadline uses monotonic elapsed time, independent of the injected wall clock.
+Lock waits check STOP/abort/deadline. STOP after builder completion prevents
+pointer publication. A deadline can reject a caller while an uncooperative builder
+continues: the store keeps its owned lock until that builder actually settles,
+then refuses late publication and releases only that owned lock. Callbacks should
+cooperate with signal/shouldContinue. There is no scheduler or automatic retry.
+An operation already committed atomically cannot be undone if a stop arrives
+during the filesystem commit; it remains an immutable verifiable pointer.
+
+Tests use temporary real files, synthetic references, independent instances and
+four separate Node processes. They cover restart/requery prevention, one concurrent
+materialization, explicit new generations, failures, STOP/abort, old locks,
+ownership changes, tamper, byte/identity bounds and publication conflict. These
+tests do not invoke a provider, actual DB, app task, model or training run.

@@ -1,0 +1,62 @@
+Aegis opt-in background diagnostic feature consumer
+2026-10-24. Source stage only; no runtime activation or ML admission.
+
+Entry: scripts/steam-live-collector/source-adapter/diagnosticFeatureConsumer.mjs
+
+createDiagnosticFeatureConsumer({producer,writeSchema,appendTrace,
+  shouldContinue=()=>true,signal=null,limits={}})
+returns {consume(input),forgetMap(matchId),status()}.
+
+consume accepts trusted host inputs only:
+{matchId,decisionAt,historyProof,sourceExportInput,expectedSourceSnapshotHash,
+ livePrefixInputs=null,seriesInput=null,currentMapNumber=null,mode='AUTO',
+ patch=null,rulesEvidence=null,expectedRulesSha256=null,
+ eventsEvidence=null,expectedEventsSha256=null}.
+
+Use this after an owned immutable archive commit. The caller obtains the actual
+pinned source export and opaque historical proof once per history revision; the
+consumer does not query history, fetch providers, start tasks, import a model or
+register an HTTP route. It does not create a proof from client-supplied JSON.
+Modes are observed-draft POST, admitted native LIVE and AUTO. PRE and BETWEEN
+remain separate shared-producer paths, rather than borrowing a stale current map.
+
+Host ports:
+- producer is the reviewed createUnifiedFeatureProducer result, exposing
+  generateFeatureBundle and getSchema, with its immutable deployment inventory.
+- writeSchema({schemaHash,schema}) returns a durable
+  {status:'created'|'existing_verified',schemaHash} receipt.
+- appendTrace(encodedTrace) returns a durable
+  {status:'created'|'existing_verified',sha256} receipt. encodedTrace is the
+  compact encodeDiagnosticFeatureTrace result, frozen before the callback.
+- shouldContinue and optional AbortSignal enforce the existing owned-session
+  manual stop. Actual host callbacks must themselves have bounded completion.
+
+Each map processes jobs in submission order. Identical pending inputs share one
+job; an unchanged successful job reuses its original receipt without advancing
+state again. Actual bytes and review pins participate in deduplication. New
+history/source provenance resets the native continuation state. A lower history
+revision, earlier materialization or altered original t0 cutoff is blocked.
+
+Schemas are stored before feature traces and written once per bounded process
+cache; a durable sink verifies content-addressed existing records after restart.
+Opaque continuation state advances only after verified schema and trace receipts.
+A write failure returns an explicit failed receipt; it does not automatically
+retry. A stop after durable trace append reports traceCommitted=true while
+stateAdvanced=false; an explicit later call can verify that same immutable trace.
+No pending callback is forcibly cancelled or assumed to have rolled back.
+
+Defaults: maxMaps=8 (cap16), maxPending=16 (cap64), completed receipt cache=64
+(cap256), schema cache=32 (cap128), serialized input/pending bytes=128MiB,
+trace=16MiB (cap64MiB). All scalar/pin metadata and serialized bytes are bounded.
+Limits do not infer source coverage or predictive performance. forgetMap is an
+explicit in-memory cache release after work settles; it never deletes evidence.
+
+The result is diagnostic only: eligibleForServing=false,
+eligibleForTraining=false, recordedPrediction=false and publicPromotion=false.
+The host must not store it through an existing model predicted() journal method,
+alter public forecasts or expose generation per mobile card request.
+
+Technical evidence combines synthetic fault/queue tests with an actual shared
+producer on synthetic pinned source exports. No real DB/provider/runtime proof
+is claimed by these tests. Full feature/source/phase and architecture review by
+Astra remains necessary before the feature-first gate and any new training.

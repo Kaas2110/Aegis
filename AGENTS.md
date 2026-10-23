@@ -81,3 +81,14 @@ training leases, remove manual stops or reset spend counters. User-facing
 unavailable predictions say only "Прогноз недоступен"; diagnostics retain reasons.
 Use synthetic test data for public fixtures. Source parity does not establish
 model quality, data coverage, serving approval or a reproducible mobile build.
+
+## Sol r2 diagnostic feature expansion
+
+The next reviewed source block adds the actual rich historical/dynamic/series
+formula modules, unifiedFeatureProducer, immutable history source exports and
+feature-only diagnostic journaling. Read docs/unified-feature-runtime-20261023.txt
+and docs/sol-feature-expansion-review-20261023.txt before continuing. The broad
+vector remains diagnostic, with inferenceVector=null and no serving/training
+admission. All79 families remain in scope; partial implemented subsets do not
+close the full feature-first gate. Runtime/task activation is separate from
+source installation. Do not rerun prior manifests against changed local source.

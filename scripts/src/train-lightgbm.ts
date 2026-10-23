@@ -264,7 +264,15 @@ async function trainBucket(
   }
 }
 
+// The legacy route joins current peer_synergy into historical snapshots below.
+// No fit is permitted until this source is replaced by causal unified vectors
+// and the complete feature-first gate has passed Astra review. No env bypass.
+function assertLegacyTrainingRouteAdmitted(): void {
+  throw new Error('legacy_lightgbm_training_blocked: current peer_synergy is not an as-of input; use reviewed unified vectors after feature-first admission');
+}
+
 async function main() {
+  assertLegacyTrainingRouteAdmitted();
   assertCandidateOnlyArgs();
   console.log(`[train-lightgbm] ml-service: ${ML_SERVICE_URL}`);
   // Ping

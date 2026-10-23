@@ -9,7 +9,7 @@ export const TARGET_IDENTITY_CONTRACT = 'aegis.feature-target-identity-revision.
 const HEX = /^[a-f0-9]{64}$/;
 const MAX_FEATURES = 250000, MAX_REFS = 100000, MAX_BYTES = 256 * 1024 * 1024;
 const IMPLEMENTATIONS = new Set(['implemented', 'partial', 'planned', 'unimplemented']);
-const SOURCE_SCOPES = new Set(['current_draft', 'current_live', 'series_context', 'candidate_axis']);
+const SOURCE_SCOPES = new Set(['current_identity', 'current_draft', 'current_live', 'series_context', 'candidate_axis']);
 const HISTORY_SCOPES = new Set(['prior_maps', 'previous_series_maps']);
 const metadataKeys = ['contract', 'version', 'sourceSha256', 'normalizationContract', 'sourceProfile'];
 const fail = reason => { throw Error('feature_composer:' + reason); };
