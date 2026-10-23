@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * Backfill для команд, которые встречаются в pro_matches за 365d,
  * но отсутствуют в teams (например, tier-2/3 nonames, не вошедшие в топ-1013
@@ -41,6 +42,7 @@ async function fetchTeam(id: number, withKey: (url: string) => string): Promise<
     if (!body || !body.team_id) return null;
     return body;
   } catch (err) {
+    if (err instanceof OdQuotaExhaustedError) throw err;
     console.warn(`[ingest-missing-teams] fetch fail team_id=${id}`, err instanceof Error ? err.message : err);
     return null;
   }

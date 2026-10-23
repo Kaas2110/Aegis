@@ -70,7 +70,7 @@ async function main() {
     } catch (e) {
       if (e instanceof OdQuotaExhaustedError) {
         console.warn(`[od-team-hero-pools] ${e.message} — прерываю цикл (saved=${saved} failed=${failed})`);
-        break;
+        throw e;
       }
       failed++;
       if (failed <= 5) console.warn(`[od-team-hero-pools] team=${teamId} ${(e as Error).message}`);

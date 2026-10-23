@@ -111,7 +111,7 @@ async function main() {
     } catch (err) {
       if (err instanceof OdQuotaExhaustedError) {
         console.warn(`[od-player-peers] ${err.message} — прерываю цикл (peerRows=${saved} failed=${failed})`);
-        break;
+        throw err;
       }
       failed++;
       console.warn(`[od-player-peers] account=${accountId} FAILED: ${err}`);

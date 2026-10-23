@@ -1,11 +1,13 @@
 import { Router, type IRouter } from 'express';
 import { db, teamsTable, leaguesTable, heroStatsTable, liveSnapshotsTable, matchDraftsTable, proMatchesTable } from '@workspace/db';
 import { inArray, and, or, eq, gte, sql } from 'drizzle-orm';
-import { getRandomUserAgent } from '../lib/userAgents';
 import { withCache } from '../lib/responseCache';
-import { getApiKey, getStratzToken } from '../services/ApiKeysService';
+import { getOpenDotaLiveFeed, LIVE_FEED_TTL_MS } from '../services/OpenDotaLiveFeed';
+import { observedLiveDraft } from '../lib/observedLiveDraft';
 import { getAppSettings } from '../services/AppSettings';
-import { withOpenDotaKey, tryAcquireOd, isOpenDotaPremium } from '../lib/openDotaUrl';
+import { readProviderFeed, FEED_INTERVALS } from '../services/ProviderFeeds';
+import { feedIsStale } from '../lib/backgroundFeed';
+import {verifiedRunningSeriesIdentity} from '../services/BookmakerMatcher';
 
 const router: IRouter = Router();
 
@@ -106,11 +108,8 @@ async function enrichWithLeagueNames(matches: unknown): Promise<unknown> {
   });
 }
 
-const OPENDOTA_BASE = 'https://api.opendota.com/api';
-const STRATZ_BASE = 'https://api.stratz.com/api/v1';
-const PANDASCORE_BASE = 'https://api.pandascore.co';
-// STRATZ_TOKEN / PANDASCORE_API_KEY — резолвим через ApiKeysService на каждый
-// запрос, чтобы admin-web мог менять override без рестарта api-server.
+
+// API keys are resolved only by the background collector.
 
 // ── PandaScore running-enrichment ─────────────────────────────────────────
 
@@ -288,6 +287,7 @@ function psRunningToLiveShape(ps: PsRunningMatch[]): Record<string, unknown>[] {
     const o2 = m.opponents?.[1]?.opponent;
     const o1Id = o1?.id ?? null;
     const o2Id = o2?.id ?? null;
+    const seriesIdentity=verifiedRunningSeriesIdentity(o1?.name??'',o2?.name??'',ps);
     const games = m.games ?? [];
     const finished = games.filter(g => g.status === 'finished');
     let r1 = 0, r2 = 0;
@@ -326,6 +326,8 @@ function psRunningToLiveShape(ps: PsRunningMatch[]): Record<string, unknown>[] {
       // Используем синтетический match_id (отрицательный, не пересекается с OD).
       match_id: -m.id,
       ps_match_id: m.id,
+      series_start_time: seriesIdentity?.id===m.id ? seriesIdentity.startsAt : null,
+      series_identity_verified: seriesIdentity?.id===m.id,
       _latest_end_at_sec: latestEndAtSec,
       team_id_radiant: o1Id ?? 0,
       team_id_dire:    o2Id ?? 0,
@@ -389,6 +391,7 @@ function enrichWithPandaScoreRunning(
     const m = rawMatch as Record<string, unknown>;
     const odR = String(m['team_name_radiant'] ?? '');
     const odD = String(m['team_name_dire'] ?? '');
+    const seriesIdentity=verifiedRunningSeriesIdentity(odR,odD,psMatches);
     const od1 = normTeamName(odR);
     const od2 = normTeamName(odD);
 
@@ -472,6 +475,8 @@ function enrichWithPandaScoreRunning(
         dire_series_wins:    direWins,
         current_map: currentMap,
         ps_match_id: ps.id,
+        series_start_time: seriesIdentity?.id===ps.id ? seriesIdentity.startsAt : null,
+        series_identity_verified: seriesIdentity?.id===ps.id,
         between_maps: true,
         // Зануляем устаревшие OD-поля чтобы UI не показывал стейл
         game_time: 0,
@@ -492,6 +497,8 @@ function enrichWithPandaScoreRunning(
       dire_series_wins:    direWins,
       current_map: currentMap,
       ps_match_id: ps.id,
+      series_start_time: seriesIdentity?.id===ps.id ? seriesIdentity.startsAt : null,
+      series_identity_verified: seriesIdentity?.id===ps.id,
       between_maps: false,
       _latest_end_at_sec: latestEndAtSec,
     };
@@ -538,126 +545,21 @@ async function getHeroNames(): Promise<Map<number, string>> {
   return heroNameCache;
 }
 
-// ── Live-draft enrichment ──────────────────────────────────────────────────
-//
-// OpenDota `/api/live` НЕ отдаёт пики/баны. Но `/api/matches/{id}` возвращает
-// `picks_bans` даже для матча в процессе (как только драфт стартовал). Эту
-// функцию мы вызываем после того, как PandaScore уже подмешал ps_match_id и
-// мы знаем, какая карта сейчас идёт.
-//
-// Стратегия:
-//  1. Параллельно (concurrency=4) fetch'им /api/matches/{match_id} для всех
-//     pro-live матчей с валидным match_id.
-//  2. Per-match cache 60s, чтобы при опросе мобилкой раз в 30s не бить OD на
-//     тот же матч заново. Premium OD: 3000 req/min, $0.0001/req — кэш бережёт
-//     счёт и снижает p95.
-//  3. Маппим picks_bans → { picks: [{heroId, heroName, side, order}], bans: [...] }.
-//     team=0 → radiant, team=1 → dire.
-//  4. Если фетч упал/таймаут — матч возвращается без поля `draft` (UI покажет
-//     placeholder «Драфт ещё не стартовал»).
-
-interface OpenDotaPickBan {
-  is_pick: boolean;
-  hero_id: number;
-  team: number; // 0 = radiant, 1 = dire
-  order: number;
-}
-
+// Live hero selections come from the already fetched lineup. Repeated calls to
+// /matches/{id} while a match is running waste the free budget and are not a
+// verified source of live ban history. Completed replay drafts use the path below.
 interface LiveDraftPayload {
-  picks: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
-  bans: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
-  source: 'opendota';
-  fetchedAt: string;
+  picks: Array<{heroId:number;heroName:string;side:'radiant'|'dire';order:number}>;
+  bans: Array<{heroId:number;heroName:string;side:'radiant'|'dire';order:number}>;
+  source:'opendota'; fetchedAt:string;
 }
-
-const draftCache = new Map<number, { payload: LiveDraftPayload | null; at: number }>();
-const DRAFT_CACHE_TTL_MS = 60_000;
-const DRAFT_CACHE_MAX = 200;
-
-function setDraftCache(matchId: number, payload: LiveDraftPayload | null) {
-  // Простая bounded LRU: при переполнении выкидываем самые старые записи
-  // (Map сохраняет порядок вставки). 200 записей × ~5 KB = ~1 MB макс.
-  draftCache.set(matchId, { payload, at: Date.now() });
-  if (draftCache.size > DRAFT_CACHE_MAX) {
-    const excess = draftCache.size - DRAFT_CACHE_MAX;
-    const it = draftCache.keys();
-    for (let i = 0; i < excess; i++) {
-      const k = it.next().value;
-      if (k !== undefined) draftCache.delete(k);
-    }
-  }
-}
-
-async function fetchOpenDotaDraft(matchId: number): Promise<LiveDraftPayload | null> {
-  const cached = draftCache.get(matchId);
-  if (cached && (Date.now() - cached.at) < DRAFT_CACHE_TTL_MS) return cached.payload;
-  // Бюджет исчерпан — не кэшируем негатив, попробуем на следующем запросе.
-  if (!tryAcquireOd('user')) return null;
-  try {
-    const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/matches/${matchId}`), { timeout: 4000 });
-    if (!resp.ok) {
-      setDraftCache(matchId, null);
-      return null;
-    }
-    const data = await resp.json() as { picks_bans?: OpenDotaPickBan[] };
-    const pb = Array.isArray(data.picks_bans) ? data.picks_bans : [];
-    if (pb.length === 0) {
-      setDraftCache(matchId, null);
-      return null;
-    }
-    const heroes = await getHeroNames();
-    const heroName = (id: number) => heroes.get(id) ?? `Hero #${id}`;
-    const payload: LiveDraftPayload = {
-      picks: pb.filter(p => p.is_pick).map(p => ({
-        heroId: p.hero_id,
-        heroName: heroName(p.hero_id),
-        side: p.team === 0 ? 'radiant' : 'dire',
-        order: p.order,
-      })),
-      bans: pb.filter(p => !p.is_pick).map(p => ({
-        heroId: p.hero_id,
-        heroName: heroName(p.hero_id),
-        side: p.team === 0 ? 'radiant' : 'dire',
-        order: p.order,
-      })),
-      source: 'opendota',
-      fetchedAt: new Date().toISOString(),
-    };
-    setDraftCache(matchId, payload);
-    return payload;
-  } catch {
-    setDraftCache(matchId, null);
-    return null;
-  }
-}
-
-async function enrichLiveMatchesWithDrafts(matches: unknown): Promise<unknown> {
-  if (!Array.isArray(matches) || matches.length === 0) return matches;
-  // Concurrency=4: типично 5-10 live-матчей, не хотим съесть весь rate-limit
-  // OD (60/min). Fetch занимает ~300-800ms, total <2s даже для 10 матчей.
-  const idSet = new Set<number>();
-  for (const raw of matches) {
-    const r = raw as Record<string, unknown>;
-    // Между картами драфта актуальной карты ещё нет — не тащим OD-драфт
-    // (он отдаст пики предыдущей карты, которые мы только что зачистили).
-    if (r['between_maps'] === true) continue;
-    const id = Number(r['match_id'] ?? 0);
-    if (id > 0) idSet.add(id);
-  }
-  const ids = Array.from(idSet);
-  const drafts = new Map<number, LiveDraftPayload | null>();
-  const CONCURRENCY = 4;
-  for (let i = 0; i < ids.length; i += CONCURRENCY) {
-    const batch = ids.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(batch.map(id => fetchOpenDotaDraft(id)));
-    batch.forEach((id, idx) => drafts.set(id, results[idx] ?? null));
-  }
-  return matches.map(raw => {
-    const m = raw as Record<string, unknown>;
-    if (m['between_maps'] === true) return m;
-    const id = Number(m['match_id'] ?? 0);
-    const draft = id > 0 ? drafts.get(id) : null;
-    return draft ? { ...m, draft } : m;
+async function enrichLiveMatchesWithDrafts(matches: unknown, fetchedAt: string | null): Promise<unknown> {
+  if (!Array.isArray(matches) || !matches.length || !fetchedAt) return matches;
+  const names=await getHeroNames();
+  return matches.map(raw=>{
+    const m=raw as Record<string,unknown>;
+    const draft=observedLiveDraft(m,names,fetchedAt);
+    return draft?{...m,draft}:m;
   });
 }
 
@@ -670,9 +572,8 @@ async function enrichLiveMatchesWithDrafts(matches: unknown): Promise<unknown> {
 //   1. Сыгранные карты определяем по live_snapshots: LiveWorker пишет снапшоты
 //      каждой карты (matchId + team ids). Окно 12h покрывает любую BO5.
 //   2. Драфт карты берём из match_drafts (заполняется ingest:drafts), а если
-//      ingest ещё не успел (карта закончилась минуты назад) — из OpenDota
-//      /api/matches/{id}. Драфт завершённой карты не меняется → кэш 30 мин,
-//      null-результат кэшируем на 60s (быстрый ретрай).
+//      ingest ещё не успел — возвращаем draft=null до следующего фонового ingest.
+//      Чтение серии никогда не загружает replay по запросу пользователя.
 
 const SERIES_WINDOW_MS = 12 * 60 * 60 * 1000;
 const FINISHED_DRAFT_TTL_MS = 30 * 60 * 1000;
@@ -704,9 +605,7 @@ async function getFinishedMapDraft(matchId: number): Promise<LiveDraftPayload | 
         fetchedAt: row.fetchedAt.toISOString(),
       };
     }
-  } catch { /* БД недоступна — пробуем OD ниже */ }
-  // 2) OpenDota: свежезавершённая карта, ingest ещё не прошёл.
-  if (!payload) payload = await fetchOpenDotaDraft(matchId);
+  } catch { /* Return unknown until the background ingest supplies a draft. */ }
   finishedDraftCache.set(matchId, { payload, at: Date.now() });
   if (finishedDraftCache.size > FINISHED_DRAFT_CACHE_MAX) {
     const excess = finishedDraftCache.size - FINISHED_DRAFT_CACHE_MAX;
@@ -831,52 +730,27 @@ router.get('/series-drafts', async (req, res) => {
   }
 });
 
-interface RequestOptions {
-  timeout?: number;
-  headers?: Record<string, string>;
-}
-
-async function apiFetch(url: string, options: RequestOptions = {}): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options.timeout ?? 10000);
-
-  try {
-    const resp = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': getRandomUserAgent(),
-        'Accept': 'application/json',
-        ...options.headers,
-      },
-    });
-    return resp;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-// Кэшируем live-ответ на 30с: мобилка опрашивает раз в 60с, и при N клиентах
-// без кэша мы бы N раз в минуту били OpenDota (rate-limit 60/min).
+// Every public match route reads only stored snapshots. Workers own all provider requests.
 router.get('/live', async (req, res) => {
-  // Не кэшируем неудачные ответы (noData=true): если у OpenDota транзиентный
-  // 503, мы не должны 30с подряд возвращать пустоту всем клиентам.
-  // Free-режим OD: TTL 60s (мобилка и так опрашивает раз в 60s) — вдвое
-  // меньше OD-запросов. Premium: 30s.
-  const liveTtlMs = isOpenDotaPremium() ? 30_000 : 60_000;
+  // Only local enrichment is cached; provider receipt timestamps remain unchanged.
+  const liveTtlMs = 30_000;
   const payload = await withCache('matches:live', liveTtlMs, async () => {
-    const results: { source: string; data: unknown; error?: string }[] = [];
+    const results: { source: string; data: unknown; fetchedAt?: string | null; stale?: boolean; error?: string }[] = [];
 
-    const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
+    const [psFeed, stratzFeed] = await Promise.all([
+      readProviderFeed('pandascore_running'), readProviderFeed('stratz_live'),
+    ]);
 
-    // Запрашиваем OpenDota live, PandaScore running и Stratz параллельно.
+    // Читаем сохранённые OpenDota, PandaScore и STRATZ snapshots.
     // PandaScore /running даёт официальные имена команд, счёт серии и номер
     // текущей карты. OpenDota даёт реальный game state (kills, gold, time).
-    const openDotaPromise = (tryAcquireOd('user')
-      ? apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/live`), { timeout: 20_000 })
-      : Promise.reject(new Error('OD free budget exhausted')))
-      .then(async r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const raw = await r.json() as unknown;
+    let openDotaFetchedAt: string | null = null;
+    let openDotaAttemptedAt: string | null = null;
+    const openDotaPromise = getOpenDotaLiveFeed()
+      .then(async feed => {
+        const raw = feed.data;
+        openDotaFetchedAt = feed.fetchedAt.toISOString();
+        openDotaAttemptedAt = feed.attemptedAt;
         // Фильтруем только профессиональные матчи: у них league_id > 0 или
         // team_id_radiant/dire > 0. Паблики (100% трафика /api/live) отбрасываем —
         // у них нет имён команд и они не релевантны для беттинг-аналитики.
@@ -897,31 +771,17 @@ router.get('/live', async (req, res) => {
           req.log.warn({ err }, 'league enrichment failed, returning raw');
           return enriched;
         });
-        return { source: 'opendota', data };
+        return { source: 'opendota', data, fetchedAt: openDotaFetchedAt, ...(feed.error ? {error: feed.error} : {}), stale: Boolean(feed.error) || Date.now() - feed.fetchedAt.getTime() >= LIVE_FEED_TTL_MS };
       })
-      .catch(err => ({ source: 'opendota', data: [], error: String(err) }));
+      .catch(() => ({ source: 'opendota', data: null, fetchedAt: null, stale: true, error: 'background_feed_unavailable' }));
 
     // PandaScore /running: официальные метаданные про-матчей (счёт серии, карта).
-    // Timeout 5s чтобы не тормозить ответ если PS недоступен.
-    const pandascoreRunningPromise = pandascoreKey
-      ? apiFetch(
-          `${PANDASCORE_BASE}/dota2/matches/running?token=${pandascoreKey}&page[size]=20`,
-          { timeout: 5000 },
-        )
-          .then(async r => r.ok ? (await r.json() as PsRunningMatch[]) : [])
-          .catch(() => [] as PsRunningMatch[])
-      : Promise.resolve([] as PsRunningMatch[]);
-
-    const stratzToken = getStratzToken();
-    const stratzPromise = stratzToken
-      ? apiFetch(`${STRATZ_BASE}/League/live`, { headers: { Authorization: `Bearer ${stratzToken}` } })
-          .then(async r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const data = await r.json() as unknown;
-            return { source: 'stratz', data };
-          })
-          .catch(err => ({ source: 'stratz', data: null, error: String(err) }))
-      : Promise.resolve({ source: 'stratz', data: null, error: 'STRATZ_TOKEN не настроен' });
+    // Даже при сбое/истечении TTL здесь нет внешнего запроса.
+    const pandascoreRunningPromise = Promise.resolve((psFeed.data ?? []) as PsRunningMatch[]);
+    const stratzPromise = Promise.resolve(stratzFeed.data)
+      .then(enrichLiveMatchesWithTeamNames)
+      .then(enrichWithLeagueNames)
+      .then(data => ({source: 'stratz', data, fetchedAt: stratzFeed.receivedAt, stale: feedIsStale(stratzFeed, FEED_INTERVALS.stratz_live), ...(stratzFeed.error ? {error: stratzFeed.error} : {})}));
 
     const [openDota, stratz, psRunning] = await Promise.allSettled([
       openDotaPromise, stratzPromise, pandascoreRunningPromise,
@@ -939,10 +799,8 @@ router.get('/live', async (req, res) => {
       const psEnriched = psMatches.length > 0
         ? enrichWithPandaScoreRunning(openDota.value.data, psMatches)
         : openDota.value.data;
-      // Подмешиваем picks_bans для каждого live-матча из OD /matches/{id}.
-      // Кешируется per-match на 60s, поэтому даже при cache miss верхнего
-      // уровня (раз в 30s) мы не убиваем rate-limit OpenDota.
-      const withDrafts = await enrichLiveMatchesWithDrafts(psEnriched).catch(err => {
+      // Reuse observed picks from the shared live response; no per-match replay requests.
+      const withDrafts = await enrichLiveMatchesWithDrafts(psEnriched, openDotaFetchedAt).catch(err => {
         req.log.warn({ err }, 'live draft enrichment failed, returning without drafts');
         return psEnriched;
       });
@@ -993,9 +851,11 @@ router.get('/live', async (req, res) => {
             }),
           ).catch(() => psShaped as Record<string, unknown>[])
         : psShaped;
-      results.push({ source: 'pandascore', data: dropStaleBetweenMaps(psFiltered) });
+      results.push({ source: 'pandascore', data: dropStaleBetweenMaps(psFiltered), fetchedAt: psFeed.receivedAt, stale: feedIsStale(psFeed, FEED_INTERVALS.pandascore_running), ...(psFeed.error ? {error: psFeed.error} : {}) });
     }
 
+    const primary = results.find(r => Array.isArray(r.data) && r.data.length > 0) ?? results.find(r => Array.isArray(r.data));
+    const odResult = results.find(r => r.source === 'opendota');
     const hasData = results.some(r => !r.error && Array.isArray(r.data) && (r.data as unknown[]).length > 0);
     return {
       sources: results,
@@ -1004,46 +864,37 @@ router.get('/live', async (req, res) => {
       // пустое состояние.
       noData: !hasData,
       pandascoreRunning: psMatches.length,
+      unavailable: !results.some(r => !r.error && Array.isArray(r.data)) && (psFeed.error !== null || psFeed.data === null),
       // B1 (Фаза 4): метаданные о свежести и происхождении данных.
       // Mobile использует чтобы показывать «обновлено 30s назад» и отличать
       // permanent (имена команд, лига) от transient (live kills/networth).
       _field_meta: {
-        fetchedAt: new Date().toISOString(),
-        cacheTtlSec: 30,
+        fetchedAt: primary?.fetchedAt ?? psFeed.receivedAt,
+        stale: primary?.stale ?? feedIsStale(psFeed, FEED_INTERVALS.pandascore_running),
+        cacheTtlSec: liveTtlMs / 1000,
         sources: {
-          opendota_live: { freshness: 'transient', maxAgeSec: 30, sourceTable: 'upstream:opendota /api/live' },
-          stratz_live:   { freshness: 'transient', maxAgeSec: 30, sourceTable: 'upstream:stratz GraphQL (DORMANT)' },
-          pandascore_running: { freshness: 'transient', maxAgeSec: 60, sourceTable: 'upstream:pandascore /running' },
+          opendota_live: {freshness: 'transient', maxAgeSec: LIVE_FEED_TTL_MS / 1000, fetchedAt: openDotaFetchedAt, attemptedAt: openDotaAttemptedAt, error: odResult?.error ?? null, stale: odResult?.stale ?? true, sourceTable: 'db:provider_feed_snapshots'},
+          stratz_live: {freshness: 'transient', maxAgeSec: FEED_INTERVALS.stratz_live / 1000, fetchedAt: stratzFeed.receivedAt, attemptedAt: stratzFeed.attemptedAt, error: stratzFeed.error, stale: feedIsStale(stratzFeed, FEED_INTERVALS.stratz_live), sourceTable: 'db:provider_feed_snapshots'},
+          pandascore_running: {freshness: 'transient', maxAgeSec: FEED_INTERVALS.pandascore_running / 1000, fetchedAt: psFeed.receivedAt, attemptedAt: psFeed.attemptedAt, error: psFeed.error, stale: feedIsStale(psFeed, FEED_INTERVALS.pandascore_running), sourceTable: 'db:provider_feed_snapshots'},
           team_names: { freshness: 'permanent', sourceTable: 'db:teams' },
           league_names: { freshness: 'permanent', sourceTable: 'db:leagues' },
         },
       },
     };
   }, (v) => !(v as { noData?: boolean }).noData);
-  res.json(payload);
+  res.status(payload.unavailable ? 503 : 200).json(payload);
 });
 
 // upcoming тоже кэшируем — 60с (предматчевое расписание меняется медленно).
 router.get('/upcoming', async (req, res) => {
-  const pandascoreKey = getApiKey('PANDASCORE_API_KEY');
-  if (!pandascoreKey) {
-    res.json({
-      noData: true,
-      error: 'PANDASCORE_API_KEY не настроен. Получить: https://pandascore.co',
-      data: [],
-    });
-    return;
-  }
   try {
-    const data = await withCache('matches:upcoming', 60_000, async () => {
-      const url = new URL(`${PANDASCORE_BASE}/dota2/matches/upcoming`);
-      url.searchParams.set('token', pandascoreKey);
-      url.searchParams.set('page[size]', '20');
-      url.searchParams.set('sort', 'begin_at');
-      url.searchParams.set('filter[status]', 'not_started');
-      const resp = await apiFetch(url.toString());
-      if (!resp.ok) throw new Error(`PandaScore: HTTP ${resp.status}`);
-      const raw = await resp.json() as unknown;
+    const snapshot = await readProviderFeed('pandascore_upcoming');
+    if (snapshot.data === null) {
+      res.status(503).json({noData: true, unavailable: true, error: snapshot.error, data: [], fetchedAt: null});
+      return;
+    }
+    const data = await withCache('matches:upcoming:' + snapshot.receivedAt, 30_000, async () => {
+      const raw = snapshot.data;
       // B4: защитный фильтр — отбрасываем матчи, где PS уже выставил winner_id
       // (status=not_started, но игра по факту сыграна/отменена). Так же дропаем
       // матчи без обеих команд (TBD vs TBD из плейофф-сетки) — не показываем
@@ -1074,40 +925,28 @@ router.get('/upcoming', async (req, res) => {
         },
       ).catch(() => enriched);
     });
-    res.json({ noData: false, data });
+    res.json({ noData: !Array.isArray(data) || data.length === 0, data, fetchedAt: snapshot.receivedAt, attemptedAt: snapshot.attemptedAt, error: snapshot.error, stale: feedIsStale(snapshot, FEED_INTERVALS.pandascore_upcoming) });
   } catch (err) {
     req.log.error({ err }, 'PandaScore upcoming error');
-    res.json({ noData: true, error: String(err), data: [] });
+    res.status(503).json({ noData: true, unavailable: true, error: 'background_feed_unavailable', data: [], fetchedAt: null });
   }
 });
 
-// heroes/hero-stats — почти статические данные. Кэш 1 час.
-router.get('/heroes', async (req, res) => {
-  try {
-    const data = await withCache('matches:heroes', 3_600_000, async () => {
-      if (!tryAcquireOd('user')) throw new Error('OD free budget exhausted');
-      const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/heroes`));
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return await resp.json() as unknown;
-    });
-    res.json({ noData: false, data });
-  } catch (err) {
-    req.log.error({ err }, 'Heroes fetch error');
-    res.json({ noData: true, data: [] });
-  }
-});
-
-router.get('/hero-stats', async (req, res) => {
-  try {
-    if (!tryAcquireOd('user')) throw new Error('OD free budget exhausted');
-    const resp = await apiFetch(withOpenDotaKey(`${OPENDOTA_BASE}/heroStats`));
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json() as unknown;
-    res.json({ noData: false, data });
-  } catch (err) {
-    req.log.error({ err }, 'Hero stats fetch error');
-    res.json({ noData: true, data: [] });
-  }
-});
-
+// Reference endpoints also remain read-only, including first load and cache expiry.
+for (const [path, key] of [['/heroes','heroes'], ['/hero-stats','hero_stats']] as const) {
+  router.get(path, async (req, res) => {
+    try {
+      const snapshot = await readProviderFeed(key);
+      res.status(snapshot.data === null ? 503 : 200).json({
+        noData: snapshot.data === null || snapshot.data.length === 0,
+        unavailable: snapshot.data === null, data: snapshot.data ?? [],
+        fetchedAt: snapshot.receivedAt, attemptedAt: snapshot.attemptedAt,
+        error: snapshot.error, stale: feedIsStale(snapshot, FEED_INTERVALS[key]),
+      });
+    } catch (err) {
+      req.log.error({err}, 'Reference feed read failed');
+      res.status(503).json({noData: true, unavailable: true, data: [], fetchedAt: null, error: 'background_feed_unavailable'});
+    }
+  });
+}
 export default router;

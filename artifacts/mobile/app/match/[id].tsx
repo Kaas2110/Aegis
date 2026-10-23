@@ -1,3 +1,5 @@
+import {selectMapMarket} from '@/lib/matchSemantics';
+import { apiFetch } from '../../lib/api';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -9,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import {
-  getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker,
+  getCachedMatch, getCachedMarkets, rebuildMarketsForBookmaker, loadMatchForDetail,
 } from '@/services/LiveDataService';
 import { MarketCard } from '@/components/MarketCard';
 import { TotalsLadder } from '@/components/TotalsLadder';
@@ -18,6 +20,7 @@ import { FreshnessIndicator } from '@/components/FreshnessIndicator';
 import { logProductEvent } from '@/services/logging/EventLogger';
 import { extractNumericMatchId } from '@/lib/matchId';
 import type { Match, Market } from '@/types';
+import { matchStatePredictionEligible } from '@/lib/liveFreshness';
 
 
 function formatGameTime(seconds: number): string {
@@ -58,13 +61,14 @@ const backStyles = StyleSheet.create({
 
 // ── Состояние ошибки / не найдено ───────────────────────────────────────────
 function ErrorScreen({
-  title, subtitle, colors, topPad, insetBottom,
+  title, subtitle, colors, topPad, insetBottom, loading = false,
 }: {
   title: string;
   subtitle?: string;
   colors: ReturnType<typeof import('@/hooks/useColors').useColors>;
   topPad: number;
   insetBottom: number;
+  loading?: boolean;
 }) {
   return (
     <View style={[errStyles.root, { backgroundColor: colors.background }]}>
@@ -82,7 +86,7 @@ function ErrorScreen({
 
       <View style={errStyles.body}>
         <View style={[errStyles.iconWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="alert-circle" size={32} color={colors.mutedForeground} />
+          {loading ? <ActivityIndicator size="large" color={colors.primary} /> : <Feather name="alert-circle" size={32} color={colors.mutedForeground} />}
         </View>
         <Text style={[errStyles.title, { color: colors.foreground }]}>{title}</Text>
         {subtitle && (
@@ -175,6 +179,8 @@ export default function MatchDetailScreen() {
     draft: {
       picks: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
       bans: Array<{ heroId: number; heroName: string; side: 'radiant' | 'dire'; order: number }>;
+      bansKnown?: boolean;
+      orderKnown?: boolean;
     } | null;
   };
   const [seriesDrafts, setSeriesDrafts] = useState<Map<number, SeriesMapDraft>>(new Map());
@@ -198,6 +204,8 @@ export default function MatchDetailScreen() {
   const [prevProbR, setPrevProbR] = useState<number | null>(null);
 
   // Ищем матч в живом кэше — никаких заглушек, если не нашли = реальная ошибка.
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [matchLoading, setMatchLoading] = useState(!!id && !getCachedMatch(id));
   const cached = id ? getCachedMatch(id) : undefined;
   const match: Match | undefined = cached?.match;
   const baseMarkets: Market[] = cached?.markets ?? getCachedMarkets(id ?? '');
@@ -215,7 +223,8 @@ export default function MatchDetailScreen() {
 
   // Пересобираем markets с выбранным букмекером
   const markets: Market[] = useMemo(() => {
-    if (!cached || !effectiveBookmakerId) return baseMarkets;
+    if (!cached) return baseMarkets;
+    if (!effectiveBookmakerId) return rebuildMarketsForBookmaker({...cached,availableBookmakers:[]},'no_bookmaker');
     return rebuildMarketsForBookmaker(cached, effectiveBookmakerId);
   }, [cached, effectiveBookmakerId, baseMarkets]);
 
@@ -223,29 +232,29 @@ export default function MatchDetailScreen() {
     if (match) logProductEvent('match_detail_opened', 'match_detail', { matchId: match.id });
   }, [match?.id]);
 
-  // T006: подтягиваем гуманизированный прогноз
-  useEffect(() => {
-    if (!match) return;
-    const tR = Number(match.team1.id);
-    const tD = Number(match.team2.id);
-    if (!Number.isFinite(tR) || !Number.isFinite(tD) || tR <= 0 || tD <= 0 || tR === tD) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(`/api/analytics/explain?radiantTeamId=${tR}&direTeamId=${tD}`);
-        if (!r.ok) return;
-        const json = await r.json() as ExplainResp;
-        if (!cancelled) {
-          setExplain(prev => {
-            // запоминаем предыдущую вероятность для live-дельты
-            if (prev) setPrevProbR(prev.winner.radiantProb);
-            return json;
-          });
-        }
-      } catch { /* silent */ }
-    })();
-    return () => { cancelled = true; };
-  }, [match?.id, match?.liveSnapshot?.gameTimeSeconds]);
+  useEffect(()=>{ const timer=setInterval(()=>setRefreshTick(t=>t+1),15000); return()=>clearInterval(timer); },[]);
+  useEffect(()=>{
+    if (!id) return;
+    let cancelled=false;
+    let active:AbortController|undefined;
+    const load=async()=>{
+      active?.abort();
+      const controller=new AbortController();active=controller;
+      if (!getCachedMatch(id)) setMatchLoading(true);
+      try {await loadMatchForDetail(id,controller.signal);} finally {
+        if (!cancelled && !controller.signal.aborted) {setMatchLoading(false);setRefreshTick(t=>t+1);}
+      }
+    };
+    void load();
+    const timer=setInterval(()=>void load(),120000);
+    return()=>{cancelled=true;active?.abort();clearInterval(timer);};
+  },[id]);
+  useEffect(()=>{if(match)setDraftMapTab(match.currentMapNumber);},[match?.id,match?.currentMapNumber]);
+  useEffect(()=>{
+    const p=cached?.markets.find(m=>m.type==='map_winner')?.prediction;
+    if (!p || !match) {setExplain(null);return;}
+    setExplain({winner:{radiantProb:p.modelProbability,direProb:1-p.modelProbability,favorite:{name:p.modelProbability>=.5?match.team1.name:match.team2.name,prob:Math.max(p.modelProbability,1-p.modelProbability)},summary:p.explanationJson.summary,factors:[]},totals:{kills:{expected:0,low:0,high:0},duration:{expectedMin:0,low:0,high:0},usedMlModel:false},teams:{radiant:{id:match.team1.openDotaId??0,name:match.team1.name},dire:{id:match.team2.openDotaId??0,name:match.team2.name}}});
+  },[match?.id,cached?.markets.find(m=>m.type==='map_winner')?.prediction.createdAt.getTime(),cached?.markets.length]);
 
   // Смена пары команд = другая серия: сбрасываем драфты прошлых карт, чтобы
   // при переиспользовании экрана не показать драфт из чужой серии.
@@ -259,12 +268,12 @@ export default function MatchDetailScreen() {
   // ничего не исключаем: OpenDota в этот момент держит id уже завершённой карты.
   useEffect(() => {
     if (activeTab !== 'draft' || !match) return;
-    if (match.format === 'BO1') return;
+    if (match.format === 'BO1' || match.format === 'unknown') return;
     const curMap = match.currentMapNumber ?? 1;
     if (curMap <= 1) return;
     if (match.status !== 'live' && match.status !== 'between_maps') return;
-    const t1 = Number(match.team1.id);
-    const t2 = Number(match.team2.id);
+    const t1 = match.team1.openDotaId ?? 0;
+    const t2 = match.team2.openDotaId ?? 0;
     if (!Number.isFinite(t1) || t1 <= 0 || !Number.isFinite(t2) || t2 <= 0 || t1 === t2) return;
     let cancelled = false;
     (async () => {
@@ -278,7 +287,7 @@ export default function MatchDetailScreen() {
           const numericId = extractNumericMatchId(match.id);
           if (numericId && numericId > 0) params.set('currentMatchId', String(numericId));
         }
-        const r = await fetch(`/api/matches/series-drafts?${params.toString()}`);
+        const r = await apiFetch(`/api/matches/series-drafts?${params.toString()}`);
         if (!r.ok) return;
         const json = await r.json() as { maps?: SeriesMapDraft[] };
         if (!cancelled && Array.isArray(json.maps)) {
@@ -306,8 +315,9 @@ export default function MatchDetailScreen() {
   if (!match) {
     return (
       <ErrorScreen
-        title="Матч не найден"
-        subtitle="Возможно, матч завершился или данные ещё загружаются. Вернитесь на главный экран и обновите список."
+        title={matchLoading ? 'Загружаем матч' : 'Матч не найден'}
+        subtitle={matchLoading ? 'Получаем актуальные данные источников.' : 'Матч отсутствует в текущих данных источников. Возможно, он уже завершился.'}
+        loading={matchLoading}
         colors={colors}
         topPad={topPad}
         insetBottom={insets.bottom}
@@ -315,7 +325,8 @@ export default function MatchDetailScreen() {
     );
   }
 
-  const snap = match.liveSnapshot;
+  const stateEligible = matchStatePredictionEligible(match);
+  const snap = stateEligible ? match.liveSnapshot : undefined;
   const draft = match.draft;
   const isLive = match.status === 'live';
   const isBetweenMaps = match.status === 'between_maps';
@@ -336,8 +347,8 @@ export default function MatchDetailScreen() {
   let draftRadiantLabel = match.team1.name;
   let draftDireLabel = match.team2.name;
   if (isPastMap && pastEntry) {
-    const t1IdNum = Number(match.team1.id);
-    const t2IdNum = Number(match.team2.id);
+    const t1IdNum = match.team1.openDotaId ?? 0;
+    const t2IdNum = match.team2.openDotaId ?? 0;
     if (pastEntry.radiantTeamId === t1IdNum || pastEntry.direTeamId === t2IdNum) {
       // ориентация совпадает с текущей
     } else if (pastEntry.radiantTeamId === t2IdNum || pastEntry.direTeamId === t1IdNum) {
@@ -366,13 +377,11 @@ export default function MatchDetailScreen() {
     const ob = MARKET_ORDER[b.type] ?? 99;
     return oa - ob;
   });
-  // «Вероятность победы» в Обзоре — берём ТОЛЬКО match_winner или map_winner.
+  // Обзор деталей показывает текущую/предстоящую карту. Список матчей показывает всю серию.
   // Других рынков (totals, first_blood) сюда НЕ подсовываем — их вероятность
   // не относится к победе команды. Если ML не вернул winner — отдельная
   // карточка «Прогноз победителя недоступен» (см. ниже).
-  const bestMarket = sortedMarkets.find(m => m.type === 'match_winner')
-    ?? sortedMarkets.find(m => m.type === 'map_winner')
-    ?? null;
+  const bestMarket = selectMapMarket(sortedMarkets) ?? null;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -386,7 +395,7 @@ export default function MatchDetailScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTournament, { color: colors.mutedForeground }]} numberOfLines={1}>
-            {match.tournamentName} · {match.format}
+            {match.tournamentName} · {match.formatKnown === false ? 'Формат неизвестен' : match.format}
           </Text>
           <View style={styles.headerTeams}>
             <Text style={[styles.headerTeam, { color: colors.radiant }]}>
@@ -410,7 +419,7 @@ export default function MatchDetailScreen() {
               <Text style={[styles.gameTimeTxt, { color: colors.mutedForeground }]}>
                 {formatGameTime(snap.gameTimeSeconds)}
               </Text>
-              <FreshnessIndicator ageSeconds={snap.snapshotAge} />
+              <FreshnessIndicator ageSeconds={snap.snapshotAge} at={match.liveDataQuality?.lastStateChangeReceivedAt ?? undefined} />
             </View>
           )}
           {isBetweenMaps && (
@@ -432,8 +441,8 @@ export default function MatchDetailScreen() {
         <View style={{ flexDirection: 'row', gap: 6 }}>
           {/* Сравнение команд (T8) — если у обеих сторон известен числовой teamId */}
           {(() => {
-            const a = Number(match.team1.id);
-            const b = Number(match.team2.id);
+            const a = match.team1.openDotaId ?? 0;
+            const b = match.team2.openDotaId ?? 0;
             if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) return null;
             return (
               <TouchableOpacity
@@ -507,19 +516,21 @@ export default function MatchDetailScreen() {
             {/* ПЕРВЫМ блоком — вероятности событий (по требованию пользователя). */}
             {bestMarket ? (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + '55' }]}>
-                <SectionTitle title="Вероятность победы" colors={colors} />
+                <SectionTitle title={bestMarket.label} colors={colors} />
                 <ProbabilityBar
                   team1Name={match.team1.name}
                   team2Name={match.team2.name}
                   modelProb={bestMarket.prediction.modelProbability}
                   marketProb={bestMarket.bestOdds.fairProbTeam1}
+                  showMarket={bestMarket.prediction.edge !== null}
                 />
+                <FreshnessIndicator ageSeconds={0} at={bestMarket.prediction.createdAt.toISOString()} />
               </View>
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <SectionTitle title="Вероятность победы" colors={colors} />
                 <Text style={{ color: colors.mutedForeground, fontSize: 13, lineHeight: 18 }}>
-                  Прогноз победителя недоступен — у одной из команд недостаточно истории матчей в нашей базе. Приблизительные оценки мы не показываем.
+                  Прогноз недоступен
                 </Text>
               </View>
             )}
@@ -531,7 +542,7 @@ export default function MatchDetailScreen() {
                   const pct = Math.round(mkt.prediction.modelProbability * 100);
                   const hasOdds = mkt.bestOdds.oddsTeam1 > 0;
                   const edge = mkt.prediction.edge;
-                  const isValue = edge > 0.04;
+                  const isValue = edge !== null && edge > 0.04;
                   return (
                     <View key={mkt.id} style={[styles.factorRow, { borderBottomColor: colors.border }]}>
                       <View style={{ flex: 1 }}>
@@ -546,7 +557,7 @@ export default function MatchDetailScreen() {
                         {isValue && (
                           <View style={[styles.factorImpact, { backgroundColor: colors.primary + '25', borderColor: colors.primary + '66' }]}>
                             <Text style={[styles.factorImpactText, { color: colors.primary, fontSize: 10 }]}>
-                              +{Math.round(edge * 100)}%
+                              +{Math.round((edge ?? 0) * 100)}%
                             </Text>
                           </View>
                         )}
@@ -577,13 +588,13 @@ export default function MatchDetailScreen() {
                       Поля с null (xp, выкупы, рошан) скрываем полностью; вернём
                       когда подключим источник с полным сейв-стейтом. */}
                   <StatItem label="Убийства Р/Д" value={`${snap.radiantKills} / ${snap.direKills}`} colors={colors} />
-                  <StatItem label="Голд Radiant" value={`${(snap.netWorthRadiant / 1000).toFixed(1)}k`} colors={colors} positive />
-                  <StatItem label="Голд Dire" value={`${(snap.netWorthDire / 1000).toFixed(1)}k`} colors={colors} />
-                  <StatItem label="Башни Radiant" value={String(snap.towersRadiant)} colors={colors} />
-                  <StatItem label="Башни Dire" value={String(snap.towersDire)} colors={colors} />
-                  <StatItem label="Бараки Radiant" value={String(snap.barracksRadiant)} colors={colors} />
-                  <StatItem label="Бараки Dire" value={String(snap.barracksDire)} colors={colors} />
+                  <StatItem label="Разница золота Radiant − Dire" value={`${((snap.netWorthRadiant-snap.netWorthDire)/1000).toFixed(1)}k`} colors={colors} positive={snap.netWorthRadiant >= snap.netWorthDire} />
+                  <StatItem label="Башни Radiant" value={snap.towersRadiant == null ? '—' : String(snap.towersRadiant)} colors={colors} />
+                  <StatItem label="Башни Dire" value={snap.towersDire == null ? '—' : String(snap.towersDire)} colors={colors} />
+                  <StatItem label="Бараки Radiant" value={snap.barracksRadiant == null ? '—' : String(snap.barracksRadiant)} colors={colors} />
+                  <StatItem label="Бараки Dire" value={snap.barracksDire == null ? '—' : String(snap.barracksDire)} colors={colors} />
                 </View>
+                {[snap.towersRadiant,snap.towersDire,snap.barracksRadiant,snap.barracksDire].some(v=>v==null) && <Text style={[styles.sectionHint,{color:colors.mutedForeground,marginTop:8}]}>Башни и бараки: нет подтверждённых данных.</Text>}
                 {snap.lastBigEvent && (
                   <View style={[styles.eventAlert, { backgroundColor: colors.warning + '20', borderColor: colors.warning + '55' }]}>
                     <Feather name="zap" size={12} color={colors.warning} />
@@ -695,7 +706,7 @@ export default function MatchDetailScreen() {
           <View style={styles.section}>
             {/* T005: подвкладки по картам. Для BO3/BO5 — реальные карты,
                 для BO1 — единственная карта без выбора. */}
-            {match.format !== 'BO1' && (
+            {match.format !== 'BO1' && match.format !== 'unknown' && (
               <View style={[styles.mapSubTabs, { backgroundColor: colors.muted }]}>
                 {Array.from(
                   { length: match.format === 'BO5' ? 5 : 3 },
@@ -725,6 +736,7 @@ export default function MatchDetailScreen() {
               <>
                 <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <SectionTitle title="Пики" colors={colors} />
+                  {displayDraft.orderKnown === false && <Text style={[styles.sectionHint,{color:colors.mutedForeground}]}>Герои текущей карты; порядок выбора недоступен.</Text>}
                   <View style={styles.draftGrid}>
                     <View style={styles.draftSide}>
                       <Text style={[styles.sideLabel, { color: colors.radiant }]}>{draftRadiantLabel}</Text>
@@ -747,6 +759,7 @@ export default function MatchDetailScreen() {
 
                 <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <SectionTitle title="Баны" colors={colors} />
+                  {displayDraft.bansKnown === false && <Text style={[styles.sectionHint,{color:colors.mutedForeground}]}>Источник не передаёт баны этой карты.</Text>}
                   <View style={styles.bansRow}>
                     {displayDraft.bans.map(b => (
                       <View key={b.heroId} style={[styles.banChip, { backgroundColor: colors.muted, borderColor: colors.border }]}>
@@ -796,37 +809,15 @@ export default function MatchDetailScreen() {
         {/* РЫНКИ */}
         {activeTab === 'markets' && (
           <View style={styles.section}>
-
-            {sortedMarkets.length > 0 ? (
-              sortedMarkets.map(mkt => {
-                // Тоталы рендерим лестницей ТБ/ТМ (как у буков), а не П1/П2.
-                // Нужны числовые team_id (OpenDota); если их нет — фолбэк на обычный MarketCard.
-                if (mkt.type === 'total_kills' || mkt.type === 'total_duration') {
-                  const t1Id = Number(match.team1.id);
-                  const t2Id = Number(match.team2.id);
-                  if (Number.isInteger(t1Id) && Number.isInteger(t2Id) && t1Id > 0 && t2Id > 0) {
-                    const ladderType = mkt.type === 'total_kills' ? 'kills' : 'duration';
-                    const liveCurrent = isLive && snap
-                      ? (ladderType === 'kills'
-                          ? snap.radiantKills + snap.direKills
-                          : Math.floor(snap.gameTimeSeconds / 60))
-                      : null;
-                    const liveMinute = isLive && snap ? Math.floor(snap.gameTimeSeconds / 60) : null;
-                    const fmt = (match.format ?? 'BO3').toUpperCase() as 'BO1' | 'BO3' | 'BO5';
-                    return (
-                      <TotalsLadder
-                        key={mkt.id}
-                        radiantTeamId={t1Id}
-                        direTeamId={t2Id}
-                        type={ladderType}
-                        format={fmt}
-                        matchId={typeof match.id === 'string' ? Number(match.id) || null : match.id}
-                        liveCurrent={liveCurrent}
-                        liveMinute={liveMinute}
-                      />
-                    );
-                  }
-                }
+            {!isFinished && !isBetweenMaps && ['kills','duration'].map(type=>(
+              <TotalsLadder key={type}
+                radiantTeamId={match.team1.openDotaId ?? 0} direTeamId={match.team2.openDotaId ?? 0}
+                type={type as 'kills' | 'duration'} format={match.format}
+                matchId={match.openDotaMatchId ?? null} eventId={match.id} bookmakerId={effectiveBookmakerId} status={isLive ? 'live' : 'prematch'}
+                snapshotReceivedAt={match.liveDataQuality?.lastStateChangeReceivedAt ?? null} liveDataQuality={match.liveDataQuality} />
+            ))}
+            {sortedMarkets.filter(m=>m.type !== 'total_kills' && m.type !== 'total_duration').length > 0 ? (
+              sortedMarkets.filter(m=>m.type !== 'total_kills' && m.type !== 'total_duration').map(mkt => {
                 return (
                   <MarketCard
                     key={mkt.id}
@@ -844,11 +835,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.emptyCard}>
                   <Feather name={isFinished ? 'check-circle' : isBetweenMaps ? 'pause-circle' : 'trending-up'} size={28} color={colors.mutedForeground} />
                   <Text style={[styles.emptyCardText, { color: colors.mutedForeground }]}>
-                    {isFinished
-                      ? 'Матч завершён. Прогнозы больше не обновляются.'
-                      : isBetweenMaps
-                        ? 'Прогноз недоступен — перерыв между картами. Появится после старта новой карты.'
-                        : 'Аналитика по рынкам загружается'}
+                    Прогноз недоступен
                   </Text>
                 </View>
               </View>
@@ -931,7 +918,7 @@ function DraftScoreBlock({ radiantHeroIds, direHeroIds, colors }: {
     if (!ready) { setData(null); return; }
     let cancelled = false;
     setLoading(true); setError(null);
-    fetch('/api/analytics/draft-score', {
+    apiFetch('/api/analytics/draft-score', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ radiantHeroIds, direHeroIds }),

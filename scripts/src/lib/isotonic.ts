@@ -5,9 +5,8 @@
  * функцию rawProb → calibratedProb по holdout-выборке так, что внутри
  * полученных бинов средний label действительно равен calibratedProb.
  *
- * Эффект: Brier score падает, log-loss падает. Accuracy не меняется
- * (порог 0.5 в монотонном маппинге двигает только локально), но
- * вероятности становятся честными — критично для расчёта edge vs odds.
+ * Изменение Brier/log-loss и accuracy проверяется на независимом test:
+ * улучшение не гарантировано, а пересечение порога 0.5 может измениться.
  *
  * Применение: применяем калибровку поверх прематч-модели на инференсе.
  * Хранится в `model_versions.metadata.calibration` как массив бинов.
@@ -73,13 +72,17 @@ export function fitIsotonic(samples: { prob: number; label: number }[]): Calibra
   // 1. Сортируем по probability
   const sorted = [...samples].sort((a, b) => a.prob - b.prob);
 
-  // 2. Каждая точка — собственный блок
-  const blocks: Block[] = sorted.map(s => ({
-    sumLabel: s.label,
-    count: 1,
-    minProb: s.prob,
-    maxProb: s.prob,
-  }));
+  // 2. Equal scores must share one fitted value regardless of label ordering.
+  const blocks: Block[] = [];
+  for (const sample of sorted) {
+    const previous = blocks[blocks.length - 1];
+    if (previous && previous.maxProb === sample.prob) {
+      previous.sumLabel += sample.label;
+      previous.count += 1;
+    } else {
+      blocks.push({ sumLabel: sample.label, count: 1, minProb: sample.prob, maxProb: sample.prob });
+    }
+  }
 
   // 3. PAV: проходим слева направо, объединяя нарушителей монотонности.
   //    Если левый блок имеет средний label > правого — сливаем (нарушение

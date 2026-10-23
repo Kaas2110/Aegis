@@ -10,8 +10,8 @@
  * Воркер **полностью автономен** — не зависит от трафика мобильного клиента.
  * Чтобы определить live count и ближайший upcoming, делает loopback HTTP-запрос
  * к собственному серверу (`/api/matches/live`, `/api/matches/upcoming`). Эти
- * эндпоинты идут через withCache, так что воркер сам прогревает общий кэш —
- * следующие запросы клиентов получают данные мгновенно.
+ * эндпоинты читают snapshots фоновых коллекторов; ни этот loopback, ни
+ * пользовательский запрос не загружает матч из внешнего API.
  *
  * Воркер пишет результаты в общий per-source кэш `routes/bookmakers.ts` (TTL
  * 65 мин), эндпоинты `/api/bookmakers/*` читают из этого кэша. Per-source
@@ -233,11 +233,13 @@ async function tick(): Promise<void> {
 
   // 2. Опрашиваем все источники букмекеров параллельно.
   const sources = getAllSourceIds();
+  let observedBookmakerLive = false;
   const results = await Promise.all(
     sources.map(async (s) => {
       const ts = Date.now();
       try {
         const r = await fetchSource(s, { force: true });
+        if (!r.error && !r.stale && r.events.some(event => event.status === 'live')) observedBookmakerLive = true;
         return {
           source: s,
           events: r.events.length,
@@ -252,6 +254,9 @@ async function tick(): Promise<void> {
   );
 
   const totalEvents = results.reduce((a, r) => a + r.events, 0);
+  // The bookmaker may see a series before our match provider. Its verified
+  // live feed is also evidence that an hourly idle interval is inappropriate.
+  if (observedBookmakerLive) mode = 'live';
   const failed = results.filter((r) => r.error).length;
   const durationMs = Date.now() - t0;
   const interval = loopbackFailed
@@ -286,7 +291,9 @@ async function tick(): Promise<void> {
     '[bookmaker-worker] tick complete',
   );
 
-  scheduleNext(interval);
+  // Preserve configured start-to-start cadence despite slow provider replies.
+  // A lower bound prevents a tight retry loop after an unusually long cycle.
+  scheduleNext(Math.max(10_000, interval - durationMs));
 }
 
 function scheduleNext(ms: number): void {

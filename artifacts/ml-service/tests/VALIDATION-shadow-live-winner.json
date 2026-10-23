@@ -1,0 +1,14 @@
+{
+  "scope": "Runtime module and real in-process FastAPI/ASGI tests, not prediction accuracy or prospective evidence",
+  "testCount": 17,
+  "failures": 0,
+  "errors": 0,
+  "goldenTrainRows": 30,
+  "historicalEligibleTrainParityRows": 408,
+  "manifestSha256": "a686c4e7490ae2aebce3dd924185b031b7d712124f4838a8798bac6bb8488149",
+  "modelSha256": "a0a5c6c8293ae0dd5d4009d25cf22ba81f6d49eefc03ecf047cb1e061851c806",
+  "providerCalls": 0,
+  "databaseConnections": 0,
+  "modelFits": 0,
+  "runtimeActivation": false
+}

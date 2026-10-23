@@ -77,7 +77,10 @@ export const ASYM_FEATURE_NAMES = [
 export const ASYM_FEATURE_DIM = ASYM_FEATURE_NAMES.length;
 
 // ── Loaded model bundle ────────────────────────────────────────────────────
+import {evidenceHash, predictionEvidence, type PredictionEvidence} from '../lib/predictionEvidence';
+
 interface LoadedAsymModel {
+  artifactHash: string;
   version: string;
   featuresVersion: number;
   blobB64: string;
@@ -110,6 +113,7 @@ export async function loadActiveAsymPrematchModel(): Promise<LoadedAsymModel | n
       return null;
     }
     const loaded: LoadedAsymModel = {
+      artifactHash: evidenceHash({blobB64:Buffer.from(blob).toString('base64'),features:ASYM_FEATURE_NAMES}),
       version: r.version,
       featuresVersion: r.featuresVersion ?? 1,
       blobB64: Buffer.isBuffer(blob) ? blob.toString('base64') : Buffer.from(blob).toString('base64'),
@@ -393,6 +397,7 @@ export interface AsymInputs {
   startTime?: number | null;
 }
 export interface AsymResult {
+  evidence: PredictionEvidence;
   probRadiantWin: number;
   rawProb: number;
   modelVersion: string;
@@ -511,7 +516,8 @@ export async function predictAsymPrematch(inp: AsymInputs): Promise<AsymResult |
     return null;
   }
 
-  const prob = await callMlPredict(cachedModel.blobB64, feats);
+  const inferenceModel = cachedModel;
+  const prob = await callMlPredict(inferenceModel.blobB64, feats);
   if (prob == null) return null;
 
   const features: Record<string, number> = {};
@@ -519,9 +525,10 @@ export async function predictAsymPrematch(inp: AsymInputs): Promise<AsymResult |
 
   return {
     probRadiantWin: prob,
+    evidence: predictionEvidence(inferenceModel.artifactHash, [...ASYM_FEATURE_NAMES], feats),
     rawProb: prob,  // изотоника внутри bundle
-    modelVersion: cachedModel.version,
-    featuresVersion: cachedModel.featuresVersion,
+    modelVersion: inferenceModel.version,
+    featuresVersion: inferenceModel.featuresVersion,
     features,
     games180d: { r: gR, d: gD },
   };

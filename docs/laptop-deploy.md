@@ -63,7 +63,7 @@ uv --version
 sudo apt install -y postgresql
 sudo -u postgres psql -c "CREATE USER aegis WITH PASSWORD 'ЗАМЕНИТЬ' CREATEDB;"
 sudo -u postgres psql -c "CREATE DATABASE aegis OWNER aegis;"
-psql postgres://aegis:ЗАМЕНИТЬ@127.0.0.1:5432/aegis -c "SELECT 1;"   # должно ответить
+psql postgres://aegis:YOUR_DATABASE_PASSWORD@127.0.0.1:5432/aegis -c "SELECT 1;"   # должно ответить
 
 # 0.6 Код: клонировать репо (GitHub-экспорт из Replit или zip)
 git clone <URL-репо> ~/aegis && cd ~/aegis
@@ -78,7 +78,7 @@ nano .env          # заполнить по комментариям внутр
 #     ИЛИ начать с пустой схемы (тогда пропустить cat/gunzip/pg_restore)
 cat aegis-db.part-*.gz > aegis-db.dump.gz   # склейка (валидный gzip только целиком)
 gunzip aegis-db.dump.gz                     # → aegis-db.dump (формат pg_dump -Fc)
-pg_restore --no-owner --no-privileges -d "postgres://aegis:ЗАМЕНИТЬ@127.0.0.1:5432/aegis" aegis-db.dump
+pg_restore --no-owner --no-privileges -d "postgres://aegis:YOUR_DATABASE_PASSWORD@127.0.0.1:5432/aegis" aegis-db.dump
 set -a; source .env; set +a
 pnpm --filter @workspace/db run push     # догнать схему до кода (идемпотентно)
 

@@ -1,31 +1,15 @@
 /**
- * Воркер, который раз в 30 секунд опрашивает OpenDota /api/live,
- * сохраняет снапшоты в БД, и считает предсказания через активную ML-модель.
+ * Collect real OpenDota live packets and calculate the currently active models.
+ * Only this collector refreshes OpenDota; HTTP readers use durable snapshots. Free-mode
+ * polling is at least 120 seconds; idle polling is configured separately.
  *
- * Запускается из index.ts если ENABLE_LIVE_WORKER=true (по умолчанию включено в dev).
- *
- * ── Stratz live enrichment (DORMANT) ────────────────────────────────────────
- * Stratz /live.match(id) давал per-player данные которые OpenDota не отдаёт:
- *   - per-player: gold, networth, xpm, gpm, items, respawn time, impPerMinute
- *   - match meta: avgRank, gameState, gameMinute, delay, roshanRespawnSec
- *   - Stratz projections: liveWinRate, prematchWinRate/Duration
- *
- * Эти поля планировалось добавить в live totals модель (live_total_kills_v2)
- * как фичи xpAdvantage_kxp и networthAdvantage_kgold. Модель называлась бы
- * live_total_kills_v2 (MarketLgbm.ts) вместо v1.
- *
- * СТАТУС: DORMANT с 2026-05-16 — Stratz upstream live пуст (live.matches=[],
- * live.match(id)=null для всех match_id). Код stratzLive.ts сохранён целиком
- * (клиент + curl fallback + circuit breaker + типы). Пять nullable колонок в
- * live_snapshots (stratz_match_meta, stratz_players, xp_advantage,
- * networth_advantage, stratz_fetched_at) тоже сохранены в схеме БД.
- *
- * КАК ВКЛЮЧИТЬ ОБРАТНО: раскомментировать import и блок enrichment ниже,
- * переименовать модель в v2, запустить train:live-totals.
- * ─────────────────────────────────────────────────────────────────────────────
+ * STRATZ rich telemetry remains disabled: authenticated GraphQL works with
+ * User-Agent STRATZ_API, but sampled live.match/playbackData were not populated.
+ * Schema availability is not a coverage guarantee. Re-enabling enrichment
+ * requires observed filled packets and a matching validated feature contract.
  */
-
-import { db, liveSnapshotsTable, predictionsTable } from '@workspace/db';
+import { db, liveSnapshotsTable, predictionsTable, proMatchesTable } from '@workspace/db';
+import {and,inArray,sql} from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { predictMatchWinner, loadActiveModel, getActiveModel, type DraftInput } from './PredictionModel';
 import { loadActiveLiveModel, getActiveLiveModel, predictLiveWinner } from './LiveWinnerModel';
@@ -35,33 +19,39 @@ import { recordPrematchPrediction } from './OutcomeTracker';
 // DORMANT — Stratz live upstream пуст. Раскомментировать при восстановлении:
 // import { fetchLiveMatchDetailBatch, type StratzLiveDetail } from '../lib/stratzLive';
 import { predictLiveTotalsFor } from './MarketLgbm';
-import { withOpenDotaKey, tryAcquireOd, isOpenDotaPremium } from '../lib/openDotaUrl';
+import {recordLiveTotalsRefusals} from './LiveTotalsDiagnostics';
+import { refreshOpenDotaLiveFeed } from './OpenDotaLiveFeed';
+import {planLiveCoverage,captureCoverageFeed,captureCoverageFailure,finishLiveCoverage,type PollCapture} from './LiveCoverageJournal';
 import { recordHeartbeat } from './workerHeartbeats';
 import { getAppSettings } from './AppSettings';
+import {LiveJournalContext, flushLivePredictionJournal} from './LivePredictionJournal';
+import {safeOpenDotaId} from '../lib/openDotaLiveIds';
+import {livePacketShapeIssue,type LivePacketShapeIssue} from '../lib/livePacketShape';
+import {enqueueLiveWinnerShadow} from './LiveWinnerShadow';
+import {enqueuePostdraftPackets} from './PostdraftShadow';
+import {enqueueHazardPackets} from './HazardShadow';
+import {enqueueWidePackets,wideShadowStatus,stopWideShadow} from './WideShadow';
+import {DEFAULT_LIVE_INTERVAL_MS, DEFAULT_IDLE_INTERVAL_MS, livePollMode,
+  livePollBaseIntervalMs, livePollFailureBackoffMs, livePollNextDelayMs, livePollActivity} from '../lib/livePollSchedule';
 
 // Дефолты live/idle (используются если БД недоступна). app_settings hot-reloadятся
 // каждым tick'ом — admin правит из /admin-web/workers без рестарта.
-// live = есть хотя бы 1 валидный live-матч; idle = ноль live-матчей.
-const DEFAULT_LIVE_INTERVAL_MS = 30_000;
-const DEFAULT_IDLE_INTERVAL_MS = 300_000;
-const MAX_BACKOFF_MS = 600_000; // 10 минут — потолок для 429/rate-limit
-const OPENDOTA_LIVE_URL = 'https://api.opendota.com/api/live';
+// live = an identified map may still be running; idle = all identified maps are finished/inactive or none exist.
 
 // Базовый интервал зависит от того, был ли валидный live на прошлом тике.
-// При 429/5xx удваивается до MAX_BACKOFF_MS. На любом успешном ответе
+// При ошибке источника удваивается до 10 минут (livePollFailureBackoffMs).
+// На любом успешном ответе
 // сбрасывается к актуальному `getBaseIntervalMs()`, который читает app_settings.
 let currentBackoffMs = DEFAULT_LIVE_INTERVAL_MS;
-let lastValidLiveCount = 0;
+let lastValidLiveCount: number | null = null;
 
 async function getBaseIntervalMs(): Promise<number> {
   try {
     const s = await getAppSettings();
-    const base = (lastValidLiveCount > 0 ? s.liveWorkerLiveSec : s.liveWorkerIdleSec) * 1000;
-    // Free-режим OD: тик не чаще 60s, чтобы не выжигать 3000/day квоту
-    // (30s-тик = 2880 запросов/сутки одним только LiveWorker'ом).
-    return isOpenDotaPremium() ? base : Math.max(base, 60_000);
+    // Paid archive acceleration must not implicitly change the 120-second live cadence.
+    return livePollBaseIntervalMs(lastValidLiveCount, s.liveWorkerLiveSec * 1000, s.liveWorkerIdleSec * 1000);
   } catch {
-    return lastValidLiveCount > 0 ? DEFAULT_LIVE_INTERVAL_MS : DEFAULT_IDLE_INTERVAL_MS;
+    return livePollBaseIntervalMs(lastValidLiveCount);
   }
 }
 
@@ -76,6 +66,7 @@ interface LiveMatch {
   dire_score?: number;
   radiant_lead?: number;
   building_state?: number;
+  deactivate_time?: unknown;
   // OpenDota /api/live раскрывает массив игроков с hero_id и team (0=R, 1=D)
   // как только драфт завершён. Используем это для v2-фичей.
   players?: Array<{ account_id?: number; hero_id?: number; team?: 0 | 1; team_slot?: number }>;
@@ -84,30 +75,23 @@ interface LiveMatch {
 /**
  * Вытаскивает 5+5 hero_ids из /api/live payload или null если драфт неполный.
  *
- * `team` (0/1) — авторитетное поле, когда оно есть. Если поля нет, делаем
- * fallback на `team_slot`: значения 0..4 (или 1..5, в зависимости от формата
- * payload в данный момент) → radiant, всё остальное малое → dire. Используем
- * Steam-bitfield эвристику (>=128 = dire), которая совпадает с типичным
- * представлением player_slot в Dota API.
+ * Only explicit team (0/1) identifies a side. team_slot is a position within
+ * a team and must not be interpreted as the unrelated Steam player_slot.
  */
 function extractDraftFromLive(m: LiveMatch): DraftInput | null {
-  if (!m.players || m.players.length < 10) return null;
+  if (livePacketShapeIssue(m)) return null;
+  if (!m.players || m.players.length !== 10) return null;
   const radiantPicks: number[] = [];
   const direPicks: number[] = [];
   const radiantAccounts: number[] = [];
   const direAccounts: number[] = [];
   for (const p of m.players) {
-    if (!p.hero_id || p.hero_id <= 0) continue;
+    if (!Number.isSafeInteger(p.hero_id) || !p.hero_id || p.hero_id <= 0) return null;
     let side: 0 | 1 | null = null;
     if (p.team === 0 || p.team === 1) {
       side = p.team;
-    } else if (typeof p.team_slot === 'number') {
-      // Heuristic: либо 0..4/5..9, либо 0..4/128..132 (Steam bitfield).
-      if (p.team_slot >= 128) side = 1;
-      else if (p.team_slot >= 5) side = 1;
-      else side = 0;
-    }
-    const acc = typeof p.account_id === 'number' && p.account_id > 0 ? p.account_id : 0;
+    } else return null;
+    const acc = safeOpenDotaId(p.account_id) ?? 0;
     if (side === 0) {
       radiantPicks.push(p.hero_id);
       radiantAccounts.push(acc);
@@ -120,7 +104,7 @@ function extractDraftFromLive(m: LiveMatch): DraftInput | null {
   // Защита от смерт случая когда два игрока попали на ту же сторону: пики
   // должны быть уникальными (5 разных героев). Если коллизия — отдаём null,
   // лучше упасть в v1 чем кормить v2 битыми фичами.
-  if (new Set(radiantPicks).size !== 5 || new Set(direPicks).size !== 5) return null;
+  if (new Set([...radiantPicks,...direPicks]).size !== 10) return null;
   // Wave 3: account_ids идут параллельным массивом, выровненным по picks.
   // Если у игрока был анонимный аккаунт (account_id отсутствует/0), оставляем
   // 0 — buildExtraFeatures игнорирует такие записи. Если у обеих сторон ВСЕ
@@ -141,6 +125,8 @@ function extractDraftFromLive(m: LiveMatch): DraftInput | null {
 
 let timeoutId: ReturnType<typeof setTimeout> | null = null;
 let pollInFlight = false;
+let scheduleInFlight = false;
+let pendingCoverage: PollCapture | null = null;
 let stopRequested = false;
 let stats = {
   totalPolls: 0,
@@ -148,6 +134,13 @@ let stats = {
   totalPredictions: 0,
   totalLivePredictions: 0,
   skippedUnchanged: 0,
+  malformedPackets: 0,
+  malformedPacketReasons: {} as Partial<Record<LivePacketShapeIssue,number>>,
+  lastMalformedPacket: null as {matchId:number|null;reason:LivePacketShapeIssue;receivedAt:string}|null,
+  lastCadenceOutcomeLookup: 'not_checked' as 'not_checked'|'not_needed'|'ok'|'failed',
+  lastCadenceActiveMaps: 0,
+  lastCadenceKnownFinishedMaps: 0,
+  lastCadenceProviderInactiveMaps: 0,
   lastPollAt: null as Date | null,
   lastPollDurationMs: 0,
   lastError: null as string | null,
@@ -164,6 +157,8 @@ const lastSeenHash = new Map<number, string>();
 
 /** Стабильный хеш ВСЕХ полей, влияющих на ML-предсказание и снапшот. */
 function hashLiveMatch(m: LiveMatch): string {
+  const shapeIssue=livePacketShapeIssue(m);
+  if(shapeIssue)throw new Error(shapeIssue); // Caller admits whole packets; never sanitize a damaged roster.
   // Heroes сортируем чтобы изменение порядка игроков в payload не давало
   // ложный «изменился». Account_ids тоже — для идемпотентности draft fingerprint.
   const heroes = (m.players ?? [])
@@ -180,57 +175,83 @@ function hashLiveMatch(m: LiveMatch): string {
   ].join('|');
 }
 
-async function pollOnce(): Promise<void> {
+async function pollOnce(coverage: PollCapture): Promise<void> {
   stats.totalPolls++;
   stats.lastPollAt = new Date();
-
-  // Free-режим: бюджетный guard (55/мин + дневной cap). LiveWorker — 'user'
-  // приоритет: его данные напрямую видит пользователь (live-прогнозы).
-  if (!tryAcquireOd('user')) {
-    logger.warn('[LiveWorker] OD free budget exhausted — skipping tick');
-    return;
-  }
+  await flushLivePredictionJournal([]); // Settle locally available outcomes even on idle polls.
 
   let matches: LiveMatch[] = [];
+  let receivedAt: Date;
   try {
-    const resp = await fetch(withOpenDotaKey(OPENDOTA_LIVE_URL), {
-      headers: { 'User-Agent': 'DotaEdgeAnalyzer/1.0' },
-    });
-    if (!resp.ok) {
-      // 429/5xx — увеличиваем backoff чтобы не выжигать квоту OpenDota.
-      // Любой 4xx/5xx считаем «надо подождать»: 522/429 транзиентны на Replit IP.
-      if (resp.status === 429 || resp.status >= 500) {
-        currentBackoffMs = Math.min(currentBackoffMs * 2, MAX_BACKOFF_MS);
-        logger.warn({ status: resp.status, nextDelayMs: currentBackoffMs },
-          '[LiveWorker] upstream throttled, backing off');
-      }
-      throw new Error(`HTTP ${resp.status}`);
-    }
-    matches = (await resp.json()) as LiveMatch[];
-    // Успешный ответ — сбрасываем backoff к актуальному базовому интервалу.
-    // Базовый интервал зависит от lastValidLiveCount (см. ниже) и hot-reloadится
-    // из app_settings, так что после первого валидного тика adaptive-режим активен.
-    const base = await getBaseIntervalMs();
-    if (currentBackoffMs !== base) {
-      logger.info({ resetTo: base, mode: lastValidLiveCount > 0 ? 'live' : 'idle' },
-        '[LiveWorker] backoff reset after success');
-      currentBackoffMs = base;
-    }
+    coverage.attemptedAt=Date.now();
+    const feed = await refreshOpenDotaLiveFeed();
+    matches = feed.data as LiveMatch[];
+    receivedAt = feed.fetchedAt;
+    captureCoverageFeed(coverage,feed.data,receivedAt); // Before filtering and unchanged-packet dedup.
   } catch (err) {
+    captureCoverageFailure(coverage,err);
+    currentBackoffMs = livePollFailureBackoffMs(currentBackoffMs);
     stats.lastError = String(err);
-    logger.warn({ err, nextDelayMs: currentBackoffMs }, '[LiveWorker] OpenDota fetch failed');
-    return;
+    logger.warn({ err, backoffMs: currentBackoffMs }, '[LiveWorker] OpenDota fetch failed');
+    throw err;
   }
 
-  if (!Array.isArray(matches) || matches.length === 0) {
-    lastValidLiveCount = 0;
-    return;
+  // Preserve the raw receipt in coverage/feed, then reject malformed packets as
+  // a whole before ANY inference path. Filtering individual null players could
+  // turn a damaged 11-entry roster into a falsely complete 5+5 draft.
+  const identified=matches.filter(m=>m!==null&&typeof m==='object'&&!Array.isArray(m)
+    &&safeOpenDotaId(m.match_id)&&safeOpenDotaId(m.team_id_radiant)&&safeOpenDotaId(m.team_id_dire));
+  const valid:LiveMatch[]=[];
+  for(const packet of matches){
+    const reason=livePacketShapeIssue(packet);
+    if(reason){
+      const matchId=packet!==null&&typeof packet==='object'?safeOpenDotaId(packet.match_id)??null:null;
+      stats.malformedPackets++;
+      stats.malformedPacketReasons[reason]=(stats.malformedPacketReasons[reason]??0)+1;
+      stats.lastMalformedPacket={matchId,reason,receivedAt:receivedAt.toISOString()};
+      logger.warn({...stats.lastMalformedPacket},'[LiveWorker] malformed packet excluded from inference; other maps continue');
+      continue;
+    }
+    if(identified.includes(packet))valid.push(packet);
   }
-
-  // Фильтруем матчи с командами и валидным id
-  const valid = matches.filter(m => m.match_id && m.team_id_radiant && m.team_id_dire);
-  lastValidLiveCount = valid.length;
+  // Read outcomes for cadence even when all packets are unchanged or malformed.
+  // A later separate query still checks outcome availability for the journal;
+  // cadence evidence must not replace that prediction-provenance check.
+  const cadenceFinished=new Set<number>();
+  let cadenceLookupFailed=false;
+  stats.lastCadenceOutcomeLookup=identified.length?'ok':'not_needed';
+  if(identified.length){
+    try {
+      const ids=[...new Set(identified.map(m=>m.match_id!))];
+      const finished=await db.select({id:proMatchesTable.matchId}).from(proMatchesTable)
+        .where(and(inArray(proMatchesTable.matchId,ids),
+          sql`${proMatchesTable.radiantWin} IS NOT NULL AND ${proMatchesTable.duration}>0`));
+      for(const row of finished)cadenceFinished.add(row.id);
+    } catch(err){
+      cadenceLookupFailed=true;
+      stats.lastCadenceOutcomeLookup='failed';
+      logger.warn({err},'[LiveWorker] cadence outcome lookup failed; unfinished candidates remain active with backoff');
+    }
+  }
+  const activity=livePollActivity(identified.map(m=>({matchId:m.match_id!,deactivateTime:m.deactivate_time})),
+    cadenceFinished,receivedAt.getTime());
+  lastValidLiveCount=activity.activeMatchIds.length;
+  stats.lastCadenceActiveMaps=lastValidLiveCount;
+  stats.lastCadenceKnownFinishedMaps=activity.knownFinishedMaps;
+  stats.lastCadenceProviderInactiveMaps=activity.providerInactiveMaps;
+  // Determine the interval from THIS response, including the first active poll.
+  const baseIntervalMs=await getBaseIntervalMs();
+  currentBackoffMs=cadenceLookupFailed&&lastValidLiveCount>0
+    ?livePollFailureBackoffMs(Math.max(currentBackoffMs,baseIntervalMs)):baseIntervalMs;
+  stats.lastError = cadenceLookupFailed?'cadence_outcome_lookup_failed':null;
+  await enqueueWidePackets(valid as unknown as Record<string,unknown>[],receivedAt);
+  if (valid.length === 0) lastSeenHash.clear();
   if (valid.length === 0) return;
+
+  // Early-phase diagnostics use every real receipt, including unchanged drafts
+  // after cold-cache/refusal. Legacy snapshot and model dedup stays independent.
+  await enqueuePostdraftPackets(valid as unknown as Record<string,unknown>[],receivedAt);
+  await enqueueHazardPackets(valid as unknown as Record<string,unknown>[],receivedAt);
 
   // Чистим хеш-кэш от матчей, которых больше нет в эфире (закончились).
   // Без этого Map рос бы бесконечно по мере появления/исчезновения матчей.
@@ -250,7 +271,6 @@ async function pollOnce(): Promise<void> {
       stats.skippedUnchanged++;
       return false;
     }
-    lastSeenHash.set(m.match_id!, h);
     return true;
   });
 
@@ -278,11 +298,13 @@ async function pollOnce(): Promise<void> {
   // }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  const journal = new Map<number, LiveJournalContext>();
   // Сохраняем снапшоты только для изменившихся матчей.
   try {
     const rows = changed.map(m => {
       return {
         matchId: m.match_id!,
+        capturedAt: receivedAt,
         gameTimeSec: m.game_time ?? null,
         radiantTeamId: m.team_id_radiant ?? null,
         direTeamId: m.team_id_dire ?? null,
@@ -300,11 +322,27 @@ async function pollOnce(): Promise<void> {
         stratzFetchedAt: null,
       };
     });
-    await db.insert(liveSnapshotsTable).values(rows);
+    const inserted = await db.insert(liveSnapshotsTable).values(rows)
+      .returning({id:liveSnapshotsTable.id,matchId:liveSnapshotsTable.matchId});
+    const packets = new Map(changed.map(m=>[m.match_id!,m]));
+    const known = new Set((await db.select({id:proMatchesTable.matchId}).from(proMatchesTable)
+      .where(and(inArray(proMatchesTable.matchId,[...packets.keys()]),
+        sql`${proMatchesTable.radiantWin} IS NOT NULL AND ${proMatchesTable.duration}>0`))).map(r=>r.id));
+    for (const row of inserted) {
+      const packet = packets.get(row.matchId);
+      if (packet) journal.set(row.matchId,new LiveJournalContext(packet as unknown as Record<string,unknown>,receivedAt,row.id,known.has(row.matchId)));
+    }
+    // Commit deduplication only after the snapshot batch is durable. A failed
+    // write must be retried even if the provider repeats the same packet.
+    for (const m of changed) lastSeenHash.set(m.match_id!, hashLiveMatch(m));
     stats.totalSnapshots += rows.length;
   } catch (err) {
     logger.error({ err }, '[LiveWorker] snapshot insert failed');
+    throw err;
   }
+
+  // Diagnostic inference uses durable observations and never depends on a prematch model.
+  enqueueLiveWinnerShadow([...journal.values()]);
 
   // T3.5 — live totals: НЕЗАВИСИМЫЙ от prematch путь. Эти модели смотрят
   // только на live-снапшот, не требуют team-ratings и должны срабатывать
@@ -312,7 +350,6 @@ async function pollOnce(): Promise<void> {
   // версия гейтилась на getActiveModel() и pred!=null, что блокировало
   // ~весь поток при любых проблемах с prematch).
   for (const m of changed) {
-    if ((m.game_time ?? -1) < 60) continue;
     try {
       // 3-tier: если у нас раскрытый драфт (10 героев) + оба team_id известны —
       // предпочитаем live_total_*_with_draft (snapshot7 + team4 + e1_live2).
@@ -324,13 +361,16 @@ async function pollOnce(): Promise<void> {
         ? { radiantPicks: draft.radiantPicks, direPicks: draft.direPicks, radiantTeamId: rTid, direTeamId: dTid }
         : undefined;
       const lt = await predictLiveTotalsFor({
-        gameTimeSec: m.game_time ?? 0,
+        gameTimeSec: m.game_time ?? null,
         radiantScore: m.radiant_score ?? null,
         direScore: m.dire_score ?? null,
         radiantLead: m.radiant_lead ?? null,
         buildingState: m.building_state ?? null,
       }, draftHint);
-      if (lt.totalKillsLogN && lt.modelVersions.kills) {
+      recordLiveTotalsRefusals(lt,journal.get(m.match_id!));
+      if (lt.totalKillsLogN && lt.modelVersions.kills && lt.evidence.kills) {
+        journal.get(m.match_id!)?.predicted('live_total_kills',{modelVersion:lt.modelVersions.kills,
+          evidence:lt.evidence.kills,output:{distribution:'legacy_log_normal',targetScope:'map',targetTransform:'log1p',nativeUnit:'kills',logMean:lt.totalKillsLogN.mean,logStd:lt.totalKillsLogN.std}});
         await db.insert(predictionsTable).values({
           matchId: m.match_id!,
           modelVersion: lt.modelVersions.kills,
@@ -339,36 +379,46 @@ async function pollOnce(): Promise<void> {
           // переиспользования existing колонок без миграции схемы.
           modelProbTeam1: lt.totalKillsLogN.mean,
           modelProbTeam2: lt.totalKillsLogN.std,
-          confidence: 0.5,
-          features: { game_min: (m.game_time ?? 0) / 60 },
+          confidence: null,
+          features: { game_min: (m.game_time ?? 0) / 60, __source_received_unix: receivedAt.getTime() / 1000 },
         });
       }
-      if (lt.totalDurationLogN && lt.modelVersions.duration) {
+      if (lt.totalDurationLogN && lt.modelVersions.duration && lt.evidence.duration) {
+        journal.get(m.match_id!)?.predicted('live_total_duration',{modelVersion:lt.modelVersions.duration,
+          evidence:lt.evidence.duration,output:{distribution:'legacy_log_normal',targetScope:'map',targetTransform:'log',nativeUnit:'seconds',logMean:lt.totalDurationLogN.mean,logStd:lt.totalDurationLogN.std}});
         await db.insert(predictionsTable).values({
           matchId: m.match_id!,
           modelVersion: lt.modelVersions.duration,
           marketType: 'live_total_duration',
           modelProbTeam1: lt.totalDurationLogN.mean,
           modelProbTeam2: lt.totalDurationLogN.std,
-          confidence: 0.5,
-          features: { game_min: (m.game_time ?? 0) / 60 },
+          confidence: null,
+          features: { game_min: (m.game_time ?? 0) / 60, __source_received_unix: receivedAt.getTime() / 1000 },
         });
       }
     } catch (err) {
+      journal.get(m.match_id!)?.unavailable('live_total_kills','totals_pipeline_error',true);
+      journal.get(m.match_id!)?.unavailable('live_total_duration','totals_pipeline_error',true);
       logger.warn({ err, matchId: m.match_id }, '[LiveWorker] live totals insert failed');
     }
   }
 
   // Делаем предсказания если модель активна
   const model = getActiveModel();
-  if (!model) return;
+  if (!model) { await flushLivePredictionJournal([...journal.values()]); return; }
 
   for (const m of changed) {
     if (!m.team_id_radiant || !m.team_id_dire) continue;
     try {
       const draft = extractDraftFromLive(m);
       const pred = await predictMatchWinner(m.team_id_radiant, m.team_id_dire, draft);
-      if (!pred) continue;
+      if (!pred) {
+        journal.get(m.match_id!)?.unavailable('prematch_context','model_or_team_features_unavailable');
+        journal.get(m.match_id!)?.unavailable('live_winner','prematch_prior_unavailable');
+        continue;
+      }
+      journal.get(m.match_id!)?.predicted('prematch_context', {modelVersion:pred.modelVersion,
+        evidence:pred.evidence,output:{radiantWinProbability:pred.probRadiantWin,rawProbability:pred.rawProb}});
 
       await db.insert(predictionsTable).values({
         matchId: m.match_id!,
@@ -376,8 +426,8 @@ async function pollOnce(): Promise<void> {
         marketType: 'match_winner',
         modelProbTeam1: pred.probRadiantWin,
         modelProbTeam2: 1 - pred.probRadiantWin,
-        confidence: 0.6, // упрощённо: пока константа, потом — функция от полноты данных
-        features: pred.features,
+        confidence: null,
+        features: { ...pred.features, __source_received_unix: receivedAt.getTime() / 1000 },
       });
       stats.totalPredictions++;
 
@@ -401,6 +451,10 @@ async function pollOnce(): Promise<void> {
           pred.probRadiantWin,
         );
         if (livePred) {
+          journal.get(m.match_id!)?.predicted('live_winner',{modelVersion:livePred.modelVersion,
+            evidence:livePred.evidence,output:{radiantWinProbability:livePred.probRadiantWin,
+              priorModelVersion:pred.modelVersion,priorModelHash:pred.evidence.modelHash,
+              priorProbability:pred.probRadiantWin}});
           try {
             await db.insert(predictionsTable).values({
               matchId: m.match_id!,
@@ -408,8 +462,8 @@ async function pollOnce(): Promise<void> {
               marketType: 'live_match_winner',
               modelProbTeam1: livePred.probRadiantWin,
               modelProbTeam2: 1 - livePred.probRadiantWin,
-              confidence: 0.7,
-              features: livePred.features,
+              confidence: null,
+              features: { ...livePred.features, __source_received_unix: receivedAt.getTime() / 1000 },
             });
             stats.totalLivePredictions++;
           } catch (err) {
@@ -444,6 +498,10 @@ async function pollOnce(): Promise<void> {
               pred.probRadiantWin,
             );
             if (asymPred) {
+              journal.get(m.match_id!)?.predicted('asym_live_winner',{modelVersion:asymPred.modelVersion,
+                evidence:asymPred.evidence,output:{radiantWinProbability:asymPred.probRadiantWin,
+                  priorModelVersion:pred.modelVersion,priorModelHash:pred.evidence.modelHash,
+                  priorProbability:pred.probRadiantWin}});
               try {
                 await db.insert(predictionsTable).values({
                   matchId: m.match_id!,
@@ -451,8 +509,8 @@ async function pollOnce(): Promise<void> {
                   marketType: 'live_match_winner_asym',
                   modelProbTeam1: asymPred.probRadiantWin,
                   modelProbTeam2: 1 - asymPred.probRadiantWin,
-                  confidence: 0.7,
-                  features: asymPred.features,
+                  confidence: null,
+                  features: { ...asymPred.features, __source_received_unix: receivedAt.getTime() / 1000 },
                 });
               } catch (err) {
                 logger.warn({ err, matchId: m.match_id }, '[LiveWorker] asym-live prediction insert failed');
@@ -462,20 +520,17 @@ async function pollOnce(): Promise<void> {
         }
       }
 
-      // Записываем прематч-прогноз в персистентный ledger.
-      // Идемпотентно благодаря UNIQUE(match_id) + onConflictDoNothing —
-      // поэтому пишем при ЛЮБОМ первом виде матча (отрицательное game_time =
-      // драфт/пик-фаза, нулевое или положительное = матч начался). Запись
-      // происходит ровно один раз — самая первая. После этого UNIQUE-ограничение
-      // отбрасывает все последующие upsert'ы. Это гарантирует, что в ledger
-      // попадают ВСЕ матчи, увиденные live-воркером, а не только те, у которых
-      // game_time < 300.
-      {
+      // Only an observed pre-start prediction belongs in the prematch ledger.
+      // A first observation halfway through a game is not a prematch test.
+      // Existing legacy rows have no such provenance and remain unvalidated.
+      if (typeof m.game_time === 'number' && m.game_time < 0) {
         // Стампим тир и features_version в features-снапшот ledger'а, чтобы
         // потом в админке можно было разбить out-of-sample метрики по тиру
         // _на момент предсказания_, а не по текущим рейтингам команд.
         const featuresStamped: Record<string, number> = {
           ...(pred.features as Record<string, number>),
+          __observed_game_time_sec: m.game_time,
+          __source_received_unix: receivedAt.getTime() / 1000,
           __features_version: pred.featuresVersion,
           __tier_t1: pred.tier === 't1' ? 1 : 0,
           __tier_t2: pred.tier === 't2' ? 1 : 0,
@@ -485,7 +540,6 @@ async function pollOnce(): Promise<void> {
           matchId: m.match_id!,
           modelVersion: pred.modelVersion,
           predictedRadiantWinProb: pred.probRadiantWin,
-          predictedConfidence: 0.6,
           radiantTeamId: m.team_id_radiant ?? null,
           direTeamId: m.team_id_dire ?? null,
           radiantName: m.team_name_radiant ?? null,
@@ -494,9 +548,14 @@ async function pollOnce(): Promise<void> {
         });
       }
     } catch (err) {
+      journal.get(m.match_id!)?.unavailable('prematch_context','winner_pipeline_error',true);
+      journal.get(m.match_id!)?.unavailable('live_winner','winner_pipeline_error',true);
+      journal.get(m.match_id!)?.unavailable('asym_live_winner','winner_pipeline_error',true);
       logger.error({ err, matchId: m.match_id }, '[LiveWorker] prediction insert failed');
     }
   }
+
+  await flushLivePredictionJournal([...journal.values()]);
 
   logger.info(
     { liveMatches: valid.length, totalPredictions: stats.totalPredictions, totalSnapshots: stats.totalSnapshots },
@@ -508,14 +567,24 @@ async function pollOnce(): Promise<void> {
  * Self-rescheduling poller. setTimeout (а не setInterval) защищает от наложения
  * запусков, если один опрос занял дольше POLL_INTERVAL_MS (медленная сеть/БД).
  */
-async function scheduleNextPoll(delayMs: number): Promise<void> {
-  if (stopRequested) return;
+async function scheduleNextPoll(delayMs: number, cause: PollCapture['ticket']['cause']='regular'): Promise<void> {
+  if (stopRequested || scheduleInFlight) return;
+  scheduleInFlight=true;
+  let coverage: PollCapture;
+  try { coverage=await planLiveCoverage(delayMs,livePollMode(lastValidLiveCount),cause); }
+  finally { scheduleInFlight=false; }
+  if(stopRequested){await finishLiveCoverage(coverage,'stopped');return;}
+  pendingCoverage=coverage;
+  // Durable planning does not add its fsync latency to the promised deadline.
+  const actualDelayMs=Math.max(0,coverage.ticket.dueAt-Date.now());
+  logger.info({nextDelayMs:actualDelayMs,mode:livePollMode(lastValidLiveCount),dueAt:coverage.ticket.dueAt}, '[LiveWorker] next poll scheduled');
   timeoutId = setTimeout(async () => {
-    if (stopRequested) return;
+    timeoutId=null;pendingCoverage=null;
+    if (stopRequested) {await finishLiveCoverage(coverage,'stopped');return;}
     if (pollInFlight) {
-      // На всякий случай: если предыдущий прогон ещё идёт — пропускаем тик.
       logger.warn('[LiveWorker] previous poll still in flight, skipping');
-      void scheduleNextPoll(currentBackoffMs);
+      await finishLiveCoverage(coverage,'skipped_overlap');
+      void scheduleNextPoll(currentBackoffMs,'backoff');
       return;
     }
     pollInFlight = true;
@@ -523,29 +592,26 @@ async function scheduleNextPoll(delayMs: number): Promise<void> {
     let tickOk = true;
     let tickErr: string | null = null;
     try {
-      await pollOnce();
+      await pollOnce(coverage);
     } catch (err) {
       tickOk = false;
       tickErr = err instanceof Error ? err.message : String(err);
+      stats.lastError = tickErr;
       logger.error({ err }, '[LiveWorker] poll error');
     } finally {
       stats.lastPollDurationMs = Date.now() - startedAt;
-      pollInFlight = false;
       recordHeartbeat('liveWorker', { ok: tickOk, durationMs: stats.lastPollDurationMs, error: tickErr });
-      // Если pollOnce кинул до сброса backoff'а — currentBackoffMs остаётся
-      // последним известным (или экспоненциальным от 429). Если успешно
-      // отработал — он уже выровнен по live/idle из app_settings.
-      // Дополнительно clamp'ом учитываем нижнюю границу базы (на случай если
-      // admin поменял настройки прямо сейчас — следующий тик возьмёт новое).
+      await finishLiveCoverage(coverage,tickOk?'ok':'error');
       const base = await getBaseIntervalMs();
-      const next = Math.max(base, currentBackoffMs);
-      void scheduleNextPoll(next);
+      const next = livePollNextDelayMs(base, currentBackoffMs);
+      pollInFlight = false;
+      void scheduleNextPoll(next,!tickOk?'backoff':livePollMode(lastValidLiveCount)==='idle'?'idle':'regular');
     }
-  }, delayMs);
+  }, actualDelayMs);
 }
 
 export function startLiveWorker(): void {
-  if (timeoutId || stopRequested) return;
+  if (timeoutId || scheduleInFlight || pollInFlight || stopRequested) return;
   logger.info(
     {
       defaultLiveIntervalMs: DEFAULT_LIVE_INTERVAL_MS,
@@ -557,11 +623,12 @@ export function startLiveWorker(): void {
   loadActiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial model load failed'));
   loadActiveLiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial live model load failed'));
   loadActiveAsymLiveModel().catch(err => logger.error({ err }, '[LiveWorker] initial asym-live model load failed'));
-  void scheduleNextPoll(5_000);
+  void scheduleNextPoll(5_000,'startup');
 
   // Wire shutdown hooks (один раз; повторные вызовы start() безвредны — node склеит).
   const shutdown = () => {
     logger.info('[LiveWorker] shutdown signal received');
+    void stopWideShadow();
     stopLiveWorker();
   };
   process.once('SIGTERM', shutdown);
@@ -573,6 +640,7 @@ export function stopLiveWorker(): void {
   if (timeoutId) {
     clearTimeout(timeoutId);
     timeoutId = null;
+    if(pendingCoverage){void finishLiveCoverage(pendingCoverage,'stopped');pendingCoverage=null;}
     logger.info('[LiveWorker] stopped');
   }
 }
@@ -582,6 +650,7 @@ export function getWorkerStats() {
   const asymLive = getActiveAsymLiveModel();
   return {
     ...stats,
+    wideShadow: wideShadowStatus(),
     modelLoaded: !!getActiveModel(),
     modelVersion: getActiveModel()?.version ?? null,
     liveModelLoaded: !!live,

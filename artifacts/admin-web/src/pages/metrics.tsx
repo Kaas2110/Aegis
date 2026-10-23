@@ -1,4 +1,5 @@
 import { Fragment, useState, useMemo } from "react";
+import { PrematchQuality } from "@/components/prematch-quality";
 import { useGetAdminMetrics, useGetAdminModels } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,16 +189,7 @@ export default function Metrics() {
             {isMetricsLoading ? (
               <div className="space-y-2"><Skeleton className="h-6 w-full" /><Skeleton className="h-6 w-full" /></div>
             ) : metricsData ? (
-              <div className="grid gap-2 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                {Object.entries(metricsData).map(([key, val]) => (
-                  <div key={key} className="flex justify-between items-center p-3 bg-background border border-border/50">
-                    <span className="font-mono text-xs text-muted-foreground truncate mr-2" title={key}>{key}</span>
-                    <span className="font-mono text-xs font-bold text-foreground">
-                      {typeof val === 'number' ? formatMetric(val) : String(val)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <PrematchQuality data={metricsData} details />
             ) : (
               <div className="text-center py-4 font-mono text-xs text-muted-foreground uppercase">ДАННЫЕ ОТСУТСТВУЮТ</div>
             )}
@@ -206,7 +198,8 @@ export default function Metrics() {
 
         <Card className="rounded-none border-border bg-card">
           <CardHeader className="border-b border-border pb-3">
-            <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">Таблица моделей</CardTitle>
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">Сохранённые отчёты обучения</CardTitle>
+            <p className="text-xs text-muted-foreground">Показатели из файлов моделей. Они не заменяют проверку на будущих матчах и не подтверждают отсутствие утечек при обучении.</p>
           </CardHeader>
           <CardContent className="p-0">
             {isModelsLoading ? (
@@ -235,10 +228,10 @@ export default function Metrics() {
                         <Badge variant="outline" className="rounded-none font-mono text-[10px]">{model.engine}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs">
-                        {formatMetric(model.trainAccuracy)} / <span className="font-bold">{formatMetric(model.testAccuracy)}</span>
+                        {/(?:total_)?(?:kills|duration)(?:_|$)/.test(model.kind) ? 'R²: ' : ''}{formatMetric(model.trainAccuracy)} / <span className="font-bold">{formatMetric(model.testAccuracy)}</span>
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs">
-                        {formatMetric(model.brierScore)}
+                        {/(?:total_)?(?:kills|duration)(?:_|$)/.test(model.kind) ? 'RMSE (log): ' : ''}{formatMetric(model.brierScore)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-muted-foreground">
                         {model.testSampleSize || '—'}

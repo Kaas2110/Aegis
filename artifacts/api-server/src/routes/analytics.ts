@@ -1,6 +1,15 @@
+import { buildBetTypeCatalogue } from '../services/BetTypeCatalogue';
+import {serveBookmakerTotals} from '../services/BookmakerTotalsLadder';
+import {readProviderFeed} from '../services/ProviderFeeds';
+import {readSource,usableBookmakerEvents,getAllSourceIds} from './bookmakers';
+import {totalsLadder} from '../services/TotalsDistribution';
 import { Router, type IRouter } from 'express';
-import { runAnalytics, type MatchInput } from '../services/AnalyticsEngine';
+import { resolveServingTeams, computeServingPredictions, servingModelRevision } from '../services/ServingPredictions';
+import { predictionCacheKey, openDotaMatchId, positiveId, validatePredictionInput } from '../services/PredictionContract';
+import { buildPopularMarkets } from '../services/PopularMarkets';
+import { type MatchInput } from '../services/AnalyticsEngine';
 import { withCache } from '../lib/responseCache';
+import { prematchValidationCte, PREMATCH_VALIDATION_POLICY, PREMATCH_VALIDATION_NOTE } from '../lib/prematchValidation';
 import {
   getActiveModel,
   loadActiveModel,
@@ -18,126 +27,18 @@ import { getTeamProfile } from '../services/features/teamProfile';
 import { requireAdminSession } from './adminAuth';
 import { eq, desc, sql, and, gte, isNotNull, inArray, or, ilike } from 'drizzle-orm';
 
-type TeamResolveEntry = { teamId: number; rating: number | null } | null;
-const TEAM_RESOLVE_TTL_MS = 30 * 60 * 1000;
-const TEAM_RESOLVE_MAX_ENTRIES = 2000;
-const teamResolveCache = new Map<string, { value: TeamResolveEntry; exp: number }>();
-
-function cacheGet(key: string): { hit: boolean; value: TeamResolveEntry } {
-  const e = teamResolveCache.get(key);
-  if (!e) return { hit: false, value: null };
-  if (Date.now() > e.exp) {
-    teamResolveCache.delete(key);
-    return { hit: false, value: null };
-  }
-  teamResolveCache.delete(key);
-  teamResolveCache.set(key, e);
-  return { hit: true, value: e.value };
-}
-
-function cacheSet(key: string, value: TeamResolveEntry) {
-  if (teamResolveCache.size >= TEAM_RESOLVE_MAX_ENTRIES) {
-    const oldest = teamResolveCache.keys().next().value;
-    if (oldest !== undefined) teamResolveCache.delete(oldest);
-  }
-  teamResolveCache.set(key, { value, exp: Date.now() + TEAM_RESOLVE_TTL_MS });
-}
-
-function normalizeTeamName(s: string): string {
-  return s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
-}
-
-async function resolveOpenDotaTeam(name: string, providedId?: number): Promise<TeamResolveEntry> {
-  if (typeof name !== 'string') return null;
-  const trimmed = name.trim();
-  if (!trimmed || trimmed.length > 80) return null;
-  const norm = normalizeTeamName(trimmed);
-  if (!norm) return null;
-  const cacheKey = `${providedId ?? 0}|${norm}`;
-  const c = cacheGet(cacheKey);
-  if (c.hit) return c.value;
-  let row: TeamResolveEntry = null;
-  if (providedId && Number.isFinite(providedId) && providedId > 0 && providedId < 1e10) {
-    const r = await db
-      .select({ teamId: teamsTable.teamId, rating: teamsTable.rating, name: teamsTable.name, tag: teamsTable.tag })
-      .from(teamsTable)
-      .where(eq(teamsTable.teamId, providedId))
-      .limit(1);
-    if (r[0]) {
-      const cn = normalizeTeamName(r[0].name ?? '');
-      const ct = normalizeTeamName(r[0].tag ?? '');
-      const idNameOk =
-        cn === norm || ct === norm ||
-        (norm.length >= 5 && (cn.includes(norm) || (cn.length >= 5 && norm.includes(cn))));
-      if (idNameOk) row = { teamId: r[0].teamId, rating: r[0].rating };
-    }
-  }
-  if (!row) {
-    const wildcard = `%${trimmed.toLowerCase()}%`;
-    const r = await db
-      .select({ teamId: teamsTable.teamId, rating: teamsTable.rating, name: teamsTable.name, tag: teamsTable.tag })
-      .from(teamsTable)
-      .where(or(ilike(teamsTable.name, wildcard), ilike(teamsTable.tag, trimmed.toLowerCase())))
-      .orderBy(desc(teamsTable.rating))
-      .limit(20);
-    const exactMatches = r.filter(c => {
-      const cn = normalizeTeamName(c.name ?? '');
-      const ct = normalizeTeamName(c.tag ?? '');
-      return cn === norm || ct === norm;
-    });
-    let best: typeof r[number] | null = null;
-    if (exactMatches.length > 0) {
-      best = exactMatches[0] ?? null;
-    } else if (norm.length >= 5) {
-      for (const cand of r) {
-        const cn = normalizeTeamName(cand.name ?? '');
-        if (!cn) continue;
-        if (cn.includes(norm) || (cn.length >= 5 && norm.includes(cn))) { best = cand; break; }
-      }
-    }
-    if (best) row = { teamId: best.teamId, rating: best.rating };
-  }
-  cacheSet(cacheKey, row);
-  return row;
-}
-
-async function enrichInputWithRealTeams(input: MatchInput, log?: { warn: (o: object, m?: string) => void }): Promise<MatchInput> {
-  if (!input.team1?.name || !input.team2?.name) return input;
-  const [t1raw, t2raw] = await Promise.all([
-    resolveOpenDotaTeam(input.team1.name, input.team1.teamId),
-    resolveOpenDotaTeam(input.team2.name, input.team2.teamId),
-  ]);
-  let t1 = t1raw;
-  let t2 = t2raw;
-  if (t1 && t2 && t1.teamId === t2.teamId) {
-    const n1 = normalizeTeamName(input.team1.name);
-    const n2 = normalizeTeamName(input.team2.name);
-    if (n1 !== n2) {
-      log?.warn?.({
-        tag: 'predict',
-        reason: 'team_resolve_collision',
-        team1Name: input.team1.name,
-        team2Name: input.team2.name,
-        resolvedTeamId: t1.teamId,
-      }, 'both teams resolved to same teamId; dropping resolutions');
-      t1 = null;
-      t2 = null;
-    }
-  }
-  if (!t1 && !t2) return input;
-  return {
-    ...input,
-    team1: {
-      ...input.team1,
-      teamId: t1?.teamId ?? input.team1.teamId,
-      elo: input.team1.elo ?? (t1?.rating ?? undefined),
-    },
-    team2: {
-      ...input.team2,
-      teamId: t2?.teamId ?? input.team2.teamId,
-      elo: input.team2.elo ?? (t2?.rating ?? undefined),
-    },
-  };
+export async function validatedAnalytics(raw: MatchInput) {
+  validatePredictionInput(raw);
+  const context=raw.seriesContext ?? {seriesScore1:0,seriesScore2:0,currentMapNumber:1};
+  const input = await resolveServingTeams({...raw,seriesContext:context});
+  // The key includes model lineage, providers, score and all input context.
+  // Missing-model responses must recover immediately after the model is loaded.
+  const result = input.status === 'live' || input.status === 'between_maps' || input.liveSnapshot || openDotaMatchId(input)
+    ? await computeServingPredictions(input)
+    : await withCache(predictionCacheKey(input, servingModelRevision()), 60_000,
+    () => computeServingPredictions(input), result => result.predictions.length > 0);
+  const predictions=result.predictions.filter(p=>p.expiresAt && Date.parse(p.expiresAt)>Date.now());
+  return {...result,predictions,state:predictions.length?'ready' as const:'unavailable' as const};
 }
 
 const router: IRouter = Router();
@@ -296,411 +197,20 @@ router.get('/ml-predict', async (req, res) => {
   });
 });
 
-/**
- * POST /api/analytics/predict
- * Принимает данные матча, возвращает предсказания для всех 15 типов ставок.
- */
-// TTL для прематч-кэша. Прематч-фичи меняются редко: ELO обновляется раз в
-// сутки, ростер-замены — единичные случаи, h2h ещё реже. 4 часа — баланс между
-// свежестью (~6 пересчётов в сутки) и экономией CPU/DB.
-const PREMATCH_PREDICT_TTL_MS = 4 * 60 * 60 * 1000;
-
-/**
- * Если переданы оба numeric teamId — вызываем активную ML-модель
- * (LightGBM v3 / LR fallback) и переопределяем `match_winner` в
- * математическом результате. Остальные 13 рынков остаются от математики
- * (для них пока нет ML). Если ML не вернул прогноз (модель не загружена,
- * мало матчей у команды и т.д.) — оставляем математику без изменений.
- */
-function pruneWinnerMarkets(result: ReturnType<typeof runAnalytics>): void {
-  // Удаляем match_winner+map_winner из predictions. Используется когда нет ML
-  // или нет реальных фич — лучше отдать пустоту (UI: «прогноз недоступен»),
-  // чем math-результат с дефолтным ELO 1700/1720 = 50/50.
-  result.predictions = result.predictions.filter(
-    p => p.betType !== 'match_winner' && p.betType !== 'map_winner',
-  );
-}
-
-async function applyMlMatchWinner(
-  result: ReturnType<typeof runAnalytics>,
-  input: MatchInput,
-): Promise<ReturnType<typeof runAnalytics>> {
-  const t1 = input.team1.teamId;
-  const t2 = input.team2.teamId;
-  if (!t1 || !t2 || t1 === t2) {
-    // Без teamId ML не вызвать → режем math winner вместо подсовывания 50/50.
-    pruneWinnerMarkets(result);
-    return result;
-  }
-
-  let ml;
-  try {
-    ml = await mlPredictMatchWinner(t1, t2);
-  } catch (err) {
-    pruneWinnerMarkets(result);
-    return result;
-  }
-  if (!ml) {
-    pruneWinnerMarkets(result);
-    return result;
-  }
-
-  const idx = result.predictions.findIndex(p => p.betType === 'match_winner');
-  if (idx === -1) return result;
-
-  const old = result.predictions[idx];
-  // ML отдаёт P(серия | 0:0). Если серия уже идёт — пересчитываем аналитически
-  // (Layer A): инвертируем в per-map p и считаем P(серия | текущий счёт).
-  const { adjustSeriesProbForScore, perMapProbFromSeries } = await import('../services/BetTypeModels');
-  const fvSeries = result.featureVector;
-  const scoreS1 = fvSeries.seriesScore1 ?? 0;
-  const scoreS2 = fvSeries.seriesScore2 ?? 0;
-  let probTeam1 = adjustSeriesProbForScore(
-    ml.probRadiantWin, fvSeries.matchFormat, scoreS1, scoreS2,
-  ); // team1 = radiant в нашей нотации
-  let winnerVersion = ml.modelVersion;
-  // Layer B (T003): обучаемая mid-series модель (kind='series_mid') — если
-  // серия уже идёт и модель может собрать фичи (есть prev-карта в pro_matches),
-  // её вероятность заменяет аналитический Layer A. Fallback — Layer A выше.
-  if ((scoreS1 > 0 || scoreS2 > 0) && fvSeries.matchFormat !== 'BO1') {
-    try {
-      const { predictSeriesMid } = await import('../services/SeriesMidModel');
-      const mid = await predictSeriesMid(t1, t2, fvSeries.matchFormat, scoreS1, scoreS2);
-      if (mid) {
-        probTeam1 = mid.probTeamAWinsSeries;
-        winnerVersion = `${mid.modelVersion}+layerB`;
-      }
-    } catch { /* Layer A остаётся */ }
-  }
-  const probTeam2 = 1 - probTeam1;
-  // Edge/EV пересчитываем относительно тех же букмекерских коэффициентов.
-  const odds1 = old.bookmakerOdds1;
-  const odds2 = old.bookmakerOdds2;
-  let edge = 0;
-  let ev = 0;
-  if (odds1 && odds2) {
-    const fairProb1 = (1 / odds1) / (1 / odds1 + 1 / odds2);
-    edge = probTeam1 - fairProb1;
-    ev = probTeam1 * (odds1 - 1) - (1 - probTeam1);
-  }
-  result.predictions[idx] = {
-    ...old,
-    probTeam1,
-    probTeam2,
-    confidence: Math.max(probTeam1, probTeam2),
-    edge,
-    ev,
-    modelVersion: winnerVersion,
-  };
-
-  // Деривируем map_winner из ML-вероятности match_winner.
-  // Без этого map_winner остаётся на математической модели с ELO 1720/1720
-  // (мобилка hardcode-ит eloRating=1720 для всех) → 50/50 даже когда
-  // match_winner честно говорит 76/24. predictMapWinner вызывает
-  // predictMatchWinner внутри — нам нужно заменить его базу на ml.probRadiantWin.
-  const mapIdx = result.predictions.findIndex(p => p.betType === 'map_winner');
-  if (mapIdx !== -1) {
-    const oldMap = result.predictions[mapIdx];
-    // Небольшая корректировка на сторону radiant и стадию серии (аналог
-    // predictMapWinner в BetTypeModels.ts, но база теперь ML, а не math).
-    const fv = result.featureVector;
-    const radiantBonus = fv.matchFormat !== 'BO1' ? 0.025 : 0.02;
-    const earlyAdj = radiantBonus * ((fv.earlyScore1 ?? 0.5) - 0.5);
-    const s1 = fv.seriesScore1 ?? 0;
-    const s2 = fv.seriesScore2 ?? 0;
-    const momentumAdj = s1 > s2 ? 0.025 : s2 > s1 ? -0.025 : 0;
-    // База карты — per-map вероятность из ML P(серия|0:0), а не серийная.
-    const pMapBase = fv.matchFormat === 'BO1'
-      ? ml.probRadiantWin
-      : perMapProbFromSeries(ml.probRadiantWin, fv.matchFormat);
-    const rawP = pMapBase + earlyAdj + momentumAdj;
-    const clamp = (v: number) => Math.max(0.05, Math.min(0.95, v));
-    const mapProb1 = clamp(rawP);
-    result.predictions[mapIdx] = {
-      ...oldMap,
-      probTeam1: mapProb1,
-      probTeam2: 1 - mapProb1,
-      confidence: Math.max(mapProb1, 1 - mapProb1),
-      modelVersion: `${ml.modelVersion}+derived`,
-    };
-  }
-
-  // Помечаем что match_winner посчитан ML-моделью; остальные рынки — math.
-  result.modelVersion = `${ml.modelVersion}+math_v1.0.0`;
-  return result;
-}
-
-/**
- * Аудит 2026-07-17: LightGBM market-модели (first_blood / total_kills /
- * total_duration) раньше применялись только в popular-markets и totals-ladder —
- * основной список POST /predict (детальный экран мобилки) оставался на
- * math_v1.0.0 с плоскими 50/50 для FB. Теперь прематч-ветка тоже получает
- * ML-оверрайды. Линии совпадают с дефолтами math-моделей (52.5 киллов /
- * 42.0 мин); прематч kills обучены на log(kills) БЕЗ сдвига +1 (сдвиг — только
- * у live_total_kills), duration — log(сек) → line × 60 (см. totals-ladder).
- */
-async function applyLgbMarketOverrides(
-  result: ReturnType<typeof runAnalytics>,
-  input: MatchInput,
-  log?: { warn: (o: object, m?: string) => void },
-): Promise<ReturnType<typeof runAnalytics>> {
-  const t1 = input.team1.teamId;
-  const t2 = input.team2.teamId;
-  if (!t1 || !t2 || t1 === t2) return result;
-  try {
-    const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
-    const lgb = await predictMarketsFor(t1, t2);
-
-    const patch = (betType: string, pRaw: number | null, version: string, confidence: number): void => {
-      if (pRaw == null || !Number.isFinite(pRaw)) return;
-      const idx = result.predictions.findIndex(p => p.betType === betType);
-      if (idx === -1) return;
-      const old = result.predictions[idx];
-      const p = Math.max(0.02, Math.min(0.98, pRaw));
-      let edge = old.edge ?? 0;
-      let ev = old.ev ?? 0;
-      if (old.bookmakerOdds1 && old.bookmakerOdds2) {
-        const fair = (1 / old.bookmakerOdds1) / (1 / old.bookmakerOdds1 + 1 / old.bookmakerOdds2);
-        edge = p - fair;
-        ev = p * (old.bookmakerOdds1 - 1) - (1 - p);
-      }
-      result.predictions[idx] = {
-        ...old,
-        probTeam1: p,
-        probTeam2: 1 - p,
-        confidence,
-        edge,
-        ev,
-        modelVersion: version,
-      };
-    };
-
-    patch(
-      'first_blood',
-      lgb.firstBloodP,
-      `lightgbm-market:${lgb.tier.firstBlood ?? 'pure'}`,
-      0.62,
-    );
-    if (lgb.totalKillsLogN) {
-      patch(
-        'total_kills',
-        probLogNormalOver(52.5, lgb.totalKillsLogN.mean, lgb.totalKillsLogN.std),
-        `lightgbm-market:${lgb.tier.totalKills ?? 'pure'}`,
-        0.72,
-      );
-    }
-    if (lgb.totalDurationLogN) {
-      patch(
-        'total_duration',
-        probLogNormalOver(42.0 * 60, lgb.totalDurationLogN.mean, lgb.totalDurationLogN.std),
-        `lightgbm-market:${lgb.tier.totalDuration ?? 'pure'}`,
-        0.72,
-      );
-    }
-  } catch (err) {
-    log?.warn?.({ err }, 'predict: lgb market overrides failed');
-  }
-  return result;
-}
-
+/** Public forecasts use trained outputs only; missing evidence remains unavailable. */
 router.post('/predict', async (req, res) => {
   try {
-    const rawInput = req.body as MatchInput & {
-      bookmakerOdds?: { odds1: number; odds2: number };
-    };
-
-    if (!rawInput.matchId || !rawInput.team1 || !rawInput.team2 || !rawInput.format) {
-      res.status(400).json({
-        error: 'Требуются поля: matchId, team1, team2, format',
-      });
-      return;
-    }
-
-    const input = await enrichInputWithRealTeams(rawInput, req.log) as MatchInput & {
-      bookmakerOdds?: { odds1: number; odds2: number };
-    };
-    input.bookmakerOdds = rawInput.bookmakerOdds;
-
-    const isLive = !!input.liveSnapshot;
-    if (isLive) {
-      // Стадийно-правильная live-ветка:
-      //  - map_winner (текущая карта) — свежий live-ML предикт из predictions
-      //    (LiveWorker пишет marketType='live_match_winner' каждые ~30s);
-      //  - match_winner (серия) — прематч-ML P(серия|0:0), пересчитанный
-      //    аналитически (Layer A) на текущий счёт серии;
-      //  - total_kills / total_duration — live-регрессии T3.5 если свежие.
-      // Live-aware math остаётся базой для остальных рынков.
-      const result = runAnalytics(input, input.bookmakerOdds);
-      const e1 = input.team1.elo;
-      const e2 = input.team2.elo;
-      if (!e1 || !e2) {
-        pruneWinnerMarkets(result);
-      }
-      const { adjustSeriesProbForScore } = await import('../services/BetTypeModels');
-      const t1 = input.team1.teamId;
-      const t2 = input.team2.teamId;
-      const ls1 = input.seriesContext?.seriesScore1 ?? 0;
-      const ls2 = input.seriesContext?.seriesScore2 ?? 0;
-      const numericMatchId = Number(input.matchId);
-
-      // (a) match_winner = серия: ML прематч + Layer A пересчёт по счёту.
-      if (t1 && t2 && t1 !== t2) {
-        try {
-          const ml = await mlPredictMatchWinner(t1, t2);
-          if (ml) {
-            let pSeries = adjustSeriesProbForScore(ml.probRadiantWin, input.format, ls1, ls2);
-            let seriesVersion = `${ml.modelVersion}+seriesA`;
-            // Layer B (T003): mid-series модель заменяет Layer A когда серия
-            // уже идёт и фичи собираются (prev-карта уже в pro_matches).
-            if ((ls1 > 0 || ls2 > 0) && input.format !== 'BO1') {
-              try {
-                const { predictSeriesMid } = await import('../services/SeriesMidModel');
-                const mid = await predictSeriesMid(t1, t2, input.format, ls1, ls2);
-                if (mid) {
-                  pSeries = mid.probTeamAWinsSeries;
-                  seriesVersion = `${mid.modelVersion}+layerB`;
-                }
-              } catch { /* Layer A остаётся */ }
-            }
-            const idx = result.predictions.findIndex(p => p.betType === 'match_winner');
-            const patched = {
-              probTeam1: pSeries,
-              probTeam2: 1 - pSeries,
-              confidence: Math.max(pSeries, 1 - pSeries),
-              modelVersion: seriesVersion,
-            };
-            if (idx !== -1) {
-              result.predictions[idx] = { ...result.predictions[idx], ...patched };
-            }
-          }
-        } catch (err) {
-          req.log.warn({ err, matchId: input.matchId }, 'live predict: series ML recompute failed');
-        }
-      }
-
-      // (b) map_winner = текущая карта: свежий live-ML из predictions (≤180s).
-      if (Number.isFinite(numericMatchId)) {
-        try {
-          const rows = await db
-            .select({
-              p1: predictionsTable.modelProbTeam1,
-              version: predictionsTable.modelVersion,
-              predictedAt: predictionsTable.predictedAt,
-            })
-            .from(predictionsTable)
-            .where(and(
-              eq(predictionsTable.matchId, numericMatchId),
-              eq(predictionsTable.marketType, 'live_match_winner'),
-            ))
-            .orderBy(desc(predictionsTable.predictedAt))
-            .limit(1);
-          if (rows.length > 0 && Number.isFinite(rows[0].p1)) {
-            const ageSec = (Date.now() - new Date(rows[0].predictedAt).getTime()) / 1000;
-            if (ageSec <= 180) {
-              const mapIdx = result.predictions.findIndex(p => p.betType === 'map_winner');
-              if (mapIdx !== -1) {
-                const pMap = Math.max(0.02, Math.min(0.98, rows[0].p1));
-                result.predictions[mapIdx] = {
-                  ...result.predictions[mapIdx],
-                  probTeam1: pMap,
-                  probTeam2: 1 - pMap,
-                  confidence: Math.max(pMap, 1 - pMap),
-                  modelVersion: rows[0].version,
-                };
-              }
-            }
-          }
-        } catch (err) {
-          req.log.warn({ err, matchId: input.matchId }, 'live predict: live_match_winner lookup failed');
-        }
-
-        // (c) live-тоталы T3.5: median из log-normal (mean в log-space) вместо
-        // прематч-математики. Если свежего live-предикта нет — рынок остаётся math.
-        try {
-          const { probLogNormalOver } = await import('../services/MarketLgbm');
-          for (const [betType, marketType] of [
-            ['total_kills', 'live_total_kills'],
-            ['total_duration', 'live_total_duration'],
-          ] as const) {
-            const rows = await db
-              .select({
-                mean: predictionsTable.modelProbTeam1,
-                std: predictionsTable.modelProbTeam2,
-                version: predictionsTable.modelVersion,
-                predictedAt: predictionsTable.predictedAt,
-              })
-              .from(predictionsTable)
-              .where(and(
-                eq(predictionsTable.matchId, numericMatchId),
-                eq(predictionsTable.marketType, marketType),
-              ))
-              .orderBy(desc(predictionsTable.predictedAt))
-              .limit(1);
-            if (rows.length === 0) continue;
-            const ageSec = (Date.now() - new Date(rows[0].predictedAt).getTime()) / 1000;
-            if (ageSec > 180 || !Number.isFinite(rows[0].mean) || !(rows[0].std > 0)) continue;
-            const tIdx = result.predictions.findIndex(p => p.betType === betType);
-            if (tIdx === -1) continue;
-            const old = result.predictions[tIdx];
-            // Линии совпадают с дефолтами math-моделей (52.5 киллов / 42.0 мин);
-            // live-модель отдаёт log-space mean/std → P(over line) из log-normal.
-            const lineRaw = betType === 'total_kills' ? 52.5 : 42.0;
-            // Audit fix 2026-07-17: live_total_kills обучена на log(final_kills + 1),
-            // поэтому линию сравниваем как (line + 1); duration — log(сек), line × 60.
-            const lineForProb = betType === 'total_duration' ? lineRaw * 60 : lineRaw + 1;
-            const pOver = probLogNormalOver(lineForProb, rows[0].mean, Math.max(1e-3, rows[0].std));
-            result.predictions[tIdx] = {
-              ...old,
-              probTeam1: pOver,
-              probTeam2: 1 - pOver,
-              confidence: Math.max(pOver, 1 - pOver),
-              modelVersion: rows[0].version,
-            };
-          }
-        } catch (err) {
-          req.log.warn({ err, matchId: input.matchId }, 'live predict: live totals override failed');
-        }
-      }
-
-      res.json(result);
-      return;
-    }
-
-    // Ключ кэша включает имена команд, формат, И teamId — на случай если апстрим
-    // переиспользует matchId при ростер-замене или смене формата (BO3↔BO5).
-    // teamId в ключе нужен потому что ML-вывод зависит от teamId, а не только
-    // от имени; без него можно отдать stale-предикт после изменения id.
-    // ВАЖНО: ключ включает seriesContext (счёт серии + номер карты), иначе
-    // после смены карты в BO3/BO5 кэш на 4ч вернёт labelRu «карты 1» и
-    // вероятность с устаревшим momentum. Без этого fix labelRu (mapNumber)
-    // фактически не работает на cached path'е.
-    const s1 = input.seriesContext?.seriesScore1 ?? 0;
-    const s2 = input.seriesContext?.seriesScore2 ?? 0;
-    const mapN = input.seriesContext?.currentMapNumber ?? (s1 + s2 + 1);
-    const cacheKey =
-      `predict:prematch:${input.matchId}:${input.team1.name}:${input.team2.name}` +
-      `:${input.format}:${input.team1.teamId ?? 0}:${input.team2.teamId ?? 0}` +
-      `:s${s1}-${s2}:m${mapN}`;
-    const result = await withCache(
-      cacheKey,
-      PREMATCH_PREDICT_TTL_MS,
-      async () => {
-        const r = runAnalytics(input, input.bookmakerOdds);
-        const withWinner = await applyMlMatchWinner(r, input);
-        // Аудит 2026-07-17: FB/тоталы — LightGBM market-модели вместо math.
-        return applyLgbMarketOverrides(withWinner, input, req.log);
-      },
-    );
-    res.json(result);
+    res.json(await validatedAnalytics(req.body as MatchInput));
   } catch (err) {
-    req.log.error({ err }, 'Analytics predict error');
-    res.status(500).json({ error: 'Ошибка аналитики', details: String(err) });
+    const invalid = err instanceof Error && err.message === 'invalid_prediction_input';
+    if (!invalid) req.log.error({err}, 'Validated prediction unavailable');
+    res.status(invalid ? 400 : 503).json({state: 'unavailable', predictions: [], error: invalid ? 'invalid_prediction_input' : 'prediction_service_unavailable'});
   }
 });
 
 /**
  * GET /api/analytics/bet-types
- * Список всех поддерживаемых типов ставок с описаниями.
+ * Каталог возможностей: поддержка контракта не означает доступность прогноза.
  */
 /**
  * GET /api/analytics/popular-markets
@@ -709,156 +219,29 @@ router.post('/predict', async (req, res) => {
  * Возвращает список рекомендуемых ставок с справедливыми коэффициентами.
  */
 router.get('/popular-markets', async (req, res) => {
-  const radiantId = Number(req.query.radiantTeamId);
-  const direId = Number(req.query.direTeamId);
-  const team1Name = String(req.query.team1Name ?? 'Radiant');
-  const team2Name = String(req.query.team2Name ?? 'Dire');
-  const formatRaw = String(req.query.format ?? 'BO3');
-
-  // Валидация входа: положительные целые ID, разные команды, валидный формат
-  if (!Number.isInteger(radiantId) || !Number.isInteger(direId) || radiantId <= 0 || direId <= 0) {
-    res.status(400).json({ error: 'radiantTeamId & direTeamId must be positive integers' });
-    return;
-  }
-  if (radiantId === direId) {
-    res.status(400).json({ error: 'radiantTeamId and direTeamId must differ' });
-    return;
-  }
-  if (formatRaw !== 'BO1' && formatRaw !== 'BO3' && formatRaw !== 'BO5') {
-    res.status(400).json({ error: 'format must be BO1, BO3 or BO5' });
-    return;
-  }
-  const format = formatRaw;
-
-  const { buildPopularMarkets } = await import('../services/PopularMarkets');
-  const { predictMatchWinner } = await import('../services/PredictionModel');
-  const { predictMarketsFor } = await import('../services/MarketLgbm');
-
-  // Опционально: подтягиваем ML-предсказание чтобы получить точный elo proxy.
-  // Здесь упрощаем — feature vector с нейтральными значениями. Если есть ML-модель,
-  // используем его prob чтобы сместить elo в наш FeatureVector.
-  let elo1 = 1700;
-  let elo2 = 1700;
+  const team1Id = positiveId(req.query.radiantTeamId);
+  const team2Id = positiveId(req.query.direTeamId);
+  if (!team1Id || !team2Id || team1Id === team2Id) { res.status(400).json({error:'invalid_team_ids'}); return; }
   try {
-    const mlPred = await predictMatchWinner(radiantId, direId);
-    if (mlPred) {
-      // Конвертируем prob в эквивалент ELO-разницы (обратная eloProb)
-      const p = Math.min(0.99, Math.max(0.01, mlPred.probRadiantWin));
-      const eloDiff = -400 * Math.log10(1 / p - 1);
-      elo1 = 1700 + eloDiff / 2;
-      elo2 = 1700 - eloDiff / 2;
-    }
-  } catch (err) {
-    req.log.warn({ err }, 'ML predict failed for popular markets — using neutral ELO');
-  }
-
-  const lgbOverrides = await predictMarketsFor(radiantId, direId).catch(() => null);
-  const cards = buildPopularMarkets({
-    team1Name,
-    team2Name,
-    features: {
-      elo1, elo2,
-      form1: 0.55, form2: 0.5,
-      h2hWinRate1: 0.5,
-      draftSynergy1: 0.5, draftSynergy2: 0.5,
-      draftCounter1: 0.5, draftCounter2: 0.5,
-      scalingScore1: 0.5, scalingScore2: 0.5,
-      earlyScore1: 0.5, earlyScore2: 0.5,
-      matchFormat: format,
-      tournamentTier: 1,
-      isLive: false,
-    },
-    lgbOverrides: lgbOverrides ?? undefined,
-  });
-
-  res.json({
-    matchInfo: { radiantId, direId, team1Name, team2Name, format },
-    eloUsed: { elo1: Math.round(elo1), elo2: Math.round(elo2) },
-    markets: cards,
-    generatedAt: new Date().toISOString(),
-  });
+    const result = await validatedAnalytics({
+      matchId: 'popular-query', status:'prematch', format: String(req.query.format ?? 'BO3') as MatchInput['format'],
+      team1:{name:String(req.query.team1Name ?? 'Radiant'),teamId:team1Id,provider:'opendota'},
+      team2:{name:String(req.query.team2Name ?? 'Dire'),teamId:team2Id,provider:'opendota'},
+    });
+    res.json({markets:buildPopularMarkets(result), state:result.state, generatedAt:result.generatedAt});
+  } catch { res.status(503).json({markets:[],state:'unavailable'}); }
 });
 
-/**
- * POST /api/analytics/popular-markets
- * Полная версия с live-снапшотом — используется когда матч идёт.
- */
 router.post('/popular-markets', async (req, res) => {
   try {
-    const { runAnalytics } = await import('../services/AnalyticsEngine');
-    const { buildPopularMarkets } = await import('../services/PopularMarkets');
-    const input = req.body as Parameters<typeof runAnalytics>[0];
-    // Минимальная валидация полей body (полная Zod-схема будет в OpenAPI спеке).
-    if (!input || typeof input !== 'object' || !input.team1 || !input.team2 || !input.matchId) {
-      res.status(400).json({ error: 'body must include matchId, team1, team2' });
-      return;
-    }
-    const result = runAnalytics(input);
-    const cards = buildPopularMarkets({
-      team1Name: input.team1.name,
-      team2Name: input.team2.name,
-      features: result.featureVector,
-    });
-    res.json({
-      matchId: input.matchId,
-      markets: cards,
-      generatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    req.log.error({ err }, 'popular-markets failed');
-    res.status(500).json({ error: 'internal', details: String(err) });
-  }
+    const result = await validatedAnalytics(req.body as MatchInput);
+    res.json({markets:buildPopularMarkets(result),state:result.state,generatedAt:result.generatedAt});
+  } catch { res.status(503).json({markets:[],state:'unavailable'}); }
 });
 
+
 router.get('/bet-types', (_req, res) => {
-  res.json({
-    betTypes: [
-      {
-        id: 'match_winner',
-        labelRu: 'Победитель матча',
-        description: 'Кто выиграет весь матч (серию)',
-        algorithm: 'ELO + форма (экспоненциальное взвешивание) + H2H + дрэфт + live-корректировка',
-        features: ['elo1', 'elo2', 'form1', 'form2', 'h2hWinRate1', 'draft', 'liveSnapshot'],
-        mlPlan: 'LightGBM на 48 фичах, горизонт 6 мес, переобучение раз в 14 дней',
-      },
-      {
-        id: 'map_winner',
-        labelRu: 'Победитель карты',
-        description: 'Кто выиграет конкретную карту в серии',
-        algorithm: 'Базовая вероятность матча + сторонний бонус (radiant +2.5% в про-играх)',
-        features: ['match_winner_prob', 'side_advantage', 'map_pool_winrate'],
-        mlPlan: 'Отдельная LightGBM с картовыми фичами (side, map_pool)',
-      },
-      {
-        id: 'first_blood',
-        labelRu: 'Первая кровь',
-        description: 'Какая команда получит первую смерть',
-        algorithm: 'Агрессивность команды (earlyScore) как Пуассоновский процесс',
-        features: ['earlyScore1', 'earlyScore2', 'form'],
-        mlPlan: 'XGBoost с временными фичами (время FB, роли героев)',
-      },
-      { id: 'first_tower', labelRu: 'Первая башня', description: 'Первая разрушенная башня', algorithm: 'Лайнинг-сила + дрэфт', features: ['earlyScore', 'draftSynergy'], mlPlan: 'LightGBM' },
-      { id: 'first_roshan', labelRu: 'Первый Рошан', description: 'Первое убийство Рошана', algorithm: 'Ранняя сила + Roshan-приоритет дрэфта', features: ['earlyScore', 'draftSynergy'], mlPlan: 'LightGBM + таймерная фича' },
-      { id: 'total_kills', labelRu: 'Тотал убийств', description: 'Суммарное число убийств на карте', algorithm: 'Темп команд × ожидаемое время', features: ['earlyScore', 'pace', 'duration_estimate'], mlPlan: 'Gradient Boosting Regressor → конвертация в Over/Under' },
-      { id: 'total_duration', labelRu: 'Длительность карты', description: 'Сколько минут длится карта', algorithm: 'scalingScore (поздние герои) × базовая длительность 35 мин', features: ['scalingScore1', 'scalingScore2'], mlPlan: 'LightGBM Regressor' },
-      { id: 'map_handicap', labelRu: 'Гандикап по картам', description: 'Победа с форой (напр. -1.5 карты)', algorithm: 'P(2-0) = p² из базовой вероятности матча', features: ['match_winner_prob'], mlPlan: 'Деривативная модель от match_winner' },
-      { id: 'correct_score', labelRu: 'Точный счёт (BO3)', description: 'Точный счёт серии (2-0, 2-1, 1-2, 0-2)', algorithm: 'Биномиальное распределение по p_map', features: ['match_winner_prob'], mlPlan: 'Симуляционная модель Монте-Карло' },
-      { id: 'comeback', labelRu: 'Камбэк (Live)', description: 'Вероятность победы проигрывающей команды (только live)', algorithm: 'σ(-k × NW_gap/5000 + time_remaining × 0.8)', features: ['netWorthLead', 'gameTimeSec', 'aegisHolder', 'buybackDisadv'], mlPlan: 'LSTM на временном ряду live-фичей' },
-      { id: 'net_worth_lead', labelRu: 'Лидерство по NW', description: 'Кто будет лидировать по NetWorth в X мин', algorithm: 'earlyScore × draftSynergy (лайнинговая пара)', features: ['earlyScore', 'draftSynergy'], mlPlan: 'LightGBM с поминутными историческими данными' },
-      { id: 'first_barracks', labelRu: 'Первые казармы', description: 'Первая разрушенная казарма', algorithm: 'Mid-game strength (scaling + synergy)', features: ['scalingScore', 'draftSynergy'], mlPlan: 'LightGBM' },
-      { id: 'over_under_maps', labelRu: 'Тотал карт (BO3)', description: 'Больше или меньше 2.5 карт в BO3', algorithm: 'P(3 карты) = 2p(1-p) из биномиального', features: ['match_winner_prob'], mlPlan: 'Логистическая регрессия' },
-      { id: 'kills_handicap', labelRu: 'Гандикап по убийствам', description: 'Разница убийств на карте', algorithm: 'Темп атак × ожидаемая продолжительность', features: ['earlyScore', 'pace'], mlPlan: 'LightGBM Regressor → бинаризация' },
-      { id: 'draft_advantage', labelRu: 'Преимущество в дрэфте', description: 'Кто собрал более сильный дрэфт', algorithm: 'Взвешенный: synergy × 0.4 + counter × 0.35 + meta_tier × 0.25', features: ['draftSynergy', 'draftCounter', 'patchWinrate'], mlPlan: 'Hero2Vec embeddings → LightGBM' },
-    ],
-    mlRoadmap: {
-      currentStage: 'mathematical_models',
-      nextStage: 'lightgbm_per_bet_type',
-      trainingData: 'OpenDota historical professional matches (last 6-12 months = 3-4 patches)',
-      retrainingSchedule: 'every 14 days or after new patch',
-      inferenceService: 'Python FastAPI at /api/ml/predict',
-      expectedImprovement: '8-15% Brier score improvement over math models',
-    },
-  });
+  res.json(buildBetTypeCatalogue());
 });
 
 /**
@@ -867,304 +250,64 @@ router.get('/bet-types', (_req, res) => {
  * (49.5, 50.5, …) с вероятностью ТБ/ТМ от модели.
  *   ?type=kills|duration                          (обязательно)
  *   ?radiantTeamId=X&direTeamId=Y                 (обязательно)
- *   ?format=BO1|BO3|BO5                           (по умолчанию BO3)
- *   ?liveCurrent=N&liveMinute=M                   (опц., для live-центрирования)
+ *   ?format=BO1|BO3|BO5|unknown                   (по умолчанию unknown)
+ *   ?status=live|prematch|finished|between_maps    (числа наблюдения берутся только с сервера)
  *   ?lineCount=7                                  (опц., 3..15, по умолчанию 7)
  */
 router.get('/totals-ladder', async (req, res) => {
   const type = String(req.query.type ?? '');
-  if (type !== 'kills' && type !== 'duration') {
-    res.status(400).json({ error: 'type must be "kills" or "duration"' });
+  const bookmakerId=String(req.query.bookmakerId??'');
+  if (bookmakerId && !['none','no_bookmaker'].includes(bookmakerId)) {
+    if (!['kills','duration'].includes(type) || !getAllSourceIds().includes(bookmakerId)) {res.status(400).json({error:'invalid_market_input'});return;}
+    try {
+      const response=await serveBookmakerTotals({type:type as 'kills'|'duration',bookmakerId,eventId:String(req.query.eventId??'')},{
+        readFeed:readProviderFeed,readEvents:async id=>usableBookmakerEvents(await readSource(id)),predict:validatedAnalytics,
+      });
+      res.json(response);
+    } catch {res.status(503).json({lines:[],unavailable:true,unavailableReason:'Данные выбранной БК временно недоступны'});}
     return;
   }
-  const radiantId = Number(req.query.radiantTeamId);
-  const direId = Number(req.query.direTeamId);
-  if (!Number.isInteger(radiantId) || !Number.isInteger(direId) || radiantId <= 0 || direId <= 0 || radiantId === direId) {
-    res.status(400).json({ error: 'radiantTeamId & direTeamId must be different positive integers' });
-    return;
-  }
-  // Опциональный matchId — нужен для подмены прематч-LGB на T3.5 live-totals
-  // предсказание из таблицы predictions. Без matchId или для прематч-вкладки
-  // продолжаем отдавать прематч log-normal. Жёсткий safe-integer guard:
-  // OpenDota match_id сейчас ~8·10⁹ (внутри Number.MAX_SAFE_INTEGER=9·10¹⁵),
-  // но защищаемся на будущее от silent precision loss.
-  const matchIdParam = req.query.matchId != null ? Number(req.query.matchId) : null;
-  const matchId = matchIdParam != null && Number.isSafeInteger(matchIdParam) && matchIdParam > 0
-    ? matchIdParam : null;
-  const formatRaw = String(req.query.format ?? 'BO3');
-  if (formatRaw !== 'BO1' && formatRaw !== 'BO3' && formatRaw !== 'BO5') {
-    res.status(400).json({ error: 'format must be BO1, BO3 or BO5' });
-    return;
-  }
-  const rawLineCount = Number(req.query.lineCount);
-  const lineCount = Math.min(15, Math.max(3, Number.isFinite(rawLineCount) && rawLineCount > 0 ? Math.floor(rawLineCount) : 7));
-  const liveCurrent = req.query.liveCurrent != null ? Number(req.query.liveCurrent) : null;
-  const liveMinute = req.query.liveMinute != null ? Number(req.query.liveMinute) : null;
-  const isLive = liveCurrent != null && liveMinute != null && liveCurrent >= 0 && liveMinute > 0;
-
-  const { predictTotalKills, predictTotalDuration } = await import('../services/BetTypeModels');
-  const { predictMatchWinner } = await import('../services/PredictionModel');
-
-  // ELO-сдвиг как в /popular-markets (используем активную ML-модель)
-  let elo1 = 1700;
-  let elo2 = 1700;
+  const team1Id = positiveId(req.query.radiantTeamId);
+  const team2Id = positiveId(req.query.direTeamId);
+  if (!['kills','duration'].includes(type) || !team1Id || !team2Id || team1Id === team2Id) {res.status(400).json({error:'invalid_market_input'});return;}
+  const matchId = positiveId(req.query.matchId);
+  // Legacy liveMinute is only a mode hint. Client numbers never become observations.
+  const status = String(req.query.status ?? (req.query.liveMinute != null ? 'live' : 'prematch'));
+  if (!['prematch','live','between_maps','finished'].includes(status)) {res.status(400).json({error:'invalid_status'});return;}
   try {
-    const mlPred = await predictMatchWinner(radiantId, direId);
-    if (mlPred) {
-      const p = Math.min(0.99, Math.max(0.01, mlPred.probRadiantWin));
-      const eloDiff = -400 * Math.log10(1 / p - 1);
-      elo1 = 1700 + eloDiff / 2;
-      elo2 = 1700 - eloDiff / 2;
-    }
-  } catch (err) {
-    req.log.warn({ err }, 'totals-ladder: ML predict failed, using neutral ELO');
-  }
-
-  const fv = {
-    elo1, elo2,
-    form1: 0.55, form2: 0.5,
-    h2hWinRate1: 0.5,
-    draftSynergy1: 0.5, draftSynergy2: 0.5,
-    draftCounter1: 0.5, draftCounter2: 0.5,
-    scalingScore1: 0.5, scalingScore2: 0.5,
-    earlyScore1: 0.5, earlyScore2: 0.5,
-    matchFormat: formatRaw as 'BO1' | 'BO3' | 'BO5',
-    tournamentTier: 1 as 1 | 2 | 3,
-    isLive,
-    gameTimeSec: isLive ? (liveMinute as number) * 60 : undefined,
-  };
-
-  // Базовое μ модели (тот же расчёт, что внутри predictTotalKills/Duration)
-  const pace = (fv.earlyScore1 * 0.7 + fv.form1 * 0.3 + fv.earlyScore2 * 0.7 + fv.form2 * 0.3) / 2;
-  const baseExpectedKills = 38 + pace * 30;
-  const scalingAvg = (fv.scalingScore1 + fv.scalingScore2) / 2;
-  const baseExpectedDuration = 28 + scalingAvg * 24;
-
-  // Live-проекция: текущий темп → ожидаемый финал
-  let projection: { current: number; minute: number; projected: number; remainingMin: number } | null = null;
-  if (isLive) {
-    const currentVal = liveCurrent as number;
-    const minute = liveMinute as number;
-    if (type === 'kills') {
-      const killsPerMin = Math.max(0.4, currentVal / Math.max(1, minute));
-      const estimatedFinalMin = Math.max(minute + 5, baseExpectedDuration);
-      const projectedKills = currentVal + killsPerMin * (estimatedFinalMin - minute);
-      projection = { current: currentVal, minute, projected: projectedKills, remainingMin: estimatedFinalMin - minute };
-    } else {
-      // duration: показываем, сколько уже прошло; «projected» = ожид. финал
-      projection = { current: minute, projected: Math.max(minute + 1, baseExpectedDuration), minute, remainingMin: Math.max(1, baseExpectedDuration - minute) };
-    }
-  }
-
-  // Центр лестницы: для прематч — медиана LGB-модели (пересчитывается ниже,
-  // когда lgbLogN известен), для live — projection.projected.
-  let center = projection ? projection.projected : (type === 'kills' ? baseExpectedKills : baseExpectedDuration);
-  const step = type === 'kills' ? 1 : 0.5;
-  // Линии у буков:
-  //   kills — всегда X.5 (49.5, 50.5, 51.5...) — snap к ближайшему X.5
-  //   duration — шаг 0.5, допускаются и .0 и .5 (42.0, 42.5, 43.0...) — snap к ближайшему .5
-  let snappedCenter: number;
-  if (type === 'kills') {
-    snappedCenter = Math.round(center - 0.5) + 0.5;
-  } else {
-    snappedCenter = Math.round(center * 2) / 2;
-  }
-  const startOffset = -Math.floor(lineCount / 2);
-  const lineValues: number[] = [];
-  for (let i = 0; i < lineCount; i++) {
-    lineValues.push(snappedCenter + (startOffset + i) * step);
-  }
-
-  // Wave 4: ТОЛЬКО LightGBM market-модель. Math-heuristic со stub-фичами 0.5
-  // (form/synergy/scaling/early/h2h всё по 0.5) выдавал бы детерминированную
-  // log-normal распределение вокруг базового μ — это фейк, не зависящий от
-  // реальных команд. Если LGB не обучен для пары — возвращаем unavailable.
-  const { predictMarketsFor, probLogNormalOver } = await import('../services/MarketLgbm');
-  // 3-tier: если у этого matchId уже есть зафиксированный драфт в БД —
-  // передаём 5+5 picks, MarketLgbm цепочкой попробует _with_draft → pure.
-  let draftHint: { radiantPicks: number[]; direPicks: number[]; radiantTeamId: number; direTeamId: number } | undefined;
-  if (matchId != null) {
-    try {
-      const drow = await db
-        .select({ rp: matchDraftsTable.radiantPicks, dp: matchDraftsTable.direPicks })
-        .from(matchDraftsTable)
-        .where(eq(matchDraftsTable.matchId, matchId))
-        .limit(1);
-      const rp = drow[0]?.rp as number[] | null | undefined;
-      const dp = drow[0]?.dp as number[] | null | undefined;
-      if (rp && dp && rp.length === 5 && dp.length === 5) {
-        draftHint = { radiantPicks: rp, direPicks: dp, radiantTeamId: radiantId, direTeamId: direId };
-      }
-    } catch (err) {
-      req.log.warn({ err, matchId }, 'totals-ladder: match_drafts lookup failed');
-    }
-  }
-  const lgb = await predictMarketsFor(radiantId, direId, draftHint).catch(() => null);
-  let lgbLogN = type === 'kills' ? lgb?.totalKillsLogN ?? null : lgb?.totalDurationLogN ?? null;
-  const lgbQ25 = type === 'duration' ? lgb?.totalDurationLogQ25 ?? null : null;
-  const lgbQ75 = type === 'duration' ? lgb?.totalDurationLogQ75 ?? null : null;
-  const linesScale = type === 'duration' ? 60 : 1;  // log target = log(sec); UI line — мин
-
-  // T3.5 override: для live-вкладки если есть свежее (≤180s) предсказание
-  // `live_total_kills`/`live_total_duration` в таблице predictions — берём его
-  // (mean,std) ВМЕСТО прематч-LGB. modelProbTeam1=mean, modelProbTeam2=std в
-  // log-space (см. LiveWorker T3.5 блок). Запись идёт каждый poll (~60s).
-  let modelVersion = 'lightgbm-market';
-  let confidence = 0.72;
-  let liveSource = false;
-  if (isLive && matchId != null) {
-    try {
-      const marketType = type === 'kills' ? 'live_total_kills' : 'live_total_duration';
-      const rows = await db
-        .select({
-          mean: predictionsTable.modelProbTeam1,
-          std: predictionsTable.modelProbTeam2,
-          version: predictionsTable.modelVersion,
-          predictedAt: predictionsTable.predictedAt,
-        })
-        .from(predictionsTable)
-        .where(and(
-          eq(predictionsTable.matchId, matchId),
-          eq(predictionsTable.marketType, marketType),
-        ))
-        .orderBy(desc(predictionsTable.predictedAt))
-        .limit(1);
-      if (rows.length > 0) {
-        const ageSec = (Date.now() - new Date(rows[0].predictedAt).getTime()) / 1000;
-        // Защита от мусора в БД: применяем override только если mean/std конечны
-        // и std положительный. Иначе тихо падаем на прематч (а не ломаем UI).
-        const meanOk = Number.isFinite(rows[0].mean);
-        const stdOk = Number.isFinite(rows[0].std) && rows[0].std > 0;
-        if (ageSec <= 180 && meanOk && stdOk) {
-          lgbLogN = { mean: rows[0].mean, std: Math.max(1e-3, rows[0].std) };
-          modelVersion = rows[0].version;
-          confidence = 0.78; // live-фичи живут на свежем снапшоте, доверие чуть выше
-          liveSource = true;
-        }
-      }
-    } catch (err) {
-      req.log.warn({ err, matchId, type }, 'totals-ladder: live override lookup failed');
-    }
-  }
-
-  if (!lgbLogN) {
-    // F9 (Phase 9): диагностический reason. predictMarketsFor возвращает null
-    // в нескольких разных случаях — раньше всем выдавали один общий текст,
-    // что мешало понять что чинить. Теперь раскрываем причину.
-    const { teamRatingDiag } = await import('../services/MarketLgbm');
-    const diag = teamRatingDiag(radiantId, direId);
-    const marketName = type === 'kills' ? 'total_kills' : 'total_duration';
-    let unavailableReason: string;
-    if (diag.modelsLoaded === 0) {
-      unavailableReason = `LightGBM модели ещё не загружены (api-server только стартовал)`;
-    } else if (diag.radiantRating == null && diag.direRating == null) {
-      unavailableReason = `Обе команды не найдены в нашей базе (нужен ingest:teams)`;
-    } else if (diag.radiantRating == null) {
-      unavailableReason = `Команда radiant (id=${radiantId}) не найдена в нашей базе`;
-    } else if (diag.direRating == null) {
-      unavailableReason = `Команда dire (id=${direId}) не найдена в нашей базе`;
-    } else if (diag.radiantGames < 3 || diag.direGames < 3) {
-      unavailableReason = `Мало истории команд: radiant=${diag.radiantGames}, dire=${diag.direGames} игр (нужно ≥3)`;
-    } else {
-      unavailableReason = `LightGBM ${marketName} модель не отвечает (circuit breaker или нет _with_draft/pure для этой пары)`;
-    }
-    req.log.info(
-      { tag: 'totals-ladder', radiantId, direId, type, diag, unavailableReason },
-      'totals-ladder unavailable',
-    );
-    res.json({
-      type,
-      expectedValue: Number(center.toFixed(2)),
-      isLive,
-      projection,
-      lines: [],
-      interval: null,
-      confidence: 0,
-      modelVersion: 'unavailable',
-      unavailable: true,
-      unavailableReason,
-      generatedAt: new Date().toISOString(),
+    const result = await validatedAnalytics({
+      matchId: matchId ? 'od_' + matchId : 'ladder-query', matchSource: matchId ? 'opendota' : undefined,
+      status:status as MatchInput['status'], format:String(req.query.format ?? 'unknown') as MatchInput['format'],
+      team1:{name:'Radiant',teamId:team1Id,provider:'opendota'},team2:{name:'Dire',teamId:team2Id,provider:'opendota'},
     });
-    return;
-  }
-
-  // Audit fix 2026-07-17 (прематч): центр лестницы = медиана модели exp(mean),
-  // а не константная эвристика со stub-фичами 0.5 (иначе при расхождении с
-  // моделью все линии улетали в один хвост, pOver≈0 или ≈1 на всех).
-  if (!projection && lgbLogN) {
-    const modelCenter = Math.exp(lgbLogN.mean) / linesScale;
-    if (Number.isFinite(modelCenter) && modelCenter > 0) {
-      center = modelCenter;
-      snappedCenter = type === 'kills'
-        ? Math.round(center - 0.5) + 0.5
-        : Math.round(center * 2) / 2;
-      lineValues.length = 0;
-      for (let i = 0; i < lineCount; i++) {
-        lineValues.push(snappedCenter + (startOffset + i) * step);
-      }
+    const isLive = !!result.observedState || status === 'live';
+    const pred = result.predictions.find(p => p.betType === (type === 'kills' ? 'total_kills' : 'total_duration'));
+    const ladder = pred?.distribution ? totalsLadder(pred.distribution,Number(req.query.lineCount ?? 7)) : null;
+    if (!ladder || !pred) {
+      res.json({type,expectedValue:null,isLive,projection:null,lines:[],interval:null,confidence:null,modelVersion:'unavailable',unavailable:true,
+        unavailableReason:'Нет проверенной модели с актуальными данными для этой карты',generatedAt:result.generatedAt});return;
     }
-  }
-
-  const lines = lineValues.map(line => {
-    // Audit fix 2026-07-17: live_total_kills обучена на log(kills + 1) → line + 1;
-    // прематч kills — log(kills) без сдвига; duration (обе) — log(сек) → line × 60.
-    const lineArg = type === 'kills'
-      ? (liveSource ? line + 1 : line)
-      : line * linesScale;
-    const pOver = probLogNormalOver(lineArg, lgbLogN.mean, lgbLogN.std);
-    return {
-      line: Number(line.toFixed(1)),
-      pOver: Number(pOver.toFixed(4)),
-      pUnder: Number((1 - pOver).toFixed(4)),
-    };
-  });
-
-  res.json({
-    type,
-    expectedValue: Number(center.toFixed(2)),
-    isLive,
-    projection,
-    lines,
-    // Audit fix 2026-07-17: квантили обучены на log(duration_sec) → в UI минуты (/60).
-    interval: type === 'duration' && lgbQ25 != null && lgbQ75 != null
-      ? {
-          q25: Number((Math.exp(lgbQ25) / 60).toFixed(2)),
-          q75: Number((Math.exp(lgbQ75) / 60).toFixed(2)),
-        }
-      : null,
-    confidence,
-    modelVersion,
-    liveSource,
-    generatedAt: new Date().toISOString(),
-  });
+    const obs = result.observedState;
+    res.json({type,...ladder,lineSource:'model',isLive,targetScope:'map',projection:obs ? {current:type === 'kills' ? obs.totalKills : obs.elapsedSeconds/60,
+      minute:obs.elapsedSeconds/60,projected:ladder.expectedValue,remainingMin:type === 'duration' ? ladder.expectedValue-obs.elapsedSeconds/60 : null} : null,
+      observedState:obs,confidence:null,modelVersion:pred.modelVersion,provenance:pred.provenance,
+      liveSource:!!obs,generatedAt:pred.generatedAt,expiresAt:pred.expiresAt});
+  } catch {res.status(503).json({lines:[],unavailable:true,unavailableReason:'Сервис прогноза временно недоступен'});}
 });
 
 /**
  * POST /api/analytics/batch
  * Предсказания для нескольких матчей сразу.
  */
-router.post('/batch', (req, res) => {
+router.post('/batch', async (req,res) => {
+  const matches = req.body?.matches;
+  if (!Array.isArray(matches) || !matches.length || matches.length > 20) {res.status(400).json({error:'matches must contain 1..20 entries'});return;}
   try {
-    const { matches } = req.body as { matches: MatchInput[] };
-    if (!Array.isArray(matches) || matches.length === 0) {
-      res.status(400).json({ error: 'Требуется массив matches' });
-      return;
-    }
-    if (matches.length > 20) {
-      res.status(400).json({ error: 'Максимум 20 матчей за раз' });
-      return;
-    }
-    const results = matches.map(m => {
-      const r = runAnalytics(m);
-      // Тот же policy что и /predict: без реального ELO режем winner-рынки.
-      if (!m.team1.elo || !m.team2.elo) pruneWinnerMarkets(r);
-      return r;
-    });
-    res.json({ results, count: results.length });
-  } catch (err) {
-    req.log.error({ err }, 'Analytics batch error');
-    res.status(500).json({ error: 'Ошибка', details: String(err) });
-  }
+    const results=[];
+    // Bound the batch rather than issuing twenty model calls at once.
+    for (const input of matches) results.push(await validatedAnalytics(input));
+    res.json({results,count:results.length});
+  } catch {res.status(503).json({results:[],state:'unavailable'});}
 });
 
 /**
@@ -1173,193 +316,15 @@ router.post('/batch', (req, res) => {
  * Используется мобилкой во вкладке «Обзор» вместо сухой выгрузки фич.
  */
 router.get('/explain', async (req, res) => {
-  const parseId = (raw: unknown): number | null => {
-    const n = Number(raw);
-    if (!Number.isFinite(n) || !Number.isSafeInteger(n) || n <= 0 || n > 1e10) return null;
-    return n;
-  };
-  const radiantId = parseId(req.query.radiantTeamId);
-  const direId = parseId(req.query.direTeamId);
-  if (radiantId === null || direId === null || radiantId === direId) {
-    res.status(400).json({ error: 'Требуются разные положительные radiantTeamId и direTeamId' });
-    return;
-  }
-
-  const result = await mlPredictMatchWinner(radiantId, direId);
-  if (!result) {
-    res.status(404).json({ error: 'Нет данных для объяснения' });
-    return;
-  }
-
-  // Подтягиваем имена команд для гуманизации
-  const teams = await db
-    .select({ teamId: teamsTable.teamId, name: teamsTable.name, rating: teamsTable.rating })
-    .from(teamsTable)
-    .where(inArray(teamsTable.teamId, [radiantId, direId]));
-  const tMap = new Map(teams.map(t => [t.teamId, t]));
-  const tR = tMap.get(radiantId);
-  const tD = tMap.get(direId);
-  const nameR = (tR?.name ?? 'Radiant').trim();
-  const nameD = (tD?.name ?? 'Dire').trim();
-  const rR = tR?.rating ?? 1500;
-  const rD = tD?.rating ?? 1500;
-
-  const probR = result.probRadiantWin;
-  const probD = 1 - probR;
-  const favName = probR >= 0.5 ? nameR : nameD;
-  const undName = probR >= 0.5 ? nameD : nameR;
-  const favProb = Math.max(probR, probD);
-
-  // Гуманизация фич — каждая по-русски + знак влияния на radiant
-  const f = result.features;
-  const factors: Array<{ label: string; impact: number; direction: 'radiant' | 'dire' | 'neutral'; description: string }> = [];
-
-  if (typeof f['elo_diff_norm'] === 'number') {
-    const v = f['elo_diff_norm'];
-    factors.push({
-      label: 'Рейтинг команд',
-      impact: Math.abs(v),
-      direction: v > 0.05 ? 'radiant' : v < -0.05 ? 'dire' : 'neutral',
-      description: v > 0.05 ? `${nameR} сильнее по рейтингу` :
-                   v < -0.05 ? `${nameD} сильнее по рейтингу` : 'рейтинг команд примерно равен',
-    });
-  }
-  if (typeof f['player_glicko_diff'] === 'number') {
-    const v = f['player_glicko_diff'];
-    if (Math.abs(v) > 0.1) {
-      factors.push({
-        label: 'Уровень игроков',
-        impact: Math.abs(v),
-        direction: v > 0.1 ? 'radiant' : v < -0.1 ? 'dire' : 'neutral',
-        description: v > 0.1 ? `Состав ${nameR} сильнее в среднем по игрокам` :
-                     `Состав ${nameD} сильнее в среднем по игрокам`,
-      });
-    }
-  }
-  if (typeof f['recent_form_diff'] === 'number') {
-    const v = f['recent_form_diff'];
-    factors.push({
-      label: 'Форма за 30 дней',
-      impact: Math.abs(v),
-      direction: v > 0.03 ? 'radiant' : v < -0.03 ? 'dire' : 'neutral',
-      description: v > 0.03 ? `${nameR} в лучшей форме` :
-                   v < -0.03 ? `${nameD} в лучшей форме` : 'обе команды на равном уровне',
-    });
-  }
-  if (typeof f['h2h_advantage_radiant'] === 'number') {
-    const v = f['h2h_advantage_radiant'];
-    if (v !== 0.5) {
-      factors.push({
-        label: 'Личные встречи (год)',
-        impact: Math.abs(v - 0.5) * 2,
-        direction: v > 0.55 ? 'radiant' : v < 0.45 ? 'dire' : 'neutral',
-        description: `${nameR} ${Math.round(v * 100)}% побед в очных матчах`,
-      });
-    }
-  }
-  if (typeof f['player_skill_diff'] === 'number' && f['player_skill_diff'] !== 0) {
-    const v = f['player_skill_diff'];
-    factors.push({
-      label: 'Игроки на их героях',
-      impact: Math.abs(v),
-      direction: v > 0.02 ? 'radiant' : v < -0.02 ? 'dire' : 'neutral',
-      description: v > 0.02 ? `Состав ${nameR} лучше владеет своими героями` :
-                   v < -0.02 ? `Состав ${nameD} лучше владеет своими героями` : 'паритет по комфорту героев',
-    });
-  }
-  if (typeof f['draft_meta_strength_diff'] === 'number') {
-    const v = f['draft_meta_strength_diff'];
-    if (Math.abs(v) > 0.005) {
-      factors.push({
-        label: 'Сила пиков по патчу',
-        impact: Math.abs(v) * 10,
-        direction: v > 0 ? 'radiant' : 'dire',
-        description: `${v > 0 ? nameR : nameD} взял героев с более высоким винрейтом в патче`,
-      });
-    }
-  }
-  if (typeof f['draft_matchup_advantage'] === 'number') {
-    const v = f['draft_matchup_advantage'];
-    if (Math.abs(v - 0.5) > 0.02) {
-      factors.push({
-        label: 'Контр-пики',
-        impact: Math.abs(v - 0.5) * 2,
-        direction: v > 0.5 ? 'radiant' : 'dire',
-        description: `${v > 0.5 ? nameR : nameD} имеет преимущество по парным матчапам героев`,
-      });
-    }
-  }
-
-  factors.sort((a, b) => b.impact - a.impact);
-  const top = factors.slice(0, 4);
-
-  // Тотал убийств / длительность — LightGBM market-модели (Wave 4/5).
-  // Если модели не загружены или ml-service недоступен — фолбэк на грубую эвристику.
-  const { predictMarketsFor } = await import('../services/MarketLgbm');
-  // /explain — без matchId, поэтому без draft hint (упадёт в pure tier).
-  const mkt = await predictMarketsFor(radiantId, direId).catch(() => null);
-
-  // log-normal (mean=μ, std=σ): медиана = exp(μ), 90% CI = exp(μ ± 1.645σ)
-  let expectedKills: number;
-  let killsLow: number;
-  let killsHigh: number;
-  if (mkt?.totalKillsLogN) {
-    const { mean: mu, std: sigma } = mkt.totalKillsLogN;
-    expectedKills = Math.exp(mu);
-    killsLow = Math.exp(mu - 1.28 * sigma);
-    killsHigh = Math.exp(mu + 1.28 * sigma);
-  } else {
-    expectedKills = 50 + (rR + rD - 3000) * 0.005;
-    killsLow = expectedKills - 8;
-    killsHigh = expectedKills + 8;
-  }
-
-  let expectedDurationSec: number;
-  let durLow: number;
-  let durHigh: number;
-  if (mkt?.totalDurationLogN) {
-    const { mean: mu, std: sigma } = mkt.totalDurationLogN;
-    expectedDurationSec = Math.exp(mu);
-    durLow = Math.exp(mu - 1.28 * sigma);
-    durHigh = Math.exp(mu + 1.28 * sigma);
-  } else {
-    const fallbackMin = 36 - Math.abs(probR - 0.5) * 6;
-    expectedDurationSec = fallbackMin * 60;
-    durLow = (fallbackMin - 5) * 60;
-    durHigh = (fallbackMin + 8) * 60;
-  }
-
-  const expectedDurationMin = expectedDurationSec / 60;
-  const usedMlTotals = !!(mkt?.totalKillsLogN && mkt?.totalDurationLogN);
-
-  const oneLiner =
-    favProb >= 0.65 ? `${favName} — уверенный фаворит (${Math.round(favProb * 100)}%)` :
-    favProb >= 0.55 ? `${favName} в чуть выгодной позиции (${Math.round(favProb * 100)}%)` :
-    `Матч близкий — ${nameR} ${Math.round(probR * 100)}% / ${nameD} ${Math.round(probD * 100)}%`;
-
-  res.json({
-    winner: {
-      radiantProb: probR,
-      direProb: probD,
-      favorite: { name: favName, prob: favProb },
-      underdog: { name: undName, prob: 1 - favProb },
-      summary: oneLiner,
-      factors: top,
-    },
-    totals: {
-      kills: { expected: Math.round(expectedKills), low: Math.round(killsLow), high: Math.round(killsHigh) },
-      duration: { expectedMin: Math.round(expectedDurationMin), low: Math.round(durLow / 60), high: Math.round(durHigh / 60) },
-      usedMlModel: usedMlTotals,
-    },
-    teams: {
-      radiant: { id: radiantId, name: nameR, rating: rR },
-      dire: { id: direId, name: nameD, rating: rD },
-    },
-    // Дублируем summary как top-level oneLiner для обратной совместимости с
-    // клиентами, ожидающими его на корне ответа (см. T001 acceptance).
-    oneLiner,
-    modelVersion: result.modelVersion,
-  });
+  const t1=positiveId(req.query.radiantTeamId),t2=positiveId(req.query.direTeamId);
+  if(!t1||!t2||t1===t2){res.status(400).json({error:'invalid_team_ids'});return;}
+  const mid=positiveId(req.query.matchId);
+  try {
+    const result=await validatedAnalytics({matchId:mid?'od_'+mid:'explain-query',matchSource:mid?'opendota':undefined,status:req.query.status==='live'?'live':'prematch',format:String(req.query.format??'BO3') as MatchInput['format'],team1:{name:'Team 1',teamId:t1,provider:'opendota'},team2:{name:'Team 2',teamId:t2,provider:'opendota'}});
+    const p=result.predictions.find(x=>x.betType==='map_winner');
+    const summary=p?'Прогноз сохранённой модели; качество пока не подтверждено.':'Прогноз недоступен: нет подходящей модели или свежих данных.';
+    res.json({state:result.state,winner:p?{radiantProb:p.probTeam1,direProb:p.probTeam2,favorite:{name:p.probTeam1>=.5?result.team1Name:result.team2Name,prob:Math.max(p.probTeam1,p.probTeam2)},summary,factors:[],modelVersion:p.modelVersion,provenance:p.provenance}:null,totals:{usedMlModel:false},oneLiner:summary,modelVersion:result.modelVersion,generatedAt:p?.generatedAt??result.generatedAt});
+  } catch {res.status(503).json({state:'unavailable',winner:null});}
 });
 
 /**
@@ -1383,19 +348,27 @@ router.post('/backtest', async (req, res) => {
   const fromDate = new Date(Date.now() - periodDays * 24 * 3600 * 1000);
 
   try {
-    const rows = await db
-      .select({
-        matchId: prematchOutcomesTable.matchId,
-        predicted: prematchOutcomesTable.predictedRadiantWinProb,
-        actual: prematchOutcomesTable.actualRadiantWin,
-        predictedAt: prematchOutcomesTable.predictedAt,
-      })
-      .from(prematchOutcomesTable)
-      .where(and(
-        isNotNull(prematchOutcomesTable.actualRadiantWin),
-        gte(prematchOutcomesTable.predictedAt, fromDate),
-      ))
-      .orderBy(prematchOutcomesTable.predictedAt);
+    const [eligible, populations] = await Promise.all([
+      db.execute(sql`${prematchValidationCte()}
+        SELECT match_id AS "matchId", predicted_radiant_win_prob AS predicted,
+          actual_radiant_win AS actual, predicted_at AS "predictedAt"
+        FROM prematch_validation WHERE validation_reason = 'validated'
+          AND actual_radiant_win IS NOT NULL AND predicted_at >= ${fromDate}
+        ORDER BY predicted_at, match_id`),
+      db.execute(sql`${prematchValidationCte()}
+        SELECT validation_reason AS reason, COUNT(*)::int AS count FROM prematch_validation
+        WHERE actual_radiant_win IS NOT NULL AND predicted_at >= ${fromDate}
+        GROUP BY validation_reason ORDER BY count DESC`),
+    ]);
+    const rows = eligible.rows as Array<{matchId: number; predicted: number; actual: boolean; predictedAt: Date}>;
+    const reasons = populations.rows as Array<{reason: string; count: number}>;
+    const validation = {
+      policy: PREMATCH_VALIDATION_POLICY, note: PREMATCH_VALIDATION_NOTE,
+      validatedResolvedRecords: rows.length,
+      unvalidatedRecords: reasons.filter(r => r.reason !== 'validated').reduce((n, r) => n + r.count, 0),
+      excludedReasons: reasons.filter(r => r.reason !== 'validated'),
+      scope: 'resolved_records_in_selected_period',
+    };
 
     // Фильтр: только ставки с уверенностью >= minConf и подразумеваемым кэфом >= minOdds.
     // Для каждого исхода ставим на ту сторону, у которой p выше.
@@ -1417,10 +390,11 @@ router.post('/backtest', async (req, res) => {
       res.json({
         ok: true,
         params: { minConfidence: minConf, minOdds, periodDays },
-        kpis: { numberOfBets: 0, hitRate: 0, avgOdds: 0, profitUnits: 0, roi: 0, maxDrawdown: 0, brierScore: null },
+        state: 'quality_unavailable', validation, oddsMode: 'synthetic_fair_odds',
+        kpis: { numberOfBets: 0, hitRate: null, avgOdds: null, profitUnits: null, roi: null, maxDrawdown: null, brierScore: null },
         equityCurve: [],
         confidenceBuckets: [],
-        message: 'Недостаточно резолвнутых исходов под выбранные фильтры',
+        message: 'Нет достаточного набора прогнозов, подтверждённых до фактического старта, под выбранные фильтры. Непроверенные записи исключены.',
       });
       return;
     }
@@ -1469,6 +443,8 @@ router.post('/backtest', async (req, res) => {
     res.json({
       ok: true,
       params: { minConfidence: minConf, minOdds, periodDays },
+      state: 'validated_subset', validation, oddsMode: 'synthetic_fair_odds',
+      message: 'Симуляция по справедливым коэффициентам 1/p; это не результат по историческим коэффициентам букмекера.',
       kpis: {
         numberOfBets: bets.length,
         hitRate,
@@ -1484,7 +460,7 @@ router.post('/backtest', async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, 'backtest failed');
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, state: 'quality_unavailable', error: 'backtest_unavailable' });
   }
 });
 
@@ -1734,11 +710,12 @@ router.get('/match-summary', async (req, res) => {
     const payload = await withCache(`match-summary:${matchId}`, 30_000, async () => {
     const [outcomeR, predsR, snapR] = await Promise.all([
       db.execute(sql`
+        ${prematchValidationCte()}
         SELECT model_version, radiant_name, dire_name, league_name,
                predicted_radiant_win_prob, predicted_confidence,
                actual_radiant_win, actual_radiant_score, actual_dire_score,
-               actual_duration_sec, predicted_at, resolved_at
-        FROM prematch_outcomes WHERE match_id = ${matchId} LIMIT 1
+               actual_duration_sec, predicted_at, resolved_at, validation_reason, verified_start_unix
+        FROM prematch_validation WHERE match_id = ${matchId} LIMIT 1
       `).catch(() => ({ rows: [] as unknown[] })),
       db.execute(sql`
         SELECT market_type, model_version, model_prob_team1, model_prob_team2, predicted_at
@@ -1757,20 +734,20 @@ router.get('/match-summary', async (req, res) => {
       predicted_radiant_win_prob?: number; predicted_confidence?: number | null;
       actual_radiant_win?: boolean | null; actual_radiant_score?: number | null;
       actual_dire_score?: number | null; actual_duration_sec?: number | null;
-      predicted_at?: string; resolved_at?: string | null;
+      predicted_at?: string; resolved_at?: string | null; validation_reason?: string; verified_start_unix?: string | null;
     } | undefined;
     let calibration: { hit: boolean; delta: number } | null = null;
-    if (outcome && outcome.actual_radiant_win != null && typeof outcome.predicted_radiant_win_prob === 'number') {
+    if (outcome?.validation_reason === 'validated' && outcome.actual_radiant_win != null && typeof outcome.predicted_radiant_win_prob === 'number') {
       const pred = outcome.predicted_radiant_win_prob;
       const actual = outcome.actual_radiant_win ? 1 : 0;
-      calibration = { hit: (pred > 0.5) === (actual === 1), delta: pred - actual };
+      calibration = { hit: (pred >= 0.5) === (actual === 1), delta: pred - actual };
     }
     // Сворачиваем market predictions: один market_type → последний прогноз.
     const marketLatest = new Map<string, { modelVersion: string; probTeam1: number | null; probTeam2: number | null; at: string }>();
     for (const p of predsR.rows as Array<{ market_type?: string; model_version?: string;
       model_prob_team1?: number | null; model_prob_team2?: number | null; predicted_at?: string }>) {
       const mt = p.market_type;
-      if (!mt || marketLatest.has(mt)) continue; // строки DESC, первый = последний
+      if (!mt || mt === 'match_winner' || marketLatest.has(mt)) continue; // prematch probability comes only from the validated ledger // строки DESC, первый = последний
       marketLatest.set(mt, {
         modelVersion: p.model_version ?? '',
         probTeam1: p.model_prob_team1 ?? null,
@@ -1786,8 +763,9 @@ router.get('/match-summary', async (req, res) => {
         radiantName: outcome.radiant_name ?? null,
         direName: outcome.dire_name ?? null,
         leagueName: outcome.league_name ?? null,
-        predictedRadiantWinProb: outcome.predicted_radiant_win_prob ?? null,
-        predictedConfidence: outcome.predicted_confidence ?? null,
+        predictedRadiantWinProb: outcome.validation_reason === 'validated' ? outcome.predicted_radiant_win_prob ?? null : null,
+        predictedConfidence: outcome.validation_reason === 'validated' ? outcome.predicted_confidence ?? null : null,
+        validation: { state: outcome.validation_reason === 'validated' ? 'validated' : 'unvalidated', reason: outcome.validation_reason ?? 'unknown', verifiedStartUnix: outcome.verified_start_unix ? Number(outcome.verified_start_unix) : null },
         actualRadiantWin: outcome.actual_radiant_win ?? null,
         actualScore: (outcome.actual_radiant_score != null && outcome.actual_dire_score != null)
           ? { radiant: outcome.actual_radiant_score, dire: outcome.actual_dire_score } : null,

@@ -1,7 +1,7 @@
 /**
  * Wave 4 — обучение LightGBM-моделей для производных рынков:
- *   - market_first_blood    : classification (label = radiantWin прокси
- *                             среди матчей с известным first_blood_time)
+ *   - market_first_blood    : classification по подтверждённому FIRSTBLOOD
+ *                             objective + kills_log; неизвестные метки исключаются
  *   - market_total_kills    : regression на log(radiant_score+dire_score)
  *   - market_total_duration : regression на log(duration_sec)
  *
@@ -11,9 +11,8 @@
  *
  * Сохранение в `model_versions` с `engine='lightgbm'`, `binaryBlob`,
  * `weights={}` (jsonb NOT NULL — кладём пустой объект как маркер; реальные
- * параметры в blob). Атомарный swap per-market: для каждого `kind`
- * деактивируем все предыдущие active и вставляем новую активную в одной
- * транзакции.
+ * параметры в blob). Только неактивные кандидаты: публикация требует
+ * отдельного проверенного manifest и не выполняется этим скриптом.
  *
  * CLI:
  *   pnpm --filter @workspace/scripts run train:market-models
@@ -31,10 +30,13 @@ import {
   teamsTable,
   modelVersionsTable,
   matchDraftsTable,
+  matchParsedTable,
 } from '@workspace/db';
 import { gte, and, eq, inArray } from 'drizzle-orm';
 import { asc } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
+import { firstBloodRadiantLabel } from './lib/first-blood-label';
 import {
   loadTeamRostersMap, loadTeamHeroPoolMap, loadHeroBenchmarksMap,
   loadHeroItemPopularityMap, loadPlayerTotalsMap, loadPlayerCountsMap,
@@ -229,11 +231,30 @@ async function loadDraftsForMatches(matchIds: number[]): Promise<Map<number, Dra
   return out;
 }
 
+async function loadFirstBloodLabels(matchIds: number[]): Promise<Map<number, 0 | 1>> {
+  const labels = new Map<number, 0 | 1>();
+  // Keep parsed payload memory bounded; never infer a missing event from map winner.
+  for (let i = 0; i < matchIds.length; i += 500) {
+    const rows = await db.select({
+      matchId: matchParsedTable.matchId,
+      objectives: matchParsedTable.objectives,
+      players: matchParsedTable.players,
+    }).from(matchParsedTable).where(inArray(matchParsedTable.matchId, matchIds.slice(i, i + 500)));
+    for (const row of rows) {
+      const label = firstBloodRadiantLabel(row.objectives, row.players);
+      if (label != null) labels.set(row.matchId, label);
+    }
+  }
+  console.log(`[train-market-models] first-blood confirmed=${labels.size}, missing/ambiguous=${matchIds.length - labels.size}`);
+  return labels;
+}
+
 interface BuildContext {
   teams: Map<number, TeamRating>;
   drafts: Map<number, DraftRow>;
   benchmarks: HeroBenchmarksMap;
   itemPop: HeroItemPopularityMap;
+  firstBloodLabels: Map<number, 0 | 1>;
 }
 
 function buildSamples(market: MarketKey, matches: MatchRow[], ctx: BuildContext): Sample[] {
@@ -271,8 +292,9 @@ function buildSamples(market: MarketKey, matches: MatchRow[], ctx: BuildContext)
     }
 
     if (fam === 'first_blood') {
-      if (m.radiantWin == null) continue;
-      out.push({ features: feats, label: m.radiantWin ? 1 : 0 });
+      const label = ctx.firstBloodLabels.get(m.matchId);
+      if (label == null) continue;
+      out.push({ features: feats, label });
     } else if (fam === 'total_kills') {
       if (m.radiantScore == null || m.direScore == null) continue;
       const total = m.radiantScore + m.direScore;
@@ -366,18 +388,13 @@ async function trainMarket(market: MarketKey, samples: Sample[]): Promise<TrainR
   }
 }
 
-async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise<void> {
+async function saveMarketCandidate(market: MarketKey, r: TrainResponse): Promise<void> {
   const kind = KIND_BY_MARKET[market];
   const blob = Buffer.from(r.blob_b64, 'base64');
   const taskType = TASK_BY_FAMILY[pureFamily(market)];
   const versionStem = `lgbm-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(modelVersionsTable)
-      .set({ isActive: false })
-      .where(and(eq(modelVersionsTable.kind, kind), eq(modelVersionsTable.isActive, true)));
-    await tx.insert(modelVersionsTable).values({
+  await saveLegacyCandidates(db, [{
       version: versionStem,
       kind,
       featuresVersion: 1,
@@ -395,6 +412,9 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
         market,
         task_type: taskType,
         taskType, // legacy alias — оставляем для обратной совместимости старых читателей
+        targetDefinition: pureFamily(market) === 'first_blood'
+          ? 'radiant_first_blood_objective_corroborated_kill_log_v1'
+          : pureFamily(market) === 'total_kills' ? 'log_final_total_kills' : 'log_final_duration_seconds',
         engine: 'lightgbm',
         residualStd: r.residual_std,
         testRaw: r.test_metrics_raw,
@@ -406,10 +426,12 @@ async function activateMarketModel(market: MarketKey, r: TrainResponse): Promise
         trainSeconds: r.train_seconds,
         blobBytes: blob.length,
       },
-      isActive: true,
-    });
+      isActive: false,
+    }], {
+    trainer: 'train-market-models', seed: 42,
+    limitations: ['current_team_hero_aggregates_not_as_of', 'row_split_not_series_grouped', 'independent_probability_interval_validation_required'],
   });
-  console.log(`  [market/${market}] ✅ activated ${versionStem} (blob=${blob.length}b)`);
+  console.log(`  [market/${market}] Saved inactive, unvalidated candidate ${versionStem}; active models unchanged`);
 }
 
 function parseMarketsFromArgs(): MarketKey[] {
@@ -430,6 +452,7 @@ function parseMarketsFromArgs(): MarketKey[] {
 }
 
 async function main(): Promise<void> {
+  assertCandidateOnlyArgs();
   const targets = parseMarketsFromArgs();
   console.log(`[train-market-models] ml-service: ${ML_SERVICE_URL} markets=${targets.join(',')}`);
 
@@ -464,7 +487,10 @@ async function main(): Promise<void> {
     ]);
     console.log(`[train-market-models] drafts=${drafts.size}/${matchIds.length} benchmarks=${benchmarks.size} itemPop=${itemPop.size}`);
   }
-  const ctx: BuildContext = { teams, drafts, benchmarks, itemPop };
+  const firstBloodLabels = targets.some(market => pureFamily(market) === 'first_blood')
+    ? await loadFirstBloodLabels(matches.map(match => match.matchId))
+    : new Map<number, 0 | 1>();
+  const ctx: BuildContext = { teams, drafts, benchmarks, itemPop, firstBloodLabels };
 
   let trained = 0;
   for (const market of targets) {
@@ -472,7 +498,7 @@ async function main(): Promise<void> {
     const samples = buildSamples(market, matches, ctx);
     const r = await trainMarket(market, samples);
     if (!r) continue;
-    await activateMarketModel(market, r);
+    await saveMarketCandidate(market, r);
     trained++;
   }
 

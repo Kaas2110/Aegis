@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 /**
  * "Закреплённый" матч, который всегда отображается первым в списке live.
  *
@@ -13,7 +14,7 @@
 import type { Match, Market, BookmakerOdds, Prediction } from '@/types';
 import type { EnrichedMatch } from '@/services/LiveDataService';
 
-const API_BASE = '/api';
+
 
 // Команды из БД (см. результат запроса):
 //   PARIVISION (PV)  — teamId 9572001, ELO 1486, 292W/161L
@@ -149,8 +150,8 @@ interface MlPredictResponse {
 async function fetchMlPrediction(): Promise<MlPredictResponse | null> {
   try {
     const m = FEATURED_MATCH_META;
-    const url = `${API_BASE}/analytics/ml-predict?radiantTeamId=${m.radiant.teamId}&direTeamId=${m.dire.teamId}`;
-    const resp = await fetch(url);
+    const url = `/api/analytics/ml-predict?radiantTeamId=${m.radiant.teamId}&direTeamId=${m.dire.teamId}`;
+    const resp = await apiFetch(url);
     if (!resp.ok) return null;
     return await resp.json() as MlPredictResponse;
   } catch {
@@ -250,6 +251,9 @@ export async function buildFeaturedMatch(): Promise<EnrichedMatch | null> {
       predictions: [
         {
           betType: 'match_winner',
+          generatedAt: new Date().toISOString(),
+          expiresAt: new Date(0).toISOString(), // archived demo, never eligible for serving
+          modelVersion: 'archived-demo',
           labelRu: 'Победитель серии',
           probTeam1: probR,
           probTeam2: probD,

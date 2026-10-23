@@ -1,0 +1,1093 @@
+{
+  "version": "dota-feature-catalog-v1",
+  "language": "ru",
+  "admission_threshold": 0.95,
+  "fields": {
+    "team_ids": {
+      "title_ru": "Идентичность двух команд",
+      "unit": "team_ids",
+      "value_kind": "pair_ids",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "static",
+      "sources": [
+        "observed_packet",
+        "schedule_observed"
+      ],
+      "dependencies": [],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Стороны и сопоставление игроков/истории; смена стороны не должна менять идентичность команды.",
+      "existing_status": "journal.v2"
+    },
+    "draft": {
+      "title_ru": "Наблюдённые10 героев и стороны",
+      "unit": "hero_draft",
+      "value_kind": "draft",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "static",
+      "sources": [
+        "observed_packet"
+      ],
+      "dependencies": [
+        "team_ids"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "journal.v2 players; проверять все10, не финальный драфт задним числом"
+    },
+    "roster": {
+      "title_ru": "Связка игрок–герой–сторона",
+      "unit": "player_hero_roster",
+      "value_kind": "roster",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "static",
+      "sources": [
+        "observed_packet",
+        "roster_observed"
+      ],
+      "dependencies": [
+        "draft"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "journal.v2 accountId nullable; реальное покрытие не доказано"
+    },
+    "pregame_roster": {
+      "title_ru": "Известный до драфта состав без выбранных героев",
+      "unit": "roster_profile",
+      "value_kind": "object",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "static",
+      "sources": [
+        "roster_observed"
+      ],
+      "dependencies": [
+        "team_ids"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Состав может быть известен раньше пиков; не требовать выбранного героя для prematch.",
+      "existing_status": "candidate"
+    },
+    "patch": {
+      "title_ru": "Версия патча с буквой и происхождением",
+      "unit": "patch_revision",
+      "value_kind": "string",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "static",
+      "sources": [
+        "provider_patch_verified",
+        "release_calendar_inferred"
+      ],
+      "dependencies": [],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Нормы героев/предметов привязаны к версии; календарное присвоение помечается inferred, не выдается за факт.",
+      "existing_status": "candidate"
+    },
+    "history_team": {
+      "title_ru": "Прошлая форма команды и стиль",
+      "unit": "asof_team_profile",
+      "value_kind": "object",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "local_history_asof"
+      ],
+      "dependencies": [
+        "team_ids"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Профиль давления, фарма, смертей и длительности — только прошлые карты, с размером/возрастом истории.",
+      "existing_status": "RichHistory; offline available_at реконструированend+300, online lineage ещё нужен"
+    },
+    "history_player": {
+      "title_ru": "Прошлые показатели игроков",
+      "unit": "asof_player_profile",
+      "value_kind": "object",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "local_history_asof"
+      ],
+      "dependencies": [
+        "pregame_roster"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Сила/форма игрока, изменение относительно своей нормы, сила прошлых соперников.",
+      "existing_status": "PlayerHistory + PastPerformance30/90d; нужна actual availability lineage"
+    },
+    "history_hero_player": {
+      "title_ru": "Комфорт игрока на выбранном герое",
+      "unit": "asof_player_hero_profile",
+      "value_kind": "object",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "local_history_asof"
+      ],
+      "dependencies": [
+        "roster",
+        "patch"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Навык на герое и недавняя практика с отделением патчей, частоты выбора и малогоn.",
+      "existing_status": "RichHistory playerhero; PastPerformance"
+    },
+    "history_draft": {
+      "title_ru": "Исторические взаимодействия героев",
+      "unit": "asof_draft_profile",
+      "value_kind": "object",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "local_history_asof"
+      ],
+      "dependencies": [
+        "draft",
+        "patch"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Синергии, контрпики, темп драфта, возможности давления/защиты; priors без результата текущей карты.",
+      "existing_status": "RichHistory synergy/counter/hero styles"
+    },
+    "postdraft_prior": {
+      "title_ru": "Вероятность бустинга после драфта",
+      "unit": "probability",
+      "value_kind": "probability",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "frozen_boosting_asof"
+      ],
+      "dependencies": [
+        "draft",
+        "history_team",
+        "history_draft"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Допустимый исторический prior для live; нужны точный artifact/schema hash и реально полученный драфт. Не заменять чужой legacy probability.",
+      "existing_status": "night state_prior использовал retrospective prior; actual online parity не доказан"
+    },
+    "role_probabilities": {
+      "title_ru": "Распределение вероятностей ролей1–5",
+      "unit": "role_probabilities",
+      "value_kind": "role_probs",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "role_inference_asof"
+      ],
+      "dependencies": [
+        "roster",
+        "history_hero_player"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Роль влияет на ожидаемый фарм/тайминг; хранить вероятности и inferred. Lane_role — линия, не позиция1–5.",
+      "existing_status": "candidate"
+    },
+    "game_clock": {
+      "title_ru": "Игровое время",
+      "unit": "seconds",
+      "value_kind": "nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "observed_packet"
+      ],
+      "dependencies": [],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "journal.v2 gameTimeSec"
+    },
+    "radiant_score": {
+      "title_ru": "Счёт убийств Radiant",
+      "unit": "kills",
+      "value_kind": "nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "observed_packet"
+      ],
+      "dependencies": [
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "journal.v2 radiantScore"
+    },
+    "dire_score": {
+      "title_ru": "Счёт убийств Dire",
+      "unit": "kills",
+      "value_kind": "nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "observed_packet"
+      ],
+      "dependencies": [
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "journal.v2 direScore"
+    },
+    "provider_lead": {
+      "title_ru": "Сырой показатель radiant_lead поставщика",
+      "unit": "provider_radiant_lead",
+      "value_kind": "number",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "observed_packet"
+      ],
+      "dependencies": [
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Использовать как самостоятельный заявленный сигнал; семантика NW/earned gold не подтверждена. Из него нельзя получить GPM игрока.",
+      "existing_status": "journal.v2 radiantLead; not NW/earnedgold"
+    },
+    "earned_gold_players": {
+      "title_ru": "Накопленное заработанное золото10 игроков",
+      "unit": "player_cumulative_earned_gold",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Распределение ресурсов и дохода; необходимы player identity, явная ось времени и семантика gold_t.",
+      "existing_status": "recent replay explicit times есть; current journal live отсутствует"
+    },
+    "earned_gold_baselines": {
+      "title_ru": "Начальный уровень накопленного заработанного золота",
+      "unit": "player_earned_gold_baseline",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "static",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Не предполагать, что стартовое золото равно заработанному. Нужен подтверждённый baseline метрики.",
+      "existing_status": "candidate"
+    },
+    "earned_gold_past": {
+      "title_ru": "Прошлая реально полученная точка earned gold",
+      "unit": "asof_player_gold_window",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "observed_packet_history"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 420,
+      "max_progression_age_sec": 420,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Окно скорости фарма только из прошлого; gap наблюдений учитывается, не интерполируется из будущей точки.",
+      "existing_status": "candidate"
+    },
+    "past_observed_packets": {
+      "title_ru": "Прошлый фактически полученный packet для траектории",
+      "unit": "past_provider_packets",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "observed_packet_history"
+      ],
+      "dependencies": [
+        "team_ids"
+      ],
+      "max_receipt_age_sec": 420,
+      "max_progression_age_sec": 420,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Предыдущая точка до t, с raw source и clocks; допустимое окно5мин+120сек. Обновление должно поступить до consumer decision.",
+      "existing_status": "candidate"
+    },
+    "xp_players": {
+      "title_ru": "Опыт каждого игрока",
+      "unit": "player_xp",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "recent replay xp_t; current journal live отсутствует"
+    },
+    "last_hits_players": {
+      "title_ru": "Добивания игроков",
+      "unit": "player_last_hits",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "",
+      "existing_status": "recent replay lh_t; current journal live отсутствует"
+    },
+    "levels_players": {
+      "title_ru": "Текущие уровни игроков",
+      "unit": "player_levels",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Уровень/талант/способность — разные сущности; уровень не доказывает выбранную прокачку.",
+      "existing_status": "candidate"
+    },
+    "purchase_events": {
+      "title_ru": "Полные покупки до текущего времени",
+      "unit": "purchase_events",
+      "value_kind": "events",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_events"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Покупка показывает прошлый тайминг, не текущий инвентарь/заряды/cooldown.",
+      "existing_status": "historical purchases; current live не подтверждены"
+    },
+    "objective_events": {
+      "title_ru": "Завершённые события объектов",
+      "unit": "objective_events",
+      "value_kind": "events",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_events"
+      ],
+      "dependencies": [
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Подтверждённое время/сторона башен, бараков, Roshan. Не декодировать opaque bitfield как число башен без версии.",
+      "existing_status": "recent replay objectives; journal buildingState opaque"
+    },
+    "inventory_players": {
+      "title_ru": "Фактический инвентарь игроков",
+      "unit": "current_inventory",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "BKB/ауры/предметные пороги требуют текущего состояния; покупки сами по себе этого не доказывают.",
+      "existing_status": "candidate"
+    },
+    "combat_availability": {
+      "title_ru": "HP/mana/respawn/cooldown/buyback availability",
+      "unit": "combat_resources",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "dynamic",
+      "sources": [
+        "verified_live_player_telemetry"
+      ],
+      "dependencies": [
+        "roster",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": 180,
+      "max_source_delivery_sec": 300,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Потенциал следующего боя зависит от доступных ресурсов, а не только накопленного NW. История buyback не равна доступности нового.",
+      "existing_status": "candidate"
+    },
+    "hero_role_minute_norms": {
+      "title_ru": "Историческая норма героя×роль×минуты×патч",
+      "unit": "asof_hero_role_minute_norms",
+      "value_kind": "object",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "local_history_asof"
+      ],
+      "dependencies": [
+        "patch"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Среднее/дисперсия/n на совместимых прошлых состояниях; current target исключён, все нормы известны к моменту расчёта.",
+      "existing_status": "candidate"
+    },
+    "item_timing_norms": {
+      "title_ru": "Исторические тайминги ключевых предметов",
+      "unit": "asof_item_timing_norms",
+      "value_kind": "object",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "historical",
+      "sources": [
+        "local_history_asof"
+      ],
+      "dependencies": [
+        "patch"
+      ],
+      "max_receipt_age_sec": null,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Доступно до decision_at; прошлые карты завершены и получены до расчёта, текущая карта исключена.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Покупки ценны относительно героя, роли, контрпика, темпа; отсутствие покупки — цензурирование только при полном event feed.",
+      "existing_status": "candidate"
+    },
+    "player_gpm": {
+      "title_ru": "Накопленный доход игрока в минуту",
+      "unit": "gold_per_minute",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "earned_gold_players",
+        "earned_gold_baselines",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "(earned_gold-baseline)/(game_time/60); не final current-map GPM и не team lead.",
+      "existing_status": "candidate"
+    },
+    "rolling_gpm": {
+      "title_ru": "Доход каждого игрока за прошлое окно",
+      "unit": "gold_per_minute",
+      "value_kind": "ten_nonnegative",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "earned_gold_players",
+        "earned_gold_past",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Δearned_gold/Δminutes с тем же игроком/героем, с фактической длиной окна.",
+      "existing_status": "candidate"
+    },
+    "gpm_hero_role_minute": {
+      "title_ru": "Отклонение фарма от нормы героя/роли/минуты",
+      "unit": "contextual_gpm_z",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "player_gpm",
+        "roster",
+        "role_probabilities",
+        "hero_role_minute_norms",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Смесь норм по вероятностям ролей; сравнивать фарм carry с carry, а не с support. Не путать статистическую норму с причинным эффектом.",
+      "existing_status": "candidate"
+    },
+    "draft_power_curve": {
+      "title_ru": "Исторический профиль силы драфта по времени",
+      "unit": "asof_draft_power_profile",
+      "value_kind": "object",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "history_draft",
+        "role_probabilities",
+        "patch"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Окна давления/масштабирования/защиты по прошлым совместимым патчам; это вероятностный профиль, не фиксированная истинная сила героя.",
+      "existing_status": "candidate"
+    },
+    "power_timing_state": {
+      "title_ru": "Состояние относительно ожидаемого окна силы",
+      "unit": "power_timing_features",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "game_clock",
+        "draft_power_curve",
+        "gpm_hero_role_minute",
+        "levels_players"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Богатый герой может раньше прийти к уровню/предмету; признак должен учитывать фактически наблюдённый ресурсный прогресс.",
+      "existing_status": "candidate"
+    },
+    "purchase_timing_deviation": {
+      "title_ru": "Покупки раньше/позже исторической нормы",
+      "unit": "purchase_timing_features",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "purchase_events",
+        "item_timing_norms",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Не выдавать факт покупки за действующий BKB; отсутствие события трактовать только при доказанной полноте.",
+      "existing_status": "candidate"
+    },
+    "style_vs_draft": {
+      "title_ru": "Стиль команды против формы/стиля соперника и драфта",
+      "unit": "style_interactions",
+      "value_kind": "object",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "history_team",
+        "history_draft",
+        "history_hero_player"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Механистические гипотезы: давление против жадного фарма, способность пережить раннее окно, исполнение ключевых героев; знак влияния учит boosting.",
+      "existing_status": "candidate"
+    },
+    "live_trajectory": {
+      "title_ru": "Изменение счёта/lead/темпа из прошлых пакетов",
+      "unit": "past_observed_trajectory",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "game_clock",
+        "radiant_score",
+        "dire_score",
+        "provider_lead",
+        "past_observed_packets"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Требуется прошлый actual packet с timestamp/gap; из одного кадра траектория недоступна.",
+      "existing_status": "candidate"
+    },
+    "objective_conversion": {
+      "title_ru": "Реализация преимущества в объекты",
+      "unit": "objective_conversion",
+      "value_kind": "object",
+      "phases": [
+        "live"
+      ],
+      "temporal_kind": "derived",
+      "sources": [
+        "derived"
+      ],
+      "dependencies": [
+        "objective_events",
+        "radiant_score",
+        "dire_score",
+        "provider_lead",
+        "game_clock"
+      ],
+      "max_receipt_age_sec": 180,
+      "max_progression_age_sec": null,
+      "max_source_delivery_sec": null,
+      "definition_version": "v1",
+      "asof_ru": "Событие и получение не позже decision_at; для dynamic нужна проверенная event timestamp, receipt не заменяет её.",
+      "null_ru": "Сохранять missing с причиной; не подставлять0. Наблюдённый0 допустим. Отсутствие кандидата не удаляет другие признаки.",
+      "game_reason_ru": "Убийства/ресурсное преимущество без разрушений отличаются от давления по карте; только события до текущего t.",
+      "existing_status": "candidate"
+    }
+  },
+  "families": {
+    "prematch_team_context": {
+      "title_ru": "До драфта: команды и историческая форма",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "required_fields": [
+        "team_ids",
+        "history_team"
+      ],
+      "discussion_ru": "Исторические prior допустимы; возраст прошлой карты не равен задержке live-пакета."
+    },
+    "prematch_player_form": {
+      "title_ru": "До драфта: игроки и индивидуальная форма",
+      "phases": [
+        "pre_draft",
+        "post_draft",
+        "live"
+      ],
+      "required_fields": [
+        "pregame_roster",
+        "history_player"
+      ],
+      "discussion_ru": "Поддерживаемый знаменатель заранее включает команды с неизвестным составом; нельзя выкинуть их после измерения."
+    },
+    "postdraft_comfort": {
+      "title_ru": "После драфта: взаимодействия и комфорт",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "required_fields": [
+        "draft",
+        "roster",
+        "history_draft",
+        "history_hero_player"
+      ],
+      "discussion_ru": "Только наблюдённый draft/roster; incomplete раскрывается как coverage failure, а не финальный драфт задним числом."
+    },
+    "postdraft_style": {
+      "title_ru": "После драфта: стиль и окна силы",
+      "phases": [
+        "post_draft",
+        "live"
+      ],
+      "required_fields": [
+        "style_vs_draft",
+        "draft_power_curve"
+      ],
+      "discussion_ru": "Согласовать исторические окна30/90/180дней на validation, не произвольно смешивать патчи."
+    },
+    "live_observed_core": {
+      "title_ru": "Live: текущий счёт и сырой lead",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "team_ids",
+        "game_clock",
+        "radiant_score",
+        "dire_score",
+        "provider_lead"
+      ],
+      "discussion_ru": "Физическая event freshness измеряется отдельно от факта получения; providerDelayRaw не равен measured lag."
+    },
+    "live_postdraft_prior": {
+      "title_ru": "Live: сохранённый корректный postdraft prior",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "postdraft_prior"
+      ],
+      "discussion_ru": "Добавляется без запрета исторических параметров; prior должен иметь свой точный контракт."
+    },
+    "live_economy": {
+      "title_ru": "Live: экономика игроков",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "player_gpm",
+        "rolling_gpm",
+        "xp_players",
+        "last_hits_players"
+      ],
+      "discussion_ru": "Требует богатого per-player feed; replay earnedgold не заменяет provider radiant_lead."
+    },
+    "live_contextual_farm": {
+      "title_ru": "Live: фарм относительно героя, роли и минуты",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "gpm_hero_role_minute"
+      ],
+      "discussion_ru": "Сначала фактическая availability/семантика, затем сравнение на одинаковых матчах. Sparse norm не превращать в0."
+    },
+    "live_power_timings": {
+      "title_ru": "Live: окна силы",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "power_timing_state",
+        "purchase_timing_deviation"
+      ],
+      "discussion_ru": "Шаг к игровому смыслу: от темпа ресурсов к достижению предметных/уровневых порогов, без выдуманного инвентаря."
+    },
+    "live_fight_resources": {
+      "title_ru": "Live: ресурсы ближайшего боя",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "inventory_players",
+        "combat_availability"
+      ],
+      "discussion_ru": "Сильная новая семья, пока требует нового подтверждённого источника; не вход в обязательный минимум до coverage теста."
+    },
+    "live_objectives": {
+      "title_ru": "Live: реализация преимущества",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "objective_conversion"
+      ],
+      "discussion_ru": "Не предполагать состояние Roshan/Aegis по одному историческому событию без правил времени/потери."
+    },
+    "live_trajectory": {
+      "title_ru": "Live: реальные изменения с предыдущего кадра",
+      "phases": [
+        "live"
+      ],
+      "required_fields": [
+        "live_trajectory"
+      ],
+      "discussion_ru": "Past-only фактические пакеты, gap и полнота; пользовательские запросы не меняют cadence сбора."
+    }
+  },
+  "global_contracts_ru": [
+    "Каталог — гипотезы/контракты признаков, не утверждение точности или причинного эффекта.",
+    "Доступность95% проверяется по заранее поддерживаемым strata и совместно по всему required набору. Missing случаи остаются в знаменателе; optional family не маскирует остальные значения.",
+    "Нормы/рейтинги/форма из прошлых завершённых карт допустимы; final stats текущей карты запрещены.",
+    "Каждая буква патча отдельная версия. Календарный inferred patch сохраняет provenance; статистики не притворяются authoritative.",
+    "Роль inferred хранится распределением и версией алгоритма; lane_role не позиция1–5.",
+    "Статические5/10/.../75 checkpoints — сетка измерения, не обязанность обучать отдельную модель на каждую минуту. После80 одна общая tail model, обновление85/90/... продолжается на непрерывном clock.",
+    "Тренировочные варианты shared time-aware, phase specialists и checkpoint specialists сравниваются на одинаковых eligible map+minute; coverage отказов измеряется отдельно; нет автоматической активации."
+  ],
+  "time_grid": {
+    "checkpoints_minutes": [
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      75
+    ],
+    "tail": "80+",
+    "tail_updates_minutes": "80,85,90,...",
+    "model_count_requirement": "not one model per checkpoint"
+  },
+  "existing_module_review": {
+    "rich_dataset.py": "Есть player/hero/style/synergy/counter и исторические окна; as-of end+300 реконструирован, не доказательство actual receipt.",
+    "recent_dataset.py": "Есть per-player explicit gold/xp/lh timelines и past stats30/90; current final scalars исключены. Нет подтверждённого live-feed parity.",
+    "liveObservationContract.ts": "v2 реально нормализует clock/scores/lead/players; XP/NW/items/levels отсутствуют, event timestamp unknown.",
+    "prospective_journal.py": "Есть actual input/vector/model hashes, но zero export не является95% pass."
+  }
+}

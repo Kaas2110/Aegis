@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * Загружает рейтинги команд из OpenDota /api/teams (~3000 команд).
  * Один запрос — весь список топ-команд по рейтингу Glicko.

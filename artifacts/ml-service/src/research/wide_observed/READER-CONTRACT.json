@@ -1,0 +1,6 @@
+{
+  "policy": "wide.committed-observation-reader.v1",
+  "readerSourceSha256": "6d2c54587ed22632461ec65ebcf5f723b0c30c88a3ebbba10aaff77586d7ee53",
+  "querySha256": "2db3466ddb2ccf65cb6e7d02f8b49bea8c82c44ea7502523724d397f07eeff39",
+  "readerManifestSha256": "3a7dbd589c0bf2357f09ccae3b707d5457d65e497ad3371a59fed19e8253f4e3"
+}

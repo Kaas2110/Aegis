@@ -8,9 +8,8 @@
  *   - пишет в `model_versions` строку с `engine='lightgbm'`, `binaryBlob = bytes`,
  *     `weights = {}` (jsonb NOT NULL — кладём пустой объект как маркер).
  *
- * НЕ трогает строки с `engine='logreg'` — они остаются активными как fallback.
- * Активный для PredictionModel становится самый свежий (`createdAt DESC`),
- * с приоритетом lightgbm.
+ * Создаёт только inactive/unvalidated кандидатов. Все действующие модели
+ * и fallback сохраняются. Публикация требует отдельного validated manifest.
  *
  * Запуск:
  *   pnpm --filter @workspace/scripts run train:lightgbm
@@ -37,6 +36,7 @@ import {
 } from '@workspace/db';
 import { asc, gte, and, eq, inArray } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
+import { assertCandidateOnlyArgs, saveLegacyCandidates } from './lib/training-candidates';
 import { classifyTier, tierKind, ALL_PREMATCH_KINDS, type Tier } from './lib/tier';
 import {
   buildHeroFeatures,
@@ -265,6 +265,7 @@ async function trainBucket(
 }
 
 async function main() {
+  assertCandidateOnlyArgs();
   console.log(`[train-lightgbm] ml-service: ${ML_SERVICE_URL}`);
   // Ping
   try {
@@ -644,7 +645,7 @@ async function main() {
         trainSeconds: r.train_seconds,
         blobBytes: blob.length,
       },
-      isActive: true,
+      isActive: false,
     });
   }
 
@@ -653,22 +654,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Атомарный swap: деактивируем ТОЛЬКО старые lightgbm-модели; logreg
-  // оставляем активными как fallback при сбое ml-service. Партиальный
-  // unique index `(kind, fv, engine) WHERE active` гарантирует консистентность.
-  console.log(`\n[train-lightgbm] Saving ${toInsert.length} models with stem ${versionStem} …`);
-  await db.transaction(async tx => {
-    await tx.update(modelVersionsTable)
-      .set({ isActive: false })
-      .where(and(
-        inArray(modelVersionsTable.kind, [...ALL_PREMATCH_KINDS]),
-        eq(modelVersionsTable.isActive, true),
-        eq(modelVersionsTable.engine, 'lightgbm'),
-      ));
-    await tx.insert(modelVersionsTable).values(toInsert);
+  console.log(`\n[train-lightgbm] Saving ${toInsert.length} inactive candidates with stem ${versionStem} …`);
+  await saveLegacyCandidates(db, toInsert, {
+    trainer: 'train-lightgbm', seed: 42,
+    limitations: ['current_aggregate_features_not_as_of', 'row_split_not_series_grouped', 'shared_early_stop_calibration_set'],
   });
 
-  console.log('\n[train-lightgbm] ✅ Saved:');
+  console.log('\n[train-lightgbm] Saved inactive, unvalidated candidates (active models unchanged):');
   for (const r of toInsert) {
     console.log(
       `   - ${r.version} kind=${r.kind} v${r.featuresVersion} test_acc=${(r.testAccuracy! * 100).toFixed(1)}% brier=${r.brierScore!.toFixed(4)} blob=${(r.binaryBlob as Buffer).length}b`,

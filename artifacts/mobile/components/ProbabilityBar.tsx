@@ -31,7 +31,7 @@ export function ProbabilityBar({ team1Name, team2Name, modelProb, marketProb, sh
       {showMarket && (
         <View style={styles.marketRow}>
           <Text style={[styles.marketLabel, { color: colors.mutedForeground }]}>
-            Рынок: {Math.round(marketProb * 100)}% — {Math.round((1 - marketProb) * 100)}%
+            Рынок: {Math.round(marketProb * 100)}% — {100 - Math.round(marketProb * 100)}%
           </Text>
         </View>
       )}

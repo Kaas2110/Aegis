@@ -33,6 +33,7 @@ export class BaselineModel implements ModelProvider {
   }
 
   private buildPrematchFeatures(match: Match): ModelFeatures {
+    if (match.format === 'unknown' || match.formatKnown === false) throw new Error('series_format_unknown');
     const t1 = match.team1;
     const t2 = match.team2;
     return {
@@ -66,7 +67,7 @@ export class BaselineModel implements ModelProvider {
       // towers: 11 башен на сторону по полному набору (3 эшелона × 3 линии + 2 трона).
       // Раньше тут был hardcoded `7 - snap.towersDire` от старой эры; с реальным
       // декодом из building_state значение может быть до 11 → выставляем clamp.
-      towersLost: Math.max(0, Math.min(11, 11 - snap.towersDire)),
+      towersLost: snap.towersDire == null ? undefined : Math.max(0, Math.min(11, 11 - snap.towersDire)),
       roshanControl: snap.aegisHolder === 'radiant' ? 1 : snap.aegisHolder === 'dire' ? -1 : 0,
       buybackAdvantage: (snap.buybacksAvailableRadiant ?? 0) - (snap.buybacksAvailableDire ?? 0),
       // T0 mini-fix (2026-05-16): убран хардкод 8200 (унаследован из старой
@@ -156,11 +157,11 @@ export class BaselineModel implements ModelProvider {
   async getDraftAdjustedPrediction(match: Match, marketType: MarketType): Promise<ModelPredictionResult> {
     const features = { ...this.buildPrematchFeatures(match) };
     if (match.draft) {
-      features.draftRadiantSynergy = match.draft.radiantSynergy;
-      features.draftDireSynergy = match.draft.direSynergy;
-      features.draftRadiantCounter = match.draft.radiantCounter;
-      features.scalingScore = match.draft.radiantScalingScore - match.draft.direScalingScore;
-      features.earlyGameScore = match.draft.radiantEarlyGameScore - match.draft.direEarlyGameScore;
+      features.draftRadiantSynergy = match.draft.radiantSynergy ?? undefined;
+      features.draftDireSynergy = match.draft.direSynergy ?? undefined;
+      features.draftRadiantCounter = match.draft.radiantCounter ?? undefined;
+      features.scalingScore = match.draft.radiantScalingScore != null && match.draft.direScalingScore != null ? match.draft.radiantScalingScore - match.draft.direScalingScore : undefined;
+      features.earlyGameScore = match.draft.radiantEarlyGameScore != null && match.draft.direEarlyGameScore != null ? match.draft.radiantEarlyGameScore - match.draft.direEarlyGameScore : undefined;
     }
     const rawProb = clamp(this.computePrematchProb(features, marketType) + (features.scalingScore ?? 0) * 0.08, 0.05, 0.95);
     const confidence = this.computeConfidence(features, 0.92, 0.88);

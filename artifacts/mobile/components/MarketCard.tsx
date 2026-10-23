@@ -10,6 +10,8 @@ import { useColors } from '@/hooks/useColors';
 import type { Market } from '@/types';
 import { OddsTilesPair } from './OddsTile';
 import { FreshnessIndicator } from './FreshnessIndicator';
+import { usePredictionClock } from '@/hooks/usePredictionClock';
+import { expireMarketQuotes } from '@/lib/marketExpiry';
 
 interface Props {
   market: Market;
@@ -40,12 +42,17 @@ function marketTypeRu(type: string): string {
   return map[type] ?? type;
 }
 
-export function MarketCard({ market, team1Name, team2Name, defaultExpanded = false, onPress }: Props) {
+export function MarketCard({ market: originalMarket, team1Name, team2Name, defaultExpanded = false, onPress }: Props) {
   const colors = useColors();
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const now = usePredictionClock(originalMarket.prediction.expiresAt,originalMarket.bestOdds.expiresAt);
+  const market=expireMarketQuotes(originalMarket,now);
   const pred = market.prediction;
+  if (!pred.expiresAt || !Number.isFinite(Date.parse(pred.expiresAt)) || Date.parse(pred.expiresAt) <= now) {
+    return <View style={[styles.card,{backgroundColor:colors.card,borderColor:colors.border}]}><Text style={[styles.summary,{color:colors.mutedForeground,padding:14}]}>Прогноз устарел. Ожидаем новые данные.</Text></View>;
+  }
   const odds = market.bestOdds;
-  const isPositiveEV = pred.ev > 0;
+  const isPositiveEV = pred.ev !== null && pred.ev > 0;
   const isTotalMarket = market.type === 'total_kills' || market.type === 'total_duration';
   // F4 (Phase 9): линию тотала берём из label рынка (сервер шлёт «Тотал убийств
   // О/У 52.5» / «Длительность О/У 42мин»), а не из хардкода. Если линию
@@ -55,8 +62,8 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
   const suffix = market.type === 'total_duration' ? ' мин' : '';
   const t1Label = isTotalMarket ? (lineStr ? `ТБ ${lineStr}${suffix}` : 'ТБ (больше)') : team1Name;
   const t2Label = isTotalMarket ? (lineStr ? `ТМ ${lineStr}${suffix}` : 'ТМ (меньше)') : team2Name;
-  const edgePct = ((pred.edge) * 100).toFixed(1);
-  const confPct = Math.round(pred.confidence * 100);
+  const edgePct = pred.edge === null ? (odds.oddsTeam1 > 1 ? 'Сравнение недоступно' : 'Нет котировки') : (pred.edge * 100).toFixed(1);
+  const confPct = pred.confidence === null ? null : Math.round(pred.confidence * 100);
 
   function toggle() {
     setExpanded(e => !e);
@@ -107,6 +114,7 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
         />
       </View>
 
+      <View style={{paddingHorizontal:14,paddingBottom:10}}><FreshnessIndicator ageSeconds={0} at={pred.createdAt.toISOString()} /></View>
       {/* ── РАСКРЫТЫЕ ДЕТАЛИ ──────────────────── */}
       {expanded && (
         <View style={[styles.expandedSection, { borderTopColor: colors.border }]}>
@@ -115,17 +123,17 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
           <View style={styles.metricsRow}>
             <MetricPill
               label="Расхождение"
-              value={(pred.edge > 0 ? '+' : '') + edgePct + '%'}
-              positive={pred.edge > 0}
+              value={pred.edge === null ? edgePct : (pred.edge > 0 ? '+' : '') + edgePct + '%'}
+              positive={pred.edge !== null && pred.edge > 0}
               colors={colors}
             />
-            <MetricPill
-              label="Уверенность"
+            {confPct !== null && <MetricPill
+              label="Качество модели"
               value={confPct + '%'}
               positive={confPct >= 65}
               colors={colors}
-            />
-            <FreshnessIndicator ageSeconds={odds.snapshotAge} />
+            />}
+            <FreshnessIndicator ageSeconds={odds.snapshotAge} at={odds.fetchedAt} />
           </View>
 
           {/* Факторы модели */}
@@ -147,6 +155,9 @@ export function MarketCard({ market, team1Name, team2Name, defaultExpanded = fal
           {/* Объяснение итога */}
           <Text style={[styles.summary, { color: colors.mutedForeground }]}>
             {pred.explanationJson.summary}
+          </Text>
+          <Text style={[styles.summary, { color: colors.mutedForeground }]}>
+            {pred.modelVersion}{pred.provenance?.modelCreatedAt ? ` · ${new Date(pred.provenance.modelCreatedAt).toLocaleDateString('ru-RU')}` : ''}
           </Text>
 
           {/* Кнопка сравнения букмекеров */}

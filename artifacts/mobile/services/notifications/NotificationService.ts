@@ -6,6 +6,7 @@
  */
 
 import { Platform } from 'react-native';
+import { matchStatePredictionEligible, liveValueComparisonAllowed, readLiveDataQuality } from '../../lib/liveFreshness';
 import Constants from 'expo-constants';
 import type { EnrichedMatch } from '@/services/LiveDataService';
 import type { Alert as UserAlertRule, MarketType } from '@/types';
@@ -88,7 +89,7 @@ class NotificationService {
       return true;
     }
     try {
-      const { default: Notifications } = await import('expo-notifications');
+      const Notifications = await import('expo-notifications');
       const { status } = await Notifications.requestPermissionsAsync();
       this.permissionGranted = status === 'granted';
       if (this.permissionGranted) {
@@ -122,12 +123,14 @@ class NotificationService {
     const activeRules = this.rules;
 
     for (const em of enrichedMatches) {
-      const t1Id = Number(em.match.team1.id);
-      const t2Id = Number(em.match.team2.id);
+      if (!matchStatePredictionEligible(em.match)) continue;
+      const t1Id = em.match.team1.openDotaId ?? 0;
+      const t2Id = em.match.team2.openDotaId ?? 0;
       const isFavMatch = favs.has(t1Id) || favs.has(t2Id);
 
       for (const mkt of em.markets) {
         const conf = mkt.prediction.confidence;
+        if (conf === null || mkt.prediction.isStale || !mkt.prediction.expiresAt || Date.parse(mkt.prediction.expiresAt) <= Date.now()) continue;
         const probTeam1 = mkt.prediction.modelProbability;
         const winnerSide: 'team1' | 'team2' = probTeam1 >= 0.5 ? 'team1' : 'team2';
         const winnerProb = winnerSide === 'team1' ? probTeam1 : 1 - probTeam1;
@@ -170,6 +173,7 @@ class NotificationService {
             if (hasRealOdds) {
               if (typeof rule.minOdds === 'number' && sideOdds < rule.minOdds) continue;
               if (typeof rule.minEdge === 'number') {
+                if (em.match.status === 'live' && !liveValueComparisonAllowed(readLiveDataQuality(em.analyticsResult?.liveDataQuality), em.analyticsResult?.bookmakerEventAlignmentVerified)) continue;
                 // edge в %: (modelProb_side × odds_side) − 1
                 const edgePct = (winnerProb * sideOdds - 1) * 100;
                 if (edgePct < rule.minEdge) continue;
@@ -233,7 +237,7 @@ class NotificationService {
     }
 
     try {
-      const { default: Notifications } = await import('expo-notifications');
+      const Notifications = await import('expo-notifications');
       await Notifications.scheduleNotificationAsync({
         content: { title, body, sound: true },
         trigger: null,
@@ -350,7 +354,7 @@ export async function notifyFavoriteTeamMatchStart(
     }
 
     try {
-      const { default: Notifications } = await import('expo-notifications');
+      const Notifications = await import('expo-notifications');
       await Notifications.scheduleNotificationAsync({
         content: { title, body, sound: true },
         trigger: null,

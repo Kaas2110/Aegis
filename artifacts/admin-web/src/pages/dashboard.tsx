@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { PrematchQuality } from "@/components/prematch-quality";
+import { countText, outcomeCoverageView } from "@/lib/quality-view";
 import {
   useGetAdminSchedulerState,
+  useGetAdminWorkersConfig,
   useGetAdminModels,
   useGetAdminMetrics,
   useGetAdminCoverage,
@@ -20,13 +23,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, formatMetric } from "@/lib/utils";
-import { AlertCircle, Clock, CheckCircle2, XCircle, Settings2, ShieldAlert, RefreshCw, Cpu, Database, Gauge } from "lucide-react";
+import { AlertCircle, Clock, CheckCircle2, XCircle, PauseCircle, Settings2, ShieldAlert, RefreshCw, Cpu, Database, Gauge } from "lucide-react";
 
 export default function Dashboard() {
   const { data: schedulerState, isLoading: isLoadingScheduler } = useGetAdminSchedulerState();
+  const { data: workersConfig, isLoading: isLoadingWorkersConfig, isError: isWorkersConfigError } = useGetAdminWorkersConfig();
   const { data: modelsData, isLoading: isLoadingModels } = useGetAdminModels();
   const { data: metricsData, isLoading: isLoadingMetrics } = useGetAdminMetrics();
   const { data: coverageData, isLoading: isLoadingCoverage } = useGetAdminCoverage();
+  const outcomes = outcomeCoverageView(coverageData?.prematchOutcomes);
   const refreshAll = useTriggerAdminRefreshAll();
   const retrain = useTriggerAdminRetrain();
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
@@ -97,25 +102,31 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {isLoadingScheduler ? (
+        {isLoadingScheduler || isLoadingWorkersConfig ? (
           Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-none bg-card" />)
         ) : (
           <>
             {(() => {
+              if (isWorkersConfigError || !workersConfig) {
+                return <StatusCard title="Внутренний планировщик" value="НЕИЗВЕСТНО" subtitle="Не удалось получить настройки сервера" icon={AlertCircle} />;
+              }
+              if (workersConfig.envDisableScheduler) {
+                return <StatusCard title="Внутренний планировщик" value="ВЫКЛЮЧЕН" subtitle="Отключён при запуске сервера" icon={PauseCircle} />;
+              }
+              if (workersConfig.schedulerDisabled) {
+                return <StatusCard title="Внутренний планировщик" value="ОТКЛЮЧЕНИЕ ЗАДАНО" subtitle="Отключён в настройках; применяется после перезапуска сервера" icon={PauseCircle} />;
+              }
               const notes = (schedulerState as { notes?: { failedAt?: string } } | undefined)?.notes;
               const failedAt = notes?.failedAt ? new Date(notes.failedAt).getTime() : 0;
               const errorIsRecent = failedAt > 0 && Date.now() - failedAt < 24 * 60 * 60 * 1000;
-              const currentStep = schedulerState?.currentStep as string | undefined;
               const showError = errorIsRecent && !!schedulerState?.lastError;
-              const statusValue = currentStep || (showError ? "ОШИБКА" : "ОК");
-              const statusSubtitle = currentStep
-                ? "Идёт обработка"
-                : showError
-                  ? "Ошибка в последнем цикле"
-                  : "Работает в штатном режиме";
+              const statusValue = showError ? "ОШИБКА" : "ВКЛЮЧЁН В НАСТРОЙКАХ";
+              const statusSubtitle = showError
+                ? "Ошибка в последнем сохранённом цикле"
+                : "Настройки разрешают работу; активность здесь не проверяется";
               return (
                 <StatusCard
-                  title="Статус планировщика"
+                  title="Внутренний планировщик"
                   value={statusValue}
                   status={showError ? "error" : "success"}
                   subtitle={statusSubtitle}
@@ -124,13 +135,15 @@ export default function Dashboard() {
               );
             })()}
             <StatusCard 
-              title="Последний ингест" 
+              title="Ингест планировщика"
               value={formatDate(schedulerState?.lastIngestAt as string)} 
+              subtitle="Последняя сохранённая дата в БД"
               icon={Clock}
             />
             <StatusCard 
               title="Последняя тренировка" 
               value={formatDate(schedulerState?.lastTrainAt as string)} 
+              subtitle="По сохранённому состоянию планировщика"
               icon={Clock}
             />
             <StatusCard 
@@ -142,6 +155,10 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Даты отражают сохранённое состояние внутреннего планировщика. Запуски внешних задач здесь не учитываются.
+      </p>
 
       <Card className="rounded-none border-border bg-card">
         <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between">
@@ -181,10 +198,10 @@ export default function Dashboard() {
                 hint={`Доля распарсенных реплеев OD за 60 дней. Cruise-ready: ${coverageData.parsed.cruiseReady60d ? "✓ да" : "✗ нет"} (нужно ≥80%).`}
               />
               <CoverageCell
-                label="Outcomes"
+                label="Сохранённые прогнозы"
                 pct={null}
-                detail={`${coverageData.prematchOutcomes.total}`}
-                hint={`prematch_outcomes (валидируют predict vs reality). Live-train ready: ${coverageData.prematchOutcomes.liveTrainReady ? "✓ да (≥200)" : "✗ нет"}.`}
+                detail={countText(outcomes.total)}
+                hint={`Для оценки качества подтверждено: ${countText(outcomes.validatedResolved)}. Не подтверждено: ${countText(outcomes.unvalidated)}. Общее число не означает готовность к обучению.`}
               />
               <CoverageCell
                 label="Team form 30d"
@@ -261,14 +278,7 @@ export default function Dashboard() {
                 <Skeleton className="h-10 w-full" />
               </div>
             ) : metricsData && Object.keys(metricsData).length > 0 ? (
-              <div className="space-y-2">
-                {Object.entries(metricsData).slice(0, 5).map(([key, value]) => (
-                  <div key={key} className="flex justify-between items-center p-2 bg-background border border-border/50">
-                    <span className="font-mono text-xs text-muted-foreground">{key}</span>
-                    <span className="font-mono text-xs font-bold">{typeof value === 'number' ? formatMetric(value) : String(value)}</span>
-                  </div>
-                ))}
-              </div>
+              <PrematchQuality data={metricsData} />
             ) : (
               <EmptyState message="Метрики не найдены" />
             )}

@@ -18,6 +18,6 @@ export function formatDate(dateString: string | undefined | null) {
 }
 
 export function formatMetric(val: number | null | undefined, decimals = 3) {
-  if (val === null || val === undefined) return "—";
+  if (typeof val !== 'number' || !Number.isFinite(val)) return "—";
   return val.toFixed(decimals);
 }

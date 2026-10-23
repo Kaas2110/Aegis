@@ -1,0 +1,1 @@
+export async function getAppSettings(){return {minTeamRating:0};}

@@ -1,3 +1,6 @@
+import type {TeamIdentityEvidence} from './TeamIdentity';
+import type {TotalsDistribution} from './TotalsDistribution';
+import type {liveStateFreshness} from '../lib/liveStateFreshness';
 /**
  * Оркестратор аналитического движка.
  * Принимает сырые данные матча → нормализует в FeatureVector → запускает все 15 моделей.
@@ -18,12 +21,14 @@ import {
 
 export interface MatchInput {
   matchId: string;
+  matchSource?: 'opendota' | 'pandascore';
+  status?: 'prematch' | 'live' | 'between_maps' | 'finished';
   // teamId — числовой OpenDota id команды; если передан для обеих команд,
   // /api/analytics/predict переопределяет match_winner предсказание выходом
   // ML-модели (LightGBM v3 prematch_winner) вместо математической эвристики.
-  team1: { name: string; elo?: number; form?: number[]; region?: string; teamId?: number };
-  team2: { name: string; elo?: number; form?: number[]; region?: string; teamId?: number };
-  format: 'BO1' | 'BO3' | 'BO5';
+  team1: { name: string; elo?: number; form?: number[]; region?: string; teamId?: number; provider?: 'opendota' | 'pandascore'; identity?: TeamIdentityEvidence };
+  team2: { name: string; elo?: number; form?: number[]; region?: string; teamId?: number; provider?: 'opendota' | 'pandascore'; identity?: TeamIdentityEvidence };
+  format: 'BO1' | 'BO3' | 'BO5' | 'unknown';
   tournamentTier?: 1 | 2 | 3;
   draft?: {
     synergy1?: number; synergy2?: number;
@@ -34,8 +39,8 @@ export interface MatchInput {
   liveSnapshot?: {
     netWorthLead: number;  // >0 = team1/radiant leads
     killsLead: number;
-    towerLead: number;
-    barracksLost: number;
+    towerLead: number | null;
+    barracksLost: number | null;
     aegisHolder: 1 | 2 | null;
     buybackDisadv: number;
     gameTimeSec: number;
@@ -78,10 +83,17 @@ function deriveStage(
   return undefined;
 }
 
-export interface EnrichedPrediction extends BetPrediction {
+export interface EnrichedPrediction extends Omit<BetPrediction, 'confidence'> {
   matchId: string;
-  edge: number;           // edge vs bookmaker (если odds переданы)
-  ev: number;             // expected value (если odds переданы)
+  edge: number | null;
+  ev: number | null;
+  confidence: number | null;
+  expiresAt?: string;
+  rawProbability?: number | null;
+  calibrationMethod?: string;
+  provenance?: {source: 'trained' | 'derived'; basis: string; featuresVersion: number | null; qualityStatus: 'legacy_unvalidated' | 'validated'; modelCreatedAt?: string | null; modelVersions?: string[]; reportedBrierScore?: number | null; trainingDataAsOf?: string | null};
+  distribution?: TotalsDistribution;
+  pPush?: number;
   bookmakerOdds1?: number;
   bookmakerOdds2?: number;
   generatedAt: string;
@@ -92,9 +104,15 @@ export interface AnalyticsResult {
   team1Name: string;
   team2Name: string;
   predictions: EnrichedPrediction[];
-  featureVector: FeatureVector;
+  featureVector: FeatureVector | null;
   generatedAt: string;
   modelVersion: string;
+  state?: 'ready' | 'unavailable';
+  unavailableMarkets?: Array<{betType: string; reason: string}>;
+  resolvedTeams?: {team1Id: number | null; team2Id: number | null};
+  teamIdentity?: {team1:TeamIdentityEvidence|null;team2:TeamIdentityEvidence|null};
+  observedState?: {elapsedSeconds:number;totalKills:number;receivedAt:string;source:'opendota'};
+  liveDataQuality?: ReturnType<typeof liveStateFreshness>;
 }
 
 /** Форма: [W,L,W,W,L] → weighted score 0..1 */
@@ -113,6 +131,8 @@ function calcFormScore(form: number[] | string[]): number {
 
 /** Нормализует MatchInput в FeatureVector */
 function buildFeatureVector(input: MatchInput): FeatureVector {
+  // Historical comparison models require a known series format too.
+  if (input.format === 'unknown') throw new Error('series_format_unknown');
   const elo1 = input.team1.elo ?? 1700;
   const elo2 = input.team2.elo ?? 1700;
   const form1 = calcFormScore(input.team1.form ?? []);
@@ -138,8 +158,8 @@ function buildFeatureVector(input: MatchInput): FeatureVector {
     earlyScore2: draft.early2 ?? 0.5,
     netWorthLead: snap?.netWorthLead,
     killsLead: snap?.killsLead,
-    towerLead: snap?.towerLead,
-    barracksLost: snap?.barracksLost,
+    towerLead: snap?.towerLead ?? undefined,
+    barracksLost: snap?.barracksLost ?? undefined,
     aegisHolder: snap?.aegisHolder,
     buybackDisadv: snap?.buybackDisadv,
     gameTimeSec: snap?.gameTimeSec,

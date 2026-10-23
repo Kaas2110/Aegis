@@ -1,0 +1,19 @@
+{
+  "contract": "wide36114.shadow.host.package.v1",
+  "files": {
+    "__init__.py": "662ce5a34175654b47c1e328501b844e2d01ebab5641334b591f9022325993d9",
+    "artifacts/feature-names.json": "a0b8952ade5da01c5e368f21be96c75140fb97d243bf058ceab5f5e1f457d380",
+    "artifacts/model.txt": "7746c88111c47f51267f6c158c2086c25687973021db5fc0e414a208091a14ee",
+    "candidate-manifest.json": "fce0840053e61daaf899adfff3d758bd18886daa491bee8d9d0300b9afc4a83a",
+    "candidate.py": "fd530a1453185f5ee4a75621a7d8837398084c8b4087c7b3035cdd996c4cb5cc",
+    "common.py": "960e8096c708f726ee47d1c87a67c74c93b3ef76a7c670592de8a86b3f378e4a",
+    "host.py": "b4cfd17cdca703b49818a12b44a572e044f31802fb5802a026b66e26884f0435",
+    "package.py": "2d8924744b7f368b9a7745223a20eedfb3bf5074a3dff2656be43984e4df66bd",
+    "router.py": "0d17c840980019e74cfb49479dc731e3b413647dc88e01d9bb5343a34caa1d2a",
+    "safe-reasons.json": "8ebdb0f6b31f07d884586623d758b34be570888101a44f14fb9da44f71fd3245"
+  },
+  "frozenFormulaBundleSha256": "6cb12f4ced0eac6a162f0ae8c099e25344944a34bfebf716d4382d34fe7a6e32",
+  "projectionBundleSha256": "ef17773af400215146f7b1b85dff49ce38c64778cc5c8dfde5157e1cd2f8e833",
+  "candidateManifestSha256": "fce0840053e61daaf899adfff3d758bd18886daa491bee8d9d0300b9afc4a83a",
+  "resourceProbeSha256": "27c762220dc938aabcb584a6e154e6b0c70361e8930258ed11ab6b3615733cb5"
+}

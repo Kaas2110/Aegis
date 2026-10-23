@@ -1,19 +1,26 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 
 interface Props {
   ageSeconds: number;
+  at?: string;
   showLabel?: boolean;
 }
 
-export function FreshnessIndicator({ ageSeconds, showLabel = true }: Props) {
+export function FreshnessIndicator({ ageSeconds: initialAge, at, showLabel = true }: Props) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),15000);return()=>clearInterval(timer);},[]);
+  const ts=at?Date.parse(at):NaN;
+  const ageSeconds=at ? (Number.isFinite(ts)&&ts<=now+5000?Math.max(0,Math.floor((now-ts)/1000)):Infinity) : Math.floor(initialAge);
   const colors = useColors();
 
   let color: string;
   let label: string;
 
-  if (ageSeconds <= 60) {
+  if (!Number.isFinite(ageSeconds)) {
+    color = colors.mutedForeground; label = 'Давность неизвестна';
+  } else if (ageSeconds <= 60) {
     color = colors.positive;
     label = ageSeconds < 5 ? 'только что' : `${ageSeconds}с назад`;
   } else if (ageSeconds <= 120) {

@@ -1,4 +1,7 @@
+import { pool } from '@workspace/db';
+import { configureApiDbPool } from './lib/configureApiDbPool';
 import app from "./app";
+import {startProviderFeedWorker} from "./services/ProviderFeedWorker";
 import { logger } from "./lib/logger";
 import { ensureSchema } from "./lib/ensureSchema";
 import { startLiveWorker } from "./services/LiveWorker";
@@ -10,6 +13,10 @@ import { loadActiveAsymLiveModel } from "./services/AsymLiveModel";
 import { loadActiveMarketModels } from "./services/MarketLgbm";
 import { loadActiveSeriesMidModel } from "./services/SeriesMidModel";
 import { primeApiKeysCache } from "./services/ApiKeysService";
+
+// Only the long-lived API retains already-open idle connections. CLI jobs use
+// the shared pool's default min=0 and retain their existing exit behavior.
+configureApiDbPool(pool);
 
 const rawPort = process.env["PORT"];
 
@@ -25,7 +32,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, async (err) => {
+app.listen(port, process.env['HOST'] ?? '0.0.0.0', async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -41,6 +48,8 @@ app.listen(port, async (err) => {
   // Прогреваем кеш overrides ключей API (admin-web → /api/admin/integrations).
   // Не fatal: при ошибке `getApiKey()` всё равно отрабатывает по ENV.
   await primeApiKeysCache().catch((err) => logger.warn({ err }, "ApiKeys cache prime failed"));
+
+  startProviderFeedWorker();
 
   // Поднимаем активную live-модель (не критично — может не существовать
   // на свежей системе, до первого ретрейна live-пайплайна).

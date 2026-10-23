@@ -1,3 +1,5 @@
+import {selectSeriesMarket} from '@/lib/matchSemantics';
+import { apiFetch } from '../../lib/api';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
@@ -131,7 +133,7 @@ export default function HomeScreen() {
   // дефолты / последний успешный конфиг.
   const refreshClientConfig = useCallback(async () => {
     try {
-      const resp = await fetch('/api/client-config');
+      const resp = await apiFetch('/api/client-config');
       if (!resp.ok) return;
       const cfg = (await resp.json()) as Partial<ClientConfig>;
       if (
@@ -258,10 +260,7 @@ export default function HomeScreen() {
         // Режим «Без БК»: явно очищаем availableBookmakers чтобы edge/EV = 0
         map.set(em.match.id, rebuildMarketsForBookmaker({ ...em, availableBookmakers: [] }, 'no_bookmaker'));
       } else {
-        const hasBk = em.availableBookmakers.some(b => b.bookmakerId === filters.bookmaker);
-        map.set(em.match.id, hasBk
-          ? rebuildMarketsForBookmaker(em, filters.bookmaker)
-          : em.markets);
+        map.set(em.match.id, rebuildMarketsForBookmaker(em, filters.bookmaker));
       }
     }
     return map;
@@ -276,32 +275,8 @@ export default function HomeScreen() {
     return map;
   }, [enrichedLive, enrichedPrematch]);
 
-  function getBestMarket(matchId: string, isLiveMatch = false): Market | undefined {
-    const mkts = marketsMap.get(matchId) ?? [];
-    if (mkts.length === 0) return undefined;
-
-    // T004: для ЛАЙВ-матчей главный % на карточке — победитель ТЕКУЩЕЙ КАРТЫ
-    // (map_winner), а серия (match_winner) показывается отдельной строкой
-    // (см. seriesMarket ниже). Для prematch приоритет прежний.
-    //
-    // Жёсткий приоритет (prematch): match_winner ВСЕГДА первым.
-    // Map_winner, тоталы и прочие — только если match_winner недоступен.
-    //
-    // Почему НЕ используем EV-сортировку внутри winner-типов:
-    // EV = modelProb(team1) × (odds1-1) − (1−modelProb(team1)).
-    // При stub-модели (50/50) map_winner.ev > match_winner.ev потому что у
-    // match_winner реальный прогноз (33% для REK × 6.50) даёт ev≈1.1,
-    // а у map_winner заглушка 50% × 6.50 даёт ev≈2.25 → алгоритм выбирает
-    // карту с ложным EV, а не матч-виннер с честным прогнозом.
-    const TYPE_PRIORITY = isLiveMatch
-      ? ['map_winner', 'match_winner', 'first_blood', 'total_kills', 'total_duration']
-      : ['match_winner', 'map_winner', 'first_blood', 'total_kills', 'total_duration'];
-
-    for (const type of TYPE_PRIORITY) {
-      const m = mkts.find(mkt => mkt.type === type);
-      if (m) return m;
-    }
-    return mkts[0];
+  function getBestMarket(matchId: string, _isLiveMatch = false): Market | undefined {
+    return selectSeriesMarket(marketsMap.get(matchId) ?? []);
   }
 
   /** T004: серия отдельной строкой на live-карточке (если главный % — карта). */

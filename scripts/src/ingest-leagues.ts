@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * Загружает лиги из OpenDota /api/leagues (~5000 записей, один запрос).
  * Используется для обогащения live/upcoming матчей человеческими названиями.

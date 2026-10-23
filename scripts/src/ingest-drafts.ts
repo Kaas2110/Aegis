@@ -316,7 +316,7 @@ async function main() {
     } catch (e) {
       if ((e as Error).name === 'OdQuotaExhaustedError') {
         console.warn(`\n[ingest-drafts] ${(e as Error).message} — прерываю цикл (saved=${saved} failed=${failed})`);
-        break;
+        throw e;
       }
       failed++;
       const msg = (e as Error).message;

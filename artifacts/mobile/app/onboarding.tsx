@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Platform,
+  Switch, Platform, BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -21,10 +21,11 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { setAgeConfirmed, setOnboarded, updateSettings } = useApp();
   const [step, setStep] = useState<Step>('welcome');
+  const [ageRejected, setAgeRejected] = useState(false);
   const [minOdds, setMinOdds] = useState(1.5);
   const [minEdge, setMinEdge] = useState(0.03);
   const [minConf, setMinConf] = useState(60);
-  const [analyticsConsent, setAnalyticsConsent] = useState(true);
+  const [analyticsConsent, setAnalyticsConsent] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -33,6 +34,14 @@ export default function OnboardingScreen() {
   function nextStep() {
     const next = STEPS[currentIdx + 1];
     if (next) setStep(next);
+  }
+
+  function handleAgeReject() {
+    if (Platform.OS === 'android') {
+      BackHandler.exitApp();
+      return;
+    }
+    setAgeRejected(true);
   }
 
   async function handleWelcomeConfirm() {
@@ -76,6 +85,17 @@ export default function OnboardingScreen() {
     );
   }
 
+  if (ageRejected) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad, paddingBottom: bottomPad }]}>
+        <View style={styles.content}>
+          <Text accessibilityRole="alert" style={[styles.ageTitle, { color: fg }]}>Доступ только с 18 лет</Text>
+          <Text style={[styles.ageDesc, { color: colors.mutedForeground }]}>Вы отказались подтверждать совершеннолетие. Приложение недоступно.</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad, paddingBottom: bottomPad }]}>
       {/* Progress */}
@@ -112,9 +132,9 @@ export default function OnboardingScreen() {
             <View style={[styles.featuresList, { backgroundColor: colors.card, borderColor: colors.border }]}>
               {[
                 { icon: 'activity', text: 'Реальные live-данные с OpenDota' },
-                { icon: 'cpu', text: '15 типов ставок · умная аналитика' },
-                { icon: 'bell', text: 'Алерты по уверенности прогноза' },
-                { icon: 'trending-up', text: 'Прематч + лайв прогнозы' },
+                { icon: 'cpu', text: 'Сравнение вероятностей и коэффициентов' },
+                { icon: 'bell', text: 'Настройки отбора событий' },
+                { icon: 'trending-up', text: 'Прематч и live: доступные прогнозы' },
               ].map(({ icon, text }) => (
                 <View key={text} style={styles.featureRow}>
                   <View style={[styles.featureIcon, { backgroundColor: p + '18' }]}>
@@ -151,7 +171,7 @@ export default function OnboardingScreen() {
             </View>
 
             <PrimaryButton label="Мне есть 18 лет — принять и продолжить" onPress={handleWelcomeConfirm} />
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleAgeReject}>
               <Text style={[styles.exitLink, { color: colors.mutedForeground }]}>Мне нет 18 лет — выйти</Text>
             </TouchableOpacity>
           </View>
@@ -173,11 +193,11 @@ export default function OnboardingScreen() {
 
             <FilterGroup label="Минимальное расхождение с рынком">
               {[0, 0.03, 0.05, 0.10].map(v => (
-                <ChipBtn key={v} label={(v * 100).toFixed(0) + '%'} active={minEdge === v} onPress={() => setMinEdge(v)} colors={colors} />
+                <ChipBtn key={v} label={(v * 100).toFixed(0) + ' п.п.'} active={minEdge === v} onPress={() => setMinEdge(v)} colors={colors} />
               ))}
             </FilterGroup>
 
-            <FilterGroup label="Минимальная уверенность прогноза">
+            <FilterGroup label="Порог уверенности (оценка пока недоступна)">
               {[50, 60, 70, 80].map(v => (
                 <ChipBtn key={v} label={v + '%'} active={minConf === v} onPress={() => setMinConf(v)} colors={colors} />
               ))}
@@ -187,10 +207,11 @@ export default function OnboardingScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.consentLabel, { color: fg }]}>Аналитика и логирование</Text>
                 <Text style={[styles.consentDesc, { color: colors.mutedForeground }]}>
-                  Сохранять события локально для улучшения продукта
+                  Сохранять события использования и технические журналы на устройстве и отправлять их на сервер. Можно отключить в профиле.
                 </Text>
               </View>
               <Switch
+                accessibilityLabel="Аналитика и логирование"
                 value={analyticsConsent}
                 onValueChange={setAnalyticsConsent}
                 trackColor={{ false: colors.muted, true: p + '88' }}

@@ -3,6 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'rea
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@/hooks/useColors';
 import type { Match, Market } from '@/types';
+import { FreshnessIndicator } from './FreshnessIndicator';
+import { usePredictionClock } from '@/hooks/usePredictionClock';
+import { expireMarketQuotes } from '@/lib/marketExpiry';
+import { matchStatePredictionEligible, observedStateAge } from '@/lib/liveFreshness';
 import { OddsTilesPair } from './OddsTile';
 import { OrnateCorners } from './OrnateFrame';
 import { HexBadge } from './HexBadge';
@@ -40,21 +44,28 @@ function marketTypeRu(type: string): string {
   }
 }
 
-export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 'pending', onPress }: Props) {
+export function MatchCard({ match, bestMarket: originalBest, seriesMarket: originalSeries, predictionStatus: originalStatus = 'pending', onPress }: Props) {
+  const now = usePredictionClock(originalBest?.prediction.expiresAt,originalBest?.bestOdds.expiresAt,originalSeries?.prediction.expiresAt,originalSeries?.bestOdds.expiresAt);
+  const stateEligible = matchStatePredictionEligible(match, now);
+  const fresh = (m?: Market) => stateEligible && m?.prediction.expiresAt && Date.parse(m.prediction.expiresAt) > now ? expireMarketQuotes(m,now) : undefined;
+  // A defensive boundary: a map/total must never become a series-win percentage.
+  const bestMarket = originalBest?.type === 'match_winner' ? fresh(originalBest) : undefined;
+  const seriesMarket = fresh(originalSeries);
+  const predictionStatus = originalBest && !bestMarket ? 'unavailable' : originalStatus;
   const colors = useColors();
   const isLive = match.status === 'live';
   const isPrematch = match.status === 'prematch';
   const isBetweenMaps = match.status === 'between_maps';
   const isFinished = match.status === 'finished';
-  const snap = match.liveSnapshot;
-  const hasPositiveEV = bestMarket && bestMarket.prediction.ev > 0.08;
+  const snap = stateEligible ? match.liveSnapshot : undefined;
+  const hasPositiveEV = bestMarket && bestMarket.prediction.ev !== null && bestMarket.prediction.ev > 0.08;
 
   // M5 (Phase 2): свежесть live-снапшота через единый getFieldState (7 состояний).
   // snap.snapshotAge — секунды с момента сервера. Между картами все live-поля
   // скрываются (отдельный режим UI «ПЕРЕРЫВ»).
   const snapState = snap
     ? getFieldState({
-        ageSeconds: snap.snapshotAge,
+        ageSeconds: observedStateAge(match.liveDataQuality, now) ?? Infinity,
         betweenMaps: isBetweenMaps,
       })
     : null;
@@ -104,7 +115,7 @@ export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 
             {match.tournamentName}
           </Text>
           <View style={styles.metaRight}>
-            <Text style={[styles.format, { color: colors.secondaryForeground }]}>{match.format}</Text>
+            <Text style={[styles.format, { color: colors.secondaryForeground }]}>{match.formatKnown === false ? 'Формат неизвестен' : match.format}</Text>
             {isLive && (
               <View style={[styles.livePill, { borderColor: colors.destructive + '88' }]}>
                 <View style={[styles.liveDot, { backgroundColor: colors.destructive }]} />
@@ -223,7 +234,7 @@ export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 
                 {(bestMarket.label || marketTypeRu(bestMarket.type)).toUpperCase()}
               </Text>
               {/* Бейдж «ПЕРЕВЕС»: показываем только когда есть реальный кэф от БК */}
-              {bestMarket.bestOdds.oddsTeam1 > 0 && bestMarket.prediction.ev > 0 && (
+              {bestMarket.bestOdds.oddsTeam1 > 0 && bestMarket.prediction.ev !== null && bestMarket.prediction.ev > 0 && (
                 <View style={[styles.evBadge, { backgroundColor: colors.radiant + '22', borderColor: colors.radiant + '55' }]}>
                   <Text style={[styles.evBadgeText, { color: colors.radiant }]}>
                     +ОЦ {(bestMarket.prediction.ev * 100).toFixed(0)}%
@@ -264,6 +275,7 @@ export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 
               );
             })()}
 
+            <FreshnessIndicator ageSeconds={0} at={bestMarket.prediction.createdAt.toISOString()} />
             {/* T004: серия отдельной строкой (главный % выше — текущая карта) */}
             {seriesMarket && (
               <View style={[styles.seriesRow, { borderTopColor: colors.borderGold + '33' }]}>
@@ -274,7 +286,7 @@ export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 
                   </Text>
                   <Text style={{ color: colors.mutedForeground }}>  ·  </Text>
                   <Text style={{ color: colors.dire }}>
-                    {match.team2.shortName} {Math.round((1 - seriesMarket.prediction.modelProbability) * 100)}%
+                    {match.team2.shortName} {100 - Math.round(seriesMarket.prediction.modelProbability * 100)}%
                   </Text>
                 </Text>
               </View>
@@ -295,7 +307,7 @@ export function MatchCard({ match, bestMarket, seriesMarket, predictionStatus = 
           <View style={[styles.pendingSection, { borderTopColor: colors.borderGold + '33' }]}>
             <ActivityIndicator size="small" color={colors.mutedForeground} />
             <Text style={[styles.pendingText, { color: colors.mutedForeground }]}>
-              Данные собираются, скоро выдадим прогноз
+              Прогноз недоступен
             </Text>
           </View>
         )}

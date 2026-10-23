@@ -10,7 +10,8 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatMetric } from "@/lib/utils";
+import { countText, outcomeCoverageView } from "@/lib/quality-view";
 
 function pctClass(pct: number, good = 90, ok = 60): string {
   if (pct >= good) return "text-radiant";
@@ -41,7 +42,7 @@ function MetricRow({
 }
 
 function Bar({ pct, threshold }: { pct: number; threshold?: number }) {
-  const clamped = Math.min(100, Math.max(0, pct));
+  const clamped = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
   const colorCls = pct >= 90 ? "bg-radiant" : pct >= 60 ? "bg-primary" : "bg-dire";
   return (
     <div className="w-full h-1.5 bg-border/40 relative overflow-hidden">
@@ -193,47 +194,40 @@ function LiveOutcomesCard() {
   const { data, isLoading } = useGetAdminCoverage({ query: { refetchInterval: 30_000, queryKey: getGetAdminCoverageQueryKey() } });
   if (isLoading || !data) return <Skeleton className="h-72 w-full" />;
   const ls = data.liveSnapshots;
-  const po = data.prematchOutcomes;
+  const po = outcomeCoverageView(data.prematchOutcomes);
   return (
     <Card className="rounded-none border-border bg-card">
       <CardHeader className="border-b border-border pb-3">
         <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">Live & Outcomes</CardTitle>
         <CardDescription className="font-mono text-xs">
-          Live polling + накопление prematch outcomes для тренировки live-моделей
+          Наблюдения за матчами и подтверждение времени прематчевых прогнозов
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4 space-y-1">
-        <MetricRow label="Live snapshots / 24ч" value={ls.last24h.toLocaleString("ru")} />
+        <MetricRow label="Live snapshots / 24ч" value={countText(ls.last24h)} />
         <MetricRow
           label="Из них с Stratz"
-          value={`${ls.withStratzEnrichment} (${ls.stratzPct.toFixed(1)}%)`}
+          value={`${countText(ls.withStratzEnrichment)} (${formatMetric(ls.stratzPct, 1)}%)`}
           valueClass={ls.stratzPct > 0 ? "text-radiant" : "text-muted-foreground"}
-          hint={ls.stratzPct === 0 ? "Stratz live upstream пуст (dormant)" : undefined}
+          hint={ls.stratzPct === 0 ? "В этих снимках нет обогащения STRATZ" : undefined}
         />
         {ls.lastCapturedAt ? (
           <MetricRow label="Последний snapshot" value={formatDate(ls.lastCapturedAt)} />
         ) : null}
         <div className="pt-3 mt-1 border-t border-border/40" />
-        <MetricRow
-          label="prematch_outcomes (всего)"
-          value={po.total.toLocaleString("ru")}
-          valueClass={po.liveTrainReady ? "text-radiant" : "text-foreground"}
-        />
-        <MetricRow label="За 30 дней" value={po.last30d.toLocaleString("ru")} />
-        <div className="pt-2">
-          <div className="flex items-baseline justify-between mb-1">
-            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-              К live-train (порог {po.liveTrainReadyThreshold})
-            </span>
-            <span
-              className={`font-mono text-[11px] font-bold ${
-                po.liveTrainReady ? "text-radiant" : "text-primary"
-              }`}
-            >
-              {po.liveTrainReady ? "ГОТОВ" : `${Math.round((100 * po.total) / po.liveTrainReadyThreshold)}%`}
-            </span>
+        <MetricRow label="Сохранено прогнозов · всего" value={countText(po.total)} />
+        <MetricRow label="Сохранено за 30 дней" value={countText(po.last30d)} />
+        <MetricRow label="Подтверждены до старта" value={countText(po.validated)} />
+        <MetricRow label="Подтверждены, исход известен" value={countText(po.validatedResolved)} />
+        <MetricRow label="Не подтверждены · исключены" value={countText(po.unvalidated)} />
+        <div className="pt-3 space-y-2">
+          <div className="flex justify-between gap-3 text-xs text-muted-foreground">
+            <span>Подтверждённые результаты до порога объёма ({countText(po.threshold)})</span>
+            <span className="font-mono shrink-0">{po.sampleProgress === null ? '—' : `${Math.round(po.sampleProgress)}%`}</span>
           </div>
-          <Bar pct={Math.min(100, (100 * po.total) / po.liveTrainReadyThreshold)} threshold={100} />
+          {po.sampleProgress !== null && <Bar pct={po.sampleProgress} threshold={100} />}
+          <p className="text-xs font-semibold">Готовность к обучению требует отдельной проверки</p>
+          <p className="text-xs text-muted-foreground">Достижение порога объёма не проверяет признаки, временное разделение данных или качество модели.</p>
         </div>
       </CardContent>
     </Card>

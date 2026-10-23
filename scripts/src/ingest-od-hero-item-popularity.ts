@@ -50,7 +50,7 @@ async function main() {
     } catch (e) {
       if (e instanceof OdQuotaExhaustedError) {
         console.warn(`[od-hero-item-pop] ${e.message} — прерываю цикл (failed=${failed})`);
-        break;
+        throw e;
       }
       failed++;
       if (failed <= 5) console.warn(`[od-hero-item-pop] hero=${heroId} ${(e as Error).message}`);

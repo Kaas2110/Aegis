@@ -168,7 +168,7 @@ router.post('/login', (req, res) => {
   const { token, expiresAt } = createSession();
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env['NODE_ENV'] === 'production',
+    secure: process.env['NODE_ENV'] === 'production' && process.env['AEGIS_LOCAL_ONLY'] !== 'true',
     sameSite: 'lax',
     maxAge: SESSION_TTL_MS,
     path: '/',

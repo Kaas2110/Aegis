@@ -1,3 +1,4 @@
+import { apiFetch } from '../../../lib/api';
 // Экран сравнения двух команд (T8). Маршрут: /match/compare/<aId>-<bId>.
 // Берёт данные из /api/analytics/team-compare и рендерит две колонки + diff.
 import React, { useEffect, useState } from 'react';
@@ -10,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { logProductEvent } from '@/services/logging/EventLogger';
 
-const API_BASE = '/api';
+
 
 type SeriesMomentum = {
   activeSeries: { seriesId: string; opponentId: string; format: number;
@@ -112,7 +113,7 @@ export default function TeamCompareScreen() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/analytics/team-compare?teamAId=${a}&teamBId=${b}`)
+    apiFetch(`/api/analytics/team-compare?teamAId=${a}&teamBId=${b}`)
       .then(r => r.json())
       .then((j: CompareResp & { error?: string }) => {
         if (cancelled) return;

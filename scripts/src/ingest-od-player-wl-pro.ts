@@ -67,7 +67,7 @@ async function main() {
     } catch (e) {
       if (e instanceof OdQuotaExhaustedError) {
         console.warn(`[od-player-wl-pro] ${e.message} — прерываю цикл (saved=${saved} failed=${failed})`);
-        break;
+        throw e;
       }
       failed++;
       if (failed <= 5) console.warn(`[od-player-wl-pro] acct=${accountId} ${(e as Error).message}`);

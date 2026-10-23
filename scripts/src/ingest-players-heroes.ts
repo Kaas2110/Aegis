@@ -230,7 +230,7 @@ async function main() {
     } catch (e) {
       if (e instanceof OdQuotaExhaustedError) {
         console.warn(`\n[ingest-players-heroes] ${e.message} — прерываю цикл (heroes=${okHeroes} failed=${failed})`);
-        break;
+        throw e;
       }
       failed++;
     }

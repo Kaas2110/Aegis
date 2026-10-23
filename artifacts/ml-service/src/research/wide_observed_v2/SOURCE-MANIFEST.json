@@ -1,0 +1,19 @@
+{
+  "contract": "wide_immutable_roster_glue_sources_v2",
+  "featureCount": 36114,
+  "frozenFormulaBundleSha256": "6cb12f4ced0eac6a162f0ae8c099e25344944a34bfebf716d4382d34fe7a6e32",
+  "modelExecution": false,
+  "python": {
+    "READER-CONTRACT.json": "865ae5986345c206beddc64d5ec102608c3b25d04ecc771d8d629b8b40a6e1f4",
+    "__init__.py": "929f3bff8d7c99680275290350bd15320c9c01c5f0b4f2ca7d64e5db81811aba",
+    "bridge.py": "0ba536ef772de4f1a1a0f4d9b6fb260bd0d7e0086199d7805c2773fd289c6934",
+    "roster_resolution.py": "ee4a85a16203260968dfef6d8ec59fe4cc56a32f56ec4a3baeb20140f1c21d55"
+  },
+  "reviewedRosterManifestSha256": "57abe3c0313168653a05eb758c7999faece74893cd4206057f3abb8bfb7c4654",
+  "sourceObservationSchemaSha256": "56df1c043c1ecb2ea8930c3211c7f754935cdc5079a6e97f520edad34023197b",
+  "typescript": {
+    "queries_v1.ts": "0dde7d092a367828a27b65f3bc0b83f41427827eed5d52dd34ff69d300dfb35d",
+    "reader_v2.ts": "88d3583fd320733cfe7713ffd96157d827ce55ff7974bcba02a4d16eb81ef314",
+    "rosterResolution.ts": "bf21abd5c28ef43edb14a6fb2b5cb8196ede684055652ac848aabd51dbc5376b"
+  }
+}

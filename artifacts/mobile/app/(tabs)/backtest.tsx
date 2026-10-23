@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/api';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +29,7 @@ export default function BacktestScreen() {
     setError(null);
     await logProductEvent('backtest_started', 'backtest', { periodDays, minConf, minOdds });
     try {
-      const resp = await fetch('/api/analytics/backtest', {
+      const resp = await apiFetch('/api/analytics/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ minConfidence: minConf, minOdds, periodDays }),
@@ -54,7 +55,7 @@ export default function BacktestScreen() {
     >
       <Text style={[styles.title, { color: colors.foreground }]}>Бэктест модели</Text>
       <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-        Реальная история прогнозов из prematch_outcomes — что было бы, если ставить по уверенности модели
+        Прогнозы, подтверждённые до старта матча. Симуляция использует коэффициент 1/p, а не реальные коэффициенты букмекера; она не показывает доходность ставок у букмекера.
       </Text>
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -100,39 +101,40 @@ export default function BacktestScreen() {
         </View>
       )}
 
-      {result && result.kpis.numberOfBets === 0 && (
+      {result?.validation && <Text style={[styles.subtitle, {color: colors.mutedForeground, marginTop: 0}]}>{result.validation.note}{'\n'}Непроверенных записей исключено: {result.validation.unvalidatedRecords}.</Text>}
+      {result && (result.state !== 'validated_subset' || result.kpis.numberOfBets === 0) && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', gap: 6 }]}>
           <Feather name="database" size={24} color={colors.mutedForeground} />
           <Text style={[styles.cardTitle, { color: colors.foreground }]}>Недостаточно данных</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground, textAlign: 'center', marginTop: 0 }]}>
-            {result.message ?? 'OutcomeTracker ещё не накопил resolved прогнозов под выбранные фильтры. Попробуйте увеличить период или снизить уверенность.'}
+            {result.message ?? 'Нет подтверждённого набора прогнозов под выбранные фильтры. Качество модели пока нельзя оценить.'}
           </Text>
         </View>
       )}
 
-      {result && result.kpis.numberOfBets > 0 && (
+      {result && result.state === 'validated_subset' && result.kpis.numberOfBets > 0 && (
         <>
           {/* KPI карточки */}
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.cardTitle, { color: colors.foreground }]}>Итог за {periodDays} дн.</Text>
             <View style={styles.kpiRow}>
-              <KpiCard label="Прибыль" value={`${result.kpis.profitUnits >= 0 ? '+' : ''}${result.kpis.profitUnits.toFixed(1)}`} sub="ед." colors={colors} positive={result.kpis.profitUnits >= 0} big />
-              <KpiCard label="Доходность" value={`${(result.kpis.roi * 100).toFixed(1)}%`} sub="на ставку" colors={colors} positive={result.kpis.roi >= 0} big />
+              <KpiCard label="Итог симуляции" value={result.kpis.profitUnits == null ? '—' : `${result.kpis.profitUnits >= 0 ? '+' : ''}${result.kpis.profitUnits.toFixed(1)}`} sub="ед." colors={colors} positive={result.kpis.profitUnits != null && result.kpis.profitUnits >= 0} big />
+              <KpiCard label="ROI симуляции" value={result.kpis.roi == null ? '—' : `${(result.kpis.roi * 100).toFixed(1)}%`} sub="на исход" colors={colors} positive={result.kpis.roi != null && result.kpis.roi >= 0} big />
             </View>
             <View style={styles.kpiRow}>
-              <KpiCard label="Ставок" value={String(result.kpis.numberOfBets)} colors={colors} />
-              <KpiCard label="Попаданий" value={`${(result.kpis.hitRate * 100).toFixed(1)}%`} colors={colors} positive={result.kpis.hitRate > 0.5} />
-              <KpiCard label="Ср. коэф" value={result.kpis.avgOdds.toFixed(2)} colors={colors} />
+              <KpiCard label="Исходов" value={String(result.kpis.numberOfBets)} colors={colors} />
+              <KpiCard label="Попаданий" value={result.kpis.hitRate == null ? '—' : `${(result.kpis.hitRate * 100).toFixed(1)}%`} colors={colors} positive={result.kpis.hitRate != null && result.kpis.hitRate > 0.5} />
+              <KpiCard label="Ср. 1/p" value={result.kpis.avgOdds?.toFixed(2) ?? '—'} colors={colors} />
             </View>
             <View style={styles.kpiRow}>
-              <KpiCard label="Просадка" value={`${result.kpis.maxDrawdown.toFixed(1)} ед.`} colors={colors} negative />
+              <KpiCard label="Просадка" value={result.kpis.maxDrawdown == null ? '—' : `${result.kpis.maxDrawdown.toFixed(1)} ед.`} colors={colors} negative />
               <KpiCard label="Brier" value={result.kpis.brierScore != null ? result.kpis.brierScore.toFixed(3) : '—'} colors={colors} />
             </View>
           </View>
 
           {/* Equity-кривая */}
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.foreground }]}>Кривая капитала</Text>
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>Кривая симуляции</Text>
             <EquityChart points={result.equityCurve.map(p => p.units)} colors={colors} />
             <Text style={[styles.equityNote, { color: colors.mutedForeground }]}>
               Старт 0 ед. · {result.equityCurve.length} последовательных ставок · 1 единица на ставку

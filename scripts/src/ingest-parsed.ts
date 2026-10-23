@@ -1,3 +1,4 @@
+import { openDotaBackgroundFetch as fetch, OdQuotaExhaustedError } from '@workspace/db/opendota';
 /**
  * ingest-parsed — T0.7 stage 2.
  *
@@ -28,13 +29,14 @@ import {
 } from '@workspace/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl';
+import { retainRawMatchResponse } from './lib/raw-match-response.js';
+import { extractParsedPayload, mergeParsedPayload, PARSED_PAYLOAD_SCHEMA_VERSION } from './lib/parsed-payload';
 
-// Premium OpenDota key: 3000 req/min = 50 req/s, неограниченно/мес.
-// Держим 20 req/s — запас под параллельные скрипты и live-poll.
+// Every request uses the shared free OpenDota budget gate.
 const RATE_LIMIT_MS = odThrottleMs(50);
 
 // Текущая версия структуры payload. Бамп при изменении набора сохраняемых полей.
-const PAYLOAD_SCHEMA_VERSION = 1;
+const PAYLOAD_SCHEMA_VERSION = PARSED_PAYLOAD_SCHEMA_VERSION;
 
 function arg(flag: string, def: number): number {
   const i = process.argv.indexOf(flag);
@@ -48,63 +50,32 @@ const REINGEST = process.argv.includes('--reingest');
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-// Извлечение нужных полей из OD-ответа. Если OD изменит схему — здесь же
-// апдейтим маппинг и бампаем PAYLOAD_SCHEMA_VERSION.
-interface OdPlayer {
-  player_slot: number;
-  account_id: number | null;
-  hero_id: number;
-  gold_t?: number[] | null;
-  xp_t?: number[] | null;
-  lh_t?: number[] | null;
-  dn_t?: number[] | null;
-  kills_log?: unknown[] | null;
-  buyback_log?: unknown[] | null;
-  purchase_log?: unknown[] | null;
-  lane_role?: number | null;
-  is_roaming?: boolean | null;
-  obs_log?: unknown[] | null;
-  sen_log?: unknown[] | null;
-  ability_upgrades_arr?: unknown[] | null;
-}
 interface OdMatchDetail {
   match_id: number;
-  version: number | null;
-  players: OdPlayer[];
-  objectives?: unknown[] | null;
-  teamfights?: unknown[] | null;
-  draft_timings?: unknown[] | null;
-}
-
-function pickPlayer(p: OdPlayer) {
-  return {
-    player_slot: p.player_slot,
-    account_id: p.account_id ?? null,
-    hero_id: p.hero_id,
-    gold_t: p.gold_t ?? null,
-    xp_t: p.xp_t ?? null,
-    lh_t: p.lh_t ?? null,
-    dn_t: p.dn_t ?? null,
-    kills_log: p.kills_log ?? null,
-    buyback_log: p.buyback_log ?? null,
-    purchase_log: p.purchase_log ?? null,
-    lane_role: p.lane_role ?? null,
-    is_roaming: p.is_roaming ?? null,
-    obs_log: p.obs_log ?? null,
-    sen_log: p.sen_log ?? null,
-    ability_upgrades_arr: p.ability_upgrades_arr ?? null,
-  };
+  version?: number | null;
+  players?: unknown;
+  objectives?: unknown;
+  teamfights?: unknown;
+  draft_timings?: unknown;
 }
 
 async function fetchMatch(matchId: number): Promise<{ data: OdMatchDetail | null; error: string | null }> {
   try {
+    const requestStartedAt = new Date();
     const r = await fetch(withOpenDotaKey(`https://api.opendota.com/api/matches/${matchId}`), {
       signal: AbortSignal.timeout(20_000),
     });
     if (!r.ok) return { data: null, error: `HTTP ${r.status}` };
     const data = (await r.json()) as OdMatchDetail;
+    if (data.match_id !== matchId) return { data: null, error: 'Provider returned a different match ID' };
+    const receivedAt = new Date();
+    // The existing direct parser still receives the same complete object.
+    const raw = retainRawMatchResponse(process.env.AEGIS_STATE_DIR, data,
+      { matchId, job: 'ingest_parsed', requestStartedAt, receivedAt });
+    if (raw.status === 'not_retained') console.warn(`[raw-match-json] ${matchId}: ${raw.reason}`);
     return { data, error: null };
   } catch (e) {
+    if (e instanceof OdQuotaExhaustedError) throw e;
     return { data: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
@@ -142,26 +113,12 @@ async function main(): Promise<void> {
   let timedOut = 0;
   let httpErrors = 0;
 
-  // Аудит 2026-07-17: circuit-breaker на серию 429 — при исчерпанной OD-квоте
-  // не жжём 200 req/тик впустую (добивая user-facing live-путь api-server'а).
-  let consecutive429 = 0;
+  // Shared quota errors abort before updating queue attempts or status.
   for (let i = 0; i < todo.length; i++) {
     const { matchId, requestedAt, attempts } = todo[i];
     const ageMs = Date.now() - new Date(requestedAt).getTime();
     const { data, error } = await fetchMatch(matchId);
-
-    if (error && /\b429\b/.test(error)) {
-      consecutive429++;
-      httpErrors++;
-      if (consecutive429 >= 3) {
-        console.warn(`[ingest-parsed] 3× HTTP 429 подряд — OD-квота исчерпана, прерываю тик (${i + 1}/${todo.length})`);
-        break;
-      }
-      // НЕ инкрементируем attempts — 429 не вина матча, доберём в следующем тике.
-      await sleep(65_000);
-      continue;
-    }
-    consecutive429 = 0;
+    const payload = extractParsedPayload(data);
 
     if (error) {
       httpErrors++;
@@ -172,38 +129,17 @@ async function main(): Promise<void> {
           updatedAt: new Date(),
         })
         .where(eq(matchParseQueueTable.matchId, matchId));
-    } else if (data && data.version != null) {
+    } else if (payload) {
       // ✓ parsed — три записи в одной транзакции, чтобы не оставить
       // несогласованное состояние (parsed row есть, но queue всё ещё queued
       // или pro_matches.is_parsed=false) при прерывании процесса.
-      const players = (data.players ?? []).map(pickPlayer);
-      const objectives = data.objectives ?? null;
-      const teamfights = data.teamfights ?? null;
-      const draftTimings = data.draft_timings ?? null;
       const now = new Date();
       await db.transaction(async (tx) => {
+        const existing = await tx.select().from(matchParsedTable).where(eq(matchParsedTable.matchId, matchId)).limit(1);
+        const values = mergeParsedPayload(existing[0] ?? null, payload);
         await tx.insert(matchParsedTable)
-          .values({
-            matchId,
-            payloadSchemaVersion: PAYLOAD_SCHEMA_VERSION,
-            odVersion: data.version!,
-            players,
-            objectives,
-            teamfights,
-            draftTimings,
-          })
-          .onConflictDoUpdate({
-            target: matchParsedTable.matchId,
-            set: {
-              payloadSchemaVersion: PAYLOAD_SCHEMA_VERSION,
-              odVersion: data.version!,
-              players,
-              objectives,
-              teamfights,
-              draftTimings,
-              parsedAt: now,
-            },
-          });
+          .values({ matchId, ...values })
+          .onConflictDoUpdate({ target: matchParsedTable.matchId, set: { ...values, parsedAt: now } });
 
         await tx.update(proMatchesTable)
           .set({ isParsed: true, parsedAt: now })

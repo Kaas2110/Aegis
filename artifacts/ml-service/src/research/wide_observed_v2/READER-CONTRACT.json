@@ -1,0 +1,6 @@
+{
+  "oldQuerySourceSha256": "6d2c54587ed22632461ec65ebcf5f723b0c30c88a3ebbba10aaff77586d7ee53",
+  "policy": "wide.committed-observation-reader.immutable-roster.v2",
+  "querySha256": "2db3466ddb2ccf65cb6e7d02f8b49bea8c82c44ea7502523724d397f07eeff39",
+  "readerSourceSha256": "88d3583fd320733cfe7713ffd96157d827ce55ff7974bcba02a4d16eb81ef314"
+}

@@ -1,0 +1,46 @@
+Steam coherent diagnostic features, 2026-10-23
+
+Source profile: steam.GetLiveLeagueGames.v1.scoreboard only. It is distinct from
+GetRealtimeStats, Terse and all postmatch summaries. One frame is one source time.
+Raw response bodies and original receipt times remain separate from later ingest.
+
+advanceSteamFeatureBundle(state, observation, options) is the shared pure archive
+and DB projection. loadSteamFeatureBundlePrefix reads a bounded, as-of DB prefix
+and invokes it without outcome joins or future interpolation. The schema contains
+33,158 columns: 31,416 player-economy columns (including masks), plus 871 Roshan
+values and 871 masks. These are feature columns, not 33,158 independent signals.
+
+Native net worth, GPM and XPM are separate quantities. No substitution of NW/min
+for native GPM. Families include hero x economy x minute, historical form/context
+interactions when proven, team concentration, opposing wealth/farm ranks and past
+60/180/300/600-second changes. Wealth rank is not a confirmed position 1..5.
+Unknown positions remain missing. Historical references require a frozen context
+with exact map identity, evidence of start and source outcomes available before
+the freeze. Context reconstructed later is labelled as such.
+
+Roshan features retain raw timer, confirmed death elapsed time, versioned respawn
+window, attested countdown, inferred death/elapsed bounds, observed Aegis holder,
+confirmed pickup/lifetime/steal, and interactions with team economy and style.
+Rules are supplied per patch/profile with evidence and as-of timestamps. There
+is no automatic current-patch rule default. A timer of zero does not prove alive;
+an inferred death interval is not a confirmed death event. Missing evidence stays
+missing. Roshan feature contract is aegis.roshan-dynamic-features.v2.
+
+An explicit nonplaying/invalid phase or terminal outcome cannot advance history.
+Map, source profile, patch/rules change, clock rewind and receipt-time rewind
+reset state. Unavailable economy is returned with a complete missing schema;
+there is no fallback probability or model promotion in this code.
+
+All frames remain diagnostic: eligibleForServing=false, eligibleForTraining=false.
+Actual timely joint availability >=95% has not been demonstrated. Archived field
+presence and repeated snapshots do not demonstrate it. Native historical NW
+trajectories are not available from the existing empty OpenDota networth_t arrays.
+Do not train a richer live feature set from unavailable retrospective inputs.
+
+Collector DB sink is explicit opt-in through dynamicSink.enabled and local
+DATABASE_URL. Failed DB writes preserve source archives for bounded catch-up.
+This source change does not enable or restart any Windows task or expired lease.
+
+Run the synthetic unit tests with node --test steamFeatureBundle.test.mjs.
+They test causality, fixed schema and archive/DB algebra, not predictive accuracy.
+Production dataset admission, model training and promotion are separate stages.

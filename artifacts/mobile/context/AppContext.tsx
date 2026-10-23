@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { UserSettings, Filters } from '@/types';
-import { initLogger, logProductEvent, startLogUploader } from '@/services/logging/EventLogger';
+import { logProductEvent, setAnalyticsConsent, stopLogUploader } from '@/services/logging/EventLogger';
+import { setAdminToken } from '@/services/AdminApi';
+import { normalizeBookmaker, restoreFilters } from '@/lib/filterPersistence';
 
 const DEFAULT_SETTINGS: UserSettings = {
   language: 'ru',
@@ -39,6 +41,7 @@ interface AppContextValue {
   setAgeConfirmed: (v: boolean) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
   updateFilters: (patch: Partial<Filters>) => void;
+  resetLocalData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -56,9 +59,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
-      await initLogger();
-      startLogUploader();
+      let analyticsAllowed = false;
       try {
         const [ob, age, sRaw, fRaw] = await Promise.all([
           AsyncStorage.getItem(ONBOARDED_KEY),
@@ -66,6 +69,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(SETTINGS_KEY),
           AsyncStorage.getItem(FILTERS_KEY),
         ]);
+        if (cancelled) return;
+        // Restore the saved selection before parsing unrelated settings.
+        setFilters(restoreFilters(fRaw,DEFAULT_FILTERS));
         if (ob === 'true') setIsOnboarded(true);
         if (age === 'true') setIsAgeConfirmed(true);
         if (sRaw) {
@@ -78,21 +84,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               .map((v: unknown) => (typeof v === 'number' ? v : Number(v)))
               .filter((n: number) => Number.isFinite(n));
           }
-          setSettings({ ...DEFAULT_SETTINGS, ...parsed });
-        }
-        if (fRaw) {
-          const parsed = JSON.parse(fRaw) as Partial<Filters>;
-          // Миграция: 'all' → 'none' (старое значение до ввода Bovada)
-          if ((parsed.bookmaker as string) === 'all') parsed.bookmaker = 'none';
-          setFilters({ ...DEFAULT_FILTERS, ...parsed });
+          analyticsAllowed = parsed.analyticsConsent === true;
+          setSettings({ ...DEFAULT_SETTINGS, ...parsed, analyticsConsent: analyticsAllowed });
         }
       } catch {
         // use defaults
       }
+      await setAnalyticsConsent(analyticsAllowed);
+      if (cancelled) {stopLogUploader();return;}
       setLoaded(true);
       await logProductEvent('app_opened', 'root');
     }
     load();
+    return ()=>{cancelled=true;stopLogUploader();};
   }, []);
 
   const setOnboarded = async (v: boolean) => {
@@ -109,18 +113,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = async (patch: Partial<UserSettings>) => {
     const next = { ...settings, ...patch };
     setSettings(next);
+    if (patch.analyticsConsent !== undefined) await setAnalyticsConsent(patch.analyticsConsent === true);
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
     await logProductEvent('settings_changed', 'settings', patch as Record<string, unknown>);
   };
 
   const updateFilters = async (patch: Partial<Filters>) => {
     const next = { ...filters, ...patch };
+    next.bookmaker=normalizeBookmaker(next.bookmaker);
     setFilters(next);
     await AsyncStorage.setItem(FILTERS_KEY, JSON.stringify(next));
     if (patch.minOdds !== undefined) await logProductEvent('min_odds_changed', 'home', { minOdds: patch.minOdds });
     if (patch.minEdge !== undefined) await logProductEvent('min_edge_changed', 'home', { minEdge: patch.minEdge });
     if (patch.minConfidence !== undefined) await logProductEvent('min_confidence_changed', 'home', { minConfidence: patch.minConfidence });
     if (patch.bookmaker !== undefined) await logProductEvent('bookmaker_filter_changed', 'home', { bookmaker: patch.bookmaker });
+  };
+
+  const resetLocalData = async () => {
+    await setAnalyticsConsent(false);
+    setSettings(DEFAULT_SETTINGS);
+    setFilters(DEFAULT_FILTERS);
+    setIsOnboarded(false);
+    setIsAgeConfirmed(false);
+    // Shared web origin may also contain the admin app's unrelated preferences.
+    const keys = (await AsyncStorage.getAllKeys()).filter(key => key.startsWith('@dea_'));
+    await Promise.all([AsyncStorage.multiRemove(keys), setAdminToken('')]);
   };
 
   if (!loaded) return null;
@@ -135,6 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAgeConfirmed,
       updateSettings,
       updateFilters,
+      resetLocalData,
       // T004: isAdmin убран из AppContext — админ-режим теперь приходит с
       // сервера через useAuth().user?.isAdmin (app_users.is_admin).
     }}>

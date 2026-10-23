@@ -314,7 +314,7 @@ export default function AlertsScreen() {
               </Text>
               <Text style={[styles.emptySubtext, { color: colors.mutedForeground }]}>
                 {alertsEnabled
-                  ? `Алерт придёт когда уверенность прогноза ≥ ${defaultMinConf}%`
+                  ? `Для алерта нужен свежий прогноз с доступной оценкой уверенности ≥ ${defaultMinConf}% и соблюдением остальных фильтров. Без оценки уверенности алерт не срабатывает.`
                   : 'Включите алерты кнопкой ВКЛ/ВЫКЛ в правом углу'}
               </Text>
             </View>

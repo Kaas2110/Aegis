@@ -1,9 +1,12 @@
 /**
  * ════════════════════════════════════════════════════════════════════
- *  DORMANT — Stratz live upstream пуст с 2026-05-16
+ *  DORMANT — detailed live enrichment is disabled in LiveWorker
  * ════════════════════════════════════════════════════════════════════
  *
- * Этот файл сохранён намеренно — код готов к повторному включению.
+ * Historical note: empty upstream was observed on 2026-05-16. On 2026-10-03
+ * live.matches returned an empty array once with valid JSON; this does not
+ * establish lack of support. Schema and field semantics need validation
+ * before enabling detailed enrichment.
  * Вызовы из LiveWorker.ts закомментированы. Ни один путь в runtime
  * сейчас не доходит до этого файла.
  *
@@ -36,27 +39,22 @@
  *   - match meta: avgRank, gameState, gameMinute, delay, roshan respawn
  *   - Stratz's own projections: liveWinRate, prematch winRate/duration
  *
- * Schema introspection (2026-05-16) confirmed Stratz live does NOT expose:
+ * Historical schema notes (2026-05-16), not a current availability guarantee:
  *   - hasAegis / aegis holder
  *   - numBuybacks / buyback state
  *   - vision score / ward placement
  *   - teamfight events (those live only in `playbackData` blob or replay-parse)
  *
- * TRANSPORT: Stratz Cloudflare blocks Node fetch on non-RU IPs (JA3 mismatch).
- * Same curl-fallback pattern as scripts/src/lib/stratz.ts.
+ * TRANSPORT: shared ordinary GraphQL POST with STRATZ_API User-Agent.
+ * Access denial stops requests; no alternate transport or token rotation.
  */
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { getStratzToken } from '../services/ApiKeysService';
+import { stratzQuery } from '@workspace/db/stratz';
+import { getApiKey } from '../services/ApiKeysService';
 import { logger } from './logger';
 
-const execFileAsync = promisify(execFile);
-const STRATZ_GQL = 'https://api.stratz.com/graphql';
-const FETCH_TIMEOUT_MS = 8_000;
 const CACHE_TTL_MS = 30_000;
 
-const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 export interface StratzLivePlayer {
   steamAccountId: number | null;
@@ -131,7 +129,6 @@ const LIVE_MATCH_QUERY = `query LiveMatch($id: Long!) {
         heroDamage
         towerDamage
         respawnTimer
-        impPerMinute { imp }
         itemId0 itemId1 itemId2 itemId3 itemId4 itemId5
       }
     }
@@ -156,7 +153,7 @@ interface StratzRawPlayer {
   heroDamage?: number | null;
   towerDamage?: number | null;
   respawnTimer?: number | null;
-  impPerMinute?: { imp?: number | null } | null;
+  impPerMinute?: Array<{ imp?: number | null } | null> | null;
   itemId0?: number | null;
   itemId1?: number | null;
   itemId2?: number | null;
@@ -172,9 +169,9 @@ interface StratzRawMatch {
   gameState?: string | null;
   delay?: number | null;
   averageRank?: number | null;
-  winRateValues?: number | null;
-  durationValues?: number | null;
-  liveWinRateValues?: { winRate?: number | null } | null;
+  winRateValues?: Array<number | null> | null;
+  durationValues?: Array<number | null> | null;
+  liveWinRateValues?: Array<{ winRate?: number | null } | null> | null;
   players?: StratzRawPlayer[] | null;
 }
 
@@ -190,8 +187,8 @@ const cache = new Map<number, { at: number; value: StratzLiveDetail | null }>();
 // Разделяем breaker по классу ошибки (architect feedback):
 //   1) NULL-upstream (live.match=null) — длинный 30m cooldown, апстрим
 //      эпизодически пуст по своей воле, бессмысленно ретраить.
-//   2) Transport error (fetch/curl/parse fail) — короткий 5m cooldown,
-//      Stratz Cloudflare переменно блокирует, рано или поздно отпустит.
+//   2) Transport error — короткий 5m cooldown. Общий transport отдельно
+//      останавливает запросы на 403 и соблюдает Retry-After на 429.
 // Раньше оба случая считались в один счётчик, и при серии транзиентных 502
 // breaker открывался на 30 минут даже если апстрим работал.
 let consecutiveNulls = 0;
@@ -267,69 +264,6 @@ function cacheSet(matchId: number, value: StratzLiveDetail | null): void {
   }
 }
 
-// ── curl fallback ──────────────────────────────────────────────────────────
-function isJsonResponse(text: string): boolean {
-  const t = text.trimStart();
-  return t.startsWith('{') || t.startsWith('[');
-}
-
-function parseGql<T>(text: string): T | null {
-  if (!isJsonResponse(text)) return null;
-  try {
-    const parsed = JSON.parse(text) as { data?: T; errors?: Array<{ message: string }> };
-    if (parsed.errors?.length) {
-      logger.debug({ tag: 'stratz-live', errors: parsed.errors.map(e => e.message) }, 'gql errors');
-      return null;
-    }
-    return parsed.data ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function gqlOnce(token: string, body: string): Promise<unknown> {
-  // 1) fetch
-  try {
-    const resp = await fetch(STRATZ_GQL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': UA,
-        Origin: 'https://stratz.com',
-        Referer: 'https://stratz.com/',
-      },
-      body,
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    const text = await resp.text();
-    if (resp.ok && isJsonResponse(text)) {
-      const parsed = parseGql<unknown>(text);
-      if (parsed !== null) return parsed;
-    }
-    // CF challenge → fall to curl
-  } catch {
-    // fall to curl
-  }
-
-  // 2) curl
-  const args = [
-    '--silent', '--max-time', String(Math.ceil(FETCH_TIMEOUT_MS / 1000)),
-    '-X', 'POST',
-    '-H', `Authorization: Bearer ${token}`,
-    '-H', 'Content-Type: application/json',
-    '-H', 'Accept: application/json',
-    '-H', `User-Agent: ${UA}`,
-    '-H', 'Origin: https://stratz.com',
-    '-H', 'Referer: https://stratz.com/',
-    '--data-raw', body,
-    STRATZ_GQL,
-  ];
-  const { stdout } = await execFileAsync('curl', args, { maxBuffer: 4 * 1024 * 1024 });
-  return parseGql<unknown>(stdout);
-}
-
 // ── normalization ──────────────────────────────────────────────────────────
 function normalizePlayer(p: StratzRawPlayer): StratzLivePlayer {
   const items = [p.itemId0, p.itemId1, p.itemId2, p.itemId3, p.itemId4, p.itemId5]
@@ -352,7 +286,7 @@ function normalizePlayer(p: StratzRawPlayer): StratzLivePlayer {
     heroDamage: p.heroDamage ?? null,
     towerDamage: p.towerDamage ?? null,
     respawnTimer: p.respawnTimer ?? null,
-    impPerMinute: p.impPerMinute?.imp ?? null,
+    impPerMinute: null, // list semantics/subfields not verified; omitted from query
     items,
   };
 }
@@ -389,13 +323,12 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
 
   if (isStratzDisabled()) return null;
 
-  const token = getStratzToken();
+  const token = getApiKey('STRATZ_TOKEN');
   if (!token) return null;
 
-  const body = JSON.stringify({ query: LIVE_MATCH_QUERY, variables: { id: matchId } });
   let raw: unknown;
   try {
-    raw = await gqlOnce(token, body);
+    raw = await stratzQuery(token, LIVE_MATCH_QUERY, { id: matchId });
   } catch (err) {
     logger.debug({ tag: 'stratz-live', matchId, err: String(err) }, 'fetch failed');
     cacheSet(matchId, null);
@@ -432,9 +365,12 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
     gameMinute: match.gameMinute ?? null,
     delay: match.delay ?? null,
     roshanRespawnSec: null, // roshanRespawn { time } — отдельный nested тип, можно дотянуть позже если понадобится
-    liveWinRateRadiant: match.liveWinRateValues?.winRate ?? null,
-    prematchWinRateRadiant: match.winRateValues ?? null,
-    prematchDurationMin: match.durationValues ?? null,
+    // Current schema exposes arrays, not the former scalar/object assumptions.
+    // Keep derived scalars empty until side, timestamp and index semantics have
+    // been verified; guessing an array element would create a false prediction.
+    liveWinRateRadiant: null,
+    prematchWinRateRadiant: null,
+    prematchDurationMin: null,
   };
   const agg = aggregate(players, meta.gameMinute);
   const detail: StratzLiveDetail = {
@@ -448,10 +384,10 @@ export async function fetchLiveMatchDetail(matchId: number): Promise<StratzLiveD
   return detail;
 }
 
-/** Fetch many matches in parallel with bounded concurrency. */
+/** Sequential requests; the shared transport permits one in-flight call. */
 export async function fetchLiveMatchDetailBatch(
   matchIds: number[],
-  concurrency = 4,
+  concurrency = 1,
 ): Promise<Map<number, StratzLiveDetail | null>> {
   const out = new Map<number, StratzLiveDetail | null>();
   let i = 0;
@@ -463,6 +399,6 @@ export async function fetchLiveMatchDetailBatch(
       out.set(id, detail);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, matchIds.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), 1, matchIds.length) }, worker));
   return out;
 }

@@ -1,0 +1,31 @@
+{
+  "contract": "wide_observed_bridge_sources_v1",
+  "dependencies": {
+    "src.research.postdraft_full.builder": "1b9b9662ed7dd0b66713e3430a1d6107338b97164921e64eb5063540dbf582b1",
+    "src.research.postdraft_full.causal": "ae5de6d0bcd768cad4de3e381053547eb88f91a71dc27d0682542e3a4be64ee8",
+    "src.research.postdraft_full.first_kill": "66005703c749897d848f7e2fb47d186d69fb4b621fc44b41204a76a276b02ab2",
+    "src.research.postdraft_full.performance": "3c604390ef757494f0f4e46e49408fbc63d86e0eb1604efa5e5641a1604951a9",
+    "src.research.postdraft_full.player": "eaae0fec0f589ade654e2a80dab2c20dd977a80f2004987f77cbe50c468b132c",
+    "src.research.postdraft_full.projection": "2af9015dd9546004bdf7688e401efb304b384c97bafb754a211d4c177e7fe539",
+    "src.research.postdraft_full.rich": "e42a4dbc4ed0604dde676534cc31f809b120aea1e487667cb3c2c2716a5c9c12",
+    "src.research.postdraft_full.roster": "7e877bde987f9407cb880941f44f91db56f84e076cd08340238095cfa4f0e8a6",
+    "src.research.postdraft_full.temporal": "b1bc2f6127c71b095926becf90be0942182ce9470f23c17005863b2ea1f0aedc",
+    "src.research.postdraft_full.wide_history": "4acb3ae4fc239442d7c1bca8b81ce747d4ba37ddaf68ae1a3b1e2e7808b6eace",
+    "src.research.postdraft_full.wide_interactions": "287322accc393628ca801db718b8d2332cccc9afeeaee56e25627021c7680975",
+    "src.research.postdraft_input_contract": "59ec33119427c1e9cfc53efde140929d45d12c951ffc558279c0bcefc6b7876e"
+  },
+  "own": {
+    "READER-CONTRACT.json": "0bba04170b332e7e96f846f4e409ac5e6377803fa1077ad0937a261cac752eae",
+    "__init__.py": "0530204253faffa6bd3caa9ee909f4d85a1604a2ded915679f9b0e96fdb5af02",
+    "anchor.py": "ae15374957cbbf90e194f326368950ed34d2c884b6211eaf6f3c31bb5b86b8e0",
+    "bridge.py": "8763d5247ec1f2dd5d613d0cd34ce4bc449804e80261191a388eff19e4b656fe",
+    "cache.py": "1ae1ac17e965b22a196cd3816bb059f46c97a6a3d618817cf118ded022e1150a",
+    "feature-groups.json": "b10876f425f7197501c305c48dbbe919bef401bccc4143e5af896a3a22782846",
+    "feature-names.json": "6cda9871540f2044018c5ba69492e5853199a14d35f1b08e4f3ef4edeac89e1a",
+    "frozen_form.py": "45cd11837e58ce6f295f0793921255d96bd0781451f91afecac29d11000f2332",
+    "frozen_wide.py": "bdb010d85962ef3dfb98b0a2b010bf2b393290c4c2ef624a5a9d63d5a5226404",
+    "lineage.py": "82056f6d2fb5c640513e729ea791d8383aa854679337dcda78b1af8c82327867",
+    "provenance.py": "e259593475fbb02f3bde9a468387c0803e012dd85bc760e05086e1028654b65a",
+    "sources.py": "3f2110959b53ca59c20e1ecb8206e6f9394f460b0dddd42167a34bfa9858ffaf"
+  }
+}

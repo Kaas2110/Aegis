@@ -19,6 +19,8 @@ import { db, prematchOutcomesTable } from '@workspace/db';
 import { eq, isNull, and, lt, sql, isNotNull } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { withOpenDotaKey, tryAcquireOd, isOpenDotaPremium } from '../lib/openDotaUrl';
+import { openDotaBackgroundFetch as fetch } from '@workspace/db/opendota';
+import { prematchValidationCte, PREMATCH_VALIDATION_POLICY, PREMATCH_VALIDATION_NOTE } from '../lib/prematchValidation';
 
 // Раз в час, чтобы успевать за live-воркером. При 6 одновременных матчах
 // LiveWorker видит ~6 новых рядов в час; resolver обрабатывает до 100 за тик
@@ -76,7 +78,7 @@ async function fetchMatchSummary(matchId: number): Promise<OpenDotaMatchSummary 
     });
     if (!resp.ok) return null;
     const data = (await resp.json()) as OpenDotaMatchSummary;
-    if (typeof data.radiant_win !== 'boolean') return null;
+    if (data.match_id !== matchId || typeof data.radiant_win !== 'boolean') return null;
     return data;
   } catch {
     return null;
@@ -120,6 +122,9 @@ async function resolveUnsettled(): Promise<void> {
         actualDireScore: summary.dire_score ?? null,
         actualDurationSec: summary.duration ?? null,
         resolvedAt: new Date(),
+        ...(Number.isSafeInteger(summary.start_time) && summary.start_time! > 0 && summary.start_time! <= Date.now() / 1000
+          ? { features: sql`COALESCE(${prematchOutcomesTable.features}, '{}'::jsonb) || jsonb_build_object('__resolved_start_time_unix', ${summary.start_time!}::bigint)` }
+          : {}),
       })
       .where(eq(prematchOutcomesTable.matchId, row.matchId));
     resolved++;
@@ -146,111 +151,64 @@ export function stopOutcomeTracker(): void {
   }
 }
 
-/** Метрики качества модели для админки. */
-export async function getModelAccuracyMetrics(): Promise<{
-  totalPredictions: number;
-  resolved: number;
-  pending: number;
-  accuracy: number | null;
-  brierScore: number | null;
-  byModel: Array<{ modelVersion: string; resolved: number; accuracy: number; brierScore: number }>;
-  byTier: Array<{ tier: 't1' | 't2' | 't3' | 'unknown'; resolved: number; accuracy: number; brierScore: number }>;
-  recent: Array<{
-    matchId: number;
-    modelVersion: string;
-    predictedRadiantWinProb: number;
-    actualRadiantWin: boolean | null;
-    radiantName: string | null;
-    direName: string | null;
-    resolvedAt: Date | null;
-  }>;
-}> {
-  const totals = await db.execute(sql`
-    SELECT
-      COUNT(*)::int AS total,
-      COUNT(actual_radiant_win)::int AS resolved
-    FROM prematch_outcomes
-  `);
-  const trow = (totals.rows[0] ?? { total: 0, resolved: 0 }) as { total: number; resolved: number };
-
-  const byModel = await db.execute(sql`
-    SELECT
-      model_version AS "modelVersion",
-      COUNT(*)::int AS resolved,
-      AVG(
-        CASE
-          WHEN (predicted_radiant_win_prob >= 0.5) = actual_radiant_win THEN 1.0
-          ELSE 0.0
-        END
-      )::float AS accuracy,
-      AVG(
-        POWER(predicted_radiant_win_prob - (CASE WHEN actual_radiant_win THEN 1 ELSE 0 END), 2)
-      )::float AS "brierScore"
-    FROM prematch_outcomes
-    WHERE actual_radiant_win IS NOT NULL
-    GROUP BY model_version
-    ORDER BY resolved DESC
-    LIMIT 10
-  `);
-
-  const recentRows = await db
-    .select({
-      matchId: prematchOutcomesTable.matchId,
-      modelVersion: prematchOutcomesTable.modelVersion,
-      predictedRadiantWinProb: prematchOutcomesTable.predictedRadiantWinProb,
-      actualRadiantWin: prematchOutcomesTable.actualRadiantWin,
-      radiantName: prematchOutcomesTable.radiantName,
-      direName: prematchOutcomesTable.direName,
-      resolvedAt: prematchOutcomesTable.resolvedAt,
-    })
-    .from(prematchOutcomesTable)
-    .where(isNotNull(prematchOutcomesTable.actualRadiantWin))
-    .orderBy(sql`resolved_at DESC NULLS LAST`)
-    .limit(20);
-
-  const overallAccRow = await db.execute(sql`
-    SELECT
-      AVG(CASE WHEN (predicted_radiant_win_prob >= 0.5) = actual_radiant_win THEN 1.0 ELSE 0.0 END)::float AS accuracy,
-      AVG(POWER(predicted_radiant_win_prob - (CASE WHEN actual_radiant_win THEN 1 ELSE 0 END), 2))::float AS brier
-    FROM prematch_outcomes
-    WHERE actual_radiant_win IS NOT NULL
-  `);
-  const acc = overallAccRow.rows[0] as { accuracy: number | null; brier: number | null } | undefined;
-
-  // Per-tier breakdown: тир определяется ТЕКУЩИМИ рейтингами команд
-  // в таблице teams (порог как в lib/tier.ts: t1 ≥1400, t2 ≥1200, иначе t3).
-  // Если рейтинга нет — попадает в 'unknown'. Это снимок «тира на момент
-  // запроса метрик», а не «тира на момент предсказания» — для отчёта
-  // достаточно, точное историческое снапшотирование тира можно добавить
-  // позже сохранением tier в prematch_outcomes.metadata.
-  const byTierRows = await db.execute(sql`
-    SELECT
-      CASE
-        WHEN rt.rating IS NULL OR dt.rating IS NULL THEN 'unknown'
-        WHEN (rt.rating + dt.rating) / 2.0 >= 1400 THEN 't1'
-        WHEN (rt.rating + dt.rating) / 2.0 >= 1200 THEN 't2'
-        ELSE 't3'
-      END AS tier,
-      COUNT(*)::int AS resolved,
-      AVG(CASE WHEN (predicted_radiant_win_prob >= 0.5) = actual_radiant_win THEN 1.0 ELSE 0.0 END)::float AS accuracy,
-      AVG(POWER(predicted_radiant_win_prob - (CASE WHEN actual_radiant_win THEN 1 ELSE 0 END), 2))::float AS "brierScore"
-    FROM prematch_outcomes po
-    LEFT JOIN teams rt ON rt.team_id = po.radiant_team_id
-    LEFT JOIN teams dt ON dt.team_id = po.dire_team_id
-    WHERE po.actual_radiant_win IS NOT NULL
-    GROUP BY tier
-    ORDER BY tier
-  `);
-
+/** Only independently time-validated ledger rows contribute to quality. */
+export async function getModelAccuracyMetrics() {
+  const [totals, byModel, recentRows, overall, byTier, excluded] = await Promise.all([
+    db.execute(sql`${prematchValidationCte()}
+      SELECT COUNT(*)::int AS "allRecords",
+        COUNT(*) FILTER (WHERE validation_reason = 'validated')::int AS total,
+        COUNT(*) FILTER (WHERE validation_reason = 'validated' AND actual_radiant_win IS NOT NULL)::int AS resolved,
+        COUNT(*) FILTER (WHERE validation_reason <> 'validated')::int AS unvalidated,
+        COUNT(*) FILTER (WHERE validation_reason <> 'validated' AND actual_radiant_win IS NOT NULL)::int AS "unvalidatedResolved"
+      FROM prematch_validation`),
+    db.execute(sql`${prematchValidationCte()}
+      SELECT model_version AS "modelVersion", COUNT(*)::int AS resolved,
+        AVG(CASE WHEN (predicted_radiant_win_prob >= 0.5) = actual_radiant_win THEN 1.0 ELSE 0.0 END)::float AS accuracy,
+        AVG(POWER(predicted_radiant_win_prob - CASE WHEN actual_radiant_win THEN 1 ELSE 0 END, 2))::float AS "brierScore"
+      FROM prematch_validation WHERE validation_reason = 'validated' AND actual_radiant_win IS NOT NULL
+      GROUP BY model_version ORDER BY resolved DESC LIMIT 10`),
+    db.execute(sql`${prematchValidationCte()}
+      SELECT match_id AS "matchId", model_version AS "modelVersion", predicted_radiant_win_prob AS "predictedRadiantWinProb",
+        actual_radiant_win AS "actualRadiantWin", radiant_name AS "radiantName", dire_name AS "direName", resolved_at AS "resolvedAt"
+      FROM prematch_validation WHERE validation_reason = 'validated' AND actual_radiant_win IS NOT NULL
+      ORDER BY resolved_at DESC NULLS LAST LIMIT 20`),
+    db.execute(sql`${prematchValidationCte()}
+      SELECT AVG(CASE WHEN (predicted_radiant_win_prob >= 0.5) = actual_radiant_win THEN 1.0 ELSE 0.0 END)::float AS accuracy,
+        AVG(POWER(predicted_radiant_win_prob - CASE WHEN actual_radiant_win THEN 1 ELSE 0 END, 2))::float AS brier
+      FROM prematch_validation WHERE validation_reason = 'validated' AND actual_radiant_win IS NOT NULL`),
+    db.execute(sql`${prematchValidationCte()}
+      SELECT CASE
+        WHEN features->>'__tier_t1' = '1' AND features->>'__tier_t2' = '0' AND features->>'__tier_t3' = '0' THEN 't1'
+        WHEN features->>'__tier_t2' = '1' AND features->>'__tier_t1' = '0' AND features->>'__tier_t3' = '0' THEN 't2'
+        WHEN features->>'__tier_t3' = '1' AND features->>'__tier_t1' = '0' AND features->>'__tier_t2' = '0' THEN 't3'
+        ELSE 'unknown' END AS tier,
+        COUNT(*)::int AS resolved,
+        AVG(CASE WHEN (predicted_radiant_win_prob >= 0.5) = actual_radiant_win THEN 1.0 ELSE 0.0 END)::float AS accuracy,
+        AVG(POWER(predicted_radiant_win_prob - CASE WHEN actual_radiant_win THEN 1 ELSE 0 END, 2))::float AS "brierScore"
+      FROM prematch_validation WHERE validation_reason = 'validated' AND actual_radiant_win IS NOT NULL
+      GROUP BY tier ORDER BY tier`),
+    db.execute(sql`${prematchValidationCte()}
+      SELECT validation_reason AS reason, COUNT(*)::int AS count FROM prematch_validation
+      WHERE validation_reason <> 'validated' GROUP BY validation_reason ORDER BY count DESC`),
+  ]);
+  const count = totals.rows[0] as { allRecords: number; total: number; resolved: number; unvalidated: number; unvalidatedResolved: number };
+  const acc = overall.rows[0] as { accuracy: number | null; brier: number | null };
   return {
-    totalPredictions: trow.total,
-    resolved: trow.resolved,
-    pending: trow.total - trow.resolved,
+    totalPredictions: count.total,
+    resolved: count.resolved,
+    pending: count.total - count.resolved,
     accuracy: acc?.accuracy ?? null,
     brierScore: acc?.brier ?? null,
-    byModel: byModel.rows as Array<{ modelVersion: string; resolved: number; accuracy: number; brierScore: number }>,
-    byTier: byTierRows.rows as Array<{ tier: 't1' | 't2' | 't3' | 'unknown'; resolved: number; accuracy: number; brierScore: number }>,
-    recent: recentRows,
+    byModel: byModel.rows,
+    byTier: byTier.rows,
+    recent: recentRows.rows.map(row => ({ ...row, matchId: Number(row.matchId) })),
+    validation: {
+      policy: PREMATCH_VALIDATION_POLICY, note: PREMATCH_VALIDATION_NOTE,
+      state: count.resolved > 0 ? 'validated_subset' : 'quality_unavailable',
+      allRecords: count.allRecords, validatedRecords: count.total,
+      unvalidatedRecords: count.unvalidated, unvalidatedResolved: count.unvalidatedResolved,
+      excludedReasons: excluded.rows,
+    },
   };
 }
 

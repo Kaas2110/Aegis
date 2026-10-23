@@ -93,7 +93,11 @@ const RADIANT_SIDE_LOGIT = 0.08;
 
 type Engine = 'logreg' | 'lightgbm';
 
+import {evidenceHash, predictionEvidence, type PredictionEvidence} from '../lib/predictionEvidence';
+
 interface LoadedModel {
+  artifactHash: string;
+  featureNames: string[];
   version: string;
   kind: PrematchKind;
   featuresVersion: 1 | 2 | 3 | 4;
@@ -175,6 +179,9 @@ function getModel(kind: PrematchKind, fv: 1 | 2 | 3 | 4): LoadedModel | null {
 }
 
 let cachedModels: Map<string, LoadedModel> = new Map();
+export function getPredictionModelRevision(): string {
+  return [...cachedModels.values()].map(m => `${m.kind}:${m.version}:${m.featuresVersion}:${m.engine}`).sort().join('|');
+}
 let lastModelLoad = 0;
 let teamRatings: Map<number, { rating: number; wins: number; losses: number }> = new Map();
 let lastTeamLoad = 0;
@@ -272,6 +279,8 @@ function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
     : (featuresArr.length || weights.length);
 
   return {
+    artifactHash: evidenceHash({engine, weights, blobB64, calibration, features: featuresArr}),
+    featureNames: featuresArr.map(String),
     version: m.version,
     kind: m.kind as PrematchKind,
     featuresVersion: fv,
@@ -291,7 +300,7 @@ function rowToLoaded(m: typeof modelVersionsTable.$inferSelect): LoadedModel {
   };
 }
 
-async function predictViaMlService(blobB64: string, features: number[]): Promise<number | null> {
+async function predictViaMlService(blobB64: string, features: number[]): Promise<{raw: number; calibrated: number} | null> {
   if (!lightgbmAvailable()) return null;
   const token = mlServiceToken();
   if (!token) {
@@ -313,11 +322,11 @@ async function predictViaMlService(blobB64: string, features: number[]): Promise
       return null;
     }
     const data = (await res.json()) as { raw_prob: number; calibrated_prob: number };
-    if (typeof data.calibrated_prob !== 'number') {
+    if (!Number.isFinite(data.calibrated_prob) || data.calibrated_prob < 0 || data.calibrated_prob > 1) {
       tripLightgbm('ml-service bad payload');
       return null;
     }
-    return data.calibrated_prob;
+    return {raw: Number.isFinite(data.raw_prob) ? data.raw_prob : data.calibrated_prob, calibrated: data.calibrated_prob};
   } catch (e) {
     // F9 (Phase 9): timeout НЕ открывает circuit. См. `MarketLgbm.ts`.
     if ((e as Error).name === 'AbortError') {
@@ -874,9 +883,11 @@ export async function predictMatchWinner(
   radiantTeamId: number | null,
   direTeamId: number | null,
   drafts?: DraftInput | null,
+  context?: {format: 'BO1' | 'BO3' | 'BO5'; mapNumber: number},
 ): Promise<{
   probRadiantWin: number;
   rawProb: number;
+  evidence: PredictionEvidence;
   modelVersion: string;
   featuresVersion: 1 | 2 | 3 | 4;
   tier: Tier | null;
@@ -934,6 +945,7 @@ export async function predictMatchWinner(
         );
         return {
           probRadiantWin: asym.probRadiantWin,
+          evidence: asym.evidence,
           rawProb: asym.rawProb,
           modelVersion: asym.modelVersion,
           featuresVersion: 1,
@@ -1012,7 +1024,11 @@ export async function predictMatchWinner(
   await refreshTeamExtended();
   const rExt = teamExtendedCache.get(radiantTeamId) ?? null;
   const dExt = teamExtendedCache.get(direTeamId) ?? null;
-  const teamFeats = buildTeamFeatures(r, d, tier, rExt, dExt);
+  const teamFeats = buildTeamFeatures(r, d, tier, rExt, dExt, context ? {
+    seriesTypeNorm: context.format === 'BO1' ? 0 : context.format === 'BO5' ? 1 : 0.5,
+    mapNoNorm: Math.min(4, Math.max(0, context.mapNumber - 1)) / 4,
+    recencyDaysNorm: 0,
+  } : undefined);
 
   let model: LoadedModel | null = null;
   let features = teamFeats;
@@ -1203,8 +1219,8 @@ export async function predictMatchWinner(
       rawProb = sigmoid(z);
       calibrated = applyCalibration(rawProb, model.calibration);
     } else {
-      rawProb = mlProb;
-      calibrated = mlProb;  // изотоника уже внутри bundle
+      rawProb = mlProb.raw;
+      calibrated = mlProb.calibrated;
     }
   } else {
     let z = 0;
@@ -1240,6 +1256,7 @@ export async function predictMatchWinner(
 
   return {
     probRadiantWin: calibrated,
+    evidence: predictionEvidence(model.artifactHash, model.featureNames, features),
     rawProb,
     modelVersion: model.version,
     featuresVersion: usedFv,
