@@ -18,11 +18,17 @@ that the proposed unified pipeline is already fully integrated.
 
 ## Public source synchronization
 
-The owner requests a pull request for each completed logical source change.
-Prepare a reviewed source-only change, run relevant technical checks, create or
-update its PR, and record its exact head commit. Do not publish databases, API
-keys, environment files, raw observations, real training fixtures, archives,
-fitted weights or generated builds. Never blindly stage the whole local runtime.
+The owner requests one pull request per completed block of work, not per edit.
+Within an unfinished block, local working source and saved checkpoints are
+authoritative. Save intermediate checkpoints for meaningful progress; do not
+automatically update GitHub or Graphify after each edit. State explicitly when
+main or its graph trails the current block.
+
+When the block is complete, review its source inventory and exclusions, run
+relevant technical checks, then create one PR or update the existing PR for that
+same block. Record its exact head commit. Do not publish databases, API keys,
+environment files, raw observations, real training fixtures, archives, fitted
+weights or generated builds. Never blindly stage the whole local runtime.
 
 Use `scripts/source-parity/check_source_parity.py` with an immutable Git commit
 to compare current public working files with GitHub source. Record byte parity
@@ -40,10 +46,12 @@ that approval does not grant automatic merge permission for later PRs.
 Use the graphify-context skill when available and relevant. Confirm repository
 identity, ready status and indexed commit before retrieval. Prefer compact,
 task-specific memory and symbol queries over repeated broad reading. Current
-local files and diffs remain authoritative. After one unavailable/stale/empty
-lookup, continue locally. Update durable verified context after meaningful
-milestones; do not upload secrets or data to make the graph current. After an
-authorized merge, verify the new index commit and relevant symbols.
+local files, diffs and checkpoints remain authoritative. After one unavailable,
+stale or empty lookup, continue locally. Save meaningful intermediate progress
+locally; synchronize durable verified cloud context at block completion, not
+after every edit. Do not upload secrets or data to make the graph current.
+After a separately authorized merge of the completed block, verify the new
+index commit and relevant symbols.
 
 ## Runtime boundaries
 
