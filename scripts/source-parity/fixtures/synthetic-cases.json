@@ -1,0 +1,10 @@
+{
+  "contract": "aegis.public-source-parity.synthetic-fixtures.v1",
+  "containsRealProjectData": false,
+  "cases": [
+    {"name": "exact", "reference": "export const value = 1;\n", "local": "export const value = 1;\n", "status": "byte_equal", "byteParity": true, "lfCanonicalParity": true},
+    {"name": "crlf", "reference": "export const value = 1;\n", "local": "export const value = 1;\r\n", "status": "line_endings_only", "byteParity": false, "lfCanonicalParity": true},
+    {"name": "changed_value", "reference": "export const value = 1;\n", "local": "export const value = 2;\n", "status": "content_mismatch", "byteParity": false, "lfCanonicalParity": false},
+    {"name": "trailing_newline", "reference": "export const value = 1;\n", "local": "export const value = 1;", "status": "content_mismatch", "byteParity": false, "lfCanonicalParity": false}
+  ]
+}

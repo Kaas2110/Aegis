@@ -1,0 +1,117 @@
+{
+  "contract": "aegis.public-source-policy.v1",
+  "description": "Public application source only. Generated Android/iOS are Expo CNG outputs; canonical configs/plugins remain included. No whole-runtime parity claim.",
+  "excludedPrefixes": [
+    "backups/",
+    "attached_assets/",
+    "exports/",
+    "artifacts/mobile/android/",
+    "artifacts/mobile/ios/",
+    "artifacts/ml-service/src/research/assets/",
+    "artifacts/ml-service/src/shadow_live_winner/assets/",
+    "artifacts/ml-service/src/shadow_series_rich/assets/models/",
+    "artifacts/ml-service/src/shadow_wide/artifacts/"
+  ],
+  "excludedComponents": [
+    "node_modules",
+    "__pycache__",
+    ".git",
+    ".cache",
+    ".local",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".expo",
+    ".gradle",
+    ".cxx",
+    "dist",
+    "build",
+    "data",
+    "logs",
+    "outputs"
+  ],
+  "excludedComponentPrefixes": [
+    "dist-before-"
+  ],
+  "excludedSuffixes": [
+    ".gz",
+    ".zip",
+    ".rar",
+    ".7z",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+    ".dump",
+    ".log",
+    ".pkl",
+    ".joblib",
+    ".onnx",
+    ".bin",
+    ".pt",
+    ".pth",
+    ".parquet",
+    ".npz",
+    ".npy",
+    ".csv",
+    ".jsonl",
+    ".pyc",
+    ".pyo",
+    ".tsbuildinfo",
+    ".keystore",
+    ".jks",
+    ".p12",
+    ".p8",
+    ".key",
+    ".pem"
+  ],
+  "excludedBasenames": [
+    "local.properties"
+  ],
+  "excludedNameContains": [
+    "train-goldens",
+    "test-goldens"
+  ],
+  "excludedPaths": [
+    "artifacts/ml-service/src/research/fixtures/temporal_hero_kills.json"
+  ],
+  "maxFiles": 20000,
+  "maxFileBytes": 67108864,
+  "maxTotalBytes": 268435456,
+  "reviewedSecretExamples": [
+    {
+      "path": ".env.example",
+      "rule": "credential_url",
+      "fileSha256": "89d449f389a66b8ba4a31656924daf8eed2bc24dde9bdac6f7aa85a52cb925d0",
+      "reason": "Reviewed public dummy example; exact file bytes only; re-review required after any edit.",
+      "reviewReferenceCommit": "74bed2e50acb19587883f6144e747f18773d4648"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/account.test.ts",
+      "rule": "literal_secret",
+      "fileSha256": "3c4f5ced92ce1e91f785a92d174270561fe56bfcacefc81a213f39630debf7da",
+      "reason": "Reviewed public dummy example; exact file bytes only; re-review required after any edit.",
+      "reviewReferenceCommit": "74bed2e50acb19587883f6144e747f18773d4648"
+    },
+    {
+      "path": "artifacts/api-server/src/services/LivePredictionJournal.test.ts",
+      "rule": "credential_url",
+      "fileSha256": "22b53cc943ea324002a37f9af77c8950149295f2b11a4863ae426557e544f053",
+      "reason": "Reviewed public dummy example; exact file bytes only; re-review required after any edit.",
+      "reviewReferenceCommit": "74bed2e50acb19587883f6144e747f18773d4648"
+    },
+    {
+      "path": "docs/laptop-deploy.md",
+      "rule": "credential_url",
+      "fileSha256": "80a7e14199a583515c56c0664e24fd8f841ef74143692a4307b3560737b17d57",
+      "reason": "Reviewed public dummy example; exact file bytes only; re-review required after any edit.",
+      "reviewReferenceCommit": "74bed2e50acb19587883f6144e747f18773d4648"
+    },
+    {
+      "path": "docs/self-hosting-guide.md",
+      "rule": "credential_url",
+      "fileSha256": "ee1a8285d7e2f902dfd6df5d0ca179752a68c6b7c6edebe0c4f332a7b0347a30",
+      "reason": "Reviewed public dummy example; exact file bytes only; re-review required after any edit.",
+      "reviewReferenceCommit": "74bed2e50acb19587883f6144e747f18773d4648"
+    }
+  ]
+}
