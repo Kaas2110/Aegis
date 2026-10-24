@@ -4,7 +4,7 @@ import {createUnifiedFeatureProducer,encodeDiagnosticFeatureTrace} from './unifi
 import {createDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
 import {draftArgs,draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
-const AT='2026-10-23T12:40:00Z',args=draftArgs({accounts:true}),h=createDynamicHistoryProof(args);
+const AT='2026-10-23T12:33:00Z',args=draftArgs({accounts:true}),h=createDynamicHistoryProof(args);
 const factory=()=>{const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});};
 const base={matchId:args.matchId,decisionAt:AT,historyProof:h.proof};
 const entry=options=>draftEntry({accounts:true,time:'2026-10-23T12:31:00Z',clock:900,...options});

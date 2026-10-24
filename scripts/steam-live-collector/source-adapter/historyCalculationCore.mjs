@@ -127,12 +127,15 @@ function heroScope(data,target,known){
 
 /** Shared feature algebra. Wrappers own phase, identity and causal admission.
  * This function never authorizes training or serving. */
-export function calculateHistoryCore({target,known,roster,facts,native,roleProofs,minimumSupport,audit,bindings,nativeAlignmentInputs=[],nativeEvidenceInputs=[],nativeProofPolicy='legacy_pinned_normalized',alignmentComputedAt=null,expectedProfileReviewSha256=null}){
+export function calculateHistoryCore({target,known,roster,facts,native,roleProofs,minimumSupport,audit,bindings,nativeAlignmentInputs=[],nativeEvidenceInputs=[],nativeProofPolicy='legacy_pinned_normalized',alignmentComputedAt=null,expectedProfileReviewSha256=null,allowEmptyRetainedCorpus=false}){
  const heroCohort=heroScope(facts.data,target,known);audit.heroCohortScope=heroCohort;
+ const emptyRetained=allowEmptyRetainedCorpus===true&&facts.rows.length===0&&native.rows.length===0&&facts.data.scope?.contract==='aegis.retained-history-selection-scope.v1'&&heroCohort.verified;
+ if(typeof allowEmptyRetainedCorpus!=='boolean'||allowEmptyRetainedCorpus&&!emptyRetained)throw Error('empty_retained_history_scope_required');
+ if(emptyRetained)audit.emptyRetainedCorpus=true;
  const ids=new Set();for(const x of facts.rows){if(positiveId(x?.matchId)){if(ids.has(x.matchId))throw Error('duplicate_map_fact');ids.add(x.matchId);}}
  const all=facts.rows.map((x,i)=>mapRecord(x,known,target.matchId,audit,i)).filter(Boolean);
  const maps=all.filter(x=>x.ended>=known-90n*DAY).sort(byId),byMap=new Map(maps.map(x=>[x.matchId,x]));audit.eligiblePriorMaps=maps.length;audit.factsOlderThan90Days=all.length-maps.length;
- if(!maps.length)return {status:'blocked',reason:'no_available_prior_maps'};
+ if(!maps.length&&!emptyRetained)return {status:'blocked',reason:'no_available_prior_maps'};
  const used=new Map(),use=map=>used.set(map.matchId,map),players=[];
  for(const p of roster){
   const playerRows=maps.filter(m=>m.players.some(x=>x.accountId===p.accountId)).map(map=>{const a=map.players.find(x=>x.accountId===p.accountId);return{map,at:map.playersAt,iso:map.playersKnownAt,won:map.radiantWon===(a.side==='radiant'),heroId:a.heroId};});
@@ -193,7 +196,7 @@ export function calculateHistoryCore({target,known,roster,facts,native,roleProof
  const acceptedRoles=[];for(const r of roleProofs){const at=instantNs(r?.knownAt);if(!object(r)||!roster.some(p=>identity(p,r))||!Number.isInteger(r.role)||r.role<1||r.role>5||r.confirmed!==true||!proof(r.evidenceRef)||at===null||at>known){count(audit,'roleProofRejected');continue;}acceptedRoles.push({...r,heroId:Number(r.heroId)});}
  const duplicateRoleKeys=new Set();for(const r of acceptedRoles)if(acceptedRoles.filter(x=>x.side===r.side&&x.role===r.role||x.accountId===r.accountId).length>1)duplicateRoleKeys.add(r.accountId);
  const roles=acceptedRoles.filter(r=>!duplicateRoleKeys.has(r.accountId));audit.rolesRejectedAmbiguous=acceptedRoles.length-roles.length;
- if(!used.size)return {status:'blocked',reason:'no_history_for_target_roster_or_heroes'};
+ if(!used.size&&!emptyRetained)return {status:'blocked',reason:'no_history_for_target_roster_or_heroes'};
  const sourceMatches=[...used.values()].sort(byId).map(m=>({matchId:m.matchId,endedAt:m.endedAt,outcomeKnownAt:m.outcomeKnownAt,evidenceRef:m.evidenceRef,sourceFactsSha256:facts.pin.sha256,sourceRowIndex:m.index}));
  audit.sourceMatches=sourceMatches.length;audit.nativeFramesAdmitted=frames.length;audit.nativeMapHeroMinuteSelected=selected.size;audit.heroMinuteReferenceGroups=references.length;audit.profileValuesPresent=players.reduce((n,p)=>n+Object.values(p.values).filter(finite).length,0);audit.profiles=players.length;
  return{status:'calculated',players,roles,references,sourceMatches,heroCohort,usedMapRecords:[...used.values()].sort(byId),nativeAlignmentBindings:[...aligned.values()].filter(x=>x.basis==='phase_absent_reviewed_profile'),nativeEvidenceBindings:[...aligned.values()]};

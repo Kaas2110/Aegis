@@ -1,0 +1,47 @@
+{
+  "contract": "aegis.sol-r4-source-technical-acceptance.v1",
+  "date": "2026-10-24",
+  "status": "technical_scope_accepted_by_full_plus_corrective_evidence",
+  "logicalTargetsCovered": 12,
+  "plannedTechnicalCases": 746,
+  "singleAllPassInvocationClaimed": false,
+  "fullRun": {
+    "tests": 746,
+    "passed": 742,
+    "failedPositiveTimeFixtures": 4,
+    "elapsedSeconds": 361.5,
+    "peakJobCommitBytes": 4343123968
+  },
+  "correctiveRerun": {
+    "tests": 4,
+    "passed": 4,
+    "productionSourceChangedAfterFullRun": false,
+    "changedScope": "positive decision-time fixtures only; source expiry checks preserved",
+    "elapsedSeconds": 42.61,
+    "peakJobCommitBytes": 3682385920
+  },
+  "memoryIncident": {
+    "oldHighMemoryPidOwnershipRecovered": false,
+    "oldSuspectPidsPresentAtInspection": false,
+    "correctedMatrixPassed": true,
+    "correctedMatrixPeakJobCommitBytes": 3244904448,
+    "allocationRefusalChecked": true,
+    "ownedParentAndDescendantCancellationChecked": true,
+    "wholeProjectRssCapClaimed": false
+  },
+  "nativeRunAggregateCommitCapBytes": 8589934592,
+  "minimumFreeBytesPolled": 4294967296,
+  "technicalEvidence": "synthetic fixtures using actual modules; retained field census separate",
+  "featureFirstGateComplete": false,
+  "source95PercentProven": false,
+  "wholeArchivePrivateProofV2Integrated": false,
+  "sustainedFullRich80MinuteAcceptance": false,
+  "realPauseConfirmationAvailable": false,
+  "currentSeriesResolverActivated": false,
+  "astrasArchitecturalAcceptanceClaimed": false,
+  "training": false,
+  "modelQualityMeasured": false,
+  "runtimeActivated": false,
+  "modelPromotion": false,
+  "sourceOnly": true
+}

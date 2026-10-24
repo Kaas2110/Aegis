@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {loadCanonicalRegistry} from '../../feature-registry/canonical-registry.mjs';
 const groups={
- history:['historicalRelationalFeatures.mjs','historicalPerformanceFields.mjs','observedDraftHistory.mjs','historyCalculationCore.mjs','historySourceExport.mjs','historySourceVerifier.mjs','retainedOpenDotaFacts.mjs','retainedHistorySourceExport.mjs'],
+ history:['historicalRelationalFeatures.mjs','historicalPerformanceFields.mjs','observedDraftHistory.mjs','historyCalculationCore.mjs','historySourceExport.mjs','historySourceVerifier.mjs','retainedOpenDotaFacts.mjs','retainedHistorySourceExport.mjs','draftHistoricalFactsDb.mjs','historicalFactsDb.mjs'],
  live:['observedDraftFeatureBundle.mjs','steamFeatureBundle.mjs','playerHeroEconomyFeatures.mjs','roshanFeatures.mjs','steamProgressionAdmission.mjs','steamPhasePolicy.mjs','steamLiveAdapter.mjs','currentSteamInput.mjs','coherentEconomyContextFeatures.mjs','retainedReplayFrame.mjs','dynamicFields.mjs','nativeFieldEvidence.mjs','losslessJson.mjs','steamObservationIdentity.mjs'],
  series:['seriesContextFeatures.mjs'],
  draft:['draftIdentityFeatures.mjs','observedDraftHistory.mjs'],

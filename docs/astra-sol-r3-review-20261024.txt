@@ -1,0 +1,137 @@
+AEGIS — ASTRA ARCHITECTURAL REVIEW OF SOL R3
+24 October 2026. Reviewed baseline: PR6 main
+70edec4c7eefda272e413e0687ded961249cc7df.
+
+DECISION
+Retain the shared feature producer architecture and the diagnostic implementation.
+The review found concrete temporal, source-admission and routing defects; staged
+correction prototypes and adversarial regressions are preserved for Sol. They are
+NOT installed, fully assembled, published or merged. Statements below describing
+corrections refer to those prototypes, not the running application. Focused tests
+do not establish final integrated acceptance. The
+full feature/source/runtime gate is NOT complete and no model quality is measured.
+Training, model activation, provider probing and task changes remain paused.
+Next implementation authority: docs/sol-feature-first-plan-20261024-r4.txt.
+Latest owner instruction: Astra performs architecture, difficult reasoning and
+review only. All further implementation, integration and technical execution belong
+to Sol. First task is R4.0 pause handling and the 300-second freshness policy.
+
+HISTORY AND LIVE
+The two inputs remain distinct. Frozen historical facts are selected using actual
+availability at the original cutoff; live values retain their own raw capture,
+map, side/identity and source horizon. Late roster disclosure does not extend t0.
+Immutable versions prevent mutable current database rows from becoming historical
+truth. Current-map final labels are excluded from early inputs.
+
+Corrected sporting recency: the relational producer had used outcomeKnownAt for
+decay and streak ordering. Re-fetching an old loss could reverse a more recent
+winning streak without any new game being played. Actual endedAt now defines
+recency/weights/order; receipt times still gate use and provenance. Formula version
+is v3, so affected schemas cannot silently reuse the old semantics.
+Retained local-corpus support no longer claims a professional/global population.
+Independent series-history transitions now require canonical same-series PRE0 or
+BETWEEN1..4 form, including the full supported series ID length.
+
+The exporter correctly preserves the earlier roster after an outcome-only refresh.
+Its combined playersKnownAt is the latest required dependency, while original
+field receipt times remain available separately. This is not a fabricated original
+roster receipt. A valid, verified, truly empty retained population now has an
+explicit diagnostic all-missing history path. It preserves zero support, unknown
+rates and the source proof; an unknown or malformed source does not gain that path.
+
+Corrected retained series cutoff: the common generator previously evaluated series
+receipts at actual reconstruction time. A receipt arriving after the old frame
+could therefore enter its reconstructed POST/LIVE vector. Series inputs now obey
+the verified frame horizon. featureInputCutoffAt is retained in the trace separately
+from actual decision/materialization/commit times. An old vector is not an old
+issued forecast. A caller-supplied earlier sourceDecisionAt alone is insufficient:
+the rich helper requires the exact held replay proof from committed source bytes.
+
+STEAM ADMISSION AND CONTINUITY
+Both explicit phase5 and absent-phase progressing profiles remain distinct.
+No game_state=5 is fabricated for a response that omitted the field.
+Raw completion-indicator presence now survives normalization. Previously finished
+or match_status could disappear and allow an explicit phase5 response into LIVE.
+The correction blocks such inputs without guessing a winner or interpreting an
+unknown provider status value as a finished result.
+
+Committed non-JSON/error bodies now advance the verified receipt watermark before
+normalization failure becomes a continuity barrier. Older packets cannot then form
+a new apparently consecutive pair. Private progressing proofs carry a deterministic
+continuity identity. Requalification after a failed/missing capture, STOP or a
+source discontinuity resets native and lead windows; the map-clock watermark stays.
+Consumer/pipeline barriers clear dynamic windows and success dedupe, preserve
+history/phase/clock guards, and prevent queued or in-flight old-epoch jobs from
+committing continuation state. New-epoch jobs cannot coalesce with old-epoch work.
+
+Freshness policy is intentionally distinct from absolute provider delay. The staged
+explicit-phase prototype uses a 180-second age guard; the absent-phase profile
+has a separate 180-second progress lease. Exact source-horizon replay is
+permitted through original committed receipts, not arbitrary backdating.
+OWNER DECISION, 24 October, latest: implement evidence-based pause handling as the
+FIRST Sol task, with a provisional five-minute (300-second) eligible-state age
+limit. See R4.0 for the exact distinction between receipt, state confirmation and
+clock advance. Confirmed pause preserves an already issued unchanged forecast;
+unknown repetition does not renew qualification. No usable state for more than
+300 seconds yields unavailable. Stronger terminal, identity and STOP barriers
+still apply immediately. Do not blindly change every progression constant or retain
+a hidden 180-second blanket display expiry. Fresh HTTP receipt alone does not prove
+upstream currency. This is not measured broadcast delay or a wait before predicting.
+The prototype's old age guard must be revised by Sol before installation.
+
+SERIES/MAP ROUTING AND RECOVERY
+The router now binds the exact series receipt SHA and bytes used in the trace;
+paths may change without changing source content. Previously the same trace could
+be shown against changed format, winners/score or prior draft information.
+The retained source horizon is checked at read time too. SERIES_PRE cannot be
+attached to upcoming map2 after completed maps. The map PRE vector remains valid,
+while main must use the independently produced BETWEEN series context.
+Current main-series identity and manually selected previous-map actual data remain
+separate. BO1, BO3 and BO5 retain explicit format and side/team orientation.
+
+Pending host recovery now distinguishes an absent trace file from a present trace
+whose dependency is missing/corrupt. The latter fails verification instead of
+silently regenerating supposedly uncommitted work. STOP/abort is rechecked after
+intent persistence and before journal append. Already durable evidence is retained.
+Two omitted historical database-reader modules now participate in source identity;
+a bounded static dependency-closure regression guards this source inventory.
+
+ALTERNATIVES AND WHY
+Do not remove all time/admission gates to improve apparent coverage: stale state
+and later series context would then look like valid live evidence. Separate pause
+handling is preferable to declaring every unchanged clock stale forever.
+Do not keep every pre-gap trajectory when the source reappears: that implies
+continuity not demonstrated by observations. Reset dynamic windows while retaining
+the maximum-clock and identity barriers so an older packet cannot reopen the map.
+Do not solve missing series-main output by copying map probability or inventing
+SERIES_PRE after 1:0. Compose separately pinned series and map traces in Sol R4.1.
+Do not fabricate historical defaults for an empty corpus. Explicit missing rates
+with support0 are different from zero win probability or a corrupt source.
+Do not drop rich features to solve the large-schema cost. Use equivalent storage,
+bounded references and measured service budgets; feature usefulness is tested later.
+
+VERIFICATION AND EVIDENCE BOUNDARIES
+Exact changed paths/hashes, before-fix counterexamples, corrected technical tests,
+independent reviews are stored in the owner's
+private continuation workspace under work/astra-sol-r3-review-20261024/.
+There is NO final integrated, installation or publication receipt for this block.
+The current handoff enumerates completed focused checks and incomplete assembly.
+Tests use synthetic data and actual source modules; no fresh provider study or
+training was performed. The earlier684-test Sol result is baseline evidence, not
+a substitute for these new counterexamples and not a predictive accuracy measure.
+Source/definition changes deliberately invalidate old schema identities. Do not
+rewrite old durable traces to match new code. Preserve their original provenance.
+
+REMAINING WORK
+R4.0: pause/repeated-state policy and300-second age limit, first.
+R4.0B: reconcile staged corrections and perform the final affected integrated checks.
+R4.1: dual-trace composition for current series and selected/upcoming map.
+R4.2: immutable streaming/indexed history, cumulative storage bounds and scale.
+R4.3: definition-level completion of pure feature variants and all79 dispositions.
+R4.4: source/rule-qualified Roshan and Aegis semantics; missing evidence stays missing.
+R4.5: equivalent compact representation and sustained actual rich pipeline budgets.
+R4.6: explicit availability denominator, profile/cohort and pause/time study design.
+R4.7: all12 target technical gate, review pack, then return to Astra before training.
+Historical clock_series null/invalid retractions must be specified before those
+fields feed new trajectory adapters. Current broad feature support is not proof
+that whole-archive, original-forecast replay or public serving is already enabled.

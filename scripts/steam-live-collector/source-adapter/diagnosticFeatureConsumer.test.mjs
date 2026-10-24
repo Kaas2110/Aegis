@@ -7,6 +7,8 @@ import {createUnifiedFeatureProducer,UNIFIED_PRODUCER_CONTRACT} from './unifiedF
 import {draftArgs,draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
+import {createFeatureProjectionCompiler} from './featureProjectionCompiler.mjs';
+import {digest,validateRegistry} from '../../feature-registry/registry-contract.mjs';
 const AT='2026-10-23T12:40:00Z';
 async function bound({accounts=true,late=false,computedAt='2026-10-23T12:30:00Z',matchId='90001'}={}){
  const a=draftArgs({accounts,matchId});a.matchId=matchId;a.computedAt=computedAt;
@@ -102,4 +104,63 @@ test('explicit map release clears success dedupe so original bytes reconstruct f
  const p=instrumentedProducer(),s=ports(),c=createDiagnosticFeatureConsumer({now:()=>"2026-10-23T13:00:00Z",...p,...s});
  const a=await c.consume(base.input);assert.equal(a.status,'recorded_diagnostic');assert.equal(c.forgetMap('90001').released,true);
  const b=await c.consume(base.input);assert.equal(b.reusedReceipt,undefined);assert.equal(b.stateAdvanced,true);assert.equal(p.calls.length,2);assert.equal(p.calls[1].previousLiveState,null);
+});
+
+test('source discontinuity clears windows and dedupe but preserves live and clock watermarks',async()=>{
+ const p=instrumentedProducer(),s=ports(),producer={...p.producer,generateFeatureBundle(input){
+  const b=p.producer.generateFeatureBundle(input);if(input.mode==='LIVE')b.sourceAdmission={classification:'observed_live',dynamicDiagnosticAllowed:true,clock:Number(input.patch),provenance:{receivedAt:input.decisionAt}};return b;
+ }},c=createDiagnosticFeatureConsumer({producer,...s,now:()=> '2026-10-23T13:00:00Z'});
+ const first={...base.input,mode:'LIVE',patch:'900'};
+ assert.equal((await c.consume(first)).status,'recorded_diagnostic');
+ assert.equal(c.invalidateSourceContinuity(base.input.matchId).cleared,true);
+ assert.equal((await c.consume({...first,decisionAt:'2026-10-23T12:41:00Z',patch:'920'})).status,'recorded_diagnostic');
+ assert.equal(p.calls.at(-1).previousLiveState,null);
+ c.invalidateSourceContinuity(base.input.matchId);
+ assert.equal((await c.consume({...first,decisionAt:'2026-10-23T12:42:00Z',patch:'899'})).reason,'generation_or_source_contract_failed');
+ assert.equal((await c.consume({...base.input,decisionAt:'2026-10-23T12:42:00Z'})).reason,'generation_or_source_contract_failed');
+});
+
+test('a source barrier during durable append cannot commit pre-barrier dynamic state',async()=>{
+ const p=instrumentedProducer(),s=ports();let barrier=true,c;
+ c=createDiagnosticFeatureConsumer({...p,...s,now:()=> '2026-10-23T13:00:00Z',appendTrace:async t=>{
+  const r=await s.appendTrace(t);if(barrier){barrier=false;c.invalidateSourceContinuity(base.input.matchId);}return r;
+ }});
+ const a=await c.consume(base.input);assert.equal(a.reason,'source_continuity_changed_after_trace');assert.equal(a.traceCommitted,true);assert.equal(a.stateAdvanced,false);
+ assert.equal((await c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'})).status,'recorded_diagnostic');assert.equal(p.calls.at(-1).previousLiveState,null);
+});
+
+test('same-input request after a barrier cannot coalesce with an old-epoch flight',async()=>{
+ const p=instrumentedProducer(),s=ports();let release;const gate=new Promise(r=>{release=r;});
+ const c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,writeSchema:async o=>{await gate;return s.writeSchema(o);}});
+ const old=c.consume(base.input);await tick();assert.equal(c.invalidateSourceContinuity(base.input.matchId).cleared,true);
+ const fresh=c.consume(base.input);release();const[a,b]=await Promise.all([old,fresh]);
+ assert.equal(a.stateAdvanced,false);assert.equal(b.status,'recorded_diagnostic');assert.equal(b.stateAdvanced,true);assert.equal(b.coalescedReceipt,undefined);assert.notEqual(a.jobKey,b.jobKey);assert.equal(p.calls.length,2);assert.equal(s.traces.length,1);assert.equal(c.status().pending,0);assert.equal(c.status().pendingBytes,0);
+});
+
+test('queued jobs admitted before an observed source barrier cannot advance a new continuity epoch',async()=>{
+ const p=instrumentedProducer(),s=ports();let release;const gate=new Promise(r=>{release=r;});
+ const c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,writeSchema:async o=>{await gate;return s.writeSchema(o);}});
+ const first=c.consume(base.input);await tick();
+ const queued=c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'});
+ assert.equal(c.invalidateSourceContinuity(base.input.matchId).cleared,true);release();
+ const [a,b]=await Promise.all([first,queued]);assert.equal(a.stateAdvanced,false);assert.equal(b.stateAdvanced,false,JSON.stringify(b));assert.equal(s.traces.length,0);
+});
+
+function tinyChurningProducer(){
+ const legacy=instrumentedProducer(),[index,familyDocument,targetDocument]=syntheticRegistry(),compiler=createFeatureProjectionCompiler({registry:validateRegistry(index,familyDocument,targetDocument),registryHash:digest(index),sourceInventory:{history:{primarySha256:'a'.repeat(64),files:[{path:'synthetic-cache-history.mjs',sha256:'a'.repeat(64)}]}},sourceProfiles:{history:'synthetic-prior'},maxSchemas:1,maxComponentSchemas:1});
+ return{calls:legacy.calls,compiler,producer:{contract:UNIFIED_PRODUCER_CONTRACT,getSchema:compiler.getSchema,generateFeatureBundle(input){
+  const bundle=legacy.producer.generateFeatureBundle(input),version=input.patch??'1',component={names:['synthetic.hist'],values:[Number(version)],masks:[0],schemaHash:digest({version}),definitions:[{name:'synthetic.hist',familyId:'H02',formula:'synthetic cache test value',formulaVersion:version,units:'fraction',inputScopes:['prior_completed_maps','current_identity']}]},blocks=[compiler.normalize(component,'history')];
+  bundle.routes=['POST_MAP_WIN','POST_KILLS'].map(target=>compiler.project(blocks,target,'POST'));return bundle;
+ }}};
+}
+test('schema registration LRU re-verifies evicted schemas without pruning routes or continuation state',async()=>{
+ const p=tinyChurningProducer(),s=ports(),known=new Set(),c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,limits:{maxSchemas:1},writeSchema:async o=>{const prior=known.has(o.schemaHash);known.add(o.schemaHash);s.schemas.push(o.schemaHash);assert.equal(digest(o.schema),o.schemaHash);return{status:prior?'existing_verified':'created',schemaHash:o.schemaHash};}});
+ const first=await c.consume({...base.input,patch:'1'});assert.equal(first.status,'recorded_diagnostic');const firstBody=JSON.parse(s.traces[0].utf8);assert.equal(firstBody.routes.length,2);
+ assert.equal((await c.consume({...base.input,patch:'2',decisionAt:'2026-10-23T12:41:00Z'})).status,'recorded_diagnostic');
+ assert.equal((await c.consume({...base.input,patch:'1',decisionAt:'2026-10-23T12:42:00Z'})).status,'recorded_diagnostic');const reloaded=JSON.parse(s.traces[2].utf8);assert.deepEqual(reloaded.routes,firstBody.routes);assert.deepEqual(reloaded.vectors,firstBody.vectors);assert.equal(s.schemas.length,6);assert.equal(c.status().registeredSchemas,1);assert.equal(c.status().maps,1);assert.equal(c.status().schemaWritesInFlight,0);assert.deepEqual(p.calls.at(-1).previousLiveState,{step:2});assert.equal(p.compiler.status().projectionSchemas,1);
+});
+test('concurrent different maps retain route-owned schemas across compiler eviction and pending writes',async()=>{
+ const other=await bound({matchId:'90002'}),p=tinyChurningProducer(),s=ports();let release;const gate=new Promise(r=>{release=r;}),seen=[];
+ const c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,limits:{maxSchemas:1},writeSchema:async o=>{seen.push(o);await gate;assert.equal(digest(o.schema),o.schemaHash);return s.writeSchema(o);}});
+ const first=c.consume({...base.input,patch:'1'});await tick();const second=c.consume({...other.input,patch:'2'});await tick();assert.equal(c.status().schemaWritesInFlight,2);assert.equal(p.compiler.status().projectionSchemas,1);release();const[a,b]=await Promise.all([first,second]);assert.equal(a.status,'recorded_diagnostic');assert.equal(b.status,'recorded_diagnostic');assert.equal(s.traces.length,2);assert.equal(seen.length,4);assert.equal(c.status().registeredSchemas,1);assert.equal(c.status().pending,0);assert.equal(c.status().maps,2);for(const schema of seen)assert.equal(Object.isFrozen(schema.schema),true);
 });

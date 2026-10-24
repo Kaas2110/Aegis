@@ -6,6 +6,7 @@ import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {advanceObservedDraftFeatureBundle,createDynamicHistoryProof,PROGRESSING_CONTRACT,readObservedFeatureSchemaPoolStatus} from './observedDraftFeatureBundle.mjs';
 import {advanceSteamFeatureBundle} from './steamFeatureBundle.mjs';
+import {createRetainedReplayFrameProof} from './retainedReplayFrame.mjs';
 const T='2026-10-23T12:30:00Z',U='2026-10-23T12:32:00Z',V='2026-10-23T12:34:00Z';
 function entry({time=T,clock=600,phase=null,accounts=true,teams=true,map='90001',missing=false,mutate=null}={}){
  const e=draftEntry({time,clock,phase,accounts,teams,matchId:map}),raw=JSON.parse(e.rawInput.utf8);
@@ -75,11 +76,12 @@ test('history materialization does not replace progression or lease evidence',()
 test('retained source horizon preserves actual history computation time and default live expiry',()=>{
  const es=pair(),a=run(es),inputs=draftArgs({accounts:true});inputs.computedAt='2026-10-23T12:45:00Z';const h=createDynamicHistoryProof(inputs),options={matchId:'90001',decisionAt:'2026-10-23T12:45:00Z',historyProof:h.proof,livePrefixInputs:[{rawInput:es[1].rawInput,metadataInput:es[1].metadataInput}],progressionProof:a.privateProof};
  assert.equal(advanceObservedDraftFeatureBundle(null,options).reason,'progression_proof_outside_lease_or_decision');
- const r=advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:U});assert.equal(r.status,'diagnostic_produced');assert.equal(r.historyRefs.computedAt,'2026-10-23T12:45:00Z');assert.equal(r.decisionAt,'2026-10-23T12:45:00Z');assert.equal(r.sourceDecisionAt,U);assert.equal(r.reconstructedSourceHorizon,true);assert.equal(r.recordedPrediction,false);
+ const retainedReplayProof=createRetainedReplayFrameProof({...es[1],reconstructedAt:options.decisionAt});
+ const r=advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:U,retainedReplayProof});assert.equal(r.status,'diagnostic_produced');assert.equal(r.historyRefs.computedAt,'2026-10-23T12:45:00Z');assert.equal(r.decisionAt,'2026-10-23T12:45:00Z');assert.equal(r.sourceDecisionAt,U);assert.equal(r.reconstructedSourceHorizon,true);assert.equal(r.recordedPrediction,false);
  assert.equal(advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:'2026-10-23T12:45:00.000000001Z'}).reason,'dynamic_source_decision_horizon');
- assert.equal(advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:'2026-10-23T12:31:59.999999999Z'}).reason,'dynamic_source_horizon_before_capture');
+ assert.equal(advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:'2026-10-23T12:31:59.999999999Z',retainedReplayProof}).reason,'dynamic_retained_replay_horizon_mismatch');
  const c=entry({time:V,clock:840}),abc=run([c],a.nextPrivateToken),lateMetadata=pinned({...JSON.parse(es[1].metadataInput.utf8),decisionAt:options.decisionAt});
- assert.equal(advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:V,livePrefixInputs:[{rawInput:es[1].rawInput,metadataInput:lateMetadata},{rawInput:c.rawInput,metadataInput:c.metadataInput}],progressionProofs:[a.privateProof,abc.privateProof]}).reason,'dynamic_source_horizon_before_capture');
+ assert.equal(advanceObservedDraftFeatureBundle(null,{...options,sourceDecisionAt:V,retainedReplayProof:createRetainedReplayFrameProof({...c,reconstructedAt:options.decisionAt}),livePrefixInputs:[{rawInput:es[1].rawInput,metadataInput:lateMetadata},{rawInput:c.rawInput,metadataInput:c.metadataInput}],progressionProofs:[a.privateProof,abc.privateProof]}).reason,'dynamic_source_horizon_before_capture');
 });
 test('equal-clock packets retain original expiry and cannot renew a lease forever',()=>{
  const a=run(pair()),b=run([entry({time:V,clock:720})],a.nextPrivateToken);assert.equal(b.status,'admitted_diagnostic');assert.equal(b.expiresAt,a.expiresAt);

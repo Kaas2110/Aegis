@@ -1,0 +1,66 @@
+AEGIS — CURRENT SOURCE STATE AND FIVE-MINUTE RETENTION
+24 October2026. Diagnostic source integration; public inference remains disabled.
+
+OWNER POLICY
+Retain an existing unchanged forecast during a confirmed pause, if the source can
+actually confirm that pause. Use300seconds from the last qualified state when
+fresh confirmation is absent. This is a chosen tolerance; it measures neither
+Steam broadcast latency nor event-to-app delay. It does not delay first prediction.
+
+IMPLEMENTED STATE CONTRACT
+steamEligibleState.mjs verifies original committed receipt/raw bytes and returns
+process-owned opaque tokens. Public stateView cannot mint/restore authority.
+Keep lastHttpReceiptAt, lastConfirmedAt and lastClockAdvanceAt separate. Initial
+coherent explicitphase5 is an admitted source state; the absent-phase profile
+requires its existing private progression proof. Equal clocks, new receipt IDs,
+changed economy at a stationary clock and arbitrary pause booleans do not renew
+the original confirmation. Exact original capture redelivery is idempotent.
+The confirmation's observation/raw/receipt refs remain fixed until admitted native
+clock progress. Read-time age is <=300seconds, including nanosecond boundary;
+older state is unavailable. Receipt age also uses300seconds at its source horizon.
+The180-second absent-phase progression qualification lease remains separate.
+
+Terminal/identity contradiction/clock rewind/STOP barriers retain stricter handling.
+Monotone account/team disclosure is distinct from known-ID replacement: reset live
+windows and qualify the new identity on admitted progress, preserving the frozen
+historical cutoff. Source-gap requalification resets dynamic windows and retains
+the original eligibility deadline; a later fetch must not make old evidence new.
+Clock plausibility compares qualified clock delta with its associated confirmation
+time, not the latest HTTP repeat. Reordered old frames, including missing-map/error
+responses, are rejected before mutating current tokens and windows.
+
+PIPELINE AND READER
+retainedFeaturePipeline observes qualified live input before expensive generation.
+Unknown repeated state retains its last trace reference and writes no new vector.
+POST draft handling remains independent. Only durable successful LIVE commits update
+the lastTraceSha256. ReadLiveEligibility checks expiry without another collector call.
+Bootstrap returns this owned port and a read-only handler; no server is started.
+The diagnostic reader binds live eligibility to both exact trace hash and original
+qualified observation ID. A saved feature trace is still inspectable after expiry;
+its presence does not imply a current forecast. Without an owned live-state port,
+the saved reader explicitly cannot establish current eligibility. No output weights
+or issued-prediction journal is fabricated. Future inference must additionally prove
+that an actual model-output receipt exists; feature traces alone do not satisfy it.
+
+RESTART AND REPLAY
+Opaque tokens are reconstructed by replaying original retained receipts, not by
+deserializing stateView. Replay uses the verified original frame horizon. Reader
+eligibility uses actual read time. Restart must not renew lastConfirmedAt. Original
+historical diagnostic replay is not an originally issued forecast or live state now.
+
+SOURCE LIMITATION
+Bounded local evidence rechecked468unique GLG bodies/8664map rows and14RT bodies.
+No qualified current live-pause/current-state UTC confirmation field was found in
+this retained GLG profile. Lobby pause_setting is configuration, not a pause event.
+RT timestamp included255 and was not established as a wall clock. These are retained
+sample facts, not exhaustive claims about every Steam API response/version.
+Confirmed-pause acquisition is therefore explicitly unavailable in this profile.
+Unknown stationary responses use the original deadline and then "Прогноз недоступен".
+A future source-backed pause adapter needs real field/time semantics and separate
+acceptance; do not turn an arbitrary paused=true into authority.
+
+EVIDENCE AND REVIEW
+Private work/sol-r4-20261024 contains original census, exact manifests, counterexamples,
+technical results and review decisions. Tests use synthetic fixtures with actual
+source modules. This block does not establish95%prospective source coverage, absolute
+live lag, sustained full rich runtime, training quality or permission to activate it.

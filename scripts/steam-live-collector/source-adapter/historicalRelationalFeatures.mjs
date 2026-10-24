@@ -9,7 +9,7 @@ import {validateObservedDraftHistory} from './observedDraftHistory.mjs';
 import {PERFORMANCE_CONTRACT,PERFORMANCE_FIELDS} from './historicalPerformanceFields.mjs';
 
 export const HISTORICAL_RELATIONAL_CONTRACT='aegis.historical-relational-features.v1';
-export const HISTORICAL_RELATIONAL_FORMULA_VERSION='aegis.prior-map-relational-statistics.v2';
+export const HISTORICAL_RELATIONAL_FORMULA_VERSION='aegis.prior-map-relational-statistics.v3';
 const WINDOWS=[7,30,90],DAY=86400n*1000000000n,MAX_MAPS=50000;
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
@@ -57,10 +57,10 @@ for(const family of HISTORICAL_RELATIONAL_PENDING_FAMILIES)Object.freeze(family)
 
 const METRICS=Object.freeze({
  supportMaps:{units:'distinct_maps',formula:'count(distinct eligible mapId)',supportAlways:true},
- effectiveCount:{units:'effective_distinct_maps',formula:'(sum(w)^2)/sum(w^2), w=2^(-age_outcomeKnownAt_days/windowDays)',supportAlways:true},
+ effectiveCount:{units:'effective_distinct_maps',formula:'(sum(w)^2)/sum(w^2), w=2^(-age_endedAt_days/windowDays)',supportAlways:true},
  rawWinFraction:{units:'fraction',formula:'sum(won)/n'},
  smoothedWinFraction:{units:'fraction',formula:'(sum(won)+10)/(n+20); fixed symmetric Beta(10,10), not learned'},
- decayedWinFraction:{units:'fraction',formula:'sum(w*won)/sum(w), w=2^(-age_outcomeKnownAt_days/windowDays)'},
+ decayedWinFraction:{units:'fraction',formula:'sum(w*won)/sum(w), w=2^(-age_endedAt_days/windowDays)'},
  smoothedDecayedWinFraction:{units:'fraction',formula:'(sum(w*won)+10)/(sum(w)+20)'},
  winFractionStandardError:{units:'fraction',formula:'sqrt(rawWinFraction*(1-rawWinFraction)/n)'},
  wilsonLower95:{units:'fraction',formula:'Wilson binomial lower bound, z=1.959963984540054'},
@@ -83,7 +83,7 @@ const METRICS=Object.freeze({
  meanOpponentKillsPerMinute:{units:'team_kills_per_minute',formula:'mean(opposite side final kills/(durationSeconds/60))'},
  meanTotalKillsPerMinute:{units:'kills_per_minute',formula:'mean((radiantKills+direKills)/(durationSeconds/60))'},
  daysSinceLastObservedMap:{units:'days',formula:'(historyCutoffAt-max(endedAt))/86400 seconds'},
- trailingOutcomeStreak:{units:'signed_distinct_maps',formula:'signed length of most recent identical outcomes ordered by outcomeKnownAt then mapId'}
+ trailingOutcomeStreak:{units:'signed_distinct_maps',formula:'signed length of most recent identical outcomes ordered by endedAt then mapId; receipt time only gates availability'}
 });
 
 function readPerformance(x,heroes,players,cutoff,audit){
@@ -215,12 +215,14 @@ function selectorsFor(roster,scope){
 }
 
 function calculateStats(rows,{windowDays,minimumSupport,cutoff,qualified,reason,supportRef,latestKnownAt}){
- const n=rows.length,win=rows.reduce((s,r)=>s+Number(r.won),0),p=n?win/n:0,weights=rows.map(r=>2**(-Number(cutoff-r.map.known)/Number(DAY)/windowDays)),sw=weights.reduce((a,b)=>a+b,0),sw2=weights.reduce((a,b)=>a+b*b,0);
+ // Event chronology defines sporting form. Availability clocks only decide
+ // what can be used; a delayed fetch or refresh cannot make an old game recent.
+ const n=rows.length,win=rows.reduce((s,r)=>s+Number(r.won),0),p=n?win/n:0,weights=rows.map(r=>2**(-Number(cutoff-r.map.ended)/Number(DAY)/windowDays)),sw=weights.reduce((a,b)=>a+b,0),sw2=weights.reduce((a,b)=>a+b*b,0);
  const winningRows=rows.filter(r=>r.won),losingRows=rows.filter(r=>!r.won),duration=rows.map(r=>r.map.durationSeconds),wins=winningRows.map(r=>r.map.durationSeconds),losses=losingRows.map(r=>r.map.durationSeconds);
  const completeKills=rows.filter(r=>r.map.kills.radiant!==null&&r.map.kills.dire!==null),kills=completeKills.map(r=>r.map.kills.radiant+r.map.kills.dire);
  const own=rows.filter(r=>r.map.kills[r.side]!==null),opp=rows.filter(r=>r.map.kills[r.side==='radiant'?'dire':'radiant']!==null);
  const z=1.959963984540054,center=n?(p+z*z/(2*n))/(1+z*z/n):null,half=n?z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/(1+z*z/n):null;
- const ordered=[...rows].sort((a,b)=>a.map.known<b.map.known?1:a.map.known>b.map.known?-1:byId(b.map,a.map));let streak=0;
+ const ordered=[...rows].sort((a,b)=>a.map.ended<b.map.ended?1:a.map.ended>b.map.ended?-1:byId(b.map,a.map));let streak=0;
  for(const r of ordered){if(r.won!==ordered[0]?.won)break;streak+=r.won?1:-1;}
  const raw={supportMaps:n,effectiveCount:sw2?sw*sw/sw2:0,rawWinFraction:n?p:null,smoothedWinFraction:(win+10)/(n+20),decayedWinFraction:sw?rows.reduce((s,r,i)=>s+weights[i]*Number(r.won),0)/sw:null,smoothedDecayedWinFraction:(rows.reduce((s,r,i)=>s+weights[i]*Number(r.won),0)+10)/(sw+20),winFractionStandardError:n?Math.sqrt(p*(1-p)/n):null,wilsonLower95:n?center-half:null,wilsonUpper95:n?center+half:null,
   meanDurationSeconds:mean(duration),durationSampleSdSeconds:variance(duration)===null?null:Math.sqrt(variance(duration)),durationP25Seconds:quantile(duration,.25),durationMedianSeconds:quantile(duration,.5),durationP75Seconds:quantile(duration,.75),late40Fraction:n?duration.filter(d=>d>=2400).length/n:null,late50Fraction:n?duration.filter(d=>d>=3000).length/n:null,winMeanDurationSeconds:mean(wins),lossMeanDurationSeconds:mean(losses),meanTotalKills:mean(kills),totalKillsSampleSd:variance(kills)===null?null:Math.sqrt(variance(kills)),totalKillsP25:quantile(kills,.25),totalKillsMedian:quantile(kills,.5),totalKillsP75:quantile(kills,.75),meanOwnKillsPerMinute:mean(own.map(r=>r.map.kills[r.side]/(r.map.durationSeconds/60))),meanOpponentKillsPerMinute:mean(opp.map(r=>r.map.kills[r.side==='radiant'?'dire':'radiant']/(r.map.durationSeconds/60))),meanTotalKillsPerMinute:mean(completeKills.map(r=>(r.map.kills.radiant+r.map.kills.dire)/(r.map.durationSeconds/60))),daysSinceLastObservedMap:n?Number(cutoff-rows.reduce((m,r)=>r.map.ended>m?r.map.ended:m,rows[0].map.ended))/Number(DAY):null,trailingOutcomeStreak:n?streak:null};
@@ -229,7 +231,7 @@ function calculateStats(rows,{windowDays,minimumSupport,cutoff,qualified,reason,
  const at=latestKnownAt;
  return Object.fromEntries(Object.entries(METRICS).map(([key,m])=>{
   const used=metricRows(key),count=used.length,ok=qualified&&(m.supportAlways||count>=minimumSupport),value=ok&&finite(raw[key])?raw[key]:null;
-  if(!effectiveCounts.has(used)){const w=used.map(r=>2**(-Number(cutoff-r.map.known)/Number(DAY)/windowDays)),sum=w.reduce((a,b)=>a+b,0),squares=w.reduce((a,b)=>a+b*b,0);effectiveCounts.set(used,squares?sum*sum/squares:0);}
+  if(!effectiveCounts.has(used)){const w=used.map(r=>2**(-Number(cutoff-r.map.ended)/Number(DAY)/windowDays)),sum=w.reduce((a,b)=>a+b,0),squares=w.reduce((a,b)=>a+b*b,0);effectiveCounts.set(used,squares?sum*sum/squares:0);}
   const metricEffectiveCount=effectiveCounts.get(used);
   return[key,{value,supportMaps:count,effectiveCount:metricEffectiveCount,cohortQualified:qualified,reason:!qualified?reason:count<minimumSupport&&!m.supportAlways?'below_minimum_support':value===null?'metric_missing_or_insufficient_variance':null,definition:HISTORICAL_RELATIONAL_FORMULA_VERSION+'/'+key,formula:m.formula,units:m.units,windowDays,minimumSupport,latestHistoryAvailabilityAt:at,supportRef}];
  }));
@@ -313,7 +315,9 @@ export function produceSeriesHistoricalRelationalFeatures({targetInput,factsInpu
  const p=targetInput?.pin,utf8=targetInput?.utf8;
  if(!obj(p)||typeof utf8!=='string'||Buffer.byteLength(utf8)>262144||Buffer.byteLength(utf8)!==p.bytes||!sha(p.sha256)||createHash('sha256').update(utf8).digest('hex')!==p.sha256)throw Error('series_history_target_pin');
  const t=JSON.parse(utf8),keys=['contract','seriesId','phase','transitionId','historyCutoffAt','validFrom','identityKnownAt','lastSeriesReceiptAt','identityRevision','team1Id','team2Id','players'];
- if(!obj(t)||t.contract!=='aegis.series-history-target.v1'||Object.keys(t).some(k=>!keys.includes(k))||typeof t.seriesId!=='string'||!t.seriesId.length||t.seriesId.length>128||!['SERIES_PRE','SERIES_BETWEEN'].includes(t.phase)||typeof t.transitionId!=='string'||!t.transitionId.length||t.transitionId.length>128||!id(t.team1Id)||!id(t.team2Id)||t.team1Id===t.team2Id||!Number.isSafeInteger(t.identityRevision)||t.identityRevision<0||!Array.isArray(t.players)||t.players.length>10)throw Error('series_history_target_contract');
+ if(!obj(t)||t.contract!=='aegis.series-history-target.v1'||Object.keys(t).some(k=>!keys.includes(k))||typeof t.seriesId!=='string'||!/^[A-Za-z0-9_.:-]{1,128}$/.test(t.seriesId)||!['SERIES_PRE','SERIES_BETWEEN'].includes(t.phase)||typeof t.transitionId!=='string'||!t.transitionId.length||t.transitionId.length>136||!id(t.team1Id)||!id(t.team2Id)||t.team1Id===t.team2Id||!Number.isSafeInteger(t.identityRevision)||t.identityRevision<0||!Array.isArray(t.players)||t.players.length>10)throw Error('series_history_target_contract');
+ const historyMapCount=[0,1,2,3,4].find(n=>t.transitionId===t.seriesId+':after:'+n);
+ if(historyMapCount===undefined||(t.phase==='SERIES_PRE')!==(historyMapCount===0))throw Error('series_history_transition_contract');
  const cutoff=instantNs(t.historyCutoffAt),valid=instantNs(t.validFrom),decision=instantNs(decisionAt);
  const identityKnown=instantNs(t.identityKnownAt),lastSeriesReceipt=instantNs(t.lastSeriesReceiptAt);
  if(cutoff===null||valid===null||decision===null||identityKnown===null||lastSeriesReceipt===null||cutoff>valid||valid>decision||identityKnown>valid||cutoff>lastSeriesReceipt||lastSeriesReceipt>decision)throw Error('series_history_target_times');
@@ -358,7 +362,7 @@ function calculateRelationalComponent({historyContext,factsInput,matchId,decisio
   selectorBindings[selector.key]={kind:selector.kind,...selector.selector};
   for(const windowDays of WINDOWS){
    const selected=rows.filter(r=>r.map.ended>=cutoff-BigInt(windowDays)*DAY),ref=selector.key+'.'+windowDays+'d';
-   support[ref]={population:'local_available_parsed_pro_known_identity_maps',scopeEvidenceSha256:historicalRelationalHash(scope.evidence),cohortQualified:selector.qualified,sourceFactsSha256:facts.pin.sha256,selectorRef:selector.key,windowDays,supportMaps:selected.length,sourceRowsRef:registerSupportRows(selected),selectionBasis:'endedAt_within_window_and_all_used_facts_available_at_original_draft_cutoff',rowsAreDistinctMaps:true};
+   support[ref]={population:scope.populationBasis==='bounded_provided_retained_corpus_not_global'?'provided_retained_response_known_identity_maps':'local_available_parsed_pro_known_identity_maps',scopeEvidenceSha256:historicalRelationalHash(scope.evidence),cohortQualified:selector.qualified,sourceFactsSha256:facts.pin.sha256,selectorRef:selector.key,windowDays,supportMaps:selected.length,sourceRowsRef:registerSupportRows(selected),selectionBasis:'endedAt_within_window_and_all_used_facts_available_at_original_draft_cutoff',rowsAreDistinctMaps:true};
    const stats=calculateStats(selected,{windowDays,minimumSupport,cutoff,qualified:selector.qualified,reason:selector.reason,supportRef:ref,latestKnownAt:supportRows[support[ref].sourceRowsRef].latestHistoryAvailabilityAt});statistics[ref]=stats;
    for(const [metric,s]of Object.entries(stats)){
     const name='histrel.'+ref+'.'+metric;names.push(name);values.push(s.value);masks.push(s.value===null?1:0);

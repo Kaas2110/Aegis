@@ -23,7 +23,7 @@ function capture(options={},edit=null){
  const e=draftEntry({accounts:true,...options});let rawInput=e.rawInput,m=JSON.parse(e.metadataInput.utf8);
  if(edit){const raw=JSON.parse(rawInput.utf8);edit(raw.result.games[0]);rawInput=pinned(raw);const o=normalizeLocalCapture({...m.capture,body:Buffer.from(rawInput.utf8),rawSha256:rawInput.pin.sha256,payloadRef:'journal:'+rawInput.pin.sha256}).observations[0];m={...m,observationId:o.observationId};}
  const requestId=String(Date.parse(m.capture.receivedAt))+'-'+randomUUID();
- return {rawInput,receiptInput:pinned({version:'steam-live-diagnostic-collector.v1',source:'steam',endpoint:'GetLiveLeagueGames/v1',httpStatus:200,status:'captured_diagnostic',diagnosticOnly:true,servingEnabled:false,trainingEnabled:false,publicPromotion:false,requestId,requestStartedAt:m.capture.requestStartedAt,receivedAt:m.capture.receivedAt,rawPersistedAt:m.capture.persistedAt,completedAt:m.capture.persistedAt,rawSha256:rawInput.pin.sha256,rawFile:'raw/'+rawInput.pin.sha256+'.body'})};
+ return {rawInput,receiptInput:pinned({version:'steam-live-diagnostic-collector.v1',source:'steam',endpoint:'GetLiveLeagueGames/v1',httpStatus:200,status:'captured_diagnostic',diagnosticOnly:true,servingEnabled:false,trainingEnabled:false,publicPromotion:false,requestId,requestStartedAt:m.capture.requestStartedAt,receivedAt:m.capture.receivedAt,rawPersistedAt:m.capture.persistedAt,completedAt:m.capture.persistedAt,rawSha256:rawInput.pin.sha256,rawFile:'raw/'+rawInput.pin.sha256+'.body',payloadRef:'journal:'+rawInput.pin.sha256,bodyBytes:rawInput.pin.bytes})};
 }
 
 test('invalid or incomplete later packet is not appended or sticky and valid live capture recovers with the same history',async()=>{

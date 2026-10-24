@@ -125,7 +125,10 @@ function normalizeGame(raw,index,capture,expected){
   }
   const delay=metric(raw,'stream_delay_s',nonnegative,{path:`result.games[${index}]`,capture});if(delay.value===null)quality.push('declared_delay_unknown');
   if(delay.value!==null&&delay.value>300)quality.push('declared_delay_exceeds_300s');
-  if(own(raw,'radiant_win')||own(raw,'winner')||own(raw,'final_score')||own(raw,'match_outcome'))quality.push('outcome_marker_present');
+  // Keep completion-marker presence through every raw replay gate. The value is
+  // deliberately not a predictor or a winner label. Even false/null is an
+  // unclassified completion indicator, not permission to forecast this frame.
+  if(['radiant_win','winner','final_score','match_outcome','finished','match_status'].some(key=>own(raw,key)))quality.push('outcome_marker_present');
   if(Buffer.byteLength(canonical(rawSource))>MAX_SOURCE)throw Error('source_game_bytes_bound');
   const source={contract:SOURCE_CONTRACT,endpoint:capture.endpoint,endpointVersion:'v1',schemaEvidence:SCHEMA_EVIDENCE,capture,rawPacket:rawSource};
   const inputHash=sha(canonical(source));

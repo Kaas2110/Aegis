@@ -1,0 +1,151 @@
+AEGIS — SOL R4 IMPLEMENTATION REVIEW FOR ASTRA
+24 October2026. Feature-first source work; no training or public activation.
+
+PROBLEM AND DECISIONS
+The r3 review found concrete chronology, source-admission and target-routing gaps.
+The owner then made pauses and five-minute freshness the first Sol task and
+restricted Astra to architecture/review. This block implements that policy,
+reconciles the earlier staged corrections and advances bounded remaining tasks.
+Exact final source paths/hashes and technical receipts are held in the private
+continuation workspace under work/sol-r4-20261024/root. No raw evidence is published.
+
+R4.0 — LIVE STATE ELIGIBILITY
+See steam-state-freshness-20261024-r4.txt. The pipeline owns opaque source-derived
+state; five-minute read expiry works without collection. HTTP repeats do not renew
+the last qualified state or issue another vector. Frozen historical context remains
+independent. Real retained GLG evidence has no qualified current pause confirmation
+field. Confirmed-pause acquisition remains explicitly unavailable, so unknown
+stationary replies expire rather than sustaining an invented pause indefinitely.
+The saved reader remains a feature inspector; actual model-output receipts are an
+additional future prerequisite for displaying forecasts. All serving flags stayfalse.
+
+CORRECTED COUNTEREXAMPLES
+An older retained packet previously mutated eligibility before its rejection.
+This affected present-map, missing-map and HTTP-error paths. Early chronological
+guards now preserve the current token, source epoch and clock watermark. Initial
+static draft frames do not poison independent live eligibility. Exact receipt
+redelivery is idempotent. Clock catch-up plausibility compares the delta with the
+time belonging to that qualified clock, not an intervening repeated HTTP response.
+Independent synthetic reproductions and corrected checks are preserved privately.
+
+R4.0B — EARLIER CORRECTION INTEGRATION
+History decay/streaks now use actual game end while receipt availability gates use.
+Local retained corpus support cannot claim global/professional population. Empty
+verified retained history yields unknown rates/support0, never invented defaults.
+Canonical independent series transitions and long IDs are checked. Retained replay
+series inputs obey the original frame horizon; actual materialization time stays
+current. sourceDecisionAt alone cannot replace held replay proof. Raw completion
+markers and committed non-JSON failure chronology survive normalization. Source
+interruptions reset dynamic windows, preserving phase and maximum-clock identity.
+Queued/in-flight work cannot cross a continuity epoch or coalesce with new-epoch
+jobs. Corrupt dependencies of a committed trace are not treated as an absent trace.
+STOP is rechecked before commit after asynchronous intent persistence. Historical
+reader dependencies participate in source/schema identity.
+
+R4.1 — SERIES AND MAP ROUTING
+Router supports independently pinned seriesTraceSha256/mapTraceSha256. During an
+inter-map break the main can use BETWEEN while upcoming map detail uses PRE. Each
+panel verifies exact series receipt/transition, own cutoff, target/schema and team
+orientation. Missing/bad evidence affects that panel; prior-map actual detail keeps
+its own heroes/result. A legacy one-trace request retains its prior atomic behavior.
+The reader has an owned route-context resolver hook and overrides backdated context
+time with actual read time. URL inputs cannot supply source bytes or filesystem
+paths. LIVE current eligibility binds exact trace AND observation. This is tested
+through actual synthetic CAS journal and read handler, without starting collection.
+The real application still needs an explicitly owned current-series receipt store/
+resolver before enabling that optional route. Do not substitute mutable present-day
+series rows for historical receipts or claim the disabled public UI is activated.
+
+R4.2 — BOUNDED IMMUTABLE HISTORY BUILDING BLOCK
+retainedHistoryCorpusIndex creates canonical bounded reference pages from verified
+versions. Its two-pass materializer checks every version reference, including
+excluded future/current-map rows, then emits one map at a time with the unchanged
+v1 selector. Nulls, same-time conflicts and identity A-to-B-to-A barriers remain.
+Small-corpus normalized facts/hashes/bindings match v1. A synthetic1024-map test
+streamed70,610,944source-version bytes; sampled peakRSS is evidence for that test,
+not a guaranteed memory ceiling or proof of the whole archive's application path.
+The common producer still requires its original bounded v1 proof envelope. The new
+stream cannot mint proof or bypass that guard. Reference envelopev2, transactional
+sink/proof, bounded history algebra and host/journal recovery remain future work.
+No cumulative disk cap is claimed: independent appenders need an agreed persistent
+reservation/fencing protocol. Never delete another owner's locks or evidence.
+
+R4.3 — DEFINITION LEDGER
+The new generated-definition ledger consumes exact common-producer schemas, retains
+each generated source/definition variant and target occurrence, accounts for all79
+families and14legacy groups, and records absent input/support/time/population/role/
+patch declarations as explicit gaps. Optional declarations present in raw definitions
+now survive projection. An inventory entry is not semantic acceptance or a resolved
+legacy alias. Learned features stayTRAIN-only/deferred; no fit has been performed.
+
+R4.4 — ROSHAN AND AEGIS
+The dedicated definition ledger distinguishes existing formulas from qualified
+source coverage. Raw timer observation does not prove alive status or exact spawn.
+Confirmed death/respawn bounds/pickup/steal need source events and patch rules.
+Explicitly conflicting event patches and pickup-before-linked-death chronology
+are rejected. Terminal Aegis evidence remains episode-scoped, never inferred from
+an empty inventory slot or treated as a full-game event count. Unknowns remainnull.
+See roshan-aegis-definition-ledger-20261024-r4.json for exact dispositions.
+
+R4.5 — BOUNDED SCHEMA CACHE BEHAVIOR
+Compiler component/projection caches now use bounded LRU/reload. Immutable schema
+references travel with active routes; consumer captures them before its firstawait.
+Completed registration metadata can be evicted and reverified in the journal, while
+pending writes remain coalesced. No map identity/clock/source watermark is evicted.
+Golden reload preserves definitions/hash/vector; rich columns are not pruned.
+Count bounds are not a byte-budget proof. Equivalent compact vector storage and
+sustained full-rich two-map80-minute resource acceptance are still required.
+
+R4.6/R4.7 — PREPARED GATES
+Prepared prospective availability protocol distinguishes required joint inputs,
+owned scheduled slots (including failures), sparse-derived support and real event
+lag. No new collection was started and no95%availability result is claimed.
+The12 logical targets keep map vs whole-series and final vs remaining totals
+semantics. Technical source checks do not measure prediction accuracy. Main card
+always concerns the whole series; selected map detail retains map-specific data.
+
+TECHNICAL TEST RESOURCE INCIDENT
+An unintegrated all12-target test appended a sixth historical map but retained a
+declared scope rowCount of5. The production source validator correctly removed
+scope qualification. A whole rich-vector assertion then attempted a large textual
+diff; its saved run failed with array-buffer allocation error. Root corrected only
+the fixture's declared count and changed the comparison to exact primitive checks
+with bounded first-mismatch output. The earlier failure remains preserved.
+The corrected actual-producer matrix passed in18.907seconds under an8GiB aggregate
+Windows JobObject; OS peak-job commit was3,244,904,448bytes. This is technical
+composition of all12targets, not12trained models or prediction-quality evidence.
+Future native checks use a serial owned-tree guard, four CPU affinity bits, explicit
+wall cap, minimum4GiB free-memory polling and kill-on-owner-close. Allocation refusal
+and parent/descendant cancellation were exercised separately. The job limit is
+allocated memory of that owned tree, not whole-project RSS; unrelated processes
+are not constrained by this runner. Full sustained rich-runtime acceptance remains
+open. Exact older-PID ownership could not be reconstructed after those processes
+had already exited; no claim is made that root stopped them during this check.
+
+FINAL COMPOSED TECHNICAL VERIFICATION
+The serial full source-adapter/registry scope executed746cases:742passed and4old
+positive consumer fixtures failed because their packets were8–9minutes older than
+decision time. Their purpose is phase/clock/history continuity, not stale-packet
+acceptance. Root moved only their positive decision times into the valid window;
+all4passed on the affected-file rerun, with explicit expiry/boundary tests unchanged.
+The full-run failure and corrective rerun are both preserved, rather than claiming
+one all-pass invocation. Unchanged production source evidence is reused. Thus all
+746planned cases have passing current evidence; no overlapping suite counts added.
+Full run:361.5seconds, peak-job commit4,343,123,968bytes; corrective run42.61seconds,
+peak3,682,385,920bytes. Both owned jobs had8GiB caps and no training/provider calls.
+The source-only acceptance receipt records these scopes and remaining gates.
+
+REJECTED SHORTCUTS
+Do not renew freshness from HTTP status200 or a caller pause flag. Do not relabel
+an old vector using later series facts. Do not fabricate history for missing data,
+prune broad features to fit caches, or raise the64MiB guard to claim archive support.
+Do not fit learned ratings/encodings to complete a source inventory. Do not merge
+provider moments field by field or confuse a retained vector with an issued forecast.
+
+RETURN TO ASTRA
+Review causality, source authority and all preserved counterexamples, then decide
+reference-sourcev2/private-proof/sink boundaries and persistent disk ownership.
+Review how to obtain qualified pause/Roshan/patch event evidence under separate
+source authority, and the full rich runtime representation/budgets. The complete
+feature/source/runtime gate remains OPEN. No fits, HPO, calibration, model-quality
+evaluation, task restart, provider calls, public model activation or app release.

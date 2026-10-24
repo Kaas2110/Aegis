@@ -11,6 +11,8 @@ import {HERO_IDS,evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {produceHistoricalRelationalFeatures,HISTORICAL_PLAYER_PROFILE_KEYS} from './historicalRelationalFeatures.mjs';
 import {readSteamProgressionProof,ADMISSION_PROFILE} from './steamProgressionAdmission.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+import {readRetainedReplayFrameProof} from './retainedReplayFrame.mjs';
+import {readSteamReceiptFreshness} from './steamPhasePolicy.mjs';
 import {produceCoherentEconomyContextFeatures,CONTRACT as ECONOMY_CONTEXT_CONTRACT,FORMULA_VERSION as ECONOMY_CONTEXT_FORMULA_VERSION} from './coherentEconomyContextFeatures.mjs';
 
 export const CONTRACT='aegis.observed-draft-steam-feature-bundle.v2';
@@ -39,7 +41,8 @@ const ROSHAN_BASE_FIELDS={
  roshan_elapsed_since_confirmed_death:['R02','seconds'],roshan_respawn_lower_seconds:['R02','seconds'],roshan_respawn_upper_seconds:['R02','seconds'],roshan_confirmed_countdown_seconds:['R02','seconds'],
  roshan_inferred_death_game_clock_lower_seconds:['R02','game_seconds'],roshan_inferred_death_game_clock_upper_seconds:['R02','game_seconds'],roshan_inferred_elapsed_since_death_lower_seconds:['R02','seconds'],roshan_inferred_elapsed_since_death_upper_seconds:['R02','seconds'],
  roshan_dead:['R02','boolean'],roshan_alive:['R02','boolean'],roshan_confirmed_death_count:['R02','confirmed_event_count_not_spawn_ordinal'],
- aegis_observed_in_slot:['R03','boolean'],aegis_holder_side:['R03','side_sign'],aegis_holder_hero:['R03','hero_id'],aegis_holder_nw:['R03','gold_value'],aegis_holder_level:['R03','level'],aegis_elapsed_since_confirmed_pickup:['R03','seconds'],aegis_lifetime_upper_seconds:['R03','seconds'],aegis_confirmed_steal:['R04','boolean']
+ aegis_observed_in_slot:['R03','boolean'],aegis_holder_side:['R03','side_sign'],aegis_holder_hero:['R03','hero_id'],aegis_holder_nw:['R03','gold_value'],aegis_holder_level:['R03','level'],aegis_elapsed_since_confirmed_pickup:['R03','seconds'],aegis_lifetime_upper_seconds:['R03','seconds'],aegis_confirmed_steal:['R04','boolean'],
+ aegis_confirmed_consumed:['R03','boolean'],aegis_confirmed_expired:['R03','boolean'],aegis_confirmed_destroyed:['R03','boolean'],aegis_elapsed_since_confirmed_consumed:['R03','seconds'],aegis_elapsed_since_confirmed_expired:['R03','seconds'],aegis_elapsed_since_confirmed_destroyed:['R03','seconds'],aegis_confirmed_terminal_event_count_for_retained_pickup:['R03','confirmed_event_count_for_retained_pickup_not_full_game_count']
 };
 const finite=x=>typeof x==='number'&&Number.isFinite(x),field=x=>x?.missing===false&&finite(x.value)?x.value:null;
 const sha=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
@@ -111,8 +114,9 @@ function summary(xs){return xs.length===5&&xs.every(finite)?{sum:xs.reduce((a,b)
  * host-review hashes. Their semantic truth remains a reviewed host assumption;
  * absence retains unknown Roshan/respawn/Aegis semantics.
  */
-export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,matchId,decisionAt,sourceDecisionAt=decisionAt,historyProof,patch=null,rulesEvidence=null,expectedRulesSha256=null,eventsEvidence=null,expectedEventsSha256=null,progressionProof=null,progressionProofs=[]}={}){
+export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,matchId,decisionAt,sourceDecisionAt=decisionAt,retainedReplayProof=null,historyProof,patch=null,rulesEvidence=null,expectedRulesSha256=null,eventsEvidence=null,expectedEventsSha256=null,progressionProof=null,progressionProofs=[]}={}){
  if(instantNs(sourceDecisionAt)===null||instantNs(decisionAt)===null||instantNs(sourceDecisionAt)>instantNs(decisionAt))return blocked('dynamic_source_decision_horizon');
+ if(instantNs(sourceDecisionAt)<instantNs(decisionAt)&&retainedReplayProof===null)return blocked('dynamic_retained_replay_proof_required');
  const history=readDynamicHistoryProof(historyProof,{matchId,decisionAt});
  if(!history.accepted)return blocked(history.reason);
  const {context,relational}=history;
@@ -125,7 +129,7 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
  if(eventDocument!==null&&(eventDocument.contract!=='aegis.confirmed-live-objective-events.v1'||!Array.isArray(eventDocument.events)||eventDocument.events.length>2048))throw Error('dynamic_events_contract');
  const events=eventDocument?.events??[];
  if(!Array.isArray(progressionProofs)||progressionProofs.length>2048)return blocked('dynamic_progression_proofs_bound');
- let native=internal?.nativeState??null,lastReceived=internal?.lastReceivedAt??null,lastClock=internal?.lastClock??null,lastObservation=null,lastNative=null,lastAdmission=null,lastAdmissionProfile=internal?.admissionProfile??null,leadHistory=structuredClone(internal?.leadHistory??[]),bindings=[];
+ let native=internal?.nativeState??null,lastReceived=internal?.lastReceivedAt??null,lastClock=internal?.lastClock??null,lastObservation=null,lastNative=null,lastAdmission=null,lastAdmissionProfile=internal?.admissionProfile??null,lastContinuityId=internal?.continuityId??null,leadHistory=structuredClone(internal?.leadHistory??[]),bindings=[];
  for(let index=0;index<livePrefixInputs.length;index++){
   const entry=livePrefixInputs[index];
   const raw=readPinnedHistoricalJson(entry.rawInput,{maxBytes:6*1024*1024}),metadata=readPinnedHistoricalJson(entry.metadataInput,{maxBytes:256*1024}).data;
@@ -133,6 +137,10 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
   const rows=normalizeLocalCapture(capture).observations.filter(o=>o.matchId===matchId&&o.observationId===metadata.observationId);
   if(rows.length!==1)return blocked('dynamic_observation_not_in_raw');
   const o=rows[0],receipt=instantNs(o.source.capture.receivedAt),clock=field(o.providerGameClockSeconds),phase=o.dynamic?.phase;
+  if(index===livePrefixInputs.length-1&&retainedReplayProof!==null){
+   let reconstructed;try{reconstructed=readRetainedReplayFrameProof(retainedReplayProof,{rawSha256:raw.pin.sha256,receivedAt:o.source.capture.receivedAt,decisionAt});}catch(error){return blocked('dynamic_'+error.message);}
+   if(instantNs(reconstructed.sourceDecisionAt)!==instantNs(sourceDecisionAt))return blocked('dynamic_retained_replay_horizon_mismatch');
+  }
   if(lastReceived!==null&&receipt<instantNs(lastReceived))return blocked('dynamic_receipt_regression');
   if(context.validFrom&&instantNs(context.validFrom)>receipt)return blocked('dynamic_context_not_known_at_capture');
   const players=SIDES.flatMap(side=>o.sides[side].players);
@@ -145,9 +153,11 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
   if(receipt>instantNs(sourceDecisionAt)||instantNs(metadata.decisionAt)>instantNs(sourceDecisionAt))return blocked('dynamic_source_horizon_before_capture');
   const admission=held===null?null:readSteamProgressionProof(held,{matchId,observationId:o.observationId,rawSha256:raw.pin.sha256,sourceProfile:o.dynamic.sourceProfile,identityHash:steamObservationIdentity(o).key,decisionAt:proofAt,observation:o});
   if(held!==null&&!admission?.accepted)return blocked(admission?.reason??'owned_progression_proof_required');
+  const freshness=readSteamReceiptFreshness(o,{decisionAt:proofAt});if(!freshness.accepted)return blocked(freshness.reason);
   if(o.dynamic.sourceProfile!==PROFILE||clock===null||clock<0||(!explicitLive&&!admission?.accepted)||o.sourceQualityReasons?.includes('outcome_marker_present'))return blocked('dynamic_live_clock_or_phase_unavailable');
   const currentAdmission=admission?.admissionProfile??null;
-  if(lastAdmissionProfile!==currentAdmission){native=null;leadHistory=[];}
+  const currentContinuityId=admission?.provenance?.continuityId??null;
+  if(lastAdmissionProfile!==currentAdmission||lastContinuityId!==currentContinuityId){native=null;leadHistory=[];}
   // Resetting a feature window is not authority to replace an accepted current
   // game with an earlier clock. A future remake/epoch needs its own proof.
   if(lastClock!==null&&clock<lastClock)return blocked('dynamic_game_clock_regression',{previousClockSeconds:lastClock,observedClockSeconds:clock,receivedAt:o.source.capture.receivedAt,rawSha256:raw.pin.sha256});
@@ -158,7 +168,7 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
   leadHistory.push({clock,knownAt:o.source.capture.receivedAt,observationId:o.observationId,leads:Object.fromEntries(LEAD_KEYS.map(k=>[k,nativeValues.get('roshan.'+k)??null]))});
   if(leadHistory.length>2048)throw Error('dynamic_lead_history_bound');
   native=frame.state;lastReceived=o.source.capture.receivedAt;lastClock=clock;
-  lastObservation=o;lastNative=frame;lastAdmission=admission;lastAdmissionProfile=currentAdmission;
+  lastObservation=o;lastNative=frame;lastAdmission=admission;lastAdmissionProfile=currentAdmission;lastContinuityId=currentContinuityId;
   bindings.push({observationId:o.observationId,rawSha256:raw.pin.sha256,metadataSha256:entry.metadataInput.pin.sha256,receivedAt:o.source.capture.receivedAt});
  }
  if(!lastObservation)return blocked('dynamic_live_prefix_empty');
@@ -170,7 +180,7 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
  const state=Object.freeze({contract:result.contract+'.state',matchId,lastObservationId:result.observationId,historyContentHash:context.contentHash});
  // Do not expose the retained state through nativeBundle.state: callers can
  // inspect/mutate that public copy without mutating the trusted next-step state.
- states.set(state,{matchId,nativeState:deepFreeze(structuredClone(native)),leadHistory:deepFreeze(structuredClone(leadHistory)),lastReceivedAt:lastReceived,lastClock,admissionProfile:lastAdmission?.admissionProfile??null,historyContentHash:context.contentHash});
+ states.set(state,{matchId,nativeState:deepFreeze(structuredClone(native)),leadHistory:deepFreeze(structuredClone(leadHistory)),lastReceivedAt:lastReceived,lastClock,admissionProfile:lastAdmission?.admissionProfile??null,continuityId:lastContinuityId,historyContentHash:context.contentHash});
  return {...result,state,decisionAt,sourceDecisionAt,reconstructedSourceHorizon:instantNs(sourceDecisionAt)<instantNs(decisionAt),admissionProvenance:lastAdmission?.provenance??null,sourceBindings:bindings,historyRefs:{contentHash:context.contentHash,historyCutoffAt:context.historyCutoffAt,validFrom:context.validFrom,computedAt:context.computedAt,identityRevision:context.draftState.revision,factsSha256:context.producer.bindings.facts.sha256},semanticEvidence:{rulesSha256:rulesEvidence?.pin?.sha256??null,eventsSha256:eventsEvidence?.pin?.sha256??null,trust:'optional reviewed host-pinned artifact, not independent event truth'},sourceCoherence:{sourceProfile:PROFILE,admissionProfile:lastAdmission?.admissionProfile??'GLG_EXPLICIT_PHASE5.v1',oneNativeProfile:true,rawBytesReplayed:true,explicitPhase5:!lastAdmission?.accepted,historyAsOfOriginalCutoff:true,receiptAuthenticity:'trusted host retained journal; no provider signature verified'},zeroMinuteCohortClaimed:false,jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false,recordedPrediction:false};
 }
 

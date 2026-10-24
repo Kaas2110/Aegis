@@ -6,6 +6,7 @@ import {advanceRoshanFeatures,FEATURE_CONTRACT} from './roshanFeatures.mjs';
 import {projectPlayerHeroEconomy,featureNames,CONTRACT as ECONOMY_CONTRACT} from './playerHeroEconomyFeatures.mjs';
 import {readSteamProgressionProof} from './steamProgressionAdmission.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+import {readSteamReceiptFreshness} from './steamPhasePolicy.mjs';
 export const BUNDLE_CONTRACT='aegis.steam-coherent-feature-bundle.v3';
 export const PROGRESSING_BUNDLE_CONTRACT='aegis.steam-coherent-feature-bundle.v4';
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
@@ -16,12 +17,14 @@ const EXPECTED_ECONOMY_ERRORS=new Set(['complete_coherent_economy_snapshot_requi
  * context; unproven history is missing, not an invented player-strength value.
  */
 export function advanceSteamFeatureBundle(previous,observation,{patch=null,rules=null,events=[],historicalContext=null,progressionProof=null,decisionAt=observation?.source?.capture?.receivedAt}={}){
+ const freshness=readSteamReceiptFreshness(observation,{decisionAt});if(!freshness.accepted)throw Error(freshness.reason);
  let admission=null;
  if(progressionProof!==null){admission=readSteamProgressionProof(progressionProof,{matchId:observation?.matchId,observationId:observation?.observationId,rawSha256:observation?.source?.capture?.rawSha256,sourceProfile:observation?.dynamic?.sourceProfile,identityHash:steamObservationIdentity(observation).key,decisionAt,observation});if(!admission.accepted)throw Error(admission.reason);}
- const admissionProfile=admission?.admissionProfile??null,bundleContract=admission?PROGRESSING_BUNDLE_CONTRACT:BUNDLE_CONTRACT;
+ const admissionProfile=admission?.admissionProfile??null,continuityId=admission?.provenance?.continuityId??null,bundleContract=admission?PROGRESSING_BUNDLE_CONTRACT:BUNDLE_CONTRACT;
  if(previous!==null&&previous!==undefined&&(![BUNDLE_CONTRACT,PROGRESSING_BUNDLE_CONTRACT].includes(previous.contract)||!Array.isArray(previous.history)||previous.history.length>2048))throw Error('steam_feature_bundle_state');
  const admissionChanged=previous!=null&&(previous.admissionProfile??null)!==admissionProfile;
- if(admissionChanged)previous=null;
+ const continuityChanged=previous!=null&&(previous.continuityId??null)!==continuityId;
+ if(admissionChanged||continuityChanged)previous=null;
  const roshan=advanceRoshanFeatures(previous?.roshanState??null,observation,{patch,rules,events,historicalContext});
  const reset=roshan.resetReasons.length>0;
  const history=reset?[]:(previous?.history??[]);
@@ -41,7 +44,7 @@ export function advanceSteamFeatureBundle(previous,observation,{patch=null,rules
  let nextHistory=history.filter(o=>clock(o)!==null&&clock(o)>=currentClock-630&&o.observationId!==observation.observationId);
  if(economy)nextHistory.push(observation);
  if(nextHistory.length>2048)throw Error('steam_feature_bundle_history_bound');
- const state={contract:bundleContract,admissionProfile,roshanState:roshan.state,history:nextHistory};
+ const state={contract:bundleContract,admissionProfile,continuityId,roshanState:roshan.state,history:nextHistory};
  return {contract:bundleContract,admissionProfile,admissionProvenance:admission?.provenance??null,matchId:observation.matchId,observationId:observation.observationId,
   sourceProfile:roshan.sourceProfile,knownAt:roshan.knownAt,eventClockSeconds:roshan.gameClockSeconds,
   sourceInputHash:roshan.sourceInputHash,rawSha256:roshan.rawSha256,
@@ -49,6 +52,6 @@ export function advanceSteamFeatureBundle(previous,observation,{patch=null,rules
   vector:{names,values,schemaHash:admission?digest({contract:bundleContract,admissionProfile,names}):digest(names),featureCount:names.length},
   roshan:{state:roshan.roshan.state,rulesAccepted:roshan.rulesAccepted,timerSemanticsAccepted:roshan.timerSemanticsAccepted,historyContext:roshan.historyContext},
   economy:economy?{status:'coherent_diagnostic_features',staticContextStatus:economy.staticContextStatus,verifiedRoleCount:economy.verifiedRoleCount,knownActiveValueColumns:economy.knownActiveValueColumns,activeValueColumns:economy.activeValueColumns}:{status:'unavailable',reason:economyReason},
-  resetReasons:admissionChanged?['admission_profile_changed',...roshan.resetReasons]:roshan.resetReasons,state,
+  resetReasons:[...(admissionChanged?['admission_profile_changed']:[]),...(continuityChanged?['source_continuity_changed']:[]),...roshan.resetReasons],state,
   jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false};
 }

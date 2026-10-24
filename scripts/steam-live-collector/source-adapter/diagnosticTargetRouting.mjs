@@ -29,46 +29,75 @@ function notFuture(value,cutoff){const at=instantNs(value);return at!==null&&at<
  * journal is an owned verifying read port such as createDiagnosticFeatureJournal.
  * Original-model forecast replay stays unavailable until its separate receipt/
  * model-output contract is reviewed; feature traces cannot satisfy that proof. */
-export function createDiagnosticTargetRouter({journal,targetDocument,expectedSchemaHashes}={}){
+export function createDiagnosticTargetRouter({journal,targetDocument,expectedSchemaHashes,readLiveEligibility=null}={}){
+ if(readLiveEligibility!==null&&typeof readLiveEligibility!=='function')fail('owned_live_eligibility_port');
  if(typeof journal?.loadTrace!=='function'||typeof journal?.loadSchema!=='function'||targetDocument?.contract!=='aegis.twelve-logical-targets.v1'||!Array.isArray(targetDocument.targets)||targetDocument.targets.length!==TARGET_IDS.length||new Set(targetDocument.targets.map(t=>t.id)).size!==TARGET_IDS.length||targetDocument.targets.some(t=>!TARGET_IDS.includes(t.id)||!Object.hasOwn(SEMANTICS,t.target)||!Array.isArray(t.stateModes)||!t.stateModes.length||!Object.values(PHASES).some(phases=>phases.includes(t.phase))))fail('owned_registry_or_journal');
  if(!exact(expectedSchemaHashes,TARGET_IDS)||Object.values(expectedSchemaHashes).some(xs=>!Array.isArray(xs)||!xs.length||xs.length>8||xs.some(x=>!SHA.test(x))||new Set(xs).size!==xs.length))fail('exact_schema_allowlist');
  const document=freeze(structuredClone(targetDocument)),metadata=new Map(document.targets.map(t=>[t.id,t])),allowed=freeze(structuredClone(expectedSchemaHashes)),targetDocumentSha256=digest(document);
  function descriptor(trace,traceSha256,route){
   const meta=metadata.get(route.targetId),semantic=SEMANTICS[meta.target];
-  return{status:'diagnostic_features_available',targetId:route.targetId,targetContract:meta.target,phase:meta.phase,stateMode:route.stateMode,...semantic,traceSha256,schemaRef:structuredClone(route.schemaRef),featureCount:route.featureCount,sourceEvidence:{sourceSnapshotHash:trace.sourceSnapshotHash??null,historicalInputRef:trace.historicalInputRef??null,rawSourceReplayPerformedByRouter:false,providerAuthenticationClaimed:false},prediction:null,modelOutputRequired:true,...(semantic.metric==='kills'||semantic.metric==='duration'?{totals:{metric:semantic.metric,unit:semantic.units,discrete:true,featureTargetQuantity:semantic.quantity,distribution:null,outputMetadataRequired:true,remainingToFinalConversionPerformed:false,consumer:'existing_TotalsDistribution_and_BookmakerTotalsLadder'}}:{}),...flags};
+  return{status:'diagnostic_features_available',targetId:route.targetId,targetContract:meta.target,phase:meta.phase,stateMode:route.stateMode,...semantic,traceSha256,schemaRef:structuredClone(route.schemaRef),featureCount:route.featureCount,sourceEvidence:{sourceSnapshotHash:trace.sourceSnapshotHash??null,historicalInputRef:trace.historicalInputRef??null,featureInputCutoffAt:trace.featureInputCutoffAt??trace.reconstruction?.sourceDecisionAt??trace.decisionAt,calculatedAt:trace.decisionAt,rawSourceReplayPerformedByRouter:false,providerAuthenticationClaimed:false},prediction:null,modelOutputRequired:true,...(semantic.metric==='kills'||semantic.metric==='duration'?{totals:{metric:semantic.metric,unit:semantic.units,discrete:true,featureTargetQuantity:semantic.quantity,distribution:null,outputMetadataRequired:true,remainingToFinalConversionPerformed:false,consumer:'existing_TotalsDistribution_and_BookmakerTotalsLadder'}}:{}),...flags};
  }
- async function read({traceSha256=null,seriesInput,phase,currentMap=null,selection={kind:'entry'},decisionAt}={}){
+ async function read({traceSha256=null,seriesTraceSha256=null,mapTraceSha256=null,seriesInput,phase,currentMap=null,selection={kind:'entry'},decisionAt}={}){
+  if(traceSha256!==null&&(seriesTraceSha256!==null||mapTraceSha256!==null))fail('ambiguous_trace_references');
+  for(const key of [traceSha256,seriesTraceSha256,mapTraceSha256])if(key!==null&&!SHA.test(key))fail('trace_hash');
+  const legacy=traceSha256!==null;
+  if(legacy){seriesTraceSha256=traceSha256;mapTraceSha256=traceSha256;}
   const decision=instantNs(decisionAt);if(decision===null||!Object.hasOwn(PHASES,phase)||currentMap!==null&&(!exact(currentMap,['mapId','mapNumber'])||!ID.test(currentMap.mapId)||!Number.isInteger(currentMap.mapNumber))||!obj(selection)||selection.kind==='entry'&&!exact(selection,['kind'])||selection.kind==='manual'&&(!exact(selection,['kind','mapId'])||!ID.test(selection.mapId))||!['entry','manual'].includes(selection.kind))fail('selection_contract');
   if(['PRE','POST','LIVE'].includes(phase)!==(currentMap!==null))fail('phase_map_identity');
   const series=produceSeriesContext({seriesInput,decisionAt,currentMapId:currentMap?.mapId??null,currentMapNumber:currentMap?.mapNumber??null}),seriesRaw=parseSeries(seriesInput),selectedMapId=selection.kind==='manual'?selection.mapId:currentMap?.mapId??(series.terminal?seriesRaw.previousMaps.at(-1)?.mapId??null:null);
   if(phase==='COMPLETE'&&!series.terminal)fail('series_not_complete');
+  if(phase==='SERIES_PRE'&&series.sourceMapIds.length!==0||phase==='BETWEEN'&&(series.sourceMapIds.length===0||series.terminal))fail('phase_series_progress');
   const selectedPrevious=seriesRaw.previousMaps.find(m=>m.mapId===selectedMapId)??null;
   if(selectedMapId!==null&&selectedMapId!==currentMap?.mapId&&!selectedPrevious)fail('selected_map_not_in_series');
   let main=series.terminal?{status:'actual_result',entity:'series',seriesId:series.seriesId,team1Id:series.team1Id,team2Id:series.team2Id,score:series.score,winnerTeamId:series.actualWinnerTeamId,prediction:null,...flags}:unavailable('verified_current_series_trace_required');
   let detail=selectedPrevious?{status:'actual_result',entity:'map',seriesId:series.seriesId,mapId:selectedPrevious.mapId,mapNumber:selectedPrevious.mapNumber,winnerTeamId:selectedPrevious.winnerTeamId,team1Kills:selectedPrevious.team1Kills,team2Kills:selectedPrevious.team2Kills,durationSeconds:selectedPrevious.durationSeconds,heroes:{orientation:'series_team1_team2',team1:selectedPrevious.team1Heroes,team2:selectedPrevious.team2Heroes},historicalForecast:null,historicalForecastReason:'verified_original_model_forecast_receipt_unavailable',prediction:null,...flags}:unavailable(selectedMapId===null?'no_current_or_selected_map':'verified_selected_map_trace_required');
   let sourceRejection=null;
-  const result=()=>freeze({contract:DIAGNOSTIC_ROUTING_CONTRACT,seriesId:series.seriesId,bestOf:series.bestOf,phase,selection:structuredClone(selection),selectedMapId,currentMapId:currentMap?.mapId??null,main:{...main,entity:'series',seriesId:series.seriesId,eventRelation:series.bestOf===1?'same_event_as_only_map':'whole_series'},detail,sourceRejection,originalForecastReplayEnabled:false,targetDocumentSha256,...flags});
-  if(traceSha256===null||series.terminal)return result();
-  if(!SHA.test(traceSha256))fail('trace_hash');
-  let trace;
-  try{
-   trace=await journal.loadTrace(traceSha256);
-   if(trace?.contract!=='aegis.diagnostic-feature-trace.v1'||trace.eligibleForServing!==false||trace.eligibleForTraining!==false||trace.recordedPrediction!==false||trace.mode!==phase||trace.seriesId!==series.seriesId||trace.matchId!==(currentMap?.mapId??null)||!notFuture(trace.decisionAt,decision)||!notFuture(trace.availableAt,decision)||trace.timings?.featuresReadyAt!==undefined&&!notFuture(trace.timings.featuresReadyAt,decision)||!Array.isArray(trace.routes)||trace.routes.length>12)fail('trace_identity_phase_or_time');
+  const panelRejections={series:null,map:null},traceCache=new Map();
+  const result=()=>freeze({contract:DIAGNOSTIC_ROUTING_CONTRACT,seriesId:series.seriesId,bestOf:series.bestOf,phase,selection:structuredClone(selection),selectedMapId,currentMapId:currentMap?.mapId??null,traceRefs:{seriesTraceSha256,mapTraceSha256},main:{...main,entity:'series',seriesId:series.seriesId,eventRelation:series.bestOf===1?'same_event_as_only_map':'whole_series'},detail,sourceRejection,panelRejections,originalForecastReplayEnabled:false,targetDocumentSha256,...flags});
+  if(series.terminal)return result();
+  const rejection=error=>typeof error?.message==='string'&&error.message.startsWith('diagnostic_target_routing:')?error.message.slice('diagnostic_target_routing:'.length):'journal_evidence_unavailable';
+  const load=async key=>{if(!traceCache.has(key))traceCache.set(key,journal.loadTrace(key));return traceCache.get(key);};
+  async function verify(key,expectedModes){
+   const trace=await load(key),traceMap=['PRE','POST','LIVE'].includes(trace?.mode)?currentMap:null;
+   if(trace?.contract!=='aegis.diagnostic-feature-trace.v1'||trace.eligibleForServing!==false||trace.eligibleForTraining!==false||trace.recordedPrediction!==false||!expectedModes.includes(trace.mode)||trace.seriesId!==series.seriesId||trace.matchId!==(traceMap?.mapId??null)||!notFuture(trace.decisionAt,decision)||!notFuture(trace.availableAt,decision)||trace.timings?.featuresReadyAt!==undefined&&!notFuture(trace.timings.featuresReadyAt,decision)||!Array.isArray(trace.routes)||trace.routes.length>12)fail('trace_identity_phase_or_time');
+   // A series ID does not pin its format, score, previous drafts or corrections.
+   // A trace can only describe the exact receipt used to generate its vector.
+   if(trace.seriesReceiptPin?.sha256!==seriesInput.pin.sha256||trace.seriesReceiptPin?.bytes!==seriesInput.pin.bytes)fail('trace_series_receipt_binding');
+   const horizon=trace.reconstruction?.sourceDecisionAt??trace.decisionAt;
+   if(!notFuture(horizon,instantNs(trace.decisionAt))||trace.featureInputCutoffAt!==undefined&&instantNs(trace.featureInputCutoffAt)!==instantNs(horizon)||!notFuture(series.availableAt,instantNs(horizon)))fail('trace_series_source_horizon');
    const binding=trace.targetBinding;
    if(['series_history','map_prematch'].includes(trace.historicalBindings?.kind)){const ref=trace.historicalInputRef;if(ref?.contract!=='aegis.static-historical-input-reference.v1'||!SHA.test(ref.sha256??'')||!Number.isSafeInteger(ref.bytes)||ref.bytes<1||ref.bytes>16384)fail('static_historical_input_reference_required');}
+   if(trace.historicalBindings?.kind==='series_history'&&trace.historicalBindings.transitionId!==series.seriesId+':after:'+series.sourceMapIds.length)fail('trace_series_transition_binding');
    if(binding?.mapId!==trace.matchId||binding?.series?.seriesId!==series.seriesId||binding.series.team1Id!==series.team1Id||binding.series.team2Id!==series.team2Id||binding.series.outcome!=='series_team1_win')fail('trace_series_orientation');
-   if(currentMap){const s=binding.mapSides;if(!obj(s)||s.radiant===s.dire||![s.radiant,s.dire].every(t=>[series.team1Id,series.team2Id].includes(t))||binding.mapOutcome!=='map_radiant_win'||binding.series.team1CurrentSide!==(s.radiant===series.team1Id?'radiant':'dire'))fail('trace_current_map_orientation');}
+   if(traceMap){const s=binding.mapSides;if(!obj(s)||s.radiant===s.dire||![s.radiant,s.dire].every(t=>[series.team1Id,series.team2Id].includes(t))||binding.mapOutcome!=='map_radiant_win'||binding.series.team1CurrentSide!==(s.radiant===series.team1Id?'radiant':'dire'))fail('trace_current_map_orientation');}
    else if(binding.mapSides!==null||binding.mapOutcome!==null||binding.series.team1CurrentSide!==null)fail('unexpected_map_side_binding');
    const seen=new Set();
    for(const route of trace.routes){
-    const meta=metadata.get(route.targetId);if(!meta||seen.has(route.targetId)||!PHASES[phase].includes(meta.phase)||!meta.stateModes.includes(route.stateMode)||meta.phase==='SERIES_LIVE'&&route.stateMode!==(phase==='LIVE'?'observed_live':'observed_postdraft')||!allowed[route.targetId].includes(route.schemaRef?.sha256))fail('route_phase_or_schema');seen.add(route.targetId);
+    const meta=metadata.get(route.targetId);if(!meta||seen.has(route.targetId)||!PHASES[trace.mode].includes(meta.phase)||meta.phase==='SERIES_PRE'&&series.sourceMapIds.length!==0||!meta.stateModes.includes(route.stateMode)||meta.phase==='SERIES_LIVE'&&route.stateMode!==(trace.mode==='LIVE'?'observed_live':'observed_postdraft')||!allowed[route.targetId].includes(route.schemaRef?.sha256))fail('route_phase_or_schema');seen.add(route.targetId);
     const schema=await journal.loadSchema(route.schemaRef.sha256);if(schema.contract!=='aegis.unified-feature-projection-schema.v1'||schema.targetId!==route.targetId||schema.stateMode!==route.stateMode||!Array.isArray(schema.definitions)||schema.definitions.length!==route.featureCount||route.schemaRef.featureCount!==route.featureCount)fail('exact_schema_target_binding');
    }
-  }catch(error){sourceRejection=typeof error?.message==='string'&&error.message.startsWith('diagnostic_target_routing:')?error.message.slice('diagnostic_target_routing:'.length):'journal_evidence_unavailable';return result();}
-  if(!series.terminal){const route=trace.routes.find(r=>metadata.get(r.targetId).phase===MAIN_PHASE[phase]&&SEMANTICS[metadata.get(r.targetId).target].entity==='series');if(route)main={...descriptor(trace,traceSha256,route),team1Id:series.team1Id,team2Id:series.team2Id,team1CurrentSide:trace.targetBinding.series.team1CurrentSide};}
-  if(selectedMapId!==null&&selectedMapId===currentMap?.mapId){
-   const routes=trace.routes.filter(r=>SEMANTICS[metadata.get(r.targetId).target].entity==='map');
-   if(routes.length)detail={status:'diagnostic_features_available',entity:'map',seriesId:series.seriesId,mapId:selectedMapId,mapNumber:currentMap.mapNumber,mapSides:structuredClone(trace.targetBinding.mapSides),targets:routes.map(r=>descriptor(trace,traceSha256,r)),prediction:null,...flags};
+   let currentLiveEligibility={status:'unavailable',reason:'owned_live_eligibility_port_not_configured',eligibleForRetainingForecast:false};
+   if(trace.mode==='LIVE'&&readLiveEligibility!==null){
+    const state=await readLiveEligibility({matchId:trace.matchId,decisionAt,traceSha256:key});
+    if(state?.eligibleForRetainingForecast!==true)fail('current_live_state_ineligible');
+    if(state.lastTraceSha256!==key||!SHA.test(trace.nativeObservationId??'')||state.stateView?.observationId!==trace.nativeObservationId)fail('current_live_trace_binding');
+    currentLiveEligibility={status:'eligible_retention_candidate',reason:state.reason??null,eligibleForRetainingForecast:true,lastTraceSha256:key,observationId:state.stateView.observationId,lastConfirmedAt:state.stateView.lastConfirmedAt??null,expiresAt:state.stateView.expiresAt??null,ageSeconds:state.ageSeconds??null,recordedPrediction:false,eligibleForServing:false};
+   }else if(trace.mode!=='LIVE')currentLiveEligibility={status:'not_applicable',eligibleForRetainingForecast:false};
+   return{trace,key,currentLiveEligibility};
+  }
+  const mainModes=legacy?[phase]:phase==='PRE'?(series.sourceMapIds.length?['BETWEEN']:['SERIES_PRE','PRE']):[phase];
+  let seriesEvidence=null,mapEvidence=null;
+  if(seriesTraceSha256!==null){try{seriesEvidence=await verify(seriesTraceSha256,mainModes);}catch(error){panelRejections.series=rejection(error);}}
+  if(mapTraceSha256!==null&&currentMap!==null&&selectedMapId===currentMap.mapId){try{mapEvidence=await verify(mapTraceSha256,[phase]);}catch(error){panelRejections.map=rejection(error);}}
+  if(seriesEvidence&&mapEvidence&&seriesEvidence.trace.matchId!==null&&['radiant','dire'].some(side=>seriesEvidence.trace.targetBinding.mapSides[side]!==mapEvidence.trace.targetBinding.mapSides[side])){seriesEvidence=null;mapEvidence=null;panelRejections.series=panelRejections.map='trace_pair_map_orientation';}
+  // The legacy one-trace call historically rejected both panels atomically.
+  if(legacy&&(panelRejections.series||panelRejections.map)){sourceRejection=panelRejections.series??panelRejections.map;return result();}
+  sourceRejection=panelRejections.series??panelRejections.map;
+  if(seriesEvidence){const {trace,key,currentLiveEligibility}=seriesEvidence,mainPhase=trace.mode==='BETWEEN'?'SERIES_BETWEEN':MAIN_PHASE[trace.mode],route=trace.routes.find(r=>metadata.get(r.targetId).phase===mainPhase&&SEMANTICS[metadata.get(r.targetId).target].entity==='series');if(route)main={...descriptor(trace,key,route),team1Id:series.team1Id,team2Id:series.team2Id,team1CurrentSide:trace.targetBinding.series.team1CurrentSide,currentLiveEligibility};}
+  if(mapEvidence){
+   const {trace,key,currentLiveEligibility}=mapEvidence,routes=trace.routes.filter(r=>SEMANTICS[metadata.get(r.targetId).target].entity==='map');
+   if(routes.length)detail={status:'diagnostic_features_available',entity:'map',seriesId:series.seriesId,mapId:selectedMapId,mapNumber:currentMap.mapNumber,mapSides:structuredClone(trace.targetBinding.mapSides),targets:routes.map(r=>({...descriptor(trace,key,r),currentLiveEligibility})),currentLiveEligibility,prediction:null,...flags};
   }
   return result();
  }

@@ -14,7 +14,9 @@ function liveEntry({time='2026-10-23T12:31:00Z',clock=900,accounts=true,offset=0
  return{rawInput,metadataInput:pinned({...m,observationId:o.observationId},'synthetic-dynamic-live-metadata.json')};
 }
 function history({accounts=true,computedAt='2026-10-23T12:30:00Z',time='2026-10-23T11:58:00Z'}={}){const a=draftArgs({accounts,time});a.computedAt=computedAt;return createDynamicHistoryProof(a);}
-function run(h,e,prev=null,extra={}){return advanceObservedDraftFeatureBundle(prev,{livePrefixInputs:Array.isArray(e)?e:[e],matchId:'90001',decisionAt:'2026-10-23T12:40:00Z',historyProof:h.proof,...extra});}
+// Formula tests use a current receipt. Stale-source rejection is exercised
+// separately; a nine-minute-old frame is no longer a valid live fixture.
+function run(h,e,prev=null,extra={}){return advanceObservedDraftFeatureBundle(prev,{livePrefixInputs:Array.isArray(e)?e:[e],matchId:'90001',decisionAt:'2026-10-23T12:33:00Z',historyProof:h.proof,...extra});}
 const value=(r,name)=>r.vector.values[r.vector.names.indexOf(name)];
 
 test('actual pinned history and coherent native capture yield wide diagnostic interactions',()=>{

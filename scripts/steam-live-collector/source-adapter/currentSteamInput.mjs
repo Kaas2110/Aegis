@@ -2,7 +2,7 @@
 import {replayPinnedDraftPrefix} from './observedDraftHistory.mjs';
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
-import {classifySteamObservationPhase} from './steamPhasePolicy.mjs';
+import {classifySteamObservationPhase,readSteamReceiptFreshness} from './steamPhasePolicy.mjs';
 import {readSteamProgressionProof} from './steamProgressionAdmission.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {instantNs} from './causalTime.mjs';
@@ -23,6 +23,7 @@ export function readCurrentSteamInput({prefix,context,matchId,decisionAt,progres
  const reconstruction=retainedReplayProof===null?null:readRetainedReplayFrameProof(retainedReplayProof,{rawSha256:last.rawInput.pin.sha256,receivedAt:m.capture.receivedAt,decisionAt});
  const sourceDecisionAt=reconstruction?.sourceDecisionAt??decisionAt;
  let admission=classifySteamObservationPhase(rows[0],{decisionAt:sourceDecisionAt});
+ if(admission.dynamicDiagnosticAllowed){const freshness=readSteamReceiptFreshness(rows[0],{decisionAt:sourceDecisionAt});if(!freshness.accepted)fail('current_observation:'+freshness.reason);}
  if(progressionProof!==null){
   const o=rows[0],p=readSteamProgressionProof(progressionProof,{matchId,observationId:o.observationId,rawSha256:o.source.capture.rawSha256,sourceProfile:o.dynamic.sourceProfile,decisionAt:sourceDecisionAt,identityHash:steamObservationIdentity(o).key,observation:o});
   if(!p.accepted)fail('current_observation:'+p.reason);
