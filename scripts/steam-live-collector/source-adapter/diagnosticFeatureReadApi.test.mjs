@@ -9,3 +9,25 @@ test('feature pages bind exact target/schema and preserve observed zero versus m
 test('writes/path selection/oversized pages/duplicate query parameters and arbitrary targets fail closed',async()=>{const {journal,calls}=fixture(),api=createDiagnosticFeatureReadApi({journal,enabled:true,maxFeaturePage:2});for(const request of [{method:'POST',url:base},{url:'https://example.com/'+base},{url:base+'/features/LIVE_MAP_WIN?limit=3'},{url:base+'/features/LIVE_MAP_WIN?limit=1&limit=2'},{url:base+'?directory=private'}])assert.ok((await api.handle(request)).status>=400);assert.equal(calls.trace,0);assert.equal((await api.handle({url:base+'/features/LIVE_KILLS'})).status,404);});
 test('storage corruption remains unavailable with a generic technical error',async()=>{const api=createDiagnosticFeatureReadApi({journal:{loadTrace:async()=>{throw Error('private-source-path');},loadSchema:async()=>null},enabled:true});const result=await api.handle({url:base});assert.equal(result.status,503);assert.equal(JSON.stringify(result).includes('private-source-path'),false);});
 test('concurrent read ceiling rejects overload without starting or queuing another journal read',async()=>{const {journal,calls}=fixture(),original=journal.loadTrace;let resume;const held=new Promise(resolve=>resume=resolve);journal.loadTrace=async key=>{await held;return original(key);};const api=createDiagnosticFeatureReadApi({journal,enabled:true,maxConcurrentReads:1}),first=api.handle({url:base});assert.equal((await api.handle({url:base})).status,429);resume();assert.equal((await first).status,200);assert.equal(calls.trace,1);});
+
+test('saved feature inspection does not claim an old trace is currently eligible',async()=>{
+ const {journal}=fixture(),api=createDiagnosticFeatureReadApi({journal,enabled:true});
+ const r=await api.handle({url:base});assert.equal(r.body.currentLiveEligibility.eligibleForRetainingForecast,false);assert.equal(r.body.currentLiveEligibility.userMessage,'Прогноз недоступен');
+});
+
+test('reader calls owned freshness port at read time; a stale clock cannot be supplied in query',async()=>{
+ const {journal}=fixture(),original=journal.loadTrace; journal.loadTrace=async hash=>({...await original(hash),nativeObservationId:'observed-1'});
+ let time='2026-10-24T00:05:00Z',reads=0;
+ const api=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=>time,readLiveEligibility:async({matchId,decisionAt})=>{
+  reads++;assert.equal(matchId,'101');return{eligibleForRetainingForecast:decisionAt=== '2026-10-24T00:05:00Z',lastTraceSha256:key,stateView:{observationId:'observed-1',lastConfirmedAt:'2026-10-24T00:00:00Z',expiresAt:'2026-10-24T00:05:00Z',classification:'confirmed_active'}};
+ }});
+ assert.equal((await api.handle({url:base})).body.currentLiveEligibility.eligibleForRetainingForecast,true);
+ time='2026-10-24T00:05:00.000000001Z';assert.equal((await api.handle({url:base})).body.currentLiveEligibility.eligibleForRetainingForecast,false);
+ assert.equal((await api.handle({url:base+'?decisionAt=2026-10-24T00:00:00Z'})).status,400);assert.equal(reads,2);
+});
+
+test('route endpoint resolves source context from an owned port and overrides backdated decisions',async()=>{
+ let calls=0;const {journal}=fixture(),api=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=> '2026-10-24T00:06:00Z',resolveRouteContext:async({seriesId})=>({seriesInput:{privateOwnedBytes:true},seriesId,decisionAt:'2000-01-01T00:00:00Z'}),targetRouter:{async read(context){calls++;assert.equal(context.decisionAt,'2026-10-24T00:06:00Z');return{seriesId:'synthetic-series',recordedPrediction:false};}}});
+ assert.equal((await api.handle({url:'/admin/feature-diagnostics/series/synthetic-series/routes'})).status,200);
+ assert.equal((await api.handle({url:'/admin/feature-diagnostics/series/synthetic-series/routes?source=forged'})).status,400);assert.equal(calls,1);
+});

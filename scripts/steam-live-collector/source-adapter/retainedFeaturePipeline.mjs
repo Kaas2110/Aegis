@@ -14,6 +14,7 @@ import {instantNs} from './causalTime.mjs';
 import {advanceSteamProgressionAdmission} from './steamProgressionAdmission.mjs';
 import {classifySteamObservationPhase} from './steamPhasePolicy.mjs';
 import {createRetainedReplayFrameProof} from './retainedReplayFrame.mjs';
+import {advanceSteamEligibleState,readSteamEligibleState} from './steamEligibleState.mjs';
 export const RETAINED_PIPELINE_CONTRACT='aegis.retained-steam-feature-pipeline.v2';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const flags={diagnosticOnly:true,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
@@ -51,10 +52,19 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
  if(!limits||typeof limits!=='object'||Array.isArray(limits)||Object.keys(limits).some(k=>!Object.hasOwn(defaults,k)))fail('limit_keys');const config={...defaults,...limits};for(const[k,v]of Object.entries(config))if(!Number.isSafeInteger(v)||v<1||v>caps[k])fail('limit_bound');
  const consumer=createDiagnosticFeatureConsumer({producer,writeSchema:x=>featureJournal.writeSchema(x),appendTrace:x=>featureJournal.appendTrace(x),loadCommittedTrace:typeof featureJournal.loadTrace==='function'?x=>featureJournal.loadTrace(x):null,shouldContinue:()=>continuing(),signal,now,limits:{maxMaps:config.maxMaps}}),maps=new Map(),completed=new Map();let tail=Promise.resolve(),pending=0,stopObserved=false;
  function continuing(){let yes=false;try{yes=signal?.aborted!==true&&shouldContinue()===true;}catch{}
-  if(!yes&&!stopObserved){stopObserved=true;for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;}}
+  if(!yes&&!stopObserved){stopObserved=true;for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;interruptEligibility(slot,matchId,'manual_stop');resetFeatureContinuity(matchId);}}
   if(yes)stopObserved=false;return yes;
  }
  const status=(state,reason,extra={})=>({contract:RETAINED_PIPELINE_CONTRACT,status:state,reason,...extra,...flags});
+ function interruptEligibility(slot,matchId,barrier='source_gap',decisionAt=slot.eligibilityDecisionAt??now()){
+  if(slot.eligibilityDecisionAt!==undefined&&instantNs(decisionAt)<instantNs(slot.eligibilityDecisionAt))return;
+  const r=advanceSteamEligibleState(slot.eligibleStateToken,{matchId,decisionAt,barrier});
+  slot.eligibleStateToken=r.nextPrivateToken;slot.eligibility=r;slot.eligibilityDecisionAt=decisionAt;
+ }
+ function resetFeatureContinuity(matchId){
+  consumer.invalidateSourceContinuity(matchId);
+  for(const[key,r]of completed)if(r.results.some(x=>x.matchId===matchId))completed.delete(key);
+ }
  function progressionFor(slot,input,matchId,decisionAt){
   const key=draftHash({raw:input.rawInput.pin.sha256,receipt:input.receiptInput.pin.sha256});
   if(slot.progressionInputKey===key)return slot.progressionResult;
@@ -71,26 +81,45 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   const decisionAt=now();let decoded;try{decoded=decodeCapture(input,decisionAt);}catch{
    // Invalid/failed committed captures break progression for every tracked map.
    const r=JSON.parse(input.receiptInput.utf8),at=instantNs(r?.completedAt)!==null&&instantNs(r?.completedAt)<=instantNs(decisionAt)?r.completedAt:decisionAt;
-   for(const[matchId,slot]of maps)progressionFor(slot,input,matchId,at);
+   for(const[matchId,slot]of maps){
+    if(slot.lastCaptureReceivedAt!==null&&instantNs(r?.receivedAt)!==null&&instantNs(r.receivedAt)<instantNs(slot.lastCaptureReceivedAt))continue;
+    progressionFor(slot,input,matchId,at);interruptEligibility(slot,matchId,'source_gap',at);resetFeatureContinuity(matchId);
+   }
    return status('blocked','capture_pin_or_contract');
   }
   const present=new Set(decoded.normalized.observations.map(o=>o.matchId));
   if(Object.keys(restoreTracesByMap).some(id=>!present.has(id)))return status('blocked','restore_map_missing_from_capture');
   const sourceDecisionAt=decoded.receipt.completedAt,retainedReplayProof=createRetainedReplayFrameProof({...input,reconstructedAt:decisionAt});
-  for(const[matchId,slot]of maps)if(!present.has(matchId))progressionFor(slot,input,matchId,sourceDecisionAt);
+  for(const[matchId,slot]of maps)if(!present.has(matchId)){
+   if(slot.lastCaptureReceivedAt!==null&&instantNs(decoded.receipt.receivedAt)<instantNs(slot.lastCaptureReceivedAt))continue;
+   progressionFor(slot,input,matchId,sourceDecisionAt);interruptEligibility(slot,matchId,'source_gap',sourceDecisionAt);resetFeatureContinuity(matchId);
+  }
 
   const results=[];
   for(const o of decoded.normalized.observations){
    if(!continuing())return status('blocked','manual_stop_or_abort',{results});
-   let slot=maps.get(o.matchId);if(!slot){if(maps.size>=config.maxMaps){results.push(status('blocked','map_bound',{matchId:o.matchId}));continue;}slot={prefix:[],prefixBytes:0,source:null,proof:null,revision:null,lastObservationId:null,blockedReason:null,closedSource:null,progressionToken:null,progressionInputKey:null,progressionResult:null,lastCaptureReceivedAt:null,anchors:null,draftRevision:null,captureCount:0};maps.set(o.matchId,slot);}
+   let slot=maps.get(o.matchId);if(!slot){if(maps.size>=config.maxMaps){results.push(status('blocked','map_bound',{matchId:o.matchId}));continue;}slot={prefix:[],prefixBytes:0,source:null,proof:null,revision:null,lastObservationId:null,blockedReason:null,closedSource:null,progressionToken:null,progressionInputKey:null,progressionResult:null,lastCaptureReceivedAt:null,anchors:null,draftRevision:null,captureCount:0,eligibleStateToken:null,eligibility:null,lastLiveTraceSha256:null,lastLiveObservationId:null};maps.set(o.matchId,slot);}
+   // Reject out-of-order delivery before touching either private authority.
+   // In particular, a rejected earlier decision must not replace a valid token
+   // with the null token returned for invalid caller chronology.
+   if(slot.lastCaptureReceivedAt!==null&&instantNs(decoded.receipt.receivedAt)<instantNs(slot.lastCaptureReceivedAt)){
+    results.push(status('blocked','out_of_order_retained_capture',{matchId:o.matchId}));continue;
+   }
    const progression=progressionFor(slot,input,o.matchId,sourceDecisionAt);slot.captureCount++;
+   const admission=classifySteamObservationPhase(o,{decisionAt});
+   // Static draft packets are not live-state failures. Start the independent
+   // eligibility observer only when live is qualified or a live state existed.
+   const observeLiveState=admission.dynamicDiagnosticAllowed||admission.terminal||slot.eligibleStateToken!==null||progression.privateProof!=null;
+   const eligibility=observeLiveState?advanceSteamEligibleState(slot.eligibleStateToken,{matchId:o.matchId,decisionAt:sourceDecisionAt,retainedEntry:input,progressionProof:progression.privateProof}):{nextPrivateToken:null,mayGenerateNewVector:false,eligibleForRetainingForecast:false,resetDynamicWindows:false};
+   slot.eligibleStateToken=eligibility.nextPrivateToken;slot.eligibility=eligibility;slot.eligibilityDecisionAt=sourceDecisionAt;
+   if(eligibility.resetDynamicWindows)resetFeatureContinuity(o.matchId);
    if(slot.blockedReason){results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
    if(slot.closedSource){results.push(status('source_closed','terminal_source_closed',{matchId:o.matchId,terminalSource:{...slot.closedSource}}));continue;}
    const entry={rawInput:input.rawInput,metadataInput:pinned({contract:DRAFT_METADATA_CONTRACT,matchId:o.matchId,observationId:o.observationId,decisionAt:decoded.receipt.completedAt,capture:decoded.capture},'steam-archive/draft-metadata.json')};
    const bytes=entry.rawInput.pin.bytes+entry.metadataInput.pin.bytes,isNew=slot.lastObservationId!==o.observationId;
    if(isNew&&slot.prefix.length&&instantNs(decoded.receipt.receivedAt)<instantNs(JSON.parse(slot.prefix.at(-1).metadataInput.utf8).capture.receivedAt)){results.push(status('blocked','out_of_order_retained_capture',{matchId:o.matchId}));continue;}
-   const admission=classifySteamObservationPhase(o,{decisionAt});
    if(admission.terminal){
+    resetFeatureContinuity(o.matchId);
     // A source closure is not a winner label or an identity contradiction. It
     // cannot reopen from a later live packet without explicit host release.
     slot.closedSource={classification:admission.classification,observationId:o.observationId,receivedAt:o.source.capture.receivedAt};
@@ -99,16 +128,25 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    if(!admission.dynamicDiagnosticAllowed&&!admission.staticDraftDiagnosticAllowed&&admission.reason!=='complete_coherent_draft_required'){
     // A rejected frame never joins the accepted history prefix or poisons the
     // map's identity checkpoint. An initial incomplete draft still replays below.
-    results.push(status('blocked','current_source_rejected:'+admission.reason,{matchId:o.matchId}));continue;
+    resetFeatureContinuity(o.matchId);results.push(status('blocked','current_source_rejected:'+admission.reason,{matchId:o.matchId}));continue;
+   }
+   // Repeated unconfirmed state is not another newly observed situation. Keep
+   // its original state/trace reference; reader-time expiry never uses NOW as
+   // a replacement receipt. Restoration replays the original source evidence.
+   const isLiveCandidate=admission.dynamicDiagnosticAllowed||progression.privateProof!==null&&progression.privateProof!==undefined||slot.lastLiveTraceSha256!==undefined&&slot.lastLiveTraceSha256!==null;
+   const restoring=restoreTracesByMap[o.matchId]!==undefined;
+   const retryQualified=eligibility.eligibleForRetainingForecast===true&&eligibility.stateView?.observationId===o.observationId&&slot.lastLiveObservationId!==o.observationId;
+   if(isLiveCandidate&&!eligibility.mayGenerateNewVector&&!retryQualified&&!restoring&&!replayOnly){
+    results.push(status('retained_state_diagnostic',eligibility.reason??'unchanged_unconfirmed_source_state',{matchId:o.matchId,traceSha256:slot.lastLiveTraceSha256??null,sourceState:readSteamEligibleState(slot.eligibleStateToken,{matchId:o.matchId,decisionAt:now()}),recordedPrediction:false}));continue;
    }
    const basePrefix=slot.anchors??slot.prefix,baseBytes=basePrefix.reduce((n,e)=>n+e.rawInput.pin.bytes+e.metadataInput.pin.bytes,0);
    if(isNew&&(basePrefix.length+1>config.maxFramesPerMap||baseBytes+bytes>config.maxPrefixBytesPerMap)){results.push(status('blocked','retained_prefix_bound',{matchId:o.matchId}));continue;}
    const proposedPrefix=isNew?[...basePrefix,entry]:slot.prefix;
-   let replay;try{replay=replayPinnedDraftPrefix({matchId:o.matchId,computedAt:decisionAt,draftPrefixInputs:proposedPrefix});}catch{slot.blockedReason='draft_prefix_requires_manual_review';results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
+   let replay;try{replay=replayPinnedDraftPrefix({matchId:o.matchId,computedAt:decisionAt,draftPrefixInputs:proposedPrefix});}catch{resetFeatureContinuity(o.matchId);slot.blockedReason='draft_prefix_requires_manual_review';results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
    if(!replay.accepted&&['draft_terminal_or_invalid_phase','ten_confirmed_heroes_and_sides_required'].includes(replay.reason)){
-    results.push(status('blocked','current_source_rejected:'+replay.reason,{matchId:o.matchId}));continue;
+    resetFeatureContinuity(o.matchId);results.push(status('blocked','current_source_rejected:'+replay.reason,{matchId:o.matchId}));continue;
    }
-   if(!replay.accepted&&replay.reason!=='complete_draft_not_observed'){slot.blockedReason='draft_identity_requires_manual_review';results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
+   if(!replay.accepted&&replay.reason!=='complete_draft_not_observed'){resetFeatureContinuity(o.matchId);slot.blockedReason='draft_identity_requires_manual_review';results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
    if(isNew){slot.prefix=proposedPrefix;slot.prefixBytes+=bytes;slot.lastObservationId=o.observationId;}
    if(!replay.accepted){results.push(status('blocked',replay.reason,{matchId:o.matchId}));continue;}
    const d=replay.state;
@@ -147,7 +185,9 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
     }
     if(!continuing())return status('blocked','manual_stop_before_generation',{results});
     const series=input.seriesByMatch?.[o.matchId]??{};
-    results.push(await consumer.consume({mode:'AUTO',matchId:o.matchId,decisionAt:now(),historyProof:slot.proof,sourceExportInput:slot.source.envelopeInput,expectedSourceSnapshotHash:slot.source.sourceSnapshotHash,livePrefixInputs:[entry],progressionProof:progression.privateProof,retainedReplayProof,...(series.seriesInput?{seriesInput:series.seriesInput,currentMapNumber:series.currentMapNumber}:{})},{restoreTraceSha256}));
+    const consumed=await consumer.consume({mode:'AUTO',matchId:o.matchId,decisionAt:now(),historyProof:slot.proof,sourceExportInput:slot.source.envelopeInput,expectedSourceSnapshotHash:slot.source.sourceSnapshotHash,livePrefixInputs:[entry],progressionProof:progression.privateProof,retainedReplayProof,...(series.seriesInput?{seriesInput:series.seriesInput,currentMapNumber:series.currentMapNumber}:{})},{restoreTraceSha256});
+    if(consumed.traceCommitted&&consumed.stateAdvanced&&consumed.mode==='LIVE'){slot.lastLiveTraceSha256=consumed.traceSha256;slot.lastLiveObservationId=o.observationId;}
+    results.push(consumed);
    }catch{if(!continuing())return status('blocked',stopPoint,{results});results.push(status('failed','history_materialization_or_generation',{matchId:o.matchId}));}
   }
   const result=status('processed_diagnostic',null,{requestId:decoded.receipt.requestId,results,sourceRejections:decoded.normalized.rejections.length,recordedInputReceipts:true,materializationBasis:historySourceFactory?'retained_source_versions_reconstructed_not_original_prediction':'current_local_reconstruction_not_original_prediction',providerCalls:0});
@@ -155,7 +195,12 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   return result;
  }
  return Object.freeze({
-  breakSourceContinuity(){if(pending)return{cleared:false,reason:'pipeline_work_pending'};for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;}return{cleared:true,reason:'owned_restart_or_stop_barrier; map_watermarks_preserved'};},
+  breakSourceContinuity(){if(pending)return{cleared:false,reason:'pipeline_work_pending'};for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;interruptEligibility(slot,matchId);resetFeatureContinuity(matchId);}return{cleared:true,reason:'owned_restart_or_stop_barrier; map_watermarks_preserved'};},
+  readLiveEligibility({matchId,decisionAt=now()}={}){
+   const slot=maps.get(matchId);if(!continuing())return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:'manual_stop_or_abort',userMessage:'Прогноз недоступен'};
+   const view=readSteamEligibleState(slot?.eligibleStateToken,{matchId,decisionAt});
+   return{...view,lastTraceSha256:slot?.lastLiveTraceSha256??null,recordedPrediction:false};
+  },
   consumeCapture(input,options={}){
    if(!continuing())return Promise.resolve(status('blocked','manual_stop_or_abort'));
    if(pending>=config.maxPendingCaptures)return Promise.resolve(status('blocked','pending_capture_bound'));

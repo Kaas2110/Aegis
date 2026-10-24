@@ -1,6 +1,6 @@
 /** Explicit host-owned ports. Imports no provider clients, database configuration,
  * model weights or schedulers. Creating this bootstrap never starts a server. */
-import {mkdir} from 'node:fs/promises';import {join} from 'node:path';
+import {mkdir,lstat} from 'node:fs/promises';import {join} from 'node:path';
 import {createUnifiedFeatureProducer} from './unifiedFeatureProducer.mjs';
 import {createRetainedFeaturePipeline} from './retainedFeaturePipeline.mjs';
 import {createHistorySourceExportStore} from './historySourceExportStore.mjs';
@@ -8,6 +8,7 @@ import {createRetainedHistoryRevisionStore} from './retainedHistoryRevisionStore
 import {createDiagnosticFeatureJournal} from './diagnosticFeatureJournal.mjs';
 import {createAppendOnlyHistoryFactStore} from './appendOnlyHistoryFactStore.mjs';
 import {createRetainedHistorySourceExport} from './retainedHistorySourceExport.mjs';
+import {createDiagnosticFeatureReadApi} from './diagnosticFeatureReadApi.mjs';
 export async function createRetainedDiagnosticHostPorts({config,shouldContinue,signal,now,onTraceIntent}){
  const sources=join(config.stateDirectory,'sources'),revisions=join(config.stateDirectory,'revisions');
  await mkdir(sources,{recursive:true});await mkdir(revisions,{recursive:true});
@@ -18,6 +19,7 @@ export async function createRetainedDiagnosticHostPorts({config,shouldContinue,s
   // Intent precedes the CAS write. Restart checks the real journal bytes before
   // deciding to restore; an interrupted or failed append never counts as success.
   const body=JSON.parse(trace.utf8);await onTraceIntent({matchId:body.matchId,traceSha256:trace.sha256});
+  if(!shouldContinue()||signal?.aborted)throw Error('manual_stop_before_trace_commit');
   return journal.appendTrace(trace);
  }};
  const historySourceFactory=async options=>{
@@ -28,7 +30,16 @@ export async function createRetainedDiagnosticHostPorts({config,shouldContinue,s
  };
  const producer=createUnifiedFeatureProducer();
  const pipeline=createRetainedFeaturePipeline({producer,sourceStore,historyRevisions,historyProfileSha256:config.historyProfileSha256,materializationGeneration:config.materializationGeneration,featureJournal,historySourceFactory,shouldContinue,signal,now,limits:config.pipelineLimits});
- return{pipeline,async hasCommittedTrace(hash){
-  try{await journal.loadTrace(hash);return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}
+ // An owned handler is returned to the host; no HTTP listener or public serving
+ // is activated. Its current-state view expires even without another capture.
+ const readLiveEligibility=input=>pipeline.readLiveEligibility(input);
+ const readApi=createDiagnosticFeatureReadApi({journal,enabled:true,readLiveEligibility,now});
+ return{pipeline,readApi,readLiveEligibility,async hasCommittedTrace(hash){
+  if(!/^[a-f0-9]{64}$/.test(hash??''))throw Error('retained_diagnostic_bootstrap:trace_hash');
+  // Only an absent trace itself means an uncommitted intent. A present trace
+  // with a missing schema/source dependency is damaged evidence, not permission
+  // to silently generate a replacement during pending-intent recovery.
+  try{await lstat(join(config.stateDirectory,'journal','traces',hash+'.json'));}catch(e){if(e.code==='ENOENT')return false;throw e;}
+  await journal.loadTrace(hash);return true;
  }};
 }

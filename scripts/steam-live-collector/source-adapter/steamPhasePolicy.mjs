@@ -4,6 +4,18 @@
  */
 import {instantNs} from './causalTime.mjs';
 export const STEAM_PHASE_POLICY_CONTRACT='aegis.steam-observed-phase-policy.v1';
+// Receipt age is only a necessary input gate. Eligible-state renewal additionally
+// requires source progress; a fresh repeated HTTP response does not renew it.
+export const STEAM_ELIGIBLE_STATE_FRESHNESS_SECONDS=300;
+export const STEAM_RECEIPT_FRESHNESS_SECONDS=STEAM_ELIGIBLE_STATE_FRESHNESS_SECONDS;
+/** Receipt freshness at the declared source horizon, not absolute event lag.
+ * Historical identity classification stays independent of this production gate. */
+export function readSteamReceiptFreshness(observation,{decisionAt}={}){
+ const received=instantNs(observation?.source?.capture?.receivedAt),decision=instantNs(decisionAt);
+ if(received===null||decision===null||received>decision)return{accepted:false,reason:'steam_receipt_after_or_invalid_decision',providerEventTimeProven:false};
+ if(decision-received>BigInt(STEAM_RECEIPT_FRESHNESS_SECONDS)*1000000000n)return{accepted:false,reason:'steam_receipt_stale',providerEventTimeProven:false};
+ return{accepted:true,reason:'receipt_within_300s_source_horizon',maximumReceiptAgeSeconds:STEAM_RECEIPT_FRESHNESS_SECONDS,providerEventTimeProven:false};
+}
 const PROFILE='steam.GetLiveLeagueGames.v1.scoreboard';
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
 const sha=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);

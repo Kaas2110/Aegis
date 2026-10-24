@@ -1,0 +1,45 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,rm,readdir} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';
+import {createRetainedDiagnosticHostPorts} from './retainedDiagnosticBootstrap.mjs';
+import {createDiagnosticFeatureJournal} from './diagnosticFeatureJournal.mjs';
+import {digest} from '../../feature-registry/registry-contract.mjs';
+import {draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
+import {createAppendOnlyHistoryFactStore} from './appendOnlyHistoryFactStore.mjs';
+import {pinRetainedHistoryJson} from './retainedOpenDotaFacts.mjs';
+
+test('pending recovery distinguishes an absent trace from a committed trace with missing schema evidence',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'aegis-bootstrap-recovery-'));
+ try{
+  const stateDirectory=join(root,'state'),historyFactDirectory=join(root,'facts');await mkdir(stateDirectory);await mkdir(historyFactDirectory);
+  const config={stateDirectory,historyFactDirectory,historyProfileSha256:'a'.repeat(64),materializationGeneration:'synthetic-review',pipelineLimits:{}};
+  const ports=await createRetainedDiagnosticHostPorts({config,shouldContinue:()=>true,signal:null,now:()=> '2026-10-24T12:00:00Z',onTraceIntent:async()=>{}});
+  assert.equal(await ports.hasCommittedTrace('a'.repeat(64)),false);
+  const schema={contract:'aegis.unified-feature-projection-schema.v1',targetId:'LIVE_MAP_WIN',stateMode:'LIVE',definitions:[{name:'synthetic.one'}]},schemaHash=digest(schema),vector={namesHash:digest(['synthetic.one']),values:[1],missing:[false]},vectorRef=digest(vector);
+  const body={contract:'aegis.diagnostic-feature-trace.v1',routes:[{targetId:'LIVE_MAP_WIN',stateMode:'LIVE',schemaRef:{sha256:schemaHash,featureCount:1},featureCount:1,vectorRef}],vectors:{[vectorRef]:vector},eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false},utf8=JSON.stringify(body),trace={contract:body.contract,utf8,bytes:Buffer.byteLength(utf8),sha256:createHash('sha256').update(utf8).digest('hex')};
+  const journal=createDiagnosticFeatureJournal({directory:join(stateDirectory,'journal')});await journal.writeSchema({schemaHash,schema});await journal.appendTrace(trace);
+  assert.equal(await ports.hasCommittedTrace(trace.sha256),true);
+  await rm(join(stateDirectory,'journal','schemas',schemaHash+'.json'));
+  await assert.rejects(()=>ports.hasCommittedTrace(trace.sha256),/ENOENT/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('manual stop observed during intent persistence prevents the subsequent trace commit',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'aegis-bootstrap-intent-stop-'));
+ try{
+  const stateDirectory=join(root,'state'),historyFactDirectory=join(root,'facts');await mkdir(stateDirectory);await mkdir(historyFactDirectory);
+  const config={stateDirectory,historyFactDirectory,historyProfileSha256:'a'.repeat(64),materializationGeneration:'synthetic-stop-review',pipelineLimits:{}};
+  const factStore=await createAppendOnlyHistoryFactStore(historyFactDirectory);
+  for(let i=0;i<5;i++){
+   const matchId=80001+i,payload={match_id:matchId,start_time:Math.floor(Date.parse('2026-10-20T10:00:00Z')/1000)+i*3600,duration:2400,radiant_win:i%2===0,radiant_score:30,dire_score:20,radiant_team_id:100,dire_team_id:200,players:Array.from({length:10},(_,n)=>({player_slot:n<5?n:128+n-5,hero_id:n+1,account_id:n+1,gold_per_min:400,xp_per_min:500,kills:5,deaths:2,assists:8}))};
+   const normalizedPayload=JSON.parse(pinRetainedHistoryJson(payload).utf8),envelope={schemaVersion:1,source:'opendota',matchId,endpoint:'https://api.opendota.com/api/matches/'+matchId,availabilityBasis:'collector_response_receipt',payloadKind:'selected_match_detail_v1',receivedAt:'2026-10-22T12:00:00Z',payload:normalizedPayload,payloadSha256:createHash('sha256').update(JSON.stringify(normalizedPayload)).digest('hex')};await factStore.append({selectedInput:pinRetainedHistoryJson(envelope)});
+  }
+  let stopped=false,intents=0;
+  const ports=await createRetainedDiagnosticHostPorts({config,shouldContinue:()=>!stopped,signal:null,now:()=> '2026-10-24T12:00:00Z',onTraceIntent:async()=>{intents++;await Promise.resolve();stopped=true;}});
+  const entry=draftEntry({accounts:true,clock:0,phase:4}),metadata=JSON.parse(entry.metadataInput.utf8),at=metadata.capture.receivedAt;
+  const receipt={version:'steam-live-diagnostic-collector.v1',source:'steam',endpoint:'GetLiveLeagueGames/v1',httpStatus:200,status:'captured_diagnostic',diagnosticOnly:true,servingEnabled:false,trainingEnabled:false,publicPromotion:false,requestId:'1792750000000-00000000-0000-0000-0000-000000000001',requestStartedAt:at,receivedAt:at,rawPersistedAt:at,completedAt:at,rawSha256:entry.rawInput.pin.sha256,rawFile:'raw/'+entry.rawInput.pin.sha256+'.body',payloadRef:'journal:'+entry.rawInput.pin.sha256,bodyBytes:entry.rawInput.pin.bytes};
+  const output=await ports.pipeline.consumeCapture({rawInput:entry.rawInput,receiptInput:pinned(receipt)});
+  assert.equal(intents,1,JSON.stringify(output));
+  const traces=await readdir(join(stateDirectory,'journal','traces')).catch(e=>{if(e.code==='ENOENT')return[];throw e;});assert.deepEqual(traces,[]);
+  assert.equal(output.results?.some(row=>row.traceCommitted===true),false);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

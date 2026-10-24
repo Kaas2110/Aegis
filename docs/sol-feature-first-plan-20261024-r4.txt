@@ -1,0 +1,266 @@
+AEGIS — SOL R4 IMPLEMENTATION PLAN AFTER ASTRA REVIEW
+24 October 2026. Source and technical work only. Training remains paused.
+
+AUTHORITY AND STARTING POINT
+Read docs/astra-sol-r3-review-20261024.txt and this plan before older checklists.
+The review starts from PR6 main 70edec4c7eefda272e413e0687ded961249cc7df.
+Astra's correction prototypes are staged only: no successor has been installed,
+published or merged for this review. Sol must reconcile and verify them first.
+Use current source and the latest handoff; never rerun previous install guards.
+The old R1–R9 implementation checklist is historical, not a restart instruction.
+Do not replay fits, refresh experimental datasets, probe providers, activate hosts,
+change tasks, remove STOP/locks, change STRATZ transport, or promote models.
+Synthetic technical checks and bounded inspection of already retained evidence
+are permitted. Source-only completed-block PR merge remains authorized.
+
+OWNER ROLE POLICY — 24 OCTOBER, LATEST
+Astra performs architecture, difficult logical/mathematical decisions and review.
+Sol performs implementation, integration, technical checks and publication of
+reviewed completed blocks. Astra must not continue routine code fixes or install
+the staged prototypes. Preserve previous evidence; do not claim combined acceptance
+from the separate focused tests. Training remains paused in both roles.
+
+ARCHITECTURE ACCEPTED FOR FURTHER IMPLEMENTATION
+One versioned feature producer supplies every phase and target. History is a
+separate as-of input, useful in live as well as prematch. Current-map dynamics
+come from one coherent admitted source profile, never field-wise provider mixing.
+Availability time decides whether a historical fact can be used. Actual game end
+time decides recency, decay and sporting streak order. A later download cannot
+make an old game recent. Preserve both times and immutable field versions.
+
+History freezes at the first complete draft receipt (t0); later identity disclosure
+creates a new context valid at t1 without extending the old history cutoff.
+For retained replay, the source frame horizon also limits series/context evidence.
+Actual materialization and journal times remain current. Reconstructed vectors
+are not originally recorded predictions. Source interruptions reset live windows
+while preserving map identity, phase and maximum-clock guards.
+
+All 79 families remain in the catalogue. A large column count does not imply
+semantic completeness or source availability. Do not prune proposed features by
+univariate correlation or silently replace broad variants with compact models.
+Do not require every sparse historical interaction to be nonmissing in 95% of
+frames: rare hero/player combinations have genuine support limitations. The 95%
+rule concerns jointly available required source inputs for a declared profile and
+cohort. Structural hero zeros do not count as observed coverage. Record historical
+support/missingness separately and expose no substitute values as observed truth.
+
+R4.0 — FIRST TASK: PAUSES, REPEATED STATES AND FIVE-MINUTE FRESHNESS
+Owner-approved direction: preserve the last unchanged forecast during a confirmed
+pause; unavailable when qualified state has expired; distinguish an actual pause
+from unexplained source repetition. Change the eligible-state age limit to 300
+seconds as a provisional product policy, not a measured Steam broadcast delay.
+Do not blindly replace every 180-second constant: receipt/state age, evidence
+qualification windows and the old absent-phase progression lease are different.
+
+Architecture and required behavior:
+1. Keep separate timestamps for last HTTP receipt, last qualified current-state
+   confirmation and last game-clock advance. Record the evidence that renewed
+   qualification. A new HTTP response, identical cached payload or game_state=5
+   alone cannot establish that an upstream state is still current.
+2. Confirmed active: accept coherent eligible state, renew its confirmation time
+   and recalculate according to the existing cadence. Do not mix source moments.
+3. Confirmed paused: require source-backed, temporally qualified pause evidence
+   tied to the exact map. Preserve an already issued forecast and its original
+   calculation time/state reference; do not invent new dynamics or repeated new
+   prediction records because polling continues. A genuinely fresh confirmation
+   may keep this paused state eligible beyond five minutes of stationary clocks.
+4. Unconfirmed stationary/repeated response: do not infer pause and do not renew
+   qualification from receipt time alone. Keep any previously qualified forecast
+   only within 300 seconds of its last confirmed state, then show unavailable.
+   If the source offers no reliable pause/freshness evidence, retain this unknown
+   branch and document the gap; never manufacture a provider field.
+5. No usable packets: the same 300-second expiry applies. At exactly 300 seconds
+   the prior qualified forecast may still be eligible; beyond 300 it is not.
+   A late response cannot retroactively renew an already expired historical state.
+6. Confirmed terminal/map change, invalid identity, clock rewind, manual STOP and
+   other integrity barriers keep their stricter existing handling; no five-minute
+   grace may override them. Preserve original identity/max-clock watermarks.
+7. Separate permission to generate a NEW live vector from permission to retain
+   an ALREADY issued forecast. The old 180-second progression lease must not be a
+   hidden blanket UI expiry for a confirmed pause. Keep initial absent-phase
+   qualification and requalification proof requirements explicit; never fabricate
+   phase5. After an uncertain gap reset dynamic windows, retaining frozen history.
+8. Enforce expiry at reader/API time too, including when the collector is silent.
+   Restart recovery must not reset evidence age. Browser users do not drive polls.
+   Before inference is enabled, diagnostic tests use explicitly synthetic prior
+   forecasts; a feature trace by itself is not an actually issued prediction.
+9. Retained offline replay checks age at its verified original source horizon;
+   it must not reject all old archive frames based on today's clock or permit an
+   arbitrary caller-supplied past timestamp. Keep replay and live serving distinct.
+10. User UI remains simple: "Прогноз недоступен" when ineligible. Detailed reasons,
+    timestamps and state classifications belong in diagnostic records. No new
+    technical warnings or redesign. No training or runtime activation implied.
+
+Inspect: steamPhasePolicy, steamProgressionAdmission, currentSteamInput,
+steamLiveAdapter, retainedReplayFrame, retainedFeaturePipeline,
+diagnosticFeatureConsumer, diagnosticFeatureReadApi and existing serving adapters.
+Start with a field/evidence matrix from retained captures, no new provider probe.
+Implement the documented state transitions before installation of any prototype
+whose hardcoded 180-second receipt guard would contradict this policy.
+Acceptance: boundary300/+1ns; no responses; repeated old bytes with fresh receipt;
+actual fresh pause confirmation; missing pause field; legitimate long pause;
+clock resumes; source gap/requalification; terminal/map switch; STOP; read without
+new collection; restart; stale replay forgery; original retained-horizon replay.
+Tests must show that repeated unknown responses cannot keep a forecast live forever.
+Explain that 300 seconds trades two additional minutes of tolerance for two extra
+minutes of potential staleness compared with180; it does not improve data latency.
+
+R4.0B — RECONCILE EXISTING CORRECTION PROTOTYPES
+After the first task, follow the exact stage/evidence map in the current handoff.
+History's finalized six-path manifest is authoritative for its delta; root/stage
+does not yet include that whole final delta. Steam and routing staged overlays
+exist in root, but check manifest hashes and interactions rather than assuming
+combined readiness. Adopt the independently verified new-epoch duplicate-flight
+test. Preserve the before-fix counterexamples; update only obsolete freshness
+expectations to R4.0, keeping genuinely stale and forged-time rejection tests.
+Run affected integrated technical checks once after assembly. Focused suite counts
+overlap and cannot be summed. Install/publish only the reviewed completed delta;
+do not rerun old installation scripts or copy every file in a staging directory.
+
+R4.1 — COMPOSE CURRENT SERIES AND SELECTED MAP ROUTES
+After R4.0 and correction reconciliation. Modules: diagnosticTargetRouting, diagnosticFeatureReadApi,
+FeatureDiagnosticAdmin and their tests; keep public model serving disabled.
+Accept independently pinned seriesTraceSha256 and mapTraceSha256. Verify each
+through the journal and expected target/schema allowlist. They must agree on
+series ID, teams, format and the exact relevant series receipt/transition; do not
+force unrelated map and series horizons to be equal. Each retains its own cutoff.
+At an inter-map break, SERIES_BETWEEN drives the main card while PRE_* may drive
+the upcoming map detail. A map2 PRE trace must not masquerade as SERIES_PRE.
+When the user views a previous map, keep the current series main result and show
+only that selected map's own heroes and actual results. A past map never receives
+the current map vector. Originally recorded forecasts require their own verified
+prediction journal; feature traces are insufficient.
+Acceptance: BO1/BO3/BO5; before first map; after 1:0; complete next draft; current
+live; manually selected past map; terminal series; changed format/winner/receipt;
+same teams but different series; missing one trace affects only its own panel;
+no UI request starts collection. Exercise real diagnostic reader/router paths,
+not only fabricated return objects. Do not redesign the existing UI.
+
+R4.2 — IMMUTABLE HISTORY AT ARCHIVE SCALE
+Modules: retainedOpenDotaFacts, appendOnlyHistoryFactStore, retainedHistorySourceExport,
+historySourceExportStore, historyRevisionStore, historyCalculationCore, producer host.
+Replace repeated whole-corpus envelopes with a content-addressed, bounded index
+and manifest of exact version references. Define canonical ordering and an as-of
+selector over per-field availability. The manifest must pin population scope,
+selector, cutoff, version references and producer version. Full-corpus completeness
+may be asserted only against that declared manifest, never all Dota matches.
+Separate an immutable reference's authenticity/integrity from its inclusion scope.
+Keep current-map exclusion, future+1ns exclusion, identity barriers and unknowns.
+Retain a small compatibility reader for old v1 envelopes; do not mutate them.
+Add cumulative on-disk capacity/append limits distinct from export row/byte limits.
+Existing maxVersions/maxTotalBytes checks constrain read/export populations and
+do not establish an on-disk storage budget. Define concurrent append ownership
+and failure receipts before implementing a cap; never delete source evidence to
+make a write pass. Cache verified immutable source handles within explicit byte
+and entry limits, with invalidation on actual file change.
+Preserve the staged qualified-empty contract while scaling history: a valid empty
+declared population may produce missing historical features, not invented history. A broken
+or unverifiable source remains blocked. Decide profile eligibility explicitly;
+do not let an incidental history exception conceal the reason.
+Acceptance: full vs chunked synthetic corpus identical values/masks; future append
+does not alter old vectors; altered version bytes fail; partial manifest clearly
+scoped; late corrected facts do not rewrite old snapshots; bounded memory/disk;
+empty valid corpus differs from corrupt/missing source; no database/provider call.
+
+R4.3 — CLOSE PURE FEATURE SEMANTICS AND THE FAMILY LEDGER
+Produce a definition-level ledger, not only family counts. For each variant record
+inputs, units, formula, event/availability cutoff, support, role/patch/population,
+phase/target, missing policy, source identity, implementation symbol and tests.
+Use these dispositions: implemented and technically verified; implementable from
+available inputs but pending; unavailable pending source/rule evidence; TRAIN-only
+learned state deferred. An unavailable variant stays in the catalogue.
+Prioritize remaining pure variants using already qualified facts: team/player/hero
+and player-by-hero finishing distributions; lineup and ally/opponent interactions;
+historical opponent-style-conditioned performance; form × current performance;
+hero × minute × economy; prior-map series recovery. Opponent style must be computed
+from matches known BEFORE the historical encounter being summarized; aggregating
+the opponent's later games would leak future style. If encounter-time state is
+unavailable, record that variant missing instead of using today's profile.
+Lead-conditioned closing/comeback/resilience requires actually retained prior live
+states plus a subsequently known label; final score alone does not establish an
+earlier lead. Bound sample units to distinct maps. Preserve explicit support and
+missingness; no hand-written universal strength coefficient.
+Role-dependent curves require role evidence. Economic rank is not position.
+Global pro meta and Immortal pub meta are separate populations; a target-selected
+corpus cannot claim either globally. Patch letters remain separate versions with
+explicit observed vs calendar-inferred provenance. Learned ratings/encodings wait
+for a future TRAIN-only contract and later permission; do not fit them now.
+Acceptance: hand-computable cases, team/side/player permutations, source changes,
+future append and current label mutation, no populated unsupported Roshan/role/
+population values, all 79 families and legacy occurrence groups accounted for.
+Exact aliases need semantic evidence; occurrence inventories alone are not aliases.
+
+R4.4 — ROSHAN AND AEGIS SOURCE/RULE CONTRACTS
+Review existing retained raw evidence only in this stage. Keep raw timer, confirmed
+event and patch-specific interpretation separate. A zero timer is not proof alive;
+possession is not proof who killed Roshan or whether an Aegis was stolen.
+Implement source-backed death/alive state, elapsed-since-death, earliest/latest
+respawn bounds, Aegis holder/side and expiry/consumption only where both input and
+versioned mechanic are qualified. Exact respawn time stays unknown if only bounds
+are knowable. A steal needs causal kill-side and pickup-side evidence.
+Keep interactions with lead, hero/player strength context and team/player/hero
+closing distributions. Do not remove their columns when source evidence is absent.
+Prematch totals use historical style/draft only; current-map Roshan does not exist
+before play. Future collection or provider access requires its separate authority.
+Acceptance: unknown vs zero; future event; patch mismatch; kill without pickup;
+pickup without known kill; opposing pickup; expired/consumed Aegis; same source
+cutoff; no silently fabricated exact timer or certainty.
+
+R4.5 — BOUNDED SHARED PRODUCTION AND STORAGE
+The r3 synthetic schema was about 180 MB and traces about 3 MB/frame. Treat those
+as prior measurements, not a sustainable service acceptance. Preserve formulas and
+all proposed dimensions while introducing equivalent sparse/block storage and
+shared schema/definition references. Missing and structural zero are distinct.
+Materialize dense ordered vectors only at a bounded consumer boundary when needed.
+Keep a deterministic decoder, exact names/schema/version hashes and golden parity.
+Avoid duplicating definitions or source envelopes in every target/frame. Replace
+schema-cache exhaustion with reviewed bounded eviction/reload or an explicit host
+rotation protocol; never evict watermarks and silently reopen old games.
+Define separate collect/generate/journal cadences and total disk budget. Do not
+activate or change the real collector schedule. Start acceptance with 2 maps at
+30-second generated-state cadence for 80+ simulated game minutes; measure CPU,
+peak memory, output bytes, cold/warm latency and end-to-end journal cost. This is
+a technical stress harness, not a production cadence commitment. Only test finer
+cadence when a stated requirement warrants it. No busy waiting for source updates.
+Acceptance uses the actual shared producer, journal, restart recovery and reader;
+the earlier source-prefix-only 80-minute test cannot substitute for full rich work.
+
+R4.6 — PROFILE AVAILABILITY AND TIME EVIDENCE
+Prepare, but do not start, the bounded source study. Define required primitive
+fields and jointly required qualified groups per Steam profile/phase; retain
+separate optional/sparse-derived fields. Use owned scheduled slots, including
+timeouts/missing/invalid/stale packets, as denominator. An archive of only successful
+captures cannot establish prospective coverage. Report distinct maps and per-map
+rates as well as slot counts; repeated frames are not independent match evidence.
+Report separately: request/receipt latency; receipt age at calculation; game-clock
+progress lease; provider-to-real-event delay. The 300-second eligible-state age
+policy from R4.0 and any separate progression qualification window are safety/product
+choices, not measured absolute broadcast delay.
+Retained audit threshold alone is not production acceptance. If new collection
+is needed, leave its concrete bounded protocol ready and the stage pending.
+
+R4.7 — COMPLETE TECHNICAL FEATURE GATE AND RETURN TO ASTRA
+Exercise the same producer for all 12 logical targets:
+PRE_MAP_WIN/PRE_KILLS/PRE_DURATION before draft;
+POST_MAP_WIN/POST_KILLS/POST_DURATION as soon as the full draft is known;
+LIVE_MAP_WIN/LIVE_KILLS/LIVE_DURATION during the current map;
+SERIES_PRE before the first map, SERIES_BETWEEN between maps, SERIES_LIVE from
+current draft/live context. The main card always concerns the whole series.
+Totals are map totals. Later live totals models produce remaining kills/seconds;
+add current score/time exactly once and evaluate all lines from one distribution.
+No-bookmaker lines are generated locally; selected-bookmaker lines keep that
+bookmaker's rules/coefficients with our model probabilities. Do not invent them.
+Create a review pack with exact paths/interfaces, rationale and alternatives,
+counterexamples, actual test results, real vs synthetic evidence, open gates and
+the precise next step. Keep immutable previous evidence. Publish one reviewed
+completed-block source PR and merge under the standing authorization; Graphify
+refreshes automatically. Use local source until its new indexed commit is verified.
+
+STOP CONDITION AND LATER TRAINING
+Return to Astra after the above executable source work and explicit unavailable
+dispositions. Do not call the full feature/source/runtime gate complete while
+required evidence is absent. Training, HPO, ablations, calibration, model accuracy
+evaluation and activation still require feature-first acceptance and owner approval.
+Future experiments retain pinned datasets, whole-map/series temporal splits,
+fixed-minute evaluation and one 80+ minute group. The prior 684 tests and broad
+vectors were technical evidence, never new validated predictive performance.

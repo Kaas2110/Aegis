@@ -7,7 +7,7 @@ import {DYNAMIC_CONTRACT} from './dynamicFields.mjs';
 import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
-export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v3';
+export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v5';
 const finite=x=>typeof x==='number'&&Number.isFinite(x),nn=x=>finite(x)&&x>=0;
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const val=x=>x?.missing===false&&finite(x.value)?x.value:null;
@@ -19,7 +19,7 @@ function validateRules(r,patch,profile,at){
  return r;
 }
 function emptyState(key){return {contract:FEATURE_CONTRACT,key,lastClock:null,lastKnownAt:null,lastTimer:null,death:null,lastLifeEvent:null,confirmedDeaths:[],seenEvents:[],aegis:null,lastEconomy:null,economyIdentityKey:null};}
-function eventAllowed(e,o,clock,at){return e&&e.matchId===o.matchId&&e.sourceProfile===o.dynamic.sourceProfile&&proof(e.id)&&proof(e.evidenceRef)&&e.confirmed===true&&nn(e.gameTimeSeconds)&&e.gameTimeSeconds<=clock&&time(e.knownAt)!==null&&time(e.knownAt)<=at;}
+function eventAllowed(e,o,clock,at,patch){return e&&e.matchId===o.matchId&&e.sourceProfile===o.dynamic.sourceProfile&&(e.patch===undefined||e.patch===null||e.patch===patch)&&proof(e.id)&&proof(e.evidenceRef)&&e.confirmed===true&&nn(e.gameTimeSeconds)&&e.gameTimeSeconds<=clock&&time(e.knownAt)!==null&&time(e.knownAt)<=at;}
 function economy(o){
  const result={};
  for(const side of ['radiant','dire']){
@@ -76,7 +76,7 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  const acceptedEvents=[],rejectedEvents=[];
  const ordered=[...events].sort((a,b)=>(a?.gameTimeSeconds??Infinity)-(b?.gameTimeSeconds??Infinity)||String(a?.id).localeCompare(String(b?.id)));
  for(const e of ordered){
-  if(!canAdvance||!eventAllowed(e,o,clock,at)){rejectedEvents.push(e?.id??'invalid_event');continue;}
+  if(!canAdvance||!eventAllowed(e,o,clock,at,patch)){rejectedEvents.push(e?.id??'invalid_event');continue;}
   if(!['roshan_death','roshan_alive','roshan_respawn','aegis_pickup','aegis_consumed','aegis_expired','aegis_destroyed'].includes(e.kind)){rejectedEvents.push(e.id);continue;}
   if(s.seenEvents.includes(e.id))continue;
   if(s.seenEvents.length>=2048)throw Error('event_history_bound');
@@ -127,7 +127,17 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  features.aegis_holder_hero=holder&&holder.heroId!==null?Number(holder.heroId):null;
  features.aegis_holder_nw=holder?.netWorth??null;features.aegis_holder_level=holder?.level??null;
  features.aegis_elapsed_since_confirmed_pickup=aegisElapsed;features.aegis_lifetime_upper_seconds=aegisRemaining;
- features.aegis_confirmed_steal=pickup&&s.death&&pickup.roshanDeathEventId===s.death.id&&['radiant','dire'].includes(s.death.side)?Number(pickup.side!==s.death.side):null;
+ features.aegis_confirmed_steal=pickup&&s.death&&pickup.roshanDeathEventId===s.death.id&&s.death.gameTimeSeconds<=pickup.gameTimeSeconds&&['radiant','dire'].includes(s.death.side)?Number(pickup.side!==s.death.side):null;
+ // Positive evidence for the retained pickup episode only. Other statuses do
+ // do not prove a negative; neither missing slots nor elapsed lifetime establish an event.
+ const terminalEvent=canAdvance?s.aegis?.terminalEvent:null;
+ const terminalKnown=terminalEvent&&['aegis_consumed','aegis_expired','aegis_destroyed'].includes(s.aegis.status)&&terminalEvent.kind===s.aegis.status&&terminalEvent.pickupEventId===s.aegis.id;
+ for(const kind of ['consumed','expired','destroyed']){
+  const confirmed=terminalKnown&&s.aegis.status==='aegis_'+kind;
+  features['aegis_confirmed_'+kind]=confirmed?1:null;
+  features['aegis_elapsed_since_confirmed_'+kind]=confirmed?clock-terminalEvent.gameTimeSeconds:null;
+ }
+ features.aegis_confirmed_terminal_event_count_for_retained_pickup=terminalKnown?1:null;
  const econ=economy(o);Object.assign(features,econ);
  const delta=canAdvance&&finite(s.lastClock)?clock-s.lastClock:null;
  for(const key of ['nw_sum_diff','gpm_sum_diff','score_diff'])features[key+'_change_per_game_minute']=delta>0&&finite(econ[key])&&finite(s.lastEconomy?.[key])?(econ[key]-s.lastEconomy[key])*60/delta:null;

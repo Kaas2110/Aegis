@@ -120,3 +120,25 @@ No fits, provider probes, migrations, runtime/task activation or promotion.
 Replay source horizons never backdate actual calculation timestamps. Preserve
 all source/store/STOP/lock boundaries and distinguish generated family subsets
 from source availability and full semantic migration.
+
+## Sol r4 current source contracts — 2026-10-24
+
+Read docs/sol-feature-first-plan-20261024-r4.txt and
+ docs/sol-r4-integration-review-20261024.txt first. The owner restricts Astra to
+architecture, difficult logical/mathematical choices and review. Sol implements,
+integrates, tests and publishes reviewed completed source blocks.
+
+Current eligible-state age is300seconds. Receipt time, source-state confirmation
+and game-clock advance are separate. Unknown stationary responses do not renew
+qualification; a saved feature trace does not prove an issued current forecast.
+No qualified live-pause field was established in the retained GLG profile; do not
+invent pause confirmation. No runtime activation or serving promotion is implied.
+
+Keep the all79-family feature catalogue and rich variants. Historical facts use
+as-of availability and actual game end for sporting recency. Only one coherent
+current source profile feeds dynamic fields. Preserve manual STOP/lock state.
+Training/HPO/calibration/model-quality evaluation remain paused pending full
+feature-first acceptance and Astra review. New technical tests are synthetic;
+archive-scale source/proof integration and prospective source coverage remain
+explicit gates. Follow the current exact install/publication receipts and use
+local source when Graphify indexing lags. No routine whole-source byte audit.

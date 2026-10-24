@@ -66,7 +66,16 @@ export function validateObservedDraftHistory(context,{matchId,decisionAt,readMod
  const {contentHash,...body}=context;if(!hash(contentHash)||evidenceHash(body)!==contentHash)return reject('draft_history_content_hash');
  const draft=context.draftState,{stateHash,...draftBody}=draft??{};
  if(!draft||draft.matchId!==matchId||draft.historyCutoffAt!==context.historyCutoffAt||draft.validFrom!==context.validFrom||!hash(stateHash)||draftHash(draftBody)!==stateHash)return reject('draft_history_state_binding');
- if(!Array.isArray(context.dependencies)||context.dependencies.length>100000||!context.dependencies.length)return reject('draft_history_dependencies');
+ const emptyRetained=context.producer?.emptyRetainedCorpus===true;
+ if(!Array.isArray(context.dependencies)||context.dependencies.length>100000||!context.dependencies.length&&!emptyRetained)return reject('draft_history_dependencies');
+ if(emptyRetained){
+  // Empty verified supplied corpus is a missing-history state, not evidence of
+  // zero form or permission to create history. Opaque proof/source replay still
+  // establishes authority; this validator checks its structural consequences.
+  const payload=context.featurePayload,pop=context.producer?.sourcePopulation;
+  const emptyProfiles=object(payload)&&['players','heroes','teams'].every(k=>Array.isArray(payload[k])&&payload[k].every(p=>object(p)&&object(p.values)&&object(p.statistics)&&Object.values(p.values).every(v=>v===null)&&Object.values(p.statistics).every(s=>object(s)&&s.value===null&&s.supportMaps===0)));
+  if(context.availabilityBasis!=='retained_receipt_reconstruction'||pop?.providedMapCount!==0||context.dependencies.length||!Array.isArray(context.sourceMatches)||context.sourceMatches.length||!emptyProfiles||payload.heroes.length!==10||payload.teams.length!==2||!Array.isArray(payload.roles)||payload.roles.length||!Array.isArray(payload.heroMinuteReferences)||payload.heroMinuteReferences.length)return reject('draft_history_empty_retained_contract');
+ }
  const outcomes=new Set();
  for(const d of context.dependencies){
   const at=instantNs(d?.availableAt);
@@ -92,7 +101,8 @@ export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInput
  const audit={factRows:facts.rows.length,nativeRows:native.rows.length,draftAcceptedObservations:draft.acceptedObservations,draftRejections:draft.rejections,prefixCompleteness:draft.prefixCompleteness};
  const roster=state.identity.players.map(p=>({...p,heroId:Number(p.heroId)}));
  const target={matchId,knownAt:state.historyCutoffAt,players:roster};
- const calculated=calculateHistoryCore({target,known,roster,facts,native,roleProofs:[],minimumSupport,audit,bindings,nativeEvidenceInputs,nativeAlignmentInputs,nativeProofPolicy:'raw_replay_required',alignmentComputedAt:computedAt,expectedProfileReviewSha256});
+ const emptyRetained=retained&&facts.rows.length===0&&native.rows.length===0;
+ const calculated=calculateHistoryCore({target,known,roster,facts,native,roleProofs:[],minimumSupport,audit,bindings,nativeEvidenceInputs,nativeAlignmentInputs,nativeProofPolicy:'raw_replay_required',alignmentComputedAt:computedAt,expectedProfileReviewSha256,allowEmptyRetainedCorpus:emptyRetained});
  if(calculated.status==='blocked')return blocked(calculated.reason,audit,bindings);
  const {players,roles,references,sourceMatches,heroCohort}=calculated;
  // Late identity is a new selector at the original cutoff. A complete old query
@@ -121,7 +131,7 @@ export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInput
  }
  const frameIds=new Set();for(const ref of references)for(const o of ref.sourceObservations){if(frameIds.has(o.observationId))continue;frameIds.add(o.observationId);dependencies.push({kind:'native_frame',matchId:o.matchId,availableAt:o.knownAt,sha256:native.pin.sha256,evidenceRef:native.ref+'#observation/'+o.observationId,rawSha256:o.rawSha256,observationId:o.observationId});}
  const body={contract:CONTEXT_CONTRACT,mode:'observed_draft_frozen',matchId,historyCutoffAt:state.historyCutoffAt,validFrom:state.validFrom,computedAt,cutoffPolicy:state.cutoffPolicy,availabilityBasis,draftState:state,sourceMatches,dependencies,featurePayload,
-  producer:{contract:PRODUCER_CONTRACT,bindings,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,nativeProofPolicy:'raw_replay_required',nativeAlignmentBindings:calculated.nativeAlignmentBindings,nativeEvidenceBindings:calculated.nativeEvidenceBindings,originalCutoffImmutable:true,lateIdentityDoesNotExpandHistory:true,zeroMinuteCohortClaimed:false,learnedState:null,...(retained?{sourcePopulation:{basis:'provided_retained_response_corpus_only',...retainedScope,originalHistoricalAvailabilityProven:false}}:{})},
+  producer:{contract:PRODUCER_CONTRACT,bindings,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,nativeProofPolicy:'raw_replay_required',nativeAlignmentBindings:calculated.nativeAlignmentBindings,nativeEvidenceBindings:calculated.nativeEvidenceBindings,originalCutoffImmutable:true,lateIdentityDoesNotExpandHistory:true,zeroMinuteCohortClaimed:false,learnedState:null,...(emptyRetained?{emptyRetainedCorpus:true}:{}),...(retained?{sourcePopulation:{basis:'provided_retained_response_corpus_only',...retainedScope,originalHistoricalAvailabilityProven:false,...(emptyRetained?{providedMapCount:0}:{})}}:{})},
   eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
  const context={...body,contentHash:evidenceHash(body)};
  const verified=validateObservedDraftHistory(context,{matchId,decisionAt:computedAt});if(!verified.accepted)throw Error('generated_draft_context_invalid:'+verified.reason);

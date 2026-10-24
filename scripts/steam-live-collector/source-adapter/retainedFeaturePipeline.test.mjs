@@ -7,10 +7,11 @@ import {createRetainedHistoryRevisionStore} from './retainedHistoryRevisionStore
 import {createHistorySourceExportStore} from './historySourceExportStore.mjs';
 import {createDiagnosticFeatureJournal} from './diagnosticFeatureJournal.mjs';
 import {createRetainedFeaturePipeline,readCommittedSteamCapture} from './retainedFeaturePipeline.mjs';
+import {createDiagnosticFeatureReadApi} from './diagnosticFeatureReadApi.mjs';
 const NOW='2026-10-23T12:40:00Z';
 function producer(){const[index,familyDocument,targetDocument]=syntheticRegistry(),sourceInventory=Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]));return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory});}
 function db(){let queries=0,flip=false;const a=draftArgs({accounts:true}),rows=JSON.parse(a.factsInput.utf8).maps.map(m=>({...m,players:m.players.map((p,i)=>({account_id:Number(p.accountId),hero_id:Number(p.heroId),player_slot:p.side==='radiant'?i%5:128+i%5,historical_performance:{gold_per_min:400,xp_per_min:500,hero_damage:12000}}))}));return{get queries(){return queries;},setFlip(v){flip=v;},async query(sql){queries++;const copy=structuredClone(sql.includes('FROM pro_matches')?rows:[]);if(flip&&copy.length)copy[0].radiantWon=!copy[0].radiantWon;return{rows:copy}}};}
-function capture(entry){const m=JSON.parse(entry.metadataInput.utf8),requestId=String(Date.parse(m.capture.receivedAt))+'-'+randomUUID();return{rawInput:entry.rawInput,receiptInput:pinned({version:'steam-live-diagnostic-collector.v1',source:'steam',endpoint:'GetLiveLeagueGames/v1',httpStatus:200,status:'captured_diagnostic',diagnosticOnly:true,servingEnabled:false,trainingEnabled:false,publicPromotion:false,requestId,requestStartedAt:m.capture.requestStartedAt,receivedAt:m.capture.receivedAt,rawPersistedAt:m.capture.persistedAt,completedAt:m.capture.persistedAt,rawSha256:entry.rawInput.pin.sha256,rawFile:'raw/'+entry.rawInput.pin.sha256+'.body'})};}
+function capture(entry){const m=JSON.parse(entry.metadataInput.utf8),requestId=String(Date.parse(m.capture.receivedAt))+'-'+randomUUID();return{rawInput:entry.rawInput,receiptInput:pinned({version:'steam-live-diagnostic-collector.v1',source:'steam',endpoint:'GetLiveLeagueGames/v1',httpStatus:200,status:'captured_diagnostic',diagnosticOnly:true,servingEnabled:false,trainingEnabled:false,publicPromotion:false,requestId,requestStartedAt:m.capture.requestStartedAt,receivedAt:m.capture.receivedAt,rawPersistedAt:m.capture.persistedAt,completedAt:m.capture.persistedAt,rawSha256:entry.rawInput.pin.sha256,rawFile:'raw/'+entry.rawInput.pin.sha256+'.body',payloadRef:'journal:'+entry.rawInput.pin.sha256,bodyBytes:entry.rawInput.pin.bytes})};}
 async function fixture(fn){const root=await mkdtemp(join(tmpdir(),'aegis-retained-features-'));try{const sources=join(root,'sources'),revisionDirectory=join(root,'revisions');await mkdir(sources);await mkdir(revisionDirectory);const historyRevisions=await createRetainedHistoryRevisionStore(revisionDirectory);const makePipeline=options=>createRetainedFeaturePipeline({historyRevisions,historyProfileSha256:'b'.repeat(64),...options});await fn({root,revisionDirectory,makePipeline,sourceStore:await createHistorySourceExportStore(sources),journal:createDiagnosticFeatureJournal({directory:join(root,'journal')})});}finally{await rm(root,{recursive:true,force:true});}}
 test('committed retained bytes flow through one history export, actual producer and durable trace',()=>fixture(async({root,revisionDirectory,makePipeline,sourceStore,journal})=>{
  const a=capture(draftEntry({accounts:true})),archive=join(root,'archive');await mkdir(join(archive,'observations'),{recursive:true});await mkdir(join(archive,'raw'));const r=JSON.parse(a.receiptInput.utf8),file=r.requestId+'.json';await writeFile(join(archive,'observations',file),a.receiptInput.utf8);await writeFile(join(archive,'raw',r.rawSha256+'.body'),a.rawInput.utf8);
@@ -48,4 +49,30 @@ test('explicit map release rebuilds state from original prefix instead of reusin
  const database=db(),p=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>NOW}),c=capture(draftEntry({accounts:true}));
  const a=await p.consumeCapture(c);assert.equal(a.results[0].status,'recorded_diagnostic');assert.equal(p.forgetMap('90001').released,true);
  const b=await p.consumeCapture(c);assert.equal(b.reusedReceipt,undefined);assert.equal(b.results[0].stateAdvanced,true);assert.equal(database.queries,2);assert.equal((await journal.loadTrace(a.results[0].traceSha256)).sourceSnapshotHash,(await journal.loadTrace(b.results[0].traceSha256)).sourceSnapshotHash);
+}));
+
+test('live read expires at five minutes without collection, and repeated clocks do not issue new traces',()=>fixture(async({makePipeline,sourceStore,journal})=>{
+ const database=db(),p=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>NOW});
+ await p.consumeCapture(capture(draftEntry({accounts:true})));
+ const first=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:31:00Z',clock:900,phase:5})));
+ assert.equal(first.results[0].status,'recorded_diagnostic');
+ const atBoundary=p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:36:00Z'});
+ assert.equal(atBoundary.eligibleForRetainingForecast,true);assert.equal(atBoundary.lastTraceSha256,first.results[0].traceSha256);
+ assert.equal(p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:36:00.000000001Z'}).eligibleForRetainingForecast,false);
+ let readAt='2026-10-23T12:36:00Z';const reader=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=>readAt,readLiveEligibility:input=>p.readLiveEligibility(input)});
+ const url='/admin/feature-diagnostics/traces/'+first.results[0].traceSha256;
+ assert.equal((await reader.handle({url})).body.currentLiveEligibility.eligibleForRetainingForecast,true);
+ readAt='2026-10-23T12:36:00.000000001Z';assert.equal((await reader.handle({url})).body.currentLiveEligibility.eligibleForRetainingForecast,false);
+ const repeated=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:32:00Z',clock:900,phase:5})));
+ assert.equal(repeated.results[0].status,'retained_state_diagnostic');assert.equal(repeated.results[0].traceSha256,first.results[0].traceSha256);
+ assert.equal(p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:36:01Z'}).eligibleForRetainingForecast,false);
+ assert.equal(p.status().consumer.recorded,2);assert.equal(database.queries,2);
+ const advanced=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:33:00Z',clock:950,phase:5})));
+ assert.equal(advanced.results[0].status,'recorded_diagnostic');assert.equal(p.status().consumer.recorded,3);
+ const current=p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:33:01Z'});
+ assert.equal(current.eligibleForRetainingForecast,true);assert.equal(current.lastTraceSha256,advanced.results[0].traceSha256);
+ const older=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:30:30Z',clock:850,phase:5})));
+ assert.equal(older.results[0].reason,'out_of_order_retained_capture');
+ const afterOld=p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:33:02Z'});
+ assert.equal(afterOld.eligibleForRetainingForecast,true);assert.equal(afterOld.stateView.lastConfirmedAt,current.stateView.lastConfirmedAt);assert.equal(afterOld.lastTraceSha256,current.lastTraceSha256);
 }));

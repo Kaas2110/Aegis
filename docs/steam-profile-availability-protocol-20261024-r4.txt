@@ -1,0 +1,58 @@
+AEGIS — PREPARED SOURCE AVAILABILITY PROTOCOL
+24 October2026. Prepared only; no new collection is started or scheduled.
+
+PURPOSE
+Determine whether a declared Steam profile can jointly provide its required
+primitive model inputs in at least95%of owned scheduled live observation slots.
+Sparse historical interactions, unsupported role labels and structural hero zeros
+are not counted as source coverage. Source receipt age and absolute event lag are
+different measurements. A successful-response archive alone has no valid denominator.
+
+OWNED DENOMINATOR
+Before dispatch, commit a slot record containing protocol/configuration hash,
+slotID, tracked match ID, expected source profile/phase, scheduledAt, deadlineAt,
+collector owner and declared required field groups. For each slot preserve exactly
+one result category: qualified timely; qualified late; timeout/no response; HTTP
+error; raw/receipt corruption; empty/missing map; phase unqualified; identity conflict;
+missing required primitive; clock rewind; stale/repeated unknown; manual STOP.
+STOP slots must be shown separately, with both planned and owned-active denominators;
+never silently discard failures or infer scheduled slots from successful captures.
+Duplicates share a slot ID and do not increase either numerator or denominator.
+
+PHASE/PROFILE GROUPS
+Declare explicit-phase GLG and absent-phase progressing GLG separately. Required
+identity: map ID, coherent side, ten distinct chosen heroes; known account/team
+IDs are separate profile requirements and unknowns remain missing. Required dynamic
+groups are declared before observation: game clock; team score/economy/buildings;
+or richer ten-player levels/GPM/XPM/net-worth/inventory fields. Qualification uses
+the same source adapter and missing/type/unit gates as the common producer.
+Do not average individual column availability to claim joint availability. A slot
+passes only when ALL required qualified primitive groups for that profile pass.
+Roshan interpretations and confirmed pause remain unavailable unless their raw
+fields and versioned event/rule evidence are qualified. History has its own support
+and as-of checks; static sparse history cannot make native coverage appear higher.
+
+TIME MEASURES
+Report separately request-to-receipt latency, persist/commit latency, eligible-state
+age at calculation/read, time since clock advance and true event-to-provider lag.
+Only an independently timestamped real event can establish the latter. The300second
+age policy is a product safety tolerance; the180second progression qualification
+lease is an admission rule. Neither is measured broadcast latency. Pauses and
+unknown source repetition require separate counts rather than automatic exclusions.
+
+SAMPLING AND REPORT
+Pin protocol first. Observe multiple distinct complete maps, tournaments and phases,
+including early/full draft, ordinary live, late80+, missing-data intervals and
+confirmed pauses if the source supplies evidence. Record distinct maps, per-map
+rates and confidence intervals with map-cluster resampling after future statistical
+review. Repeated frames are not independent games. Do not choose an unregistered
+minimum map count or claim95%from a handful of successes. A first bounded pilot is
+diagnostic only; deployment acceptance needs a reviewed sampling/uncertainty budget.
+Retain pinned original receipts/raw bytes privately and exact exclusion counts.
+
+LIMITS
+Respect existing STOP/lock/manual pauses, API budgets and data retention policy.
+Prepare a finite owned run with explicit runtime/disk/request bounds only when the
+owner separately authorizes collection. UI users must not drive polling. No new
+provider probing, paid service purchase, background task or runtime activation is
+implied by this document. Return results to Astra before using coverage as a gate.

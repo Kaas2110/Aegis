@@ -110,7 +110,7 @@ test('player-array reordering alone preserves the identity and trajectory',()=>{
  const a=advanceSteamFeatureBundle(null,observation(840)),b=advanceSteamFeatureBundle(a.state,observation(900,{reversed:true,offset:10}));
  assert.equal(get(b,'native_economy.hero.1.native_gpm.past_60s_change_per_minute'),10);
  assert.ok(!b.resetReasons.includes('player_side_team_identity_changed'));
- assert.equal(b.vector.featureCount,38468);
+ assert.equal(b.vector.featureCount,38482);
 });
 test('zero Roshan timer remains unknown without attested semantics',()=>{
  const r=advanceSteamFeatureBundle(null,observation());

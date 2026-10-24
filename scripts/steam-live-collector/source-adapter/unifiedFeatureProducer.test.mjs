@@ -5,7 +5,7 @@ import {draftArgs,draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {collectDraftHistorySourceExport} from './historySourceExport.mjs';
 import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
-const AT='2026-10-23T12:40:00Z';
+const AT='2026-10-23T12:33:00Z';
 const sources=()=>Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.synthetic.mjs',sha256:'a'.repeat(64)}]}]));
 function factory(){const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:sources()});}
 function live({phase=5}={}){const e=draftEntry({time:'2026-10-23T12:31:00Z',clock:900,accounts:true,phase}),raw=JSON.parse(e.rawInput.utf8),m=JSON.parse(e.metadataInput.utf8);for(const s of ['radiant','dire'])for(const p of raw.result.games[0].scoreboard[s].players)Object.assign(p,{net_worth:5000+p.hero_id*100,gold_per_min:400+p.hero_id,xp_per_min:500+p.hero_id,level:10,gold:100});const rawInput=pinned(raw);const o=normalizeLocalCapture({...m.capture,body:Buffer.from(rawInput.utf8),rawSha256:rawInput.pin.sha256,payloadRef:'journal:'+rawInput.pin.sha256}).observations[0];return{rawInput,metadataInput:pinned({...m,observationId:o.observationId})};}
