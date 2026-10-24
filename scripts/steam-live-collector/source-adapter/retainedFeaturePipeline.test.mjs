@@ -17,7 +17,7 @@ test('committed retained bytes flow through one history export, actual producer 
  const a=capture(draftEntry({accounts:true})),archive=join(root,'archive');await mkdir(join(archive,'observations'),{recursive:true});await mkdir(join(archive,'raw'));const r=JSON.parse(a.receiptInput.utf8),file=r.requestId+'.json';await writeFile(join(archive,'observations',file),a.receiptInput.utf8);await writeFile(join(archive,'raw',r.rawSha256+'.body'),a.rawInput.utf8);
  const fromDisk=await readCommittedSteamCapture({archive,receiptFile:file}),database=db(),pipeline=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>NOW});
  const first=await pipeline.consumeCapture(fromDisk);assert.equal(first.results[0].status,'recorded_diagnostic');assert.equal(first.results[0].mode,'POST');assert.equal(database.queries,2);
- const second=await pipeline.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:31:00Z',clock:900,phase:5})));assert.equal(second.results[0].status,'recorded_diagnostic');assert.equal(second.results[0].mode,'LIVE');assert.equal(database.queries,2);assert.equal((await readdir(join(root,'sources'))).length,1);
+ const second=await pipeline.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:31:00Z',clock:900,phase:5})));assert.equal(second.results[0].status,'recorded_diagnostic',JSON.stringify(second.results[0]));assert.equal(second.results[0].mode,'LIVE');assert.equal(database.queries,2);assert.equal((await readdir(join(root,'sources'))).length,1);
  const t=await journal.loadTrace(second.results[0].traceSha256);assert.equal(t.mode,'LIVE');assert.equal(t.historyCutoffAt,'2026-10-23T11:58:00Z');assert.equal(t.recordedPrediction,false);assert.equal(first.materializationBasis,'current_local_reconstruction_not_original_prediction');
  const duplicate=await pipeline.consumeCapture(fromDisk);assert.equal(duplicate.reusedReceipt,true);assert.equal(duplicate.results[0].stateAdvanced,false);assert.equal(database.queries,2);
  const restarted=createDiagnosticFeatureJournal({directory:join(root,'journal')});assert.equal((await restarted.loadTrace(second.results[0].traceSha256)).mode,'LIVE');
@@ -52,7 +52,10 @@ test('explicit map release rebuilds state from original prefix instead of reusin
 }));
 
 test('live read expires at five minutes without collection, and repeated clocks do not issue new traces',()=>fixture(async({makePipeline,sourceStore,journal})=>{
- const database=db(),p=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>NOW});
+ // A retained trace materialized at12:40 cannot be a current artifact at12:36.
+ // Positive read fixtures must follow the actual materialization timestamp.
+ let materializedAt='2026-10-23T12:31:01Z';
+ const database=db(),p=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>materializedAt});
  await p.consumeCapture(capture(draftEntry({accounts:true})));
  const first=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:31:00Z',clock:900,phase:5})));
  assert.equal(first.results[0].status,'recorded_diagnostic');
@@ -63,10 +66,12 @@ test('live read expires at five minutes without collection, and repeated clocks 
  const url='/admin/feature-diagnostics/traces/'+first.results[0].traceSha256;
  assert.equal((await reader.handle({url})).body.currentLiveEligibility.eligibleForRetainingForecast,true);
  readAt='2026-10-23T12:36:00.000000001Z';assert.equal((await reader.handle({url})).body.currentLiveEligibility.eligibleForRetainingForecast,false);
+ materializedAt='2026-10-23T12:32:01Z';
  const repeated=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:32:00Z',clock:900,phase:5})));
  assert.equal(repeated.results[0].status,'retained_state_diagnostic');assert.equal(repeated.results[0].traceSha256,first.results[0].traceSha256);
  assert.equal(p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:36:01Z'}).eligibleForRetainingForecast,false);
  assert.equal(p.status().consumer.recorded,2);assert.equal(database.queries,2);
+ materializedAt='2026-10-23T12:33:00.500Z';
  const advanced=await p.consumeCapture(capture(draftEntry({accounts:true,time:'2026-10-23T12:33:00Z',clock:950,phase:5})));
  assert.equal(advanced.results[0].status,'recorded_diagnostic');assert.equal(p.status().consumer.recorded,3);
  const current=p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:33:01Z'});
@@ -75,4 +80,14 @@ test('live read expires at five minutes without collection, and repeated clocks 
  assert.equal(older.results[0].reason,'out_of_order_retained_capture');
  const afterOld=p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:33:02Z'});
  assert.equal(afterOld.eligibleForRetainingForecast,true);assert.equal(afterOld.stateView.lastConfirmedAt,current.stateView.lastConfirmedAt);assert.equal(afterOld.lastTraceSha256,current.lastTraceSha256);
+}));
+test('absent-phase repeated clocks resume through actual pipeline with unchanged historical cutoff',()=>fixture(async({makePipeline,sourceStore,journal})=>{
+ const database=db(),p=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>NOW});
+ const frame=(time,clock)=>capture(draftEntry({accounts:true,time,clock,phase:null}));
+ const first=await p.consumeCapture(frame('2026-10-23T12:30:00Z',600));assert.equal(first.results[0].mode,'POST');
+ const advanced=await p.consumeCapture(frame('2026-10-23T12:31:00Z',660));assert.equal(advanced.results[0].status,'recorded_diagnostic');assert.equal(advanced.results[0].mode,'LIVE');
+ const repeated=await p.consumeCapture(frame('2026-10-23T12:32:59Z',660));assert.equal(repeated.results[0].status,'retained_state_diagnostic');assert.equal(repeated.results[0].traceSha256,advanced.results[0].traceSha256);
+ const resumed=await p.consumeCapture(frame('2026-10-23T12:33:00Z',780));assert.equal(resumed.results[0].status,'recorded_diagnostic');assert.equal(resumed.results[0].mode,'LIVE');assert.notEqual(resumed.results[0].traceSha256,advanced.results[0].traceSha256);
+ const original=await journal.loadTrace(first.results[0].traceSha256),latest=await journal.loadTrace(resumed.results[0].traceSha256);assert.equal(latest.historyCutoffAt,original.historyCutoffAt);assert.equal(latest.historyCutoffAt,'2026-10-23T12:30:00Z');assert.equal(database.queries,2);assert.equal(p.status().consumer.recorded,3);
+ const exact=p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:38:00Z'});assert.equal(exact.eligibleForRetainingForecast,true);assert.equal(exact.lastTraceSha256,resumed.results[0].traceSha256);assert.equal(p.readLiveEligibility({matchId:'90001',decisionAt:'2026-10-23T12:38:00.000000001Z'}).eligibleForRetainingForecast,false);
 }));

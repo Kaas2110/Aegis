@@ -1,11 +1,23 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile,readdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createHash} from 'node:crypto';
 import {createDiagnosticFeatureJournal} from './diagnosticFeatureJournal.mjs';import {digest} from '../../feature-registry/registry-contract.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 function schema(targetId='LIVE_MAP_WIN'){return{contract:'aegis.unified-feature-projection-schema.v1',targetId,stateMode:'LIVE',definitions:[{name:'synthetic.one'},{name:'synthetic.missing'}]};}
 function trace(schemas){const v={namesHash:digest(schemas[0].definitions.map(d=>d.name)),values:[0,null],missing:[false,true]},vectorRef=digest(v),body={contract:'aegis.diagnostic-feature-trace.v1',routes:schemas.map(s=>({targetId:s.targetId,stateMode:s.stateMode,schemaRef:{sha256:digest(s),featureCount:2},featureCount:2,vectorRef})),vectors:{[vectorRef]:v},eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};return repin(body);}
 function repin(b){const utf8=JSON.stringify(b);return{contract:b.contract,utf8,bytes:Buffer.byteLength(utf8),sha256:hash(utf8)};}
 async function fixture(fn){const directory=await mkdtemp(join(tmpdir(),'aegis-feature-journal-'));try{await fn(createDiagnosticFeatureJournal({directory}),directory);}finally{await rm(directory,{recursive:true,force:true});}}
+
+test('R5 journal rejects an exhausted memory reservation before cloning schema input',()=>fixture(async(_s,directory)=>{
+ const arena=createDiagnosticResourceArena({maxBytes:1024}),held=arena.reserve(1024),journal=createDiagnosticFeatureJournal({directory,resourceArena:arena}),a=schema();
+ await assert.rejects(journal.writeSchema({schemaHash:digest(a),schema:a}),/schema_memory_reservation/);
+ assert.equal(journal.cacheStats().schemaSnapshots,0);assert.equal(arena.status().leases,1);held.release();assert.equal(arena.status().chargedBytes,0);
+}));
+test('R5 journal releases temporary reservations on failed and successful writes',()=>fixture(async(_s,directory)=>{
+ const arena=createDiagnosticResourceArena({maxBytes:8*1024*1024}),journal=createDiagnosticFeatureJournal({directory,resourceArena:arena}),a=schema();
+ await assert.rejects(journal.writeSchema({schemaHash:'a'.repeat(64),schema:a}),/schema_contract/);assert.equal(arena.status().chargedBytes,0);
+ await journal.writeSchema({schemaHash:digest(a),schema:a});await journal.appendTrace(trace([a]));assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
+}));
 test('schema and trace are durable, content-addressed and idempotent across restart',()=>fixture(async(s,directory)=>{
  const a=schema(),b=schema('LIVE_KILLS'),t=trace([a,b]);await Promise.all([s.writeSchema({schemaHash:digest(a),schema:a}),s.writeSchema({schemaHash:digest(b),schema:b})]);
  assert.equal((await readdir(join(directory,'definitions'))).length,1);assert.equal((await s.appendTrace(t)).status,'created');

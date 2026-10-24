@@ -18,7 +18,7 @@ test('saved feature inspection does not claim an old trace is currently eligible
 test('reader calls owned freshness port at read time; a stale clock cannot be supplied in query',async()=>{
  const {journal}=fixture(),original=journal.loadTrace; journal.loadTrace=async hash=>({...await original(hash),nativeObservationId:'observed-1'});
  let time='2026-10-24T00:05:00Z',reads=0;
- const api=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=>time,readLiveEligibility:async({matchId,decisionAt})=>{
+ const api=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=>time,readLiveEligibility:({matchId,decisionAt})=>{
   reads++;assert.equal(matchId,'101');return{eligibleForRetainingForecast:decisionAt=== '2026-10-24T00:05:00Z',lastTraceSha256:key,stateView:{observationId:'observed-1',lastConfirmedAt:'2026-10-24T00:00:00Z',expiresAt:'2026-10-24T00:05:00Z',classification:'confirmed_active'}};
  }});
  assert.equal((await api.handle({url:base})).body.currentLiveEligibility.eligibleForRetainingForecast,true);
@@ -30,4 +30,11 @@ test('route endpoint resolves source context from an owned port and overrides ba
  let calls=0;const {journal}=fixture(),api=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=> '2026-10-24T00:06:00Z',resolveRouteContext:async({seriesId})=>({seriesInput:{privateOwnedBytes:true},seriesId,decisionAt:'2000-01-01T00:00:00Z'}),targetRouter:{async read(context){calls++;assert.equal(context.decisionAt,'2026-10-24T00:06:00Z');return{seriesId:'synthetic-series',recordedPrediction:false};}}});
  assert.equal((await api.handle({url:'/admin/feature-diagnostics/series/synthetic-series/routes'})).status,200);
  assert.equal((await api.handle({url:'/admin/feature-diagnostics/series/synthetic-series/routes?source=forged'})).status,400);assert.equal(calls,1);
+});
+test('feature read final fence observes expiry after delayed schema IO and rejects asynchronous state authority',async()=>{
+ const {journal}=fixture(),loadTrace=journal.loadTrace,loadSchema=journal.loadSchema; journal.loadTrace=async hash=>({...await loadTrace(hash),nativeObservationId:'observed-1'});
+ let time='2026-10-24T00:04:59Z',release,entered,reads=0;const gate=new Promise(resolve=>{release=resolve;}),started=new Promise(resolve=>{entered=resolve;});journal.loadSchema=async hash=>{entered();await gate;return loadSchema(hash);};
+ const state=()=>({eligibleForRetainingForecast:true,lastTraceSha256:key,stateView:{observationId:'observed-1',lastConfirmedAt:'2026-10-24T00:00:00Z',expiresAt:'2026-10-24T00:05:00Z',continuityGeneration:0}}),api=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=>time,readLiveEligibility:()=>{reads++;return state();}});
+ const pending=api.handle({url:base+'/features/LIVE_MAP_WIN'});await started;time='2026-10-24T00:05:00.000000001Z';release();const result=await pending;assert.equal(result.status,200);assert.equal(result.body.features.length,3);assert.equal(result.body.currentLiveEligibility.eligibleForRetainingForecast,false);assert.equal(result.body.currentLiveEligibility.evaluatedAt,time);assert.equal(result.body.currentLiveEligibility.reason,'eligible_state_expired');assert.equal(reads,1);
+ const asynchronous=createDiagnosticFeatureReadApi({journal,enabled:true,now:()=> '2026-10-24T00:05:00Z',readLiveEligibility:async()=>state()}),rejected=await asynchronous.handle({url:base});assert.equal(rejected.status,200);assert.equal(rejected.body.currentLiveEligibility.eligibleForRetainingForecast,false);assert.equal(rejected.body.currentLiveEligibility.reason,'synchronous_live_eligibility_port_required');
 });

@@ -1,0 +1,125 @@
+{
+  "contract": "aegis.sol-r5-core-technical-evidence.v1",
+  "scope": "synthetic technical source contracts; not ML quality or real coverage",
+  "originalFailuresPreserved": true,
+  "oneAllPassInvocationClaimed": false,
+  "newRegressionFailuresHaveCurrentPassingEvidence": true,
+  "overlappingRunsNotSummed": true,
+  "training": false,
+  "providerCalls": false,
+  "runtimeActivation": false,
+  "runs": {
+    "r5-resource-primitives-1": {
+      "status": "passed",
+      "counts": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 62189568,
+      "elapsedSeconds": 0.203,
+      "resourceSha256": "8c8d3e304df569c0357612f7d21fdcb33d1fa6504084c2188f3504efce1ab7aa",
+      "logSha256": "747a11af01d65bbc9aba931d3db1a1287410fe4dac201ea64d26974f0a244eb7",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    },
+    "r5-consumer-journal-handles-1": {
+      "status": "passed",
+      "counts": {
+        "tests": 40,
+        "pass": 40,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 1546276864,
+      "elapsedSeconds": 14.672,
+      "resourceSha256": "7f839cb511b01f3d6b1efab58a1650e5edd4fc3d9d049a3c8f1122e51ada632c",
+      "logSha256": "d051edd523d283ec470c3e867ffc92914691cba760ae0987d776755a2100ddab",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    },
+    "r5-freshness-events-clock-1": {
+      "status": "failed",
+      "counts": {
+        "tests": 130,
+        "pass": 119,
+        "fail": 11,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 3491991552,
+      "elapsedSeconds": 100.359,
+      "resourceSha256": "594dadf10a8cf679ffde1488351e880acbabfbf8ba8f12ae4bc11d761cd2692c",
+      "logSha256": "0efc3deba03c3075c1530f4a4ced03c0b42bce4b1cb8ffd23d7ea09b45e61a19",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    },
+    "r5-pipeline-rich-schema-corrective-1": {
+      "status": "passed",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 3541909504,
+      "elapsedSeconds": 54.5,
+      "resourceSha256": "86af4375eb81ddf50b1d1f0fcbdaa9adf1903b60ffb6d262402e7efd242e9da6",
+      "logSha256": "515f9cf12521546d8131f6622c0adde750573be4dfd4428687cbd8bc6531c2c1",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    },
+    "r5-admission-and-clock-corrections-1": {
+      "status": "passed",
+      "counts": {
+        "tests": 47,
+        "pass": 47,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 1482952704,
+      "elapsedSeconds": 10.844,
+      "resourceSha256": "544a0b729fed03e00f63ae379c6c9efec0cd5e14c9f9fa9fff97aa793d7ed342",
+      "logSha256": "d0c88e488687fb1b61151207a860c8a3b8b0690a7e1d25277bc442156f1e6cad",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    },
+    "r5-live-pipeline-corrections-1": {
+      "status": "failed",
+      "counts": {
+        "tests": 2,
+        "pass": 1,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 3690426368,
+      "elapsedSeconds": 77.172,
+      "resourceSha256": "0cd67d28d0d204ebc0a8f5e76302ac2fb6dc622a35e29a930d70640c1097a0a1",
+      "logSha256": "63873576d1deac3fe66c553882c2ca2dcdea705a00e55c717c686d006973a8d2",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    },
+    "r5-read-materialization-clock-fixture-1": {
+      "status": "passed",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "peakJobCommitBytes": 3413807104,
+      "elapsedSeconds": 37.86,
+      "resourceSha256": "54e34f25f176aba513ea4d59ba968cd0d6b41edaf39dc499db00d6bfdd199701",
+      "logSha256": "5b620fdcd5cc54b8fd2aba6a16dccd518293ce7a9d3d645767c556bf230ad536",
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa"
+    }
+  }
+}

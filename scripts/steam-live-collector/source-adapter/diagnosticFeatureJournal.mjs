@@ -4,16 +4,18 @@ import {mkdir,writeFile,readFile,link,unlink,lstat} from 'node:fs/promises';
 import {resolve,join,isAbsolute} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {canonical,digest} from '../../feature-registry/registry-contract.mjs';
+import {createDiagnosticResourceArena,measureBoundedJsonBytes,snapshotPlainRecord} from './diagnosticResourceArena.mjs';
 const SH=/^[a-f0-9]{64}$/,MAX=256*1024*1024,CACHE_MAX=512*1024*1024;
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const fail=x=>{throw Error('diagnostic_feature_journal:'+x);};
 const flags={eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
 const freeze=x=>{if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.values(x).forEach(freeze);Object.freeze(x);}return x;};
-export function createDiagnosticFeatureJournal({directory,maxSchemaBytes=MAX,maxTraceBytes=16*1024*1024,maxCachedSchemas=32,maxCachedDefinitions=8,maxCachedDefinitionBytes=MAX}={}){
+export function createDiagnosticFeatureJournal({directory,maxSchemaBytes=MAX,maxTraceBytes=16*1024*1024,maxCachedSchemas=32,maxCachedDefinitions=8,maxCachedDefinitionBytes=MAX,resourceArena=null}={}){
  if(typeof directory!=='string'||!isAbsolute(directory)||!Number.isSafeInteger(maxSchemaBytes)||maxSchemaBytes<1024||maxSchemaBytes>MAX||!Number.isSafeInteger(maxTraceBytes)||maxTraceBytes<1024||maxTraceBytes>64*1024*1024)fail('directory_or_bound');
  if(!Number.isSafeInteger(maxCachedSchemas)||maxCachedSchemas<1||maxCachedSchemas>128||!Number.isSafeInteger(maxCachedDefinitions)||maxCachedDefinitions<1||maxCachedDefinitions>64||!Number.isSafeInteger(maxCachedDefinitionBytes)||maxCachedDefinitionBytes<1024||maxCachedDefinitionBytes>CACHE_MAX)fail('cache_bound');
  const root=resolve(directory),schemas=new Map(),definitions=new Map(),metadata=new WeakMap(),schemaFlights=new Map(),definitionFlights=new Map();let cachedDefinitionBytes=0;
- const counters={schemaCacheHits:0,definitionCacheHits:0,definitionParses:0,definitionHashChecks:0,schemaDigests:0,namesDigests:0};
+ const arena=resourceArena??createDiagnosticResourceArena();if(typeof arena?.reserve!=='function'||typeof arena?.status!=='function')fail('owned_resource_arena');
+ const counters={schemaCacheHits:0,definitionCacheHits:0,definitionParses:0,definitionHashChecks:0,schemaDigests:0,namesDigests:0,schemaSnapshots:0,traceSnapshots:0};
  const touch=(map,key,value)=>{map.delete(key);map.set(key,value);};
  function forgetDefinition(key){const entry=definitions.get(key);if(entry){cachedDefinitionBytes-=entry.bytes;definitions.delete(key);}for(const [k,v]of schemas)if(v.definitionsHash===key)schemas.delete(k);}
  async function fingerprint(kind,key,bound){
@@ -116,21 +118,33 @@ export function createDiagnosticFeatureJournal({directory,maxSchemaBytes=MAX,max
   },
   loadHistoricalInputs,
   async writeSchema({schemaHash,schema}={}){
-   schema=structuredClone(schema);
+   schema=snapshotPlainRecord(schema);
+   if(typeof schemaHash!=='string'||!SH.test(schemaHash)||schema.contract!=='aegis.unified-feature-projection-schema.v1'||!Array.isArray(schema.definitions))fail('schema_contract');
+   const bytes=measureBoundedJsonBytes(schema,{maxBytes:maxSchemaBytes+1024*1024,maxNodes:16000000});if(schema.definitions.length>150000)fail('schema_contract');
+   const reservation=arena.reserve(bytes*6+65536);
+   if(!reservation)fail('schema_memory_reservation');
+   try{
+   counters.schemaSnapshots++;schema=structuredClone(schema);
    if(!SH.test(schemaHash??'')||schema?.contract!=='aegis.unified-feature-projection-schema.v1'||!Array.isArray(schema.definitions)||schema.definitions.length>150000||schema.definitions.some(d=>typeof d?.name!=='string'||!d.name.length)||new Set(schema.definitions.map(d=>d.name)).size!==schema.definitions.length||digest(schema)!==schemaHash)fail('schema_contract');
    const {definitions,...header}=schema,utf8=canonical(definitions),ref={sha256:sha(utf8),bytes:Buffer.byteLength(utf8),count:definitions.length};
    await put('definitions',ref.sha256,utf8,maxSchemaBytes);
    const status=await put('schemas',schemaHash,canonical({contract:'aegis.diagnostic-feature-schema-reference.v1',schemaHash,definitionsRef:ref,header}),1024*1024);
    return{status,schemaHash,definitionsRef:ref,...flags};
+   }finally{reservation.release();}
   },
   loadSchema,
-  cacheStats(){return{...counters,cachedSchemas:schemas.size,cachedDefinitions:definitions.size,cachedDefinitionBytes,maxCachedSchemas,maxCachedDefinitions,maxCachedDefinitionBytes};},
+  cacheStats(){return{...counters,cachedSchemas:schemas.size,cachedDefinitions:definitions.size,cachedDefinitionBytes,maxCachedSchemas,maxCachedDefinitions,maxCachedDefinitionBytes,resourceArena:arena.status()};},
   clearCache(){schemas.clear();definitions.clear();cachedDefinitionBytes=0;},
   async appendTrace(trace){
-   trace=structuredClone(trace);
+   trace=snapshotPlainRecord(trace);
+   if(trace?.contract!=='aegis.diagnostic-feature-trace.v1'||typeof trace.utf8!=='string'||Buffer.byteLength(trace.utf8)>maxTraceBytes)fail('trace_pin');
+   const reservation=arena.reserve(Buffer.byteLength(trace.utf8)*6+65536);if(!reservation)fail('trace_memory_reservation');
+   try{
+   counters.traceSnapshots++;trace=structuredClone(trace);
    if(trace?.contract!=='aegis.diagnostic-feature-trace.v1'||typeof trace.utf8!=='string'||trace.bytes!==Buffer.byteLength(trace.utf8)||trace.bytes>maxTraceBytes||sha(trace.utf8)!==trace.sha256)fail('trace_pin');
    await validateTraceBody(JSON.parse(trace.utf8));
    const status=await put('traces',trace.sha256,trace.utf8,maxTraceBytes);return{status,sha256:trace.sha256,...flags};
+   }finally{reservation.release();}
   },
   async loadTrace(hash){const utf8=await read('traces',hash,maxTraceBytes);if(sha(utf8)!==hash)fail('stored_trace_hash');return validateTraceBody(JSON.parse(utf8));},
  });

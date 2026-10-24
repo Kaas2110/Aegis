@@ -9,6 +9,7 @@ import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
 import {classifySteamObservationPhase,STEAM_ELIGIBLE_STATE_FRESHNESS_SECONDS} from './steamPhasePolicy.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {readSteamProgressionProof,PROGRESSION_POLICY} from './steamProgressionAdmission.mjs';
+import {isPlausibleSteamClockAdvance} from './steamClockProgress.mjs';
 
 export const ELIGIBLE_STATE_CONTRACT='aegis.steam-eligible-state.v1';
 export const STEAM_PAUSE_CAPABILITY=Object.freeze({status:'unavailable_source_evidence',profile:'steam.GetLiveLeagueGames.v1.scoreboard',reason:'no_qualified_live_pause_or_current_state_timestamp_in_retained_profile',canMintConfirmedPause:false});
@@ -103,8 +104,7 @@ export function advanceSteamEligibleState(previousPrivateToken,{retainedEntry=nu
  // Compare clocks against their associated confirmation timestamps. An HTTP
  // repeat can be much newer than the qualified clock and cannot shorten that
  // clock's real elapsed interval, nor extend its qualified freshness deadline.
- const clockElapsed=s.lastConfirmedNs===null?null:d.received-s.lastConfirmedNs;
- if(advanced&&clockElapsed!==null&&clock-s.maximumClockSeconds>Number(clockElapsed)/1e9+PROGRESSION_POLICY.clockPlausibilitySlackSeconds){invalidate('eligible_state_implausible_clock_advance');return finish();}
+  if(advanced&&s.lastConfirmedNs!==null&&!isPlausibleSteamClockAdvance({anchorClockSeconds:s.maximumClockSeconds,anchorReceivedNs:s.lastConfirmedNs,clockSeconds:clock,receivedNs:d.received,slackSeconds:PROGRESSION_POLICY.clockPlausibilitySlackSeconds})){invalidate('eligible_state_implausible_clock_advance');return finish();}
  if(s.integrityBlocked||receiptGap!==null&&receiptGap>BigInt(PROGRESSION_POLICY.maximumReceiptGapSeconds)*NS||s.lastConfirmedNs!==null&&d.received-s.lastConfirmedNs>BigInt(PROGRESSION_POLICY.leaseSeconds)*NS){resetDynamicWindows=true;s.continuityGeneration++;}
  s.integrityBlocked=false;s.classification='confirmed_active';s.reason=initial?'first_authoritative_live_state':'native_game_clock_advanced';s.identityHash=identity;s.identitySnapshot=snapshot;s.lastConfirmedNs=d.received;s.lastConfirmedAt=d.r.receivedAt;s.confirmationReceivedAt=d.r.receivedAt;s.confirmationReceiptSha256=d.receiptSha256;s.observationId=o.observationId;s.rawSha256=d.rawSha256;s.providerGameClockSeconds=clock;s.maximumClockSeconds=clock;if(advanced)s.lastClockAdvanceAt=d.r.receivedAt;
  confirmationRenewed=true;mayGenerateNewVector=true;return finish();

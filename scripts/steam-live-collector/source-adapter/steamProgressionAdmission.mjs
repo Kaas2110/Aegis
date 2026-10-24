@@ -9,10 +9,11 @@ import {normalizeLocalCapture,canonical,sha,NORMALIZATION_CONTRACT} from './stea
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
 import {classifySteamObservationPhase} from './steamPhasePolicy.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+import {isPlausibleSteamClockAdvance} from './steamClockProgress.mjs';
 export const ADMISSION_CONTRACT='aegis.steam-observed-progression-admission.v1';
 export const ADMISSION_PROFILE='GLG_PROGRESSING_OBSERVED.v1';
 export const SOURCE_PROFILE='steam.GetLiveLeagueGames.v1.scoreboard';
-export const PROGRESSION_POLICY=Object.freeze({contract:'aegis.steam-progression-policy.v1',maximumReceiptGapSeconds:180,leaseSeconds:180,clockPlausibilitySlackSeconds:30});
+export const PROGRESSION_POLICY=Object.freeze({contract:'aegis.steam-progression-policy.v2',maximumReceiptGapSeconds:180,leaseSeconds:180,clockPlausibilitySlackSeconds:30,clockAnchor:'last_distinct_coherent_clock_receipt'});
 const states=new WeakMap(),proofs=new WeakMap(),NS=1000000000n;
 const flags={eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false,publicPromotion:false};
 const hash=x=>sha(canonical(x));
@@ -44,9 +45,9 @@ export function advanceSteamProgressionAdmission(previousPrivateToken,{retainedP
  if(previousPrivateToken!=null&&!old)return reject('owned_progression_state_required');
  if(typeof matchId!=='string'||!/^[1-9]\d{0,19}$/.test(matchId)||decision===null||hash(policy)!==hash(PROGRESSION_POLICY))return reject('progression_policy_map_or_decision');
  if(old&&old.matchId!==matchId)return reject('progression_state_map_mismatch');
- let s=old?{...old}: {matchId,lastReceipt:null,lastBinding:null,last:null,lastProgress:null,maximumClock:null,terminal:false,prefixHash:hash({matchId,policy:PROGRESSION_POLICY}),continuityId:hash({matchId,policy:PROGRESSION_POLICY,origin:'unseeded'}),captures:0};
+ let s=old?{...old}: {matchId,lastReceipt:null,lastBinding:null,last:null,clockAnchor:null,lastProgress:null,maximumClock:null,terminal:false,prefixHash:hash({matchId,policy:PROGRESSION_POLICY}),continuityId:hash({matchId,policy:PROGRESSION_POLICY,origin:'unseeded'}),captures:0};
  let reason='consecutive_positive_progress_required',privateProof=null,provenance=null,discontinuity=false;
- function barrier(why,binding=null){s={...s,last:null,lastProgress:null,lastProgressBindings:null,continuityId:hash({previous:s.continuityId,reason:why,binding})};discontinuity=true;reason=why;}
+ function barrier(why,binding=null){s={...s,last:null,clockAnchor:null,lastProgress:null,lastProgressBindings:null,continuityId:hash({previous:s.continuityId,reason:why,binding})};discontinuity=true;reason=why;}
  function finish(){
   const nextPrivateToken=Object.freeze({contract:ADMISSION_CONTRACT+'.state'});states.set(nextPrivateToken,freeze(s));
   return{contract:ADMISSION_CONTRACT,status:privateProof?'admitted_diagnostic':'blocked',reason,privateProof,nextPrivateToken,provenance,expiresAt:provenance?.expiresAt??null,discontinuity,continuityId:s.continuityId,...flags};
@@ -79,14 +80,16 @@ export function advanceSteamProgressionAdmission(previousPrivateToken,{retainedP
   if(!coherent){
    const why=expired?'progression_lease_expired_pair_required':previous&&previous.identityHash!==identityHash?'progression_identity_changed':gap!==null&&gap>180n*NS?'progression_receipt_gap_exceeded':'consecutive_positive_progress_required';
    if(previous||expired||gap!==null&&gap>180n*NS)barrier(why,d.binding);
-   s={...s,last:current,lastProgress:null,maximumClock:clock};reason=why;continue;
+   s={...s,last:current,clockAnchor:current,lastProgress:null,maximumClock:clock};reason=why;continue;
   }
   const deltaClock=clock-previous.clock;
-  // Compare the fractional receipt gap directly; never round to milliseconds.
-  if(deltaClock>Number(gap)/1e9+30){barrier('progression_implausible_clock_advance',d.binding);continue;}
+  // Repeated HTTP responses preserve the first receipt associated with this
+  // unchanged clock. Keep its anchor distinct from the consecutive receipt gap.
+  const anchor=s.clockAnchor;
+  if(!isPlausibleSteamClockAdvance({anchorClockSeconds:anchor?.clock,anchorReceivedNs:anchor?.received,clockSeconds:clock,receivedNs:d.received,slackSeconds:PROGRESSION_POLICY.clockPlausibilitySlackSeconds})){barrier('progression_implausible_clock_advance',d.binding);continue;}
   const lastProgress=deltaClock>0?d.received:s.lastProgress;
-  const lastProgressBindings=deltaClock>0?{previous:{raw:previous.raw,receipt:previous.receipt,observationId:previous.observation.observationId,clockSeconds:previous.clock},current:{raw:d.raw,receipt:d.receipt,observationId:o.observationId,clockSeconds:clock}}:s.lastProgressBindings;
-  s={...s,last:current,lastProgress,lastProgressBindings,maximumClock:clock};
+  const lastProgressBindings=deltaClock>0?{previous:{raw:previous.raw,receipt:previous.receipt,observationId:previous.observation.observationId,clockSeconds:previous.clock},clockAnchor:{raw:anchor.raw,receipt:anchor.receipt,observationId:anchor.observation.observationId,clockSeconds:anchor.clock,receivedAt:anchor.receivedAt},current:{raw:d.raw,receipt:d.receipt,observationId:o.observationId,clockSeconds:clock}}:s.lastProgressBindings;
+  s={...s,last:current,clockAnchor:deltaClock>0?current:anchor,lastProgress,lastProgressBindings,maximumClock:clock};
   if(lastProgress===null){reason='consecutive_positive_progress_required';continue;}
   const expires=lastProgress+180n*NS;
   if(decision>expires){reason='progression_lease_expired';continue;}

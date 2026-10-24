@@ -1,0 +1,174 @@
+PUBLIC CONTEXT MIRROR. Private work/ and outputs/ evidence paths refer to the
+operator continuation workspace, not files in the public source checkout.
+
+AEGIS — CURRENT SOL IMPLEMENTATION PLAN R5
+24 October2026. Supersedes prior execution order after Astra's R4 review.
+
+READ FIRST
+docs/continuation/astra-to-sol-r4-review-20261024.txt
+docs/astra-sol-r4-review-20261024.txt
+docs/astra-r4-architecture-decisions-20261024.txt (AD1-AD10)
+Relevant detailed notes: work/astra-sol-r4-review-20261024/.
+
+BASELINE / SCOPE
+PR7 maina3f11f5264a50acab33b4384671e7fb1cf9447a9 is already installed/merged.
+Do not rerun old guards, completed fits/tests or publication to recover context.
+Graphify was ready on PR7 at review; these new documents are local until included
+in the next substantive source block. Current local source is authoritative.
+Astra reviewed only: all fixes in this plan still require Sol implementation.
+
+NO training/HPO/ablations/calibration/quality evaluation, provider probes/data
+refresh, runtime/schedule activation, migrations, promotion or app release.
+Preserve STOP/foreign locks/manual pauses/API budgets/deferred STRATZ configuration.
+Do not restart a stopped process. English docs/PRs, Russian owner chat.
+Keep all79families and implemented rich columns. Missing data remains missing.
+
+EXECUTION ORDER
+R5.0 then R5.1. R5.2 can proceed independently in source; only ONE native technical
+run at a time. R5.3 precedes archive-scale algebra; R5.4 precedes sustained runtime.
+R5.5/R5.6 can proceed independently where their interfaces are pinned. R5.7 last.
+Use existing immutable evidence where valid, narrow changed-contract tests, bounded
+failure messages and owned resources. No full746-case rerun on every edit.
+Record changes/interfaces, rationale/alternatives, actual checks, synthetic-vs-real
+evidence, limitations and exact continuation after each meaningful block.
+
+R5.0 — MEMORY ADMISSION / OWNERSHIP [FIRST]
+Modules: diagnosticFeatureConsumer, diagnosticFeatureJournal; owned test runner.
+Findings M1/M2; AD7/AD8.
+Deliver cheap shape/count admission and capacity reservation BEFORE inputSize,
+clone/full hash. Validate actual bounded bytes, not caller claims. Release on every
+reject/cancel/error; dedupe binds epoch and immutable source semantics. A full
+queue cannot copy another large input. Add shared unique-asset/transient accounting
+interfaces and start one rich generation/one pending commit. Pin runner/helper
+hashes in new receipts; leave old receipts unchanged.
+Prepare global16GiBsupervisor only as inactive source; existing8GiBtest job is not
+whole-project enforcement. Before a technical run account known project use and
+headroom; unknown ownership never authorizes killing a process. Preserve games.
+Acceptance: instrumented overload never enters copy/hash; held writer; duplicate,
+corrupt, same/new epoch input; cancellation/error releases reservations; no foreign
+lock/STOP deletion. Small tests first, serial8GiB/four CPUs/min4GiBfree/finite wall.
+
+R5.1 — CLOCK ANCHOR AND FINAL READ FENCE
+Modules: steamProgressionAdmission, steamEligibleState, retainedFeaturePipeline,
+diagnosticTargetRouting, diagnosticFeatureReadApi. F1/F2; AD2.
+Keep clock-bearing anchor separate from last receipt; equal-clock repeats never
+renew it. Retain180squalification/receipt checks and300sstate-retention boundary.
+Initial seed, advancement, restart/barrier share one invariant. Do not remove the
+plausibility check. After awaited evidence IO use owned final time and common
+source/epoch snapshot; final STOP/expiry fence, evaluatedAt/expiresAt. Historical
+inspection remains available without claiming current forecast availability.
+Acceptance: phase-absent12:30clock600;12:31clock660;12:32:59repeat660;12:33clock780
+passes actual progression+pipeline. Initial-repeat scenario passes; truly impossible
+advance fails.180/+1ns and300/+1ns precise. Restart retains original anchor/deadline.
+Deferred IO crossing expiry/STOP/new observation cannot return an old current claim.
+Prior-map actuals and per-panel failures remain isolated. Do not invent pause data.
+
+R5.2 — ROSHAN / HISTORICAL CLOCK CORRECTIONS
+Modules: roshanFeatures, retainedOpenDotaFacts/selectors, affected projection.
+E1/H2; AD6. No new provider calls.
+Implement bounded event ledger, ID/content binding, pending pickup links and
+deterministic episode reduction. Same known event set/cutoff => same fields across
+batch order. Contradictions make affected optional fields unknown, not arbitrary
+truth. Add derivation v2 clock-block tombstones and identity epochs; retain v1
+decoder. Wire actual rich producer without silently dropping/versioning away fields.
+Acceptance: terminal-before-pickup, repeated/changed IDs, late older/conflicting
+terminal, new episode, future/map/patch mismatch. times valid->null/[]/invalid,
+metrics without clock, one invalid metric, equal-time conflict, A->B->A identities.
+Unused series must not silently become live-qualified input just because stored.
+
+R5.3 — VERIFIED HISTORY HANDLE AND TRANSACTIONAL V2 SOURCE
+Modules: historySourceVerifier, retainedHistorySourceExport/CorpusIndex,
+historyCalculationCore, observedDraftHistory/FeatureBundle, retainedFeaturePipeline,
+history source/revision stores and fact store. H1; AD1/AD3/AD4/AD8.
+Substeps:
+a. Owned opaque verified source handle bound to cutoff/revision/hash/proof and byte
+   ownership. No dense source rebuild per live frame. Keep v1 intake verification.
+b. Single owned writer, durable reservation journal/fencing, marker-last commit.
+   Reserve before writes; independent appenders use owned port before v2 enabled.
+c. Target-independent VERSIONED corpus retains every version/tombstone/identity
+   epoch, with time-aware indexes. Only target-specific t0 view resolves rows.
+d. Explicit v2 source proof binds generation, selection and semantic identities;
+   keep population/original-availability caveats. Do not lift v1's64MiB ceiling.
+Acceptance: source verification once per loaded immutable asset and on reload;
+t0<t1 late identity/backfill cannot extend history. Latest B/J or null correction
+cannot hide old eligible A/H in indexes. Missing excluded/future ref invalidates
+complete-scope proof. Mutation/STOP/quota/crash cannot publish partial artifacts.
+Committed corruption is not empty history. Deduped append charged once; uncertain
+reservations retained; no age-based lock deletion. Existing v1 remains readable.
+
+R5.4 — EXACT BOUNDED ALGEBRA / COMPACT RICH FEATURES
+Requires R5.0/R5.3 ownership. Modules: historyCalculationCore,
+historicalRelationalFeatures, observedDraftFeatureBundle, featureProjectionCompiler,
+unifiedFeatureProducer, diagnosticFeatureJournal. AD5/AD7.
+Implement descriptor-driven cohort UNION including hero/meta history outside target
+teams; deterministic batched exact reductions/quantiles and shared support chunks.
+Factor immutable dictionaries/coordinates; Float64+missing bitmaps; shared projection
+assets, streaming canonical encode/hash, bounded diagnostic pages. Buffers remain
+opaque. Charge in-flight references after LRU eviction and transient copies. Avoid
+full public audit copies when a caller only needs a private context handle.
+Acceptance: small-golden expanded names/definitions/values/masks/support for all
+applicable targets; explicit arithmetic order/version; mutation/corruption checks;
+eviction/reload exact semantics; outstanding holds still charged. No approximating
+or trimming families. Corpus>64MiB through actual producer+journal+restart within
+v2 bounds, not isolated index-only success. No new data ingestion is needed.
+
+R5.5 — OWNED SERIES RESOLVER / APP DIAGNOSTIC BRIDGE
+Modules: seriesContextFeatures/seriesHistoryTarget, diagnosticTargetRouting,
+diagnosticFeatureReadApi, retainedDiagnosticBootstrap, existing app adapters.
+AD1/AD2/AD9. Keep runtime/serving OFF.
+Implement immutable current-series receipt store/resolver: teams/format/prior-map
+prefix/score/after-N transition/current map/independent trace refs, original receipt
+availability. Prepare explicit adapter to current feature/forecast journal contracts.
+List legacy180000mschecks and their meanings; do not replace all constants blindly.
+No inference or UI redesign. Main=whole series; detail=current map by default or
+selected prior-map heroes/results. Client provides no raw source/path/time authority.
+Acceptance BO1/BO3/BO5: unknown first map ID/sides, full draft, live current score,
+between maps, side flips, previous-map selection, terminal, corrected/stale receipts,
+independent panel corruption. No cross-map/series identity or source binding.
+
+R5.6 — FULL SEMANTIC LEDGER / SOURCE DISPOSITIONS
+Modules: generated-definition-ledger, registry, actual emitted schemas.
+All79families/14legacy groups accounted, including unimplemented/unavailable entries.
+Every definition: units/population/support/time/availability/role/patch policy,
+missingness and wired status. No aliases where old meanings differ. Preserve the
+proposed useful interactions. Sparse history support is separate from joint source95%.
+Required12logical targets:
+PRE_MAP_WIN,PRE_KILLS,PRE_DURATION,SERIES_PRE;
+POST_MAP_WIN,POST_KILLS,POST_DURATION;
+LIVE_MAP_WIN,LIVE_KILLS,LIVE_DURATION,SERIES_LIVE,SERIES_BETWEEN.
+SERIES_LIVE has distinct postdraft/live mode; BETWEEN and next-map PRE independent.
+These are contracts, not12trained models. History is useful in all eligible phases;
+current live never enters PRE. Final-vs-remaining totals and map-vs-series orientation
+explicit. Source-unqualified pause/Roshan/role fields remain unavailable.
+
+R5.7 — SUSTAINED TECHNICAL ACCEPTANCE / RETURN TO ASTRA
+After implementation+narrow checks, run actual common producer, stores, journal,
+restart and reader on pinned SYNTHETIC inputs. Two81-minute map contexts at30s:
+324advancing states+2zero-time draft states=326total, plus PRE/BETWEEN/terminal
+coverage of all12targets. No fabricated liveclock0.30s is a bounded test profile,
+not a poll change or proof for a faster production cadence.
+Include schema churn, held writes/backpressure, repeats/errors/gaps, t1 identities,
+STOP/cancel, corruption, source/identity changes and previous-map selection.
+Initial caps: owned8GiBjob/four CPUs/min4GiBfree/<=20minwall; service path peak<=6GiB;
+owned stress output<=4GiB. Fail on cap; do not raise/prune silently. Report peak and
+current commit, RSS separately, arena/buffer/queue/schema/disk counts and timings.
+Warm charged growth target<=64MiB excluding explicitly enumerated schema changes;
+initial warm p95<=2s,p99<=5s,no frame>15s,cold<=30s at this cadence. These are NEW
+engineering targets requiring measurements. Faster deployment needs its own test.
+No source collection study now. Keep prepared prospective slots/failure denominator,
+joint field requirements and map/series-cluster uncertainty protocol. Collection
+pilot and qualification need separate authorization and pinned precision/stopping.
+
+PUBLICATION / HANDOFF
+Each coherent completed block: changed-scope checks, source exclusions, independent
+technical review, one PR, attach, merge exact reviewed head under standing permission.
+No routine merge question/full parity. Include source-safe copies of this review,
+architecture and plan in the next substantive implementation block. Graphify refreshes
+automatically; no duplicate manual build. Candidate memory is not accepted context.
+Save changed paths/hash/interfaces, alternatives, negative regression receipts,
+real-vs-synthetic results, resource logs, gaps and precise next action for Astra.
+Use immutable run names/owned guards; never rerun obsolete pre-install manifests.
+Return to Astra after executable R5 work and explicit unavailable dispositions,
+before training/activation. Isolate genuinely new design conflicts and continue
+unaffected work. Passing technical checks alone does not close full feature/source/
+runtime or prediction-quality gates.

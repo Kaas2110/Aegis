@@ -9,12 +9,14 @@ import {createDiagnosticFeatureJournal} from './diagnosticFeatureJournal.mjs';
 import {createAppendOnlyHistoryFactStore} from './appendOnlyHistoryFactStore.mjs';
 import {createRetainedHistorySourceExport} from './retainedHistorySourceExport.mjs';
 import {createDiagnosticFeatureReadApi} from './diagnosticFeatureReadApi.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
 export async function createRetainedDiagnosticHostPorts({config,shouldContinue,signal,now,onTraceIntent}){
  const sources=join(config.stateDirectory,'sources'),revisions=join(config.stateDirectory,'revisions');
  await mkdir(sources,{recursive:true});await mkdir(revisions,{recursive:true});
  const sourceStore=await createHistorySourceExportStore(sources),historyRevisions=await createRetainedHistoryRevisionStore(revisions,{shouldContinue,signal});
  const factStore=await createAppendOnlyHistoryFactStore(config.historyFactDirectory,{shouldContinue,signal});
- const journal=createDiagnosticFeatureJournal({directory:join(config.stateDirectory,'journal')});
+ const resourceArena=createDiagnosticResourceArena({maxBytes:2*1024**3});
+ const journal=createDiagnosticFeatureJournal({directory:join(config.stateDirectory,'journal'),resourceArena});
  const featureJournal={...journal,async appendTrace(trace){
   // Intent precedes the CAS write. Restart checks the real journal bytes before
   // deciding to restore; an interrupted or failed append never counts as success.
@@ -29,7 +31,7 @@ export async function createRetainedDiagnosticHostPorts({config,shouldContinue,s
   return createRetainedHistorySourceExport({draftPrefixInputs:options.draftPrefixInputs,matchId:options.matchId,computedAt,exportedAt:now(),versionInputs});
  };
  const producer=createUnifiedFeatureProducer();
- const pipeline=createRetainedFeaturePipeline({producer,sourceStore,historyRevisions,historyProfileSha256:config.historyProfileSha256,materializationGeneration:config.materializationGeneration,featureJournal,historySourceFactory,shouldContinue,signal,now,limits:config.pipelineLimits});
+ const pipeline=createRetainedFeaturePipeline({producer,sourceStore,historyRevisions,historyProfileSha256:config.historyProfileSha256,materializationGeneration:config.materializationGeneration,featureJournal,historySourceFactory,shouldContinue,signal,now,limits:config.pipelineLimits,resourceArena});
  // An owned handler is returned to the host; no HTTP listener or public serving
  // is activated. Its current-state view expires even without another capture.
  const readLiveEligibility=input=>pipeline.readLiveEligibility(input);

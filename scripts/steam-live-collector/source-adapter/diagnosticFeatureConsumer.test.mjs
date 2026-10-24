@@ -159,8 +159,28 @@ test('schema registration LRU re-verifies evicted schemas without pruning routes
  assert.equal((await c.consume({...base.input,patch:'2',decisionAt:'2026-10-23T12:41:00Z'})).status,'recorded_diagnostic');
  assert.equal((await c.consume({...base.input,patch:'1',decisionAt:'2026-10-23T12:42:00Z'})).status,'recorded_diagnostic');const reloaded=JSON.parse(s.traces[2].utf8);assert.deepEqual(reloaded.routes,firstBody.routes);assert.deepEqual(reloaded.vectors,firstBody.vectors);assert.equal(s.schemas.length,6);assert.equal(c.status().registeredSchemas,1);assert.equal(c.status().maps,1);assert.equal(c.status().schemaWritesInFlight,0);assert.deepEqual(p.calls.at(-1).previousLiveState,{step:2});assert.equal(p.compiler.status().projectionSchemas,1);
 });
-test('concurrent different maps retain route-owned schemas across compiler eviction and pending writes',async()=>{
+test('different maps serialize rich generation and preserve route schemas while a write is pending',async()=>{
  const other=await bound({matchId:'90002'}),p=tinyChurningProducer(),s=ports();let release;const gate=new Promise(r=>{release=r;}),seen=[];
  const c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,limits:{maxSchemas:1},writeSchema:async o=>{seen.push(o);await gate;assert.equal(digest(o.schema),o.schemaHash);return s.writeSchema(o);}});
- const first=c.consume({...base.input,patch:'1'});await tick();const second=c.consume({...other.input,patch:'2'});await tick();assert.equal(c.status().schemaWritesInFlight,2);assert.equal(p.compiler.status().projectionSchemas,1);release();const[a,b]=await Promise.all([first,second]);assert.equal(a.status,'recorded_diagnostic');assert.equal(b.status,'recorded_diagnostic');assert.equal(s.traces.length,2);assert.equal(seen.length,4);assert.equal(c.status().registeredSchemas,1);assert.equal(c.status().pending,0);assert.equal(c.status().maps,2);for(const schema of seen)assert.equal(Object.isFrozen(schema.schema),true);
+ const first=c.consume({...base.input,patch:'1'});await tick();const second=c.consume({...other.input,patch:'2'});await tick();assert.equal(c.status().schemaWritesInFlight,1);assert.equal(p.calls.length,1);assert.equal(p.compiler.status().projectionSchemas,1);release();const[a,b]=await Promise.all([first,second]);assert.equal(a.status,'recorded_diagnostic');assert.equal(b.status,'recorded_diagnostic');assert.equal(s.traces.length,2);assert.equal(seen.length,4);assert.equal(c.status().registeredSchemas,1);assert.equal(c.status().pending,0);assert.equal(c.status().maps,2);assert.equal(c.status().resourceArena.chargedBytes,0);for(const schema of seen)assert.equal(Object.isFrozen(schema.schema),true);
+});
+
+test('R5 saturated queue refuses work before reading a large body or running preparation',async()=>{
+ const p=instrumentedProducer(),s=ports();let release;const gate=new Promise(r=>{release=r;});
+ const c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,limits:{maxPending:1},writeSchema:async o=>{await gate;return s.writeSchema(o);}});
+ const first=c.consume(base.input);await tick();const before=c.status().preparation;let reads=0;
+ const input={...base.input};Object.defineProperty(input,'sourceExportInput',{enumerable:true,get(){reads++;throw Error('should_not_prepare_overload');}});
+ const rejected=await c.consume(input);assert.equal(rejected.reason,'pending_work_bound');assert.equal(reads,0);assert.deepEqual(c.status().preparation,before);release();assert.equal((await first).status,'recorded_diagnostic');assert.equal(c.status().resourceArena.chargedBytes,0);
+});
+test('R5 byte reservation denies ownership copying and releases after source failure',async()=>{
+ const p=instrumentedProducer(),s=ports(),arena={reserve(){return null;},status(){return{chargedBytes:0};}};
+ const c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s,resourceArena:arena});assert.equal((await c.consume(base.input)).reason,'memory_reservation_bound');assert.equal(c.status().preparation.ownedCopies,0);assert.equal(p.calls.length,0);
+ const d=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s});assert.equal((await d.consume({...base.input,historyProof:{}})).reason,'host_input_or_history_contract');assert.equal(d.status().resourceArena.chargedBytes,0);assert.equal(d.status().pending,0);
+});
+test('R5 available capacity still rejects nested and top-level accessors without reentry',async()=>{
+ const p=instrumentedProducer(),s=ports(),c=createDiagnosticFeatureConsumer({now:()=> '2026-10-23T13:00:00Z',...p,...s});let entered=0;
+ const top={...base.input};Object.defineProperty(top,'matchId',{enumerable:true,get(){entered++;c.consume(base.input);return'90001';}});
+ assert.equal((await c.consume(top)).reason,'host_input_or_history_contract');
+ const nested=structuredClone(base.input.sourceExportInput);Object.defineProperty(nested,'utf8',{enumerable:true,get(){entered++;return'{}';}});
+ assert.equal((await c.consume({...base.input,sourceExportInput:nested})).reason,'host_input_or_history_contract');assert.equal(entered,0);assert.equal(p.calls.length,0);assert.equal(c.status().preparation.ownedCopies,0);assert.equal(c.status().resourceArena.chargedBytes,0);
 });

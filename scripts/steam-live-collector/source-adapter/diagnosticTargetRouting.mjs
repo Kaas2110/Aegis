@@ -3,6 +3,7 @@
 import {TARGET_IDS,digest} from '../../feature-registry/registry-contract.mjs';
 import {produceSeriesContext} from './seriesContextFeatures.mjs';
 import {instantNs} from './causalTime.mjs';
+import {readCurrentLiveEligibilitySnapshot} from './currentLiveEligibilitySnapshot.mjs';
 export const DIAGNOSTIC_ROUTING_CONTRACT='aegis.diagnostic-target-routing.v1';
 const flags={diagnosticOnly:true,eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false,publicPromotion:false};
 const ID=/^[1-9]\d{0,19}$/,SHA=/^[a-f0-9]{64}$/;
@@ -29,11 +30,30 @@ function notFuture(value,cutoff){const at=instantNs(value);return at!==null&&at<
  * journal is an owned verifying read port such as createDiagnosticFeatureJournal.
  * Original-model forecast replay stays unavailable until its separate receipt/
  * model-output contract is reviewed; feature traces cannot satisfy that proof. */
-export function createDiagnosticTargetRouter({journal,targetDocument,expectedSchemaHashes,readLiveEligibility=null}={}){
+export function createDiagnosticTargetRouter({journal,targetDocument,expectedSchemaHashes,readLiveEligibility=null,now=()=>new Date().toISOString()}={}){
+ if(typeof now!=='function')fail('owned_current_read_clock');
  if(readLiveEligibility!==null&&typeof readLiveEligibility!=='function')fail('owned_live_eligibility_port');
  if(typeof journal?.loadTrace!=='function'||typeof journal?.loadSchema!=='function'||targetDocument?.contract!=='aegis.twelve-logical-targets.v1'||!Array.isArray(targetDocument.targets)||targetDocument.targets.length!==TARGET_IDS.length||new Set(targetDocument.targets.map(t=>t.id)).size!==TARGET_IDS.length||targetDocument.targets.some(t=>!TARGET_IDS.includes(t.id)||!Object.hasOwn(SEMANTICS,t.target)||!Array.isArray(t.stateModes)||!t.stateModes.length||!Object.values(PHASES).some(phases=>phases.includes(t.phase))))fail('owned_registry_or_journal');
  if(!exact(expectedSchemaHashes,TARGET_IDS)||Object.values(expectedSchemaHashes).some(xs=>!Array.isArray(xs)||!xs.length||xs.length>8||xs.some(x=>!SHA.test(x))||new Set(xs).size!==xs.length))fail('exact_schema_allowlist');
- const document=freeze(structuredClone(targetDocument)),metadata=new Map(document.targets.map(t=>[t.id,t])),allowed=freeze(structuredClone(expectedSchemaHashes)),targetDocumentSha256=digest(document);
+ const document=freeze(structuredClone(targetDocument)),metadata=new Map(document.targets.map(t=>[t.id,t])),allowed=freeze(structuredClone(expectedSchemaHashes)),targetDocumentSha256=digest(document),ownedReads=new WeakMap();
+ function eligibleView(snapshot,key){const state=snapshot.state;return{status:'eligible_retention_candidate',reason:state.reason,eligibleForRetainingForecast:true,evaluatedAt:snapshot.evaluatedAt,lastTraceSha256:key,observationId:state.stateView.observationId,lastConfirmedAt:state.stateView.lastConfirmedAt,expiresAt:state.stateView.expiresAt,continuityGeneration:state.stateView.continuityGeneration,ageSeconds:state.ageSeconds,recordedPrediction:false,eligibleForServing:false};}
+ /** The HTTP host calls this after awaiting read(). It closes that final promise
+  * boundary with a synchronous source/STOP fence; only our held output is valid. */
+ function finalizeRead(route){
+  const meta=ownedReads.get(route);if(!meta)fail('owned_route_read_required');
+  const hasCurrent=panel=>panel?.currentLiveEligibility?.eligibleForRetainingForecast===true;
+  if(!hasCurrent(route.main)&&!hasCurrent(route.detail))return route;
+  const minimumDecisionAt=[meta.decisionAt,route.main?.currentLiveEligibility?.evaluatedAt,route.detail?.currentLiveEligibility?.evaluatedAt].filter(x=>instantNs(x)!==null).reduce((a,b)=>instantNs(a)>=instantNs(b)?a:b);
+  const snapshot=readCurrentLiveEligibilitySnapshot({readLiveEligibility,now,matchId:route.currentMapId,minimumDecisionAt}),state=snapshot.state,next=structuredClone(route);
+  function refresh(panel,label){
+   if(!hasCurrent(panel))return panel;
+   const prior=panel.currentLiveEligibility,reason=state.eligibleForRetainingForecast!==true?'current_live_state_ineligible':state.lastTraceSha256!==prior.lastTraceSha256||state.stateView?.observationId!==prior.observationId?'current_live_trace_binding':null;
+   if(reason){next.panelRejections[label]=reason;return label==='series'?{...unavailable(reason),entity:'series',seriesId:next.seriesId,eventRelation:panel.eventRelation}:unavailable(reason);}
+   const currentLiveEligibility=eligibleView(snapshot,prior.lastTraceSha256);return{...panel,currentLiveEligibility,...(Array.isArray(panel.targets)?{targets:panel.targets.map(target=>({...target,currentLiveEligibility}))}:{})};
+  }
+  next.main=refresh(next.main,'series');next.detail=refresh(next.detail,'map');next.sourceRejection=next.panelRejections.series??next.panelRejections.map;
+  const value=freeze(next);ownedReads.set(value,meta);return value;
+ }
  function descriptor(trace,traceSha256,route){
   const meta=metadata.get(route.targetId),semantic=SEMANTICS[meta.target];
   return{status:'diagnostic_features_available',targetId:route.targetId,targetContract:meta.target,phase:meta.phase,stateMode:route.stateMode,...semantic,traceSha256,schemaRef:structuredClone(route.schemaRef),featureCount:route.featureCount,sourceEvidence:{sourceSnapshotHash:trace.sourceSnapshotHash??null,historicalInputRef:trace.historicalInputRef??null,featureInputCutoffAt:trace.featureInputCutoffAt??trace.reconstruction?.sourceDecisionAt??trace.decisionAt,calculatedAt:trace.decisionAt,rawSourceReplayPerformedByRouter:false,providerAuthenticationClaimed:false},prediction:null,modelOutputRequired:true,...(semantic.metric==='kills'||semantic.metric==='duration'?{totals:{metric:semantic.metric,unit:semantic.units,discrete:true,featureTargetQuantity:semantic.quantity,distribution:null,outputMetadataRequired:true,remainingToFinalConversionPerformed:false,consumer:'existing_TotalsDistribution_and_BookmakerTotalsLadder'}}:{}),...flags};
@@ -54,7 +74,7 @@ export function createDiagnosticTargetRouter({journal,targetDocument,expectedSch
   let detail=selectedPrevious?{status:'actual_result',entity:'map',seriesId:series.seriesId,mapId:selectedPrevious.mapId,mapNumber:selectedPrevious.mapNumber,winnerTeamId:selectedPrevious.winnerTeamId,team1Kills:selectedPrevious.team1Kills,team2Kills:selectedPrevious.team2Kills,durationSeconds:selectedPrevious.durationSeconds,heroes:{orientation:'series_team1_team2',team1:selectedPrevious.team1Heroes,team2:selectedPrevious.team2Heroes},historicalForecast:null,historicalForecastReason:'verified_original_model_forecast_receipt_unavailable',prediction:null,...flags}:unavailable(selectedMapId===null?'no_current_or_selected_map':'verified_selected_map_trace_required');
   let sourceRejection=null;
   const panelRejections={series:null,map:null},traceCache=new Map();
-  const result=()=>freeze({contract:DIAGNOSTIC_ROUTING_CONTRACT,seriesId:series.seriesId,bestOf:series.bestOf,phase,selection:structuredClone(selection),selectedMapId,currentMapId:currentMap?.mapId??null,traceRefs:{seriesTraceSha256,mapTraceSha256},main:{...main,entity:'series',seriesId:series.seriesId,eventRelation:series.bestOf===1?'same_event_as_only_map':'whole_series'},detail,sourceRejection,panelRejections,originalForecastReplayEnabled:false,targetDocumentSha256,...flags});
+   const result=()=>{const value=freeze({contract:DIAGNOSTIC_ROUTING_CONTRACT,seriesId:series.seriesId,bestOf:series.bestOf,phase,selection:structuredClone(selection),selectedMapId,currentMapId:currentMap?.mapId??null,traceRefs:{seriesTraceSha256,mapTraceSha256},main:{...main,entity:'series',seriesId:series.seriesId,eventRelation:series.bestOf===1?'same_event_as_only_map':'whole_series'},detail,sourceRejection,panelRejections,originalForecastReplayEnabled:false,targetDocumentSha256,...flags});ownedReads.set(value,{decisionAt});return value;};
   if(series.terminal)return result();
   const rejection=error=>typeof error?.message==='string'&&error.message.startsWith('diagnostic_target_routing:')?error.message.slice('diagnostic_target_routing:'.length):'journal_evidence_unavailable';
   const load=async key=>{if(!traceCache.has(key))traceCache.set(key,journal.loadTrace(key));return traceCache.get(key);};
@@ -77,13 +97,7 @@ export function createDiagnosticTargetRouter({journal,targetDocument,expectedSch
     const meta=metadata.get(route.targetId);if(!meta||seen.has(route.targetId)||!PHASES[trace.mode].includes(meta.phase)||meta.phase==='SERIES_PRE'&&series.sourceMapIds.length!==0||!meta.stateModes.includes(route.stateMode)||meta.phase==='SERIES_LIVE'&&route.stateMode!==(trace.mode==='LIVE'?'observed_live':'observed_postdraft')||!allowed[route.targetId].includes(route.schemaRef?.sha256))fail('route_phase_or_schema');seen.add(route.targetId);
     const schema=await journal.loadSchema(route.schemaRef.sha256);if(schema.contract!=='aegis.unified-feature-projection-schema.v1'||schema.targetId!==route.targetId||schema.stateMode!==route.stateMode||!Array.isArray(schema.definitions)||schema.definitions.length!==route.featureCount||route.schemaRef.featureCount!==route.featureCount)fail('exact_schema_target_binding');
    }
-   let currentLiveEligibility={status:'unavailable',reason:'owned_live_eligibility_port_not_configured',eligibleForRetainingForecast:false};
-   if(trace.mode==='LIVE'&&readLiveEligibility!==null){
-    const state=await readLiveEligibility({matchId:trace.matchId,decisionAt,traceSha256:key});
-    if(state?.eligibleForRetainingForecast!==true)fail('current_live_state_ineligible');
-    if(state.lastTraceSha256!==key||!SHA.test(trace.nativeObservationId??'')||state.stateView?.observationId!==trace.nativeObservationId)fail('current_live_trace_binding');
-    currentLiveEligibility={status:'eligible_retention_candidate',reason:state.reason??null,eligibleForRetainingForecast:true,lastTraceSha256:key,observationId:state.stateView.observationId,lastConfirmedAt:state.stateView.lastConfirmedAt??null,expiresAt:state.stateView.expiresAt??null,ageSeconds:state.ageSeconds??null,recordedPrediction:false,eligibleForServing:false};
-   }else if(trace.mode!=='LIVE')currentLiveEligibility={status:'not_applicable',eligibleForRetainingForecast:false};
+    const currentLiveEligibility=trace.mode==='LIVE'?{status:'unavailable',reason:'owned_live_eligibility_port_not_configured',eligibleForRetainingForecast:false}:{status:'not_applicable',eligibleForRetainingForecast:false};
    return{trace,key,currentLiveEligibility};
   }
   const mainModes=legacy?[phase]:phase==='PRE'?(series.sourceMapIds.length?['BETWEEN']:['SERIES_PRE','PRE']):[phase];
@@ -91,6 +105,19 @@ export function createDiagnosticTargetRouter({journal,targetDocument,expectedSch
   if(seriesTraceSha256!==null){try{seriesEvidence=await verify(seriesTraceSha256,mainModes);}catch(error){panelRejections.series=rejection(error);}}
   if(mapTraceSha256!==null&&currentMap!==null&&selectedMapId===currentMap.mapId){try{mapEvidence=await verify(mapTraceSha256,[phase]);}catch(error){panelRejections.map=rejection(error);}}
   if(seriesEvidence&&mapEvidence&&seriesEvidence.trace.matchId!==null&&['radiant','dire'].some(side=>seriesEvidence.trace.targetBinding.mapSides[side]!==mapEvidence.trace.targetBinding.mapSides[side])){seriesEvidence=null;mapEvidence=null;panelRejections.series=panelRejections.map='trace_pair_map_orientation';}
+   // All asynchronous evidence IO is complete. Read ONE current source snapshot
+   // for both panels. The synchronous port observes STOP and source epoch now;
+   // no await follows this fence before the response is constructed.
+   if(readLiveEligibility!==null&&(seriesEvidence?.trace.mode==='LIVE'||mapEvidence?.trace.mode==='LIVE')){
+    const snapshot=readCurrentLiveEligibilitySnapshot({readLiveEligibility,now,matchId:currentMap.mapId,minimumDecisionAt:decisionAt}),state=snapshot.state;
+    function qualify(evidence,panel){
+     if(evidence?.trace.mode!=='LIVE')return evidence;
+     if(state.eligibleForRetainingForecast!==true){panelRejections[panel]='current_live_state_ineligible';return null;}
+     if(state.lastTraceSha256!==evidence.key||!SHA.test(evidence.trace.nativeObservationId??'')||state.stateView?.observationId!==evidence.trace.nativeObservationId){panelRejections[panel]='current_live_trace_binding';return null;}
+     evidence.currentLiveEligibility=eligibleView(snapshot,evidence.key);return evidence;
+    }
+    seriesEvidence=qualify(seriesEvidence,'series');mapEvidence=qualify(mapEvidence,'map');
+   }
   // The legacy one-trace call historically rejected both panels atomically.
   if(legacy&&(panelRejections.series||panelRejections.map)){sourceRejection=panelRejections.series??panelRejections.map;return result();}
   sourceRejection=panelRejections.series??panelRejections.map;
@@ -101,5 +128,5 @@ export function createDiagnosticTargetRouter({journal,targetDocument,expectedSch
   }
   return result();
  }
- return Object.freeze({read,targetDocumentSha256,originalForecastReplayEnabled:false,...flags});
+  return Object.freeze({read,finalizeRead,targetDocumentSha256,originalForecastReplayEnabled:false,...flags});
 }

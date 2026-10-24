@@ -6,7 +6,7 @@ import {digest,FAMILY_IDS,validateRegistry,validateProjection} from '../../featu
 import {producePrematchHistoricalRelationalFeatures,produceSeriesHistoricalRelationalFeatures} from './historicalRelationalFeatures.mjs';
 import {readDynamicHistoryProof,advanceObservedDraftFeatureBundle} from './observedDraftFeatureBundle.mjs';
 import {produceSeriesContext} from './seriesContextFeatures.mjs';
-import {verifyHistorySourceExport} from './historySourceVerifier.mjs';
+import {createVerifiedHistorySourceHandle,readVerifiedHistorySourceHandle} from './historySourceVerifier.mjs';
 import {instantNs} from './causalTime.mjs';
 import {replayPinnedDraftPrefix} from './observedDraftHistory.mjs';
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
@@ -39,21 +39,26 @@ export function createUnifiedFeatureProducer({index,familyDocument,targetDocumen
  const normalize=compiler.normalize,draftCache=new Map();
  const project=(blocks,targetId,mode,semanticInputs,rowCache)=>compiler.project(blocks,targetId,targetId==='SERIES_LIVE'?(mode==='LIVE'?'observed_live':'observed_postdraft'):targetId.startsWith('SERIES_')?targetId:mode,semanticInputs,rowCache);
  return Object.freeze({contract:UNIFIED_PRODUCER_CONTRACT,getSchema:compiler.getSchema,compilerStatus:compiler.status,
-  generateFeatureBundle({mode='AUTO',matchId=null,decisionAt,historyProof=null,prematchInput=null,livePrefixInputs=null,previousLiveState=null,seriesInput=null,currentMapNumber=null,rulesEvidence=null,expectedRulesSha256=null,eventsEvidence=null,expectedEventsSha256=null,patch=null,sourceExportInput=null,expectedSourceSnapshotHash=null,seriesHistoryInput=null,progressionProof=null,retainedReplayProof=null}={}){
+  generateFeatureBundle({mode='AUTO',matchId=null,decisionAt,historyProof=null,prematchInput=null,livePrefixInputs=null,previousLiveState=null,seriesInput=null,currentMapNumber=null,rulesEvidence=null,expectedRulesSha256=null,eventsEvidence=null,expectedEventsSha256=null,patch=null,sourceExportInput=null,sourceExportHandle=null,expectedSourceSnapshotHash=null,seriesHistoryInput=null,progressionProof=null,retainedReplayProof=null}={}){
    if(!['AUTO','PRE','POST','LIVE','BETWEEN','SERIES_PRE'].includes(mode)||instantNs(decisionAt)===null)fail('mode_or_decision');
    let historical=null,context=null,live=null,series=null,selectedMode=mode,sourceExport=null,sourceAdmission=null,inputSourceBindings=[],targetBinding=null,seriesHistorical=null,draft=null,reconstruction=null;
-   if(sourceExportInput!==null){sourceExport=verifyHistorySourceExport(sourceExportInput,{expectedSourceSnapshotHash,matchId,decisionAt});if(!sourceExport.population.factsUsable)fail('unavailable_history_source_export');}
+   if(sourceExportInput!==null&&sourceExportHandle!==null)fail('mixed_source_export_authorities');
+   if(sourceExportInput!==null||sourceExportHandle!==null){
+    const expected=expectedSourceSnapshotHash??sourceExportInput?.pin?.sha256,options={expectedSourceSnapshotHash:expected,matchId,decisionAt};
+    const handle=sourceExportHandle??createVerifiedHistorySourceHandle(sourceExportInput,options);
+    sourceExport=readVerifiedHistorySourceHandle(handle,options);if(!sourceExport.population.factsUsable)fail('unavailable_history_source_export');
+   }
    if(historyProof!==null){const h=readDynamicHistoryProof(historyProof,{matchId,decisionAt});if(!h.accepted)fail(h.reason);context=h.context;historical=h.relational;
    }
    if(prematchInput!==null){if(historyProof!==null)fail('mixed_prematch_and_draft_context');historical=producePrematchHistoricalRelationalFeatures({...prematchInput,decisionAt});}
    if(sourceExport){
-    const e=JSON.parse(sourceExport.envelopeInput.utf8),i=sourceExport.identity;
-    if(!historical||historical.factsSha256!==e.factsInput?.pin?.sha256)fail('history_export_facts_binding');
+    const i=sourceExport.identity;
+    if(!historical||historical.factsSha256!==sourceExport.factsSha256)fail('history_export_facts_binding');
     // This export contract includes an observed draft. It must not attest a PRE
     // target, whose selectors and identity intentionally do not contain heroes.
     if(!context)fail('history_export_requires_observed_draft_context');
     const d=context.draftState,b=context.producer.bindings;
-    if(i.matchId!==context.matchId||i.revision!==d.revision||i.draftHash!==d.identity.draftHash||i.rosterHash!==d.identity.rosterHash||i.sideIdentityHash!==d.identity.sideIdentityHash||instantNs(i.historyCutoffAt)!==instantNs(context.historyCutoffAt)||instantNs(i.validFrom)!==instantNs(context.validFrom)||e.nativeInput?.pin?.sha256!==b.nativeObservations.sha256||digest(e.draftPrefixInputs.map(p=>({raw:p.rawInput.pin.sha256,metadata:p.metadataInput.pin.sha256})))!==digest(b.draftPrefix.map(p=>({raw:p.raw.sha256,metadata:p.metadata.sha256}))))fail('history_export_context_binding');
+    if(i.matchId!==context.matchId||i.revision!==d.revision||i.draftHash!==d.identity.draftHash||i.rosterHash!==d.identity.rosterHash||i.sideIdentityHash!==d.identity.sideIdentityHash||instantNs(i.historyCutoffAt)!==instantNs(context.historyCutoffAt)||instantNs(i.validFrom)!==instantNs(context.validFrom)||sourceExport.nativeSha256!==b.nativeObservations.sha256||sourceExport.draftPrefixBindingHash!==digest(b.draftPrefix.map(p=>({raw:p.raw.sha256,metadata:p.metadata.sha256}))))fail('history_export_context_binding');
    }
    if(seriesHistoryInput!==null){
     if(!['SERIES_PRE','BETWEEN'].includes(mode))fail('independent_series_history_phase_only');
@@ -112,7 +117,7 @@ export function createUnifiedFeatureProducer({index,familyDocument,targetDocumen
    const rowCache=new Map();
    const seriesAlreadyStarted=seriesInput!==null&&JSON.parse(seriesInput.utf8).completeThroughMapNumber>0;
    const routes=series?.terminal?[]:targets[selectedMode].filter(t=>(!t.startsWith('SERIES_')||series!==null)&&!(selectedMode==='PRE'&&t==='SERIES_PRE'&&seriesAlreadyStarted)).map(t=>project(blocks,t,selectedMode,semanticInputs,rowCache));
-   const availableAt=latest([context?.computedAt,historical?.validFrom,seriesHistorical?.validFrom,live?.knownAt,sourceAdmission?.provenance?.receivedAt,series?.availableAt,sourceExport?JSON.parse(sourceExport.envelopeInput.utf8).exportedAt:null]);
+   const availableAt=latest([context?.computedAt,historical?.validFrom,seriesHistorical?.validFrom,live?.knownAt,sourceAdmission?.provenance?.receivedAt,series?.availableAt,sourceExport?.exportedAt]);
    if(availableAt!==null&&instantNs(availableAt)>instantNs(decisionAt))fail('component_availability_after_decision');
    return {contract:UNIFIED_PRODUCER_CONTRACT,status:series?.terminal?'series_complete_actual_result':'diagnostic_generated',mode:selectedMode,matchId,seriesId:series?.seriesId??null,decisionAt,featureInputCutoffAt:reconstruction?.sourceDecisionAt??decisionAt,availableAt,historyCutoffAt:context?.historyCutoffAt??historical?.historyCutoffAt??seriesHistorical?.historyCutoffAt??null,historyContextHash:context?.contentHash??null,sourceSnapshotHash:sourceExport?.sourceSnapshotHash??null,
     targetBinding,sourceAdmission,inputSourceBindings,reconstruction,historicalBindings:{kind:seriesHistorical?'series_history':prematchInput?'map_prematch':context?'draft_frozen_context':null,factsSha256:seriesHistorical?.factsSha256??historical?.factsSha256??null,targetSha256:seriesHistoryInput?.targetInput?.pin?.sha256??prematchInput?.targetInput?.pin?.sha256??null,transitionId:seriesHistorical?.transitionId??null,identityRevision:seriesHistorical?.identityRevision??context?.draftState.revision??null,historyCutoffAt:context?.historyCutoffAt??historical?.historyCutoffAt??seriesHistorical?.historyCutoffAt??null,validFrom:seriesHistorical?.validFrom??context?.validFrom??historical?.validFrom??null},draftObservation:context?{firstCompleteObservationId:context.draftState.firstCompleteObservationId,firstClock:context.draftState.firstClock,firstObservationCohort:context.draftState.firstObservationCohort,firstObservedBasis:context.draftState.firstObservedBasis,identityRevision:context.draftState.revision,validFrom:context.validFrom}:null,
