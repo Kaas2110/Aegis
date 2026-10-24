@@ -1,0 +1,204 @@
+PUBLIC CONTEXT MIRROR. Private work/ and outputs/ evidence paths refer to the
+operator continuation workspace, not files in the public source checkout.
+
+AEGIS — ARCHITECTURE DECISIONS AFTER SOL R4 REVIEW
+24 October2026. Approved implementation direction, NOT implemented behavior.
+This consolidated document prevails over ambiguous wording in specialist notes.
+No training, provider calls, deployment, migrations or runtime activation granted.
+
+AD1. HISTORY AND LIVE ARE TWO CAUSAL INPUTS TO ONE PRODUCER
+One logical versioned producer serves every target. At each decision it combines:
+(a) immutable as-of historical context; (b) one coherent admitted current source
+profile; (c) a separately versioned series receipt when the target needs it.
+Do not mix dynamic player fields from different provider clocks. History may
+come from OpenDota and live from Steam if meanings/units/identities are compatible.
+
+For an observed draft, t0 is its first complete retained receipt. Context revision
+t1 can disclose identities but uses facts available by t0. Identity selectors may
+change, the cutoff may not. Current-map final statistics never join its history.
+Series PRE freezes its own initial context; BETWEEN freezes each after-N transition.
+Prior-map results/context can enter only when their actual receipt is available.
+Every trace binds exact history context, current observation, series receipt,
+formula/schema version, event clock, input horizon and actual calculation time.
+Preserve original capture horizon during reconstruction and label reconstruction.
+Do not fabricate historical availability merely because a match ended earlier.
+
+AD2. QUALIFIED SOURCE STATE AND FORECAST RETENTION
+Keep300seconds, inclusive at the boundary. It is a retention tolerance, NOT a
+measurement of broadcast delay. Keep180seconds as separate absent-phase admission
+lease. Model execution cadence is another setting; no polling schedule changes.
+Maintain separate last receipt, last qualified state and clock-bearing anchor.
+The anchor records the receipt when its game clock was first coherently observed
+or advanced; equal-clock repeats do not move it. Compare plausible new native
+advance against that anchor, while consecutive receipt gaps keep their own check.
+Any source/identity/STOP/rewind barrier ends continuity; terminal remains terminal.
+Fresh explicit source confirmation of a pause could preserve an already issued
+forecast, but current retained evidence supplies no qualified pause adapter.
+Until then, stationary unknown keeps only the original retention deadline.
+
+After asynchronous evidence reads, evaluate current eligibility with an owned
+clock and one current state/epoch snapshot for all relevant panels. No later IO
+may arbitrarily age that claim before final construction. Include evaluatedAt and
+expiresAt; network delivery cannot be perfectly wall-clock atomic. A changed
+state or STOP invalidates current claims; historical feature inspection survives.
+Keep predictionIssuedAt/stateHash separate from source eligibility. A feature
+trace alone is not an issued forecast. No stale trace may be relabeled current.
+
+AD3. PRIVATE VERIFIED SOURCE HANDLES
+At owned intake/load, verify actual pinned bytes and source derivation, then mint
+an opaque process-local handle. Bind target, cutoff, identity revision, source root,
+contract/formula/inventory hashes and private historical proof. Each use validates
+requested horizon and identity cheaply. Do not rebuild a frozen envelope per frame.
+Public JSON, verified:true, filename, mtime or a hash string cannot mint authority.
+Immutable in-memory assets can be reused; disk reload/restart rechecks content.
+If a dependency changes or corruption is observed, invalidate the affected load,
+not merely its pathname. LRU eviction releases cache ownership, not in-flight pins.
+Use one shared byte budget for these assets. Keep v1 byte-based verifiers for
+compatibility and untrusted intake; optimize ownership, not verification standards.
+
+AD4. V2 HISTORY: VERSIONED CORPUS, TARGET VIEW, TRANSACTIONAL COMMIT
+Use a new reference envelope. Do not modify old v1 bytes or lift its64MiB guard.
+There are TWO distinct artifacts:
+1. Target-independent corpus generation retaining ALL normalized field/block
+   versions, availability timestamps, explicit null/invalid/conflict records and
+   identity epochs. Never collapse it to one latest row per map. Identity/hero
+   indexes must be version/epoch/time-aware, so old eligible identities remain
+   selectable even after later replacements or corrections.
+2. Target-specific as-of view resolving versions at t0, excluding current map,
+   applying identity revision and declaring population. Only this view may have
+   one resolved compact row per map. Pin it for its context lifetime.
+
+V2 envelope binds generation root, target kind/ID or series transition, t0/t1,
+selection expression/version, selected dependencies, counts, normalized parts,
+draft/native refs, formula/source inventory, population and actual materialization
+time. Preserve local-corpus/non-global and original-availability caveats.
+Verify every declared generation reference at intake, including excluded rows;
+the verified immutable normalized generation then avoids replaying raw archive
+on each frame. Later raw appends create a new generation, not a rewritten context.
+Missing/corrupt refs fail qualification; no partial/empty fallback.
+
+Target selection is the UNION needed by descriptors: team/player histories,
+selected-hero population across other teams, pairs/counters and declared meta
+populations. Selecting only current teams' matches would bias generic hero form.
+Population/support IDs remain explicit. Global/Immortal coverage is not implied.
+
+Materialize through one owned transaction: reserve bytes, write bounded provisional
+parts and incremental hashes, validate final counts/digests, flush files, publish
+immutable manifest/commit marker LAST. Only a verified completed marker permits
+proof creation or a context pointer. STOP, mutation, cap or crash before commit
+exposes no usable partial history. Recovery distinguishes unfinished vs corrupt.
+
+AD5. EXACT BOUNDED HISTORY CALCULATION
+Use committed compact parts and bounded cohort references/bitsets; reduce finite
+batches rather than copy whole maps into every cohort. Preserve canonical numeric
+map-ID arithmetic order separately from lexical serialization order. Keep exact
+support membership, missingness, sample-variance and quantile semantics.
+Exact medians/quartiles use bounded scalar batches or external sorted runs, not
+approximate sketches. Preserve arithmetic when equivalent; any deliberate rounding
+or formula change needs a new semantic version and explicit tolerance review.
+No feature pruning or hidden corpus truncation to pass resource acceptance.
+Cache target/t0/revision aggregates once. Support/provenance chunks are shared,
+not repeated source ID strings in every descriptor. Current native GPM, net worth
+and historical final GPM remain different measurements.
+
+AD6. CLOCK SERIES AND ROSHAN EVENT SEMANTICS
+Historical clock block derivation v2:
+- No series keys present means no update.
+- Explicit times:null means a block tombstone. Valid times:[] is an observed
+  empty block, retracting old samples. Series fields with no usable clock mean
+  invalid block, not permission to reuse an old clock.
+- On a valid same-response clock, each metric is observed/absent/null/invalid.
+  Never borrow an older metric onto the new axis. Preserve clock units and
+  negative/pre-game values in storage; target policy selects eligible times.
+- Bind map/provider/slot/side/hero/account identity epoch. Late account disclosure
+  cannot retroactively relabel unknown player observations without evidence.
+- Select null/invalid/conflicted latest blocks explicitly; do not backfill from
+  older values. Keep v1 verification and old artifact versions readable.
+
+Roshan/Aegis: bounded canonical ledger of source-qualified events, identity->digest
+binding, knownAt cutoff, explicit episode links. Retain unresolved terminal links
+until their pickup is known; recompute episode state independent of batch ordering.
+Repeated same content is idempotent; same ID changed content is a conflict.
+Mutually exclusive terminal facts cannot be resolved by lexical ID or arrival
+order. Mark affected derived episode fields unknown/conflicted and retain evidence.
+New pickup creates a separate episode. An old episode cannot overwrite the new.
+Rules stay patch/profile/knownAt-qualified. No guessed timer semantics, current
+life status, theft, consumption or respawn from inventory absence. Optional
+conflicted Roshan features may be missing without invalidating unrelated inputs.
+
+AD7. MEMORY: EARLY ADMISSION AND LOSSLESS COMPACT ASSETS
+First perform cheap shape/count admission and reserve bounded resources; only
+then copy/hash/verify large input. Check actual bytes at the owned boundary, not
+caller claims. Release reservations on every reject/cancel/error path. Preserve
+source epoch in deduplication. A full queue must not clone another large payload.
+
+One owned arena accounts unique schema/dictionary/history/vector assets with
+reference owners: cache, generation, journal and reader. Encoding/decoding and
+pending-write buffers are separately reserved. Count caps alone are insufficient.
+Start with one rich generation and at most one pending commit globally per host.
+Queue descriptors/held immutable handles. Backpressure preserves evidence and
+watermarks; it never drops features or silently evicts active map continuity.
+
+Factor repeated definitions into immutable dictionaries and coordinate arrays;
+Float64 values plus missing bitmap retain all columns and distinguish null/zero.
+Typed buffers must stay behind opaque owned handles (freezing their container is
+not immutability). Share projection assets across heads; page expanded diagnostics
+at the edge. Stream canonical hashing/serialization inside reserved buffers.
+Logical schema/semantics remain identical; new wire representation gets its own
+version and decoder. No float32, quantization, approximate quantiles or feature
+selection under a memory optimization label.
+
+Target process architecture: one owned supervisor, hard16GiB aggregate commit;
+one offline worker up to8GiB, services collectively6GiB,2GiB supervisor/headroom.
+This is a DESIGN, not currently enforced across all independent Aegis processes.
+Existing external tasks are not silently attached/restarted or killed. Until
+supervision is implemented and separately activated, use the verified serial
+8GiB technical runner,4CPU affinity and minimum4GiB-free checks. Decline new heavy
+work if known project usage plus its reservation cannot fit16GiB. Unknown ownership
+does not justify killing a PID. Pin runner/helper hashes in new receipts.
+No fit is authorized by reserving a future offline budget.
+
+AD8. PERSISTENT DISK OWNERSHIP
+One writer per artifact-store root, multiple immutable readers. Choose an OS-held
+exclusive writer lock plus durable reservation/commit journal and root generation/
+fencing token; no distributed expiring lease or PID-text ownership substitute.
+Serialize reservation/append/commit under that owner. Account committed bytes,
+provisional bytes and reserved bytes; verify deduplicated objects before charging
+once. Unknown files/generation mismatches block new writes pending reconciliation.
+Crash restart may obtain the OS lock only after prior ownership is actually gone,
+then reconcile its journal and manifests. It must not delete manual/foreign locks,
+STOPs, reservations or evidence merely by age. Uncertain reservations remain
+charged and blocked for repair. Existing independent writers must use this port
+before v2 writes are enabled. No schedule/service activation is part of the task.
+
+AD9. REAL HOST ROUTING AND SOURCE COVERAGE
+Implement an owned immutable current-series receipt store/resolver. It binds score,
+format, exact prior-map prefix, current/selected map, trace refs and transition.
+No browser-supplied raw evidence, file paths or past current clock. Main is series,
+detail is current map by default or selected prior-map actuals. Terminal series
+returns actual result. Prepare serving-policy integration while keeping it off.
+
+Availability protocol stays prospective and separately authorized. Commit planned
+slots before dispatch; errors/missing/stale packets remain in the denominator.
+Report per-profile JOINT required primitive coverage; sparse historical support
+is separate.95%successful marginal fields is not95%joint coverage. Map/series
+clusters are the sampling units for uncertainty, not repeated frames. Initial
+pilot only estimates variance; no acceptance from a few favorable maps. Specify
+cohorts/precision/stopping rule before an eventual qualification run. Exact pause,
+Roshan semantics or event latency remain unavailable until actual evidence.
+
+AD10. ACCEPTANCE AND RETURN TO ASTRA
+First small causal/negative fixtures, then compact/full-producer sustained runs
+under owned limits. Two map contexts over81 simulated minutes at30s intervals:
+324 advancing states plus2 zero-time draft states,326total, with separate PRE/
+BETWEEN/terminal transitions covering all12targets. Zero game time is not invented
+as a live admission. This30s cadence is a bounded engineering test profile, NOT a
+change to collection or evidence for faster production cadence. Test any proposed
+faster deployment cadence separately before activation.
+Actual producer, persistent journal, restart and reader must run; mocked vectors
+or a prefix-only loop do not count. Preserve all features and exact small-golden
+semantics. Initial service target peak<=6GiB, hard test job8GiB,4CPU,>=4GiBfree,
+finite<=20min wall, owned stress output<=4GiB. Report failures, don't silently
+raise caps. Include schema churn, delayed writes, missing/error/repeated packets,
+t1 identities, conflicts, STOP and cancellation. Account plateau, not just peak.
+No actual collection, training, predictive evaluation or activation is included.

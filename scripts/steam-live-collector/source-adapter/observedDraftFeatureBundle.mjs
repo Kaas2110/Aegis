@@ -55,7 +55,8 @@ function deepFreeze(x){if(x&&typeof x==='object'&&!Object.isFrozen(x)){for(const
  * revision. Neither a JSON content hash nor a user-supplied context is a proof.
  * Public copies are inspectable; the private token retains immutable originals.
  */
-export function createDynamicHistoryProof(historyProducerInputs){
+export function createDynamicHistoryProof(historyProducerInputs,{includeInspectionCopies=true}={}){
+ if(typeof includeInspectionCopies!=='boolean')throw Error('dynamic_history_inspection_option');
  const input=structuredClone(historyProducerInputs),produced=produceObservedDraftHistory(input);
  if(produced.status==='blocked'||!produced.context)throw Error('dynamic_history_producer_blocked:'+produced.reason);
  const context=deepFreeze(structuredClone(produced.context));
@@ -63,7 +64,7 @@ export function createDynamicHistoryProof(historyProducerInputs){
  if(relational.status!=='diagnostic_produced')throw Error('dynamic_relational_history_blocked:'+relational.reason);
  const proof=Object.freeze({contract:HISTORY_PROOF_CONTRACT,historyContentHash:context.contentHash,relationalContentHash:relational.contentHash??evidenceHash(relational)});
  histories.set(proof,{context,relational:deepFreeze(structuredClone(relational))});
- return {contract:HISTORY_PROOF_CONTRACT,proof,context:structuredClone(context),relational:structuredClone(relational),eligibleForServing:false,eligibleForTraining:false};
+ return {contract:HISTORY_PROOF_CONTRACT,proof,...(includeInspectionCopies?{context:structuredClone(context),relational:structuredClone(relational)}:{}),eligibleForServing:false,eligibleForTraining:false};
 }
 
 /** Authoritative read for the shared POST/LIVE entrypoint. Returned originals

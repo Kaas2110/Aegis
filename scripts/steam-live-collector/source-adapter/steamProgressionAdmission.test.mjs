@@ -62,6 +62,26 @@ test('an implausible capture is a barrier and cannot seed the next admitted pair
  assert.equal(a.reason,'progression_implausible_clock_advance');assert.equal(b.status,'blocked');
  assert.equal(run([entry({time:'2026-10-23T12:36:00Z',clock:920})],b.nextPrivateToken).status,'admitted_diagnostic');
 });
+test('clock-bearing anchor survives HTTP repeats in the actual absent-phase profile',()=>{
+ const frames=[entry(),entry({time:'2026-10-23T12:31:00Z',clock:660}),entry({time:'2026-10-23T12:32:59Z',clock:660}),entry({time:'2026-10-23T12:33:00Z',clock:780})];
+ let sequential=null;for(const frame of frames)sequential=run([frame],sequential?.nextPrivateToken??null);
+ const replayed=run(frames);assert.equal(sequential.status,'admitted_diagnostic');assert.deepEqual(replayed.provenance,sequential.provenance);
+ assert.equal(sequential.provenance.lastProgressAt,'2026-10-23T12:33:00.000000000Z');
+ assert.equal(sequential.provenance.bindings.lastTrueAdvance.clockAnchor.receivedAt,'2026-10-23T12:31:00Z');
+ assert.equal(sequential.provenance.bindings.lastTrueAdvance.clockAnchor.clockSeconds,660);
+ assert.equal(sequential.provenance.bindings.lastTrueAdvance.previous.receipt.sha256,frames[2].receiptInput.pin.sha256);
+ assert.equal(gate(sequential,'2026-10-23T12:36:00Z').accepted,true);assert.equal(gate(sequential,'2026-10-23T12:36:00.000000001Z').accepted,false);
+});
+test('initial repeated seed uses its first clock receipt and still rejects implausible advancement',()=>{
+ const repeated=[entry(),entry({time:'2026-10-23T12:31:59Z',clock:600})];
+ const good=run([...repeated,entry({time:U,clock:720})]);assert.equal(good.status,'admitted_diagnostic');assert.equal(good.provenance.bindings.lastTrueAdvance.clockAnchor.receivedAt,T);
+ assert.equal(run([...repeated,entry({time:U,clock:751})]).reason,'progression_implausible_clock_advance');
+});
+test('source interruption clears clock anchor and does not bridge the new positive pair',()=>{
+ const a=run([entry(),entry({time:'2026-10-23T12:31:00Z',clock:660})]),b=run([entry({time:'2026-10-23T12:32:00Z',missing:true})],a.nextPrivateToken),seed=entry({time:'2026-10-23T12:33:00Z',clock:780}),c=run([seed],b.nextPrivateToken);
+ assert.equal(c.status,'blocked');const d=run([entry({time:'2026-10-23T12:34:59Z',clock:780}),entry({time:'2026-10-23T12:35:00Z',clock:900})],c.nextPrivateToken);
+ assert.equal(d.status,'admitted_diagnostic');assert.equal(d.provenance.bindings.lastTrueAdvance.clockAnchor.receivedAt,'2026-10-23T12:33:00Z');assert.notEqual(d.continuityId,a.continuityId);
+});
 test('a different endpoint capture breaks progression and profiles have distinct schemas',()=>{
  const es=pair(),a=run(es),foreign=entry({time:V,clock:840}),r=JSON.parse(foreign.receiptInput.utf8);foreign.receiptInput=pinned({...r,endpoint:'GetRealtimeStats/v1'});
  const b=run([foreign],a.nextPrivateToken);assert.equal(b.status,'blocked');assert.equal(run([entry({time:'2026-10-23T12:36:00Z',clock:960})],b.nextPrivateToken).status,'blocked');

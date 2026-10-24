@@ -1,0 +1,91 @@
+AEGIS SOL R5 — CORE SOURCE INTEGRATION REVIEW
+24 October2026. R5.0/R5.1, event corrections and verified-history handle block.
+Installation/publication receipts, not this prose, establish installed state.
+Private run/evidence paths are relative to the operator continuation workspace.
+
+PROBLEM / RESULT
+Full queues used to copy/hash another large payload; repeated Steam clocks could
+reject plausible later advancement; async diagnostic reads could report expired
+state as current. Frozen historical source envelopes were rebuilt per live frame.
+The new core addresses those contracts with early memory admission, one globally
+serialized generation/commit per consumer, owned final read fences and private
+compact history-source authority. Source-only diagnostic work; no model activation.
+
+IMPLEMENTED INTERFACES
+diagnosticResourceArena: reserve/release and unique immutable asset holds, exact
+bounded JSON wire-length measurement without allocating a serialized copy, plain
+record/accessor/proxy boundary. Accounting is an engineering estimate; OS job caps
+remain the hard native containment. It is not whole-project RSS enforcement.
+Consumer: count/map admission before traversal, actual bounded wire measurement,
+reservation before clone/hash, release on every normal reject/dedupe/failure/commit.
+One global execution tail covers generation through durable completion. Pending
+old/new source epochs and watermarks remain independently fenced.
+Journal: reservations before schema/trace ownership snapshots. Bootstrap shares
+one2GiB arena between journal and consumer. Existing cached/read/private-proof
+asset accounting remains a separate R5.4 integration task, not claimed complete.
+
+Steam: new shared clock-bearing anchor invariant; repeated HTTP receipt does not
+move this anchor. Consecutive receipt gaps/180s qualification and300s retention
+remain separate. Policy provenance version becomes steam-progression-policy.v2.
+Router/reader: synchronous owned current-state snapshot after all evidence IO;
+router.finalizeRead accepts only its held result and is called after API await.
+Final expiry/STOP/source observation/trace bindings determine current eligibility.
+Reader inspection of old features remains possible; no issued prediction inferred.
+
+History: createVerifiedHistorySourceHandle replays original source once on intake;
+readVerifiedHistorySourceHandle checks immutable compact descriptor per use.
+Descriptor<=16KiB, exact source/facts/native/draft/revision/time bindings, no raw
+envelope/facts arrays retained. Producer/consumer accept exactly one of bytes or
+owned handle. Pipeline mints per loaded revision and drops its dense source copy.
+includeInspectionCopies:false avoids unused public history audit copies; default
+old API remains compatible. t0 cutoff stays frozen; t1 identity cannot extend it.
+
+Roshan/Aegis componentv6: bounded canonical event ledger, unresolved pickup links,
+batch-independent semantic reduction and explicit conflicts. Same factual event
+with later receipt provenance is corroboration. Linked death drives theft; missing
+inventory never proves consumption.878existing names retained; v5state resets.
+Clock-series derivationv2 is additive: null/empty/invalid corrections retract old
+blocks; same-response axes/metrics and identity epochs are explicit. v1 derivation
+and verification remain readable/default. Actual trajectories/collection not enabled.
+
+CHECKS / NEGATIVE EVIDENCE
+All new checks use synthetic retained source data; the actual shared producer,
+CAS journal, restart and reader are exercised in the pipeline integration cases.
+This is source correctness evidence, not source coverage or predictive accuracy.
+Exact logs/resources are pinned in sol-r5-core-technical-evidence-20261024.json.
+
+An initial130-case scope had119passes and11failures. Eight clock-series fixtures
+hashed nested payload before canonicalization; fixing the fixture preserved source
+validation. Three actual rich pipeline cases exposed an insufficient4M-node JSON
+walk bound. The structural bound is now16M for schema admission; wire-byte/feature
+and owned8GiB OS caps stayed intact. No features were removed. Corrective cases
+passed. One older reader positive fixture tried to read at12:36 an artifact actually
+materialized at12:40. The new final-time check correctly rejected it; the fixture
+now materializes before read, rather than weakening the availability check.
+All original failed receipts remain evidence. Do not describe one all-pass run
+or sum overlapping suites. Reused47-case admission/clock and40-case preliminary
+consumer/journal/handle suites have separate scopes, including5handle golden cases.
+
+RESOURCE EVIDENCE
+All root native checks were serial, owned JobObject<=8GiB, four CPUs, finite wall,
+minimum4GiB host-free polling. Runner/helper hashes and shared lock path are recorded.
+Largest observed job peak in this core scope:3,690,426,368bytes (~3.44GiB).
+This is aggregate owned-job commit, not whole-project resident memory.16GiB global
+supervisor and sustained full-rich runtime acceptance remain later tasks.
+
+REJECTED ALTERNATIVES / REASONS
+- Removing clock plausibility or renewing repeats would accept stale/impossible data.
+- Trusting claimed hash/verified JSON would erase source authority; use opaque handles.
+- Disabling source gates or shrinking features would hide actual contract failures.
+- Increasing every180constant would mix state retention, qualification and serving.
+- Expiring foreign locks or killing historical PIDs would ignore actual ownership.
+
+REMAINING R5 WORK
+Transactional reference corpus, single writer migration, exact bounded historical
+algebra, compact rich asset integration, current-series host store wiring and final
+semantic/availability/sustained runtime gates remain separate. New storage/series/
+compact modules being developed are excluded from this core block until separately
+reviewed/tested. No new fits/HPO/calibration/quality evaluation, provider probes,
+migrations, schedule/runtime activation, model promotion or app/store release.
+Next: continue R5.3-R5.7 under the published architecture; return to Astra with
+reasoning and exact evidence before any training decision.

@@ -1,0 +1,57 @@
+PUBLIC CONTEXT MIRROR. Private work/ and outputs/ evidence paths refer to the
+operator continuation workspace, not files in the public source checkout.
+
+AEGIS — ASTRA TO SOL AFTER R4 REVIEW
+24 October2026. Current continuation entry point.
+
+OWNER REQUEST COMPLETED
+Astra reviewed Sol R4 history/live alignment, five-minute freshness and memory;
+selected architecture and updated the Sol plan. Documentation only: no application
+code edits, test executions, provider calls, training, runtime activation or new
+publication. Existing PR7 source remains the implementation baseline.
+
+READ
+docs/astra-sol-r4-review-20261024.txt — verdict and concrete findings.
+docs/astra-r4-architecture-decisions-20261024.txt — selected AD1-AD10.
+docs/sol-feature-first-plan-20261024-r5.txt — executable R5.0-R5.7 and acceptance.
+AEGIS-SOL-PLAN-2026-10-24.txt now points to R5; older content below is historical.
+work/astra-sol-r4-review-20261024/ — detailed evidence.
+
+BASELINE
+PR7 maina3f11f5264a50acab33b4384671e7fb1cf9447a9,
+head3865a6d854e8a8cfb3dccc47e30d2fbb1e7149c8;54installed paths.
+Graphify ready on this main during review. New documents are local; include them
+in the next substantive Sol source block. No duplicate build/full parity required.
+Canonical APP git HEAD is an older baseline with installed source deltas;
+do not reset/clean to GitHub main or blindly publish private runtime files.
+
+FIRST ACTION UNDER SOL
+Read current documents, inspect source/status/owned locks without restarting tasks.
+Begin R5.0 early allocation admission/resource ownership, then R5.1 clock-anchor/
+final-read fence. Implement exact counterexamples as small bounded tests. Preserve
+old746-case evidence; do not rerun it for context recovery. No large matrix before
+ownership/backpressure corrections. No training or new provider calls.
+
+KEY FINDINGS
+F1 absent-phase Steam can reject plausible progress after repeats: wrong clock anchor.
+F2 route eligibility can use a timestamp captured before slow evidence IO.
+M1 queue saturation checked after expensive copy/hash; M2 no shared byte accounting.
+H1 frozen history export rebuilt per live generation; H2 corrected clock arrays
+can fail to retract old data (not yet consumed). E1 terminal Aegis receipt before
+pickup can be lost, and conflicts depend on arrival order.
+No new demonstrated t0/t1 future-data leak in the inspected current vector path.
+
+DECISIONS
+300sretention !=180squalification !=real source lag. Unknown repeats renew neither.
+No verified pause source invented. Live=frozen history+one coherent source profile.
+Corpus retains ALL versions/tombstones/identity epochs; only target t0view resolves
+rows. V2: private handles, transactional commit, single writer reservations, exact
+bounded algebra. Memory design16GiBaggregate is not yet globally enforced; use
+serial8GiBguard with measured headroom now. Preserve STOP/foreign processes.
+
+EVIDENCE AND ROLE BOUNDARY
+742full-run passes+4corrective passes cover746planned cases across invocations.
+New review is static, no new regression executed or accuracy claim. Source/event
+coverage and whole-runtime acceptance remain open. Sol owns implementation/tests/
+reviewed source-only PR/merge; Astra architecture and final logic review. Standing
+merge permission applies, but model/app/public release remains separate.

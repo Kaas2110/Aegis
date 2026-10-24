@@ -142,3 +142,14 @@ feature-first acceptance and Astra review. New technical tests are synthetic;
 archive-scale source/proof integration and prospective source coverage remain
 explicit gates. Follow the current exact install/publication receipts and use
 local source when Graphify indexing lags. No routine whole-source byte audit.
+
+## Sol R5 core source checkpoint — 2026-10-24
+Read docs/sol-r5-core-review-20261024.txt and the R5 feature-first plan.
+Early allocation admission, serial diagnostic generation/commit, source clock
+anchor/final read fence, Roshan event ledger, historical clock-block v2 and compact
+verified history handles are source-integrated. The full byte-owned compact runtime,
+transactional reference corpus, complete series host integration and sustained
+acceptance remain separate later work. Training/provider probes/runtime activation
+and model promotion stay paused. Existing 300-second state retention and separate
+180-second progression admission are preserved; active legacy serving is separate.
+Use exact new install/publication receipts; do not rerun old guards or full parity.

@@ -7,7 +7,7 @@ import {DYNAMIC_CONTRACT} from './dynamicFields.mjs';
 import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
-export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v5';
+export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v6';
 const finite=x=>typeof x==='number'&&Number.isFinite(x),nn=x=>finite(x)&&x>=0;
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const val=x=>x?.missing===false&&finite(x.value)?x.value:null;
@@ -18,8 +18,75 @@ function validateRules(r,patch,profile,at){
  if(!finite(r.respawnMinimumSeconds)||r.respawnMinimumSeconds<=0||!finite(r.respawnMaximumSeconds)||r.respawnMaximumSeconds<r.respawnMinimumSeconds||r.respawnMaximumSeconds>3600||!finite(r.aegisLifetimeSeconds)||r.aegisLifetimeSeconds<=0||r.aegisLifetimeSeconds>3600)return null;
  return r;
 }
-function emptyState(key){return {contract:FEATURE_CONTRACT,key,lastClock:null,lastKnownAt:null,lastTimer:null,death:null,lastLifeEvent:null,confirmedDeaths:[],seenEvents:[],aegis:null,lastEconomy:null,economyIdentityKey:null};}
+const LEDGER_CONTRACT='aegis.roshan-event-ledger.v1',MAX_EVENT_IDS=2048,MAX_EVENT_VARIANTS=4096,MAX_LEDGER_BYTES=4*1024*1024;
+const LIFE_KINDS=new Set(['roshan_death','roshan_alive','roshan_respawn']),TERMINAL_KINDS=new Set(['aegis_consumed','aegis_expired','aegis_destroyed']);
+const EVENT_KINDS=new Set([...LIFE_KINDS,'aegis_pickup',...TERMINAL_KINDS]);
+const canonical=x=>Array.isArray(x)?'['+x.map(canonical).join(',')+']':x!==null&&typeof x==='object'?'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}':JSON.stringify(x);
+// Availability receipts corroborate a fact; they are not physical event content.
+// Retain only the earliest supplied qualified receipt (tie: evidence reference),
+// so a repeated fetch cannot add an event or shift its original availability.
+const eventDigest=e=>createHash('sha256').update(canonical(Object.fromEntries(Object.entries(e).filter(([k])=>k!=='knownAt'&&k!=='evidenceRef')))).digest('hex');
+const earlierReceipt=(a,b)=>time(a.knownAt)<time(b.knownAt)||time(a.knownAt)===time(b.knownAt)&&lexical(a.evidenceRef,b.evidenceRef)<0;
+const lexical=(a,b)=>a<b?-1:a>b?1:0;
+function emptyState(key){return {contract:FEATURE_CONTRACT,key,lastClock:null,lastKnownAt:null,lastTimer:null,death:null,lastLifeEvent:null,confirmedDeaths:[],seenEvents:[],aegis:null,eventLedger:{contract:LEDGER_CONTRACT,entries:[]},lastEconomy:null,economyIdentityKey:null};}
 function eventAllowed(e,o,clock,at,patch){return e&&e.matchId===o.matchId&&e.sourceProfile===o.dynamic.sourceProfile&&(e.patch===undefined||e.patch===null||e.patch===patch)&&proof(e.id)&&proof(e.evidenceRef)&&e.confirmed===true&&nn(e.gameTimeSeconds)&&e.gameTimeSeconds<=clock&&time(e.knownAt)!==null&&time(e.knownAt)<=at;}
+// Keep only the bounded event contract. Property order and absent/null optional
+// fields do not create different content; changed actual event facts do.
+function normalizedEvent(e){
+ if(!EVENT_KINDS.has(e.kind)||e.side!=null&&!['radiant','dire'].includes(e.side)||['accountId','pickupEventId','roshanDeathEventId'].some(k=>e[k]!=null&&!proof(e[k]))||e.heroId!=null&&(!Number.isSafeInteger(e.heroId)||e.heroId<1||e.heroId>250))return null;
+ if(e.kind==='aegis_pickup'&&(!['radiant','dire'].includes(e.side)||!proof(e.accountId))||TERMINAL_KINDS.has(e.kind)&&!proof(e.pickupEventId))return null;
+ return Object.fromEntries(['id','kind','matchId','sourceProfile','patch','confirmed','evidenceRef','knownAt','gameTimeSeconds','side','accountId','heroId','pickupEventId','roshanDeathEventId'].map(k=>[k,e[k]??null]));
+}
+function checkLedger(ledger){
+ if(ledger?.contract!==LEDGER_CONTRACT||!Array.isArray(ledger.entries)||ledger.entries.length>MAX_EVENT_IDS)throw Error('event_ledger_state_contract');
+ let variants=0,previous=null;
+ for(const row of ledger.entries){
+  if(!proof(row?.id)||previous!==null&&lexical(previous,row.id)>=0||!Array.isArray(row.variants)||!row.variants.length)throw Error('event_ledger_state_identity');previous=row.id;
+  let priorDigest=null;
+  for(const v of row.variants){if(++variants>MAX_EVENT_VARIANTS||typeof v?.digest!=='string'||!v.event||!proof(v.event.evidenceRef)||time(v.event.knownAt)===null||v.digest!==eventDigest(v.event)||v.event.id!==row.id||priorDigest!==null&&lexical(priorDigest,v.digest)>=0)throw Error('event_ledger_state_variant');priorDigest=v.digest;}
+ }
+ if(Buffer.byteLength(canonical(ledger))>MAX_LEDGER_BYTES)throw Error('event_ledger_byte_bound');
+}
+function appendEvents(ledger,events,o,clock,at,patch,canAdvance){
+ checkLedger(ledger);const rows=new Map(ledger.entries.map(row=>[row.id,{id:row.id,variants:[...row.variants]}])),accepted=[],rejected=[];let variants=ledger.entries.reduce((n,row)=>n+row.variants.length,0);
+ for(const e of events){
+  if(!canAdvance||!eventAllowed(e,o,clock,at,patch)){rejected.push(e?.id??'invalid_event');continue;}
+  const event=normalizedEvent(e);if(event===null){rejected.push(e.id);continue;}
+  const digest=eventDigest(event);let row=rows.get(event.id);
+  const same=row?.variants.findIndex(v=>v.digest===digest)??-1;
+  if(same>=0){if(earlierReceipt(event,row.variants[same].event))row.variants[same]={digest,event};continue;}
+  if(!row){if(rows.size>=MAX_EVENT_IDS)throw Error('event_history_bound');row={id:event.id,variants:[]};rows.set(event.id,row);}
+  if(++variants>MAX_EVENT_VARIANTS)throw Error('event_variant_history_bound');row.variants.push({digest,event});accepted.push(event.id);
+ }
+ const next={contract:LEDGER_CONTRACT,entries:[...rows.values()].sort((a,b)=>lexical(a.id,b.id)).map(row=>({...row,variants:row.variants.sort((a,b)=>lexical(a.digest,b.digest))}))};checkLedger(next);
+ return{ledger:next,accepted:[...new Set(accepted)].sort(lexical),rejected:[...new Set(rejected)].sort(lexical)};
+}
+// Selection uses game-time evidence. A lexical ID is never a tiebreaker for
+// contradictory truth; equal-time distinct assertions remain explicitly unknown.
+function latestEvidence(ledger,kinds){
+ const candidates=ledger.entries.flatMap(row=>row.variants.filter(v=>kinds.has(v.event.kind)).map(v=>({event:v.event,conflicted:row.variants.length!==1})));
+ if(!candidates.length)return{event:null,conflicted:false};
+ const clock=Math.max(...candidates.map(x=>x.event.gameTimeSeconds)),latest=candidates.filter(x=>x.event.gameTimeSeconds===clock);
+ if(latest.some(x=>x.conflicted)||latest.length!==1)return{event:null,conflicted:true};return{event:latest[0].event,conflicted:false};
+}
+function reduceEvents(ledger){
+ const byId=new Map(ledger.entries.map(row=>[row.id,row])),life=latestEvidence(ledger,LIFE_KINDS),death=latestEvidence(ledger,new Set(['roshan_death'])),pickup=latestEvidence(ledger,new Set(['aegis_pickup']));
+ const conflicts=ledger.entries.filter(row=>row.variants.length>1).map(row=>row.id),confirmedDeaths=ledger.entries.filter(row=>row.variants.length===1&&row.variants[0].event.kind==='roshan_death').map(row=>row.id);
+ let aegis=pickup.conflicted?{id:null,status:'conflicted_pickup'}:pickup.event?{...pickup.event,status:'pickup_confirmed'}:null;
+ const unresolved=[],invalidLinks=[];
+ for(const row of ledger.entries)for(const v of row.variants)if(TERMINAL_KINDS.has(v.event.kind)){
+  const linked=byId.get(v.event.pickupEventId);if(!linked)unresolved.push(v.event.id);else if(linked.variants.length===1&&linked.variants[0].event.kind==='aegis_pickup'&&v.event.gameTimeSeconds<linked.variants[0].event.gameTimeSeconds)invalidLinks.push(v.event.id);
+ }
+ if(pickup.event){
+  const rows=ledger.entries.filter(row=>row.variants.some(v=>TERMINAL_KINDS.has(v.event.kind)&&v.event.pickupEventId===pickup.event.id&&v.event.gameTimeSeconds>=pickup.event.gameTimeSeconds));
+  const terminal=rows.flatMap(row=>row.variants.filter(v=>TERMINAL_KINDS.has(v.event.kind)&&v.event.pickupEventId===pickup.event.id&&v.event.gameTimeSeconds>=pickup.event.gameTimeSeconds).map(v=>v.event));
+  const signatures=new Set(terminal.map(e=>canonical({kind:e.kind,gameTimeSeconds:e.gameTimeSeconds})));
+  if(rows.some(row=>row.variants.length!==1)||signatures.size>1)aegis={...pickup.event,status:'conflicted_terminal_events'};
+  else if(terminal.length){const event=[...terminal].sort((a,b)=>lexical(a.id,b.id))[0];aegis={...pickup.event,status:event.kind,terminalEvent:event};}
+ }
+ const deathConflict=ledger.entries.some(row=>row.variants.length>1&&row.variants.some(v=>v.event.kind==='roshan_death'));
+ return{life:life.event,lifeConflicted:life.conflicted,death:death.event,deathConflicted:death.conflicted,aegis,byId,confirmedDeaths,deathCountConflicted:deathConflict,audit:{conflictingEventIds:conflicts,unresolvedTerminalEventIds:[...new Set(unresolved)].sort(lexical),invalidEpisodeChronologyEventIds:[...new Set(invalidLinks)].sort(lexical),pickupConflicted:pickup.conflicted,lifeConflicted:life.conflicted}};
+}
 function economy(o){
  const result={};
  for(const side of ['radiant','dire']){
@@ -51,8 +118,11 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  const timerSemanticsAccepted=!!(r&&r.timerSemantics==='confirmed_seconds_until_respawn'&&proof(r.timerSemanticsEvidenceRef)&&time(r.timerSemanticsKnownAt)!==null&&time(r.timerSemanticsKnownAt)<=time(r.knownAt));
  if(!Array.isArray(events)||events.length>2048)throw Error('event_evidence_bound');
  const key=JSON.stringify([o.matchId,d.sourceProfile,d.contract,patch,r?digest(r):null]);
- const resetReasons=[];let s=previous?structuredClone(previous):emptyState(key);
- if(s.contract!==FEATURE_CONTRACT||s.key!==key){resetReasons.push('map_profile_patch_or_rules_changed');s=emptyState(key);}
+ const resetReasons=[];let s;
+ if(previous&&previous.contract!==FEATURE_CONTRACT){resetReasons.push('state_contract_changed_reset_required');s=emptyState(key);}
+ else if(previous&&previous.key!==key){resetReasons.push('map_profile_patch_or_rules_changed');s=emptyState(key);}
+ else if(previous){checkLedger(previous.eventLedger);s=structuredClone(previous);}
+ else s=emptyState(key);
  if(s.lastKnownAt!==null&&(time(s.lastKnownAt)===null||at<time(s.lastKnownAt))){resetReasons.push('receipt_time_regression');s=emptyState(key);}
  if(finite(clock)&&finite(s.lastClock)&&clock<s.lastClock){resetReasons.push('game_clock_regression');s=emptyState(key);}
  if(clock===null||clock<0){resetReasons.push('game_clock_unusable');s=emptyState(key);}
@@ -73,25 +143,8 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  features.roshan_timer_decreasing_pair=pairConsistent===null?null:Number(pairConsistent);
  features.roshan_timer_positive=timer===null?null:Number(timer>0);
  let life='unknown',lifeEvidence=null;
- const acceptedEvents=[],rejectedEvents=[];
- const ordered=[...events].sort((a,b)=>(a?.gameTimeSeconds??Infinity)-(b?.gameTimeSeconds??Infinity)||String(a?.id).localeCompare(String(b?.id)));
- for(const e of ordered){
-  if(!canAdvance||!eventAllowed(e,o,clock,at,patch)){rejectedEvents.push(e?.id??'invalid_event');continue;}
-  if(!['roshan_death','roshan_alive','roshan_respawn','aegis_pickup','aegis_consumed','aegis_expired','aegis_destroyed'].includes(e.kind)){rejectedEvents.push(e.id);continue;}
-  if(s.seenEvents.includes(e.id))continue;
-  if(s.seenEvents.length>=2048)throw Error('event_history_bound');
-  s.seenEvents.push(e.id);
-  acceptedEvents.push(e.id);
-  if(e.kind==='roshan_death'){
-   if(!s.death||e.gameTimeSeconds>=s.death.gameTimeSeconds)s.death={...e};
-   if(!s.confirmedDeaths.includes(e.id))s.confirmedDeaths.push(e.id);
-  }
-  if(['roshan_death','roshan_alive','roshan_respawn'].includes(e.kind)&&(!s.lastLifeEvent||e.gameTimeSeconds>=s.lastLifeEvent.gameTimeSeconds))s.lastLifeEvent={...e};
-  if(e.kind==='aegis_pickup'&&['radiant','dire'].includes(e.side)&&proof(e.accountId)){
-   if(!s.aegis||e.gameTimeSeconds>=s.aegis.gameTimeSeconds)s.aegis={...e,status:'pickup_confirmed'};
-  }
-  if(['aegis_consumed','aegis_expired','aegis_destroyed'].includes(e.kind)&&s.aegis&&e.gameTimeSeconds>=s.aegis.gameTimeSeconds&&e.pickupEventId===s.aegis.id)s.aegis={...s.aegis,status:e.kind,terminalEvent:e};
- }
+ const appended=appendEvents(s.eventLedger,events,o,clock,at,patch,canAdvance),acceptedEvents=appended.accepted,rejectedEvents=appended.rejected;
+ s.eventLedger=appended.ledger;const reduced=reduceEvents(s.eventLedger);s.death=reduced.death;s.lastLifeEvent=reduced.life;s.confirmedDeaths=reduced.confirmedDeaths;s.seenEvents=s.eventLedger.entries.map(row=>row.id);s.aegis=reduced.aegis;
  const elapsed=canAdvance&&s.death?clock-s.death.gameTimeSeconds:null;
  let lower=null,upper=null,countdown=null,inferredDeathLower=null,inferredDeathUpper=null,inferredElapsedLower=null,inferredElapsedUpper=null;
  if(r&&elapsed!==null){lower=Math.max(0,r.respawnMinimumSeconds-elapsed);upper=Math.max(0,r.respawnMaximumSeconds-elapsed);}
@@ -112,7 +165,8 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  features.roshan_inferred_death_game_clock_lower_seconds=inferredDeathLower;features.roshan_inferred_death_game_clock_upper_seconds=inferredDeathUpper;
  features.roshan_inferred_elapsed_since_death_lower_seconds=inferredElapsedLower;features.roshan_inferred_elapsed_since_death_upper_seconds=inferredElapsedUpper;
  features.roshan_dead=life==='unknown'?null:Number(life==='dead');features.roshan_alive=life==='unknown'?null:Number(life==='alive');
- features.roshan_confirmed_death_count=s.confirmedDeaths.length||null;
+ if(reduced.lifeConflicted){life='unknown';lifeEvidence='conflicting_confirmed_events';features.roshan_dead=null;features.roshan_alive=null;}
+ features.roshan_confirmed_death_count=reduced.deathCountConflicted?null:s.confirmedDeaths.length||null;
  let holder=null;
  const candidates=[];
  if(canAdvance&&r&&Number.isSafeInteger(r.aegisItemId)&&r.aegisItemId>0){
@@ -127,7 +181,8 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  features.aegis_holder_hero=holder&&holder.heroId!==null?Number(holder.heroId):null;
  features.aegis_holder_nw=holder?.netWorth??null;features.aegis_holder_level=holder?.level??null;
  features.aegis_elapsed_since_confirmed_pickup=aegisElapsed;features.aegis_lifetime_upper_seconds=aegisRemaining;
- features.aegis_confirmed_steal=pickup&&s.death&&pickup.roshanDeathEventId===s.death.id&&s.death.gameTimeSeconds<=pickup.gameTimeSeconds&&['radiant','dire'].includes(s.death.side)?Number(pickup.side!==s.death.side):null;
+ const linkedDeath=pickup?reduced.byId.get(pickup.roshanDeathEventId):null,stealDeath=linkedDeath?.variants.length===1&&linkedDeath.variants[0].event.kind==='roshan_death'?linkedDeath.variants[0].event:null;
+ features.aegis_confirmed_steal=pickup&&stealDeath&&stealDeath.gameTimeSeconds<=pickup.gameTimeSeconds&&['radiant','dire'].includes(stealDeath.side)?Number(pickup.side!==stealDeath.side):null;
  // Positive evidence for the retained pickup episode only. Other statuses do
  // do not prove a negative; neither missing slots nor elapsed lifetime establish an event.
  const terminalEvent=canAdvance?s.aegis?.terminalEvent:null;
@@ -152,7 +207,7 @@ export function advanceRoshanFeatures(previous,observation,{patch=null,rules=nul
  return {contract:FEATURE_CONTRACT,observationId:o.observationId,matchId:o.matchId,sourceProfile:d.sourceProfile,sourceInputHash:o.inputHash,rawSha256:o.source.capture.rawSha256,
   knownAt,gameClockSeconds:clock,patch,rulesVersion:r?.version??null,rulesAccepted:r!==null,timerSemanticsAccepted,historyContext:{accepted:history.accepted,reason:history.reason,mode:history.accepted?'prematch_frozen':null},
   roshan:{state:life,evidence:lifeEvidence,inferredDeathBoundsEvidence:inferredDeathLower===null?null:'attested_timer_and_versioned_respawn_bounds'},aegis:{holder,status:s.aegis?.status??'unknown',absenceProven:false},
-  resetReasons,acceptedEventIds:acceptedEvents,rejectedEventIds:rejectedEvents,state:s,features,missing,
+  resetReasons,acceptedEventIds:acceptedEvents,rejectedEventIds:rejectedEvents,eventAudit:{contract:LEDGER_CONTRACT,eventIds:s.eventLedger.entries.length,variants:s.eventLedger.entries.reduce((n,row)=>n+row.variants.length,0),...reduced.audit},state:s,features,missing,
   schemaHash:digest(Object.keys(features).sort()),eligibleForServing:false,eligibleForTraining:false};
 }
 export function featureVector(result){

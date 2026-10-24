@@ -7,6 +7,9 @@ import {PERFORMANCE_FIELDS,PERFORMANCE_CONTRACT} from './historicalPerformanceFi
 
 export const RETAINED_FACT_VERSION_CONTRACT='aegis.retained-opendota-fact-version.v1';
 export const RETAINED_FACT_DERIVATION='opendota.retained-response.fields.v1';
+export const RETAINED_FACT_VERSION_CONTRACT_V2='aegis.retained-opendota-fact-version.v2';
+export const RETAINED_FACT_DERIVATION_V2='opendota.retained-response.fields.v2';
+export const RETAINED_CLOCK_BLOCK_CONTRACT='aegis.retained-opendota-clock-block.v2';
 export const RETAINED_FACT_MAX_BYTES=40*1024*1024;
 const MAX_BODY=16*1024*1024,MAX_VERSIONS=20000,MAX_TOTAL=64*1024*1024;
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -53,7 +56,7 @@ export function readRetainedOpenDotaResponse(inputs){
 }
 const TOP={start_time:x=>Number.isSafeInteger(x)&&x>0,duration:x=>finite(x)&&x>0&&x<=86400,radiant_win:x=>typeof x==='boolean',radiant_score:x=>Number.isSafeInteger(x)&&x>=0,dire_score:x=>Number.isSafeInteger(x)&&x>=0,radiant_team_id:numId,dire_team_id:numId,patch:x=>Number.isSafeInteger(x)&&x>=0,leagueid:x=>Number.isSafeInteger(x)&&x>=0};
 const slotSide=slot=>Number.isInteger(slot)&&slot>=0&&slot<=4?'radiant':Number.isInteger(slot)&&slot>=128&&slot<=132?'dire':null;
-function derive(source,payload){
+function derive(source,payload,{includeLegacyClock=true}={}){
  const fields=[],missing=[];
  const field=(path,value,valid,identity=null)=>{const status=value===null?'explicit_null':valid(value)?'observed':'invalid';fields.push({path,value:status==='observed'?structuredClone(value):null,status,knownAt:source.receivedAt,playerIdentity:identity});if(status!=='observed')missing.push({path,reason:status});};
  for(const [name,valid]of Object.entries(TOP))if(Object.hasOwn(payload,name))field('/'+name,payload[name],valid);else missing.push({path:'/'+name,reason:'absent'});
@@ -72,7 +75,7 @@ function derive(source,payload){
    for(const name of new Set([...Object.values(PERFORMANCE_FIELDS),'lane_role','is_roaming']))if(Object.hasOwn(p,name))field(prefix+name,p[name],name==='is_roaming'?x=>typeof x==='boolean':finite,identity);
    // Time series are one indivisible response clock. Never fill new values using
    // an old times axis, nor manufacture minute values from final statistics.
-   if(Array.isArray(p.times)&&p.times.length>0&&p.times.length<=20000&&p.times.every((x,i)=>Number.isSafeInteger(x)&&(i===0||x>p.times[i-1]))){
+   if(includeLegacyClock&&Array.isArray(p.times)&&p.times.length>0&&p.times.length<=20000&&p.times.every((x,i)=>Number.isSafeInteger(x)&&(i===0||x>p.times[i-1]))){
     const series={times:p.times};for(const key of ['networth_t','gold_t','xp_t','lh_t','dn_t'])if(Array.isArray(p[key])&&p[key].length===p.times.length&&p[key].every(finite))series[key]=p[key];
     field(prefix+'clock_series',series,()=>true,identity);
    }
@@ -87,9 +90,56 @@ export function deriveHistoricalFactVersion(sourceInputs){
  return freeze({versionInput,versionSha256:versionInput.pin.sha256,version});
 }
 export function verifyHistoricalFactVersion(versionInput){
- const candidate=pinned(versionInput,RETAINED_FACT_MAX_BYTES),rebuilt=deriveHistoricalFactVersion(candidate.data.sourceInputs);
+ const candidate=pinned(versionInput,RETAINED_FACT_MAX_BYTES),rebuilt=candidate.data.contract===RETAINED_FACT_VERSION_CONTRACT_V2?deriveHistoricalFactVersionV2(candidate.data.sourceInputs):deriveHistoricalFactVersion(candidate.data.sourceInputs);
  if(rebuilt.versionInput.utf8!==versionInput.utf8||rebuilt.versionSha256!==versionInput.pin.sha256)fail('version_not_rederived_from_source');
  return rebuilt;
+}
+
+/** V1 byte rederivation remains unchanged. V2 treats the time axis and its
+ * metrics as one response block, including explicit empty/null/invalid updates.
+ * This is retained historical evidence, not admission as a live observation. */
+export function deriveHistoricalFactVersionV2(sourceInputs){
+ const checked=readRetainedOpenDotaResponse(sourceInputs),base=derive(checked.source,checked.payload,{includeLegacyClock:false}),keys=['networth_t','gold_t','xp_t','lh_t','dn_t'];
+ const fields=base.fields.filter(f=>!f.path.endsWith('/clock_series')),missing=base.missing.filter(f=>!f.path.endsWith('/clock_series'));
+ for(const p of checked.payload.players??[]){
+  if(!['times',...keys].some(k=>Object.hasOwn(p,k)))continue;
+  const playerIdentity={playerSlot:p.player_slot,side:slotSide(p.player_slot),heroId:hero(p.hero_id)?p.hero_id:null,accountId:account(p.account_id)?String(p.account_id):null},path='/players/'+p.player_slot+'/clock_series';
+  const validTimes=Array.isArray(p.times)&&p.times.length<=20000&&p.times.every((x,i)=>Number.isSafeInteger(x)&&(i===0||x>p.times[i-1]));
+  const status=Object.hasOwn(p,'times')&&p.times===null?'explicit_null':validTimes?'observed':'invalid';
+  let value=null;
+  if(status==='observed'){
+   const metrics={};
+   for(const key of keys){
+    const v=p[key],s=!Object.hasOwn(p,key)?'absent':v===null?'explicit_null':Array.isArray(v)&&v.length===p.times.length&&v.every(finite)?'observed':'invalid';
+    metrics[key]={status:s,values:s==='observed'?structuredClone(v):null};
+   }
+   value={contract:RETAINED_CLOCK_BLOCK_CONTRACT,times:structuredClone(p.times),metrics};
+  }else missing.push({path,reason:status});
+  fields.push({path,value,status,knownAt:checked.source.receivedAt,playerIdentity});
+ }
+ fields.sort((a,b)=>a.path.localeCompare(b.path,'en'));
+ const version={contract:RETAINED_FACT_VERSION_CONTRACT_V2,derivationVersion:RETAINED_FACT_DERIVATION_V2,source:checked.source,sourceInputs:checked.sourceInputs,fields,missing,eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false};
+ const versionInput=pinRetainedHistoryJson(version,'retained-history/fact-version-v2.json');if(versionInput.pin.bytes>RETAINED_FACT_MAX_BYTES)fail('version_bytes_bound');
+ return freeze({versionInput,versionSha256:versionInput.pin.sha256,version});
+}
+
+/** Explicit v2-only view: all retained responses must be rederived using the v2
+ * contract so a later v1 omitted-null cannot hide a correction. Target-independent
+ * storage keeps every version; this selector resolves only one declared cutoff. */
+export function selectHistoricalClockSeriesV2(options={}){
+ if(!Array.isArray(options.versionInputs)||options.versionInputs.length>MAX_VERSIONS)fail('clock_v2_versions_required');
+ let bytes=0;
+ for(const input of options.versionInputs){if(!Number.isSafeInteger(input?.pin?.bytes)||(bytes+=input.pin.bytes)>MAX_TOTAL)fail('selection_bytes_bound');const x=pinned(input,RETAINED_FACT_MAX_BYTES).data;if(x.contract!==RETAINED_FACT_VERSION_CONTRACT_V2)fail('clock_v2_requires_v2_versions');}
+ const selected=selectHistoricalFactVersions(options),fields=new Map(selected.fields.map(f=>[f.matchId+':'+f.path,f])),barriers=new Map(selected.identityBarriers.map(b=>[b.matchId+':'+b.playerSlot,b])),blocks=[],rejected=[];
+ for(const f of selected.fields.filter(f=>f.path.endsWith('/clock_series'))){
+  const slot=f.playerIdentity?.playerSlot,prefix='/players/'+slot+'/',h=fields.get(f.matchId+':'+prefix+'hero_id'),a=fields.get(f.matchId+':'+prefix+'account_id'),barrier=barriers.get(f.matchId+':'+slot)??{};
+  const reason=f.status!=='observed'?'clock_block_'+f.status:f.value?.contract!==RETAINED_CLOCK_BLOCK_CONTRACT?'clock_block_contract':h?.status!=='observed'||f.playerIdentity?.heroId!==h.value||barrier.heroBarrierAt&&time(f.knownAt)<=time(barrier.heroBarrierAt)?'clock_block_hero_epoch_unavailable':null;
+  if(reason){rejected.push({matchId:f.matchId,playerSlot:slot,knownAt:f.knownAt,reason,versionSha256:f.versionSha256});continue;}
+  const currentAccount=a?.status==='observed'&&a.playerIdentity?.heroId===h.value&&(!barrier.heroBarrierAt||time(a.knownAt)>time(barrier.heroBarrierAt))?String(a.value):null;
+  const accountEligible=currentAccount!==null&&f.playerIdentity.accountId===currentAccount&&(!barrier.accountBarrierAt||time(f.knownAt)>time(barrier.accountBarrierAt));
+  blocks.push({matchId:f.matchId,playerSlot:slot,side:f.playerIdentity.side,heroId:h.value,accountId:accountEligible?currentAccount:null,heroHistoryEligible:true,playerHistoryEligible:accountEligible,knownAt:f.knownAt,versionSha256:f.versionSha256,block:structuredClone(f.value)});
+ }
+ return freeze({contract:'aegis.selected-retained-clock-blocks.v2',targetMapId:selected.targetMapId,historyCutoffAt:selected.historyCutoffAt,blocks,rejected,sourceVersions:selected.sourceVersions,sourceVersionSetSha256:selected.sourceVersionSetSha256,eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false});
 }
 
 /** Selection is order independent. A conflict at the exact same receipt instant

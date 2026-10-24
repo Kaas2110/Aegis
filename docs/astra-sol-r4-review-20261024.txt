@@ -1,0 +1,142 @@
+PUBLIC CONTEXT MIRROR. Private work/ and outputs/ evidence paths refer to the
+operator continuation workspace, not files in the public source checkout.
+
+AEGIS — ASTRA ARCHITECTURAL REVIEW OF SOL R4
+24 October 2026. Documentation-only review; implementation belongs to Sol.
+
+VERDICT
+Accept R4 as a useful diagnostic source foundation with explicit limitations.
+Do not accept it as complete feature-first/runtime readiness. Keep training,
+model-quality evaluation, provider probing and runtime/model activation paused.
+Several concrete source defects and missing resource contracts must be corrected.
+No application code was edited and no new technical/ML tests were run in this
+review. Findings below are static counterexamples, not executed reproductions.
+
+BASELINE AND EVIDENCE
+PR7 main: a3f11f5264a50acab33b4384671e7fb1cf9447a9;
+reviewed head: 3865a6d854e8a8cfb3dccc47e30d2fbb1e7149c8.
+The recorded 54-path manifest is
+8d09ffbbd3dad6e59c069178ccfaaf4751c698bb3a3670e970870026706b2d58.
+Eight directly reviewed current modules match that manifest; no whole-source
+parity audit was repeated. Canonical local APP remains authoritative. Its local
+git baseline is not the independently published GitHub merge; do not reset it.
+Graphify is now ready on PR7, build924d826b-17fb-4cbf-9390-40152739fb5c,
+8715nodes/20534edges. Prior memory candidates are not architectural approval.
+
+Reused technical evidence: 742 full-run passes plus4 corrected positive-time
+fixture passes cover746 planned cases across invocations, not one all-pass run.
+The actual12-target composition check separately passed1/1. No current predictive
+accuracy was measured. None of those receipts covers the new counterexamples.
+Peak owned-job commit: full run4,343,123,968bytes; corrected matrix3,244,904,448bytes.
+Those are about4.05GiB/3.02GiB, not total project RSS or sustained service evidence.
+
+ACCEPTED INVARIANTS IN THE INSPECTED PATH
+1. Historical availability, sporting event time and calculation time are distinct.
+   A late download does not make an old game recent. Current-map labels remain
+   excluded. Historical team/player/hero statistics are valid live inputs.
+2. History freezes at first complete draft receipt t0. Late team/account disclosure
+   creates a context valid from t1 with the SAME t0 cutoff. Actual materialization
+   time is not backdated. Retained replay is not an originally issued forecast.
+3. Independent series history does not require an unknown map ID or map sides.
+   Whole-series main and selected-map detail retain distinct identities, trace
+   references and result orientation. Prior-map actuals remain separate.
+4.300seconds is the provisional retention limit for the last qualified state.
+  180seconds is a separate absent-phase progression qualification lease. The
+   inspected diagnostic reader does not secretly shorten retention to180seconds.
+   Fresh HTTP receipt alone cannot renew stationary state. Terminal, identity,
+   rewind and manual STOP barriers remain stronger than the retention allowance.
+5. The actual retained Steam profile does not establish a qualified pause signal.
+   Keeping the unknown-stationary branch is correct; inventing pause evidence
+   would not be a valid completion. Source event-to-app delay remains unmeasured.
+6. The corrected all12-target fixture fixes declared row count and bounds assertion
+   output. Source-completeness checks were not weakened to make the test pass.
+7. Reference streaming, cache LRU, the definition ledger and Roshan additions are
+   useful partial implementations. Their reports correctly keep coverage, large
+   corpus proof and sustained rich-runtime acceptance open.
+
+PRIORITIZED FINDINGS
+Paths below are relative to APP/scripts/steam-live-collector/source-adapter.
+
+F1 — HIGH: absent-phase progression uses the wrong elapsed-time anchor.
+steamProgressionAdmission.mjs:75-89 compares a new game-clock delta with the
+last HTTP receipt gap, which can be a repeat. Example:12:30 clock600;12:31clock660;
+12:32:59 repeated660;12:33clock780.120game seconds over120real seconds is plausible,
+but the code compares120 with1+30 and rejects the new packet. The corrected
+steamEligibleState logic cannot help without an admitted progression proof.
+Use a separate clock-bearing anchor; preserve receipt chronology, qualification
+lease, maximum-clock barriers and repeat non-renewal. Cover initial qualification,
+restart and actual pipeline composition, not only explicit phase5.
+
+F2 — MEDIUM BEFORE ACTIVATION: current route eligibility can be stale after IO.
+diagnosticFeatureReadApi.mjs:32-37 / diagnosticTargetRouting.mjs:61-102 capture a
+decision time before awaited trace/schema reads. A request begun at12:34:59 can
+finish after12:35 expiry and still claim current eligibility at the old time.
+Recheck with an owned final clock after evidence IO, bind both relevant panels
+to one eligibility/epoch snapshot, and make a final STOP/expiry fence before
+constructing the response. Keep historical inspection possible. No actual wrong
+public prediction was demonstrated; public serving remains disabled for R4.
+
+M1 — HIGH BEFORE LARGE RUNS: allocation happens before overload rejection.
+diagnosticFeatureConsumer.mjs:154 calls prepare:73-80, including serialization,
+clone and hash, before queue admission:159. A full queue still incurs another
+large temporary allocation. Reserve capacity before expensive ownership copying;
+use verified immutable handles for duplicate sources. A claimed hash/byte count
+must not bypass validation. Rejected overload must not enter the copy/hash stage.
+
+M2 — RUNTIME GATE: cache counts do not bound all live assets in bytes.
+featureProjectionCompiler.mjs:32,53,59 and diagnosticFeatureConsumer.mjs:97-138
+retain schemas beyond cache eviction in active bundles; journal schema writes
+also clone. No common reservation accounts cache, in-flight, reader and encoding
+ownership. Introduce shared byte accounting plus lossless compact representation,
+not feature pruning. A worker JobObject is not yet a global project supervisor.
+
+H1 — HOT-PATH DEFECT: identical history is fully rebuilt on every live generation.
+retainedFeaturePipeline.mjs:188 -> unifiedFeatureProducer.mjs:45 ->
+historySourceVerifier.mjs:8-12 -> retainedHistorySourceExport.mjs:50-56.
+Frozen history caching does not bypass this repeated source reconstruction.
+Use an owned verified artifact handle with exact immutable bindings and bounded
+lifetime. Reverify on actual load/reload; do cheap time/identity checks per use.
+This is proven redundant source work, not a measured cause of the earlier OOM.
+
+H2 — DORMANT TRAJECTORY DEFECT: corrections can leave old clock arrays selected.
+retainedOpenDotaFacts.mjs:74-78 emits no block for times:null/[]/invalid or new
+metrics without a clock axis. Old series therefore survive as though no correction
+arrived. Current generated vectors do not consume these series. Add versioned
+whole-block tombstones and identity epochs BEFORE enabling trajectory features.
+Never combine new metrics with an older clock axis or fill retracted data.
+
+E1 — EVENT DEFECT: Aegis receipt order can lose or overwrite episode state.
+roshanFeatures.mjs:77-94 marks IDs seen before a terminal-to-pickup link resolves.
+An earlier-received consumption followed by a delayed pickup can remain forever
+pickup_confirmed. Late contradictory terminal events can overwrite one another;
+same-ID changed payload is silently ignored. Use a bounded canonical event ledger
+and deterministic episode reduction at the known-at cutoff. Conflicts become
+explicit unknowns; absence of inventory never proves a terminal event.
+This finding is about implemented optional formulas, not confirmed Steam event
+availability. Source qualification remains a separate prerequisite.
+
+IMPORTANT INTEGRATION LIMITS
+- Active ServingPredictions still has180000ms checks. R4 is a separate diagnostic
+  path; it has not changed live serving throughout the app. Prepare a deliberate
+  shared-policy bridge; do not globally replace all180constants or activate it.
+- The reference index does not yet connect a complete v2 source proof through the
+  producer/journal/restart. Keep dense v1 limits intact; do not raise64MiB instead.
+- Current-series receipt storage/resolver is still a host contract to implement.
+- All79families remain in scope; a generated-definition ledger is not proof that
+  every field is available, every historical meaning migrated, or95%coverage met.
+- The prior high-memory PID had already exited; exact old ownership was not
+  recovered. A brief current process listing showed no similar Aegis process.
+  Nothing was killed, and no user game/STOP/task was disturbed by this review.
+
+SELECTED NEXT ARCHITECTURE / CONTINUATION
+Read docs/astra-r4-architecture-decisions-20261024.txt, then
+AEGIS-SOL-PLAN-2026-10-24.txt. The new R5 sequence supersedes prior implementation
+orders without invalidating their historical receipts. Sol implements, checks
+and publishes completed blocks; Astra reviews their reasoning and contracts.
+No new training or provider collection follows automatically from this review.
+
+DETAILED REVIEW SOURCES
+work/astra-sol-r4-review-20261024/ROOT-REVIEW-EVIDENCE.txt
+work/astra-sol-r4-review-20261024/freshness-review.txt
+work/astra-sol-r4-review-20261024/history-review.txt
+work/astra-sol-r4-review-20261024/memory-review.txt
