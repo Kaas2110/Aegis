@@ -1,0 +1,171 @@
+AEGIS — RETAINED HISTORICAL FACT VERSIONS, 24 OCTOBER 2026
+
+Status and boundary
+
+This diagnostic source block adds a pure reader for already retained OpenDota
+responses, immutable source-derived fact versions, an opt-in private file CAS and
+a frozen-draft source-export bridge. It does not run a collector, read or write a
+production database, apply a migration, schedule a job, fit a model or admit
+features for training/serving. Current mutable match_parsed exports retain their
+database_timestamp_reconstruction provenance. Existing parsed writer guards
+remain in force; this addition does not relabel earlier mutable rows.
+
+Source contract and trust
+
+retainedOpenDotaFacts.mjs accepts exactly one of two byte-pinned source bundles:
+1. selectedInput: the actual persisted selected_match_detail_v1 envelope,
+   including its collector receivedAt, payload hash and match identity.
+2. receiptInput plus payloadInput: the actual full-decoded response receipt and
+   its separately retained, explicitly redacted decoded JSON body. Receipt and
+   payload hashes/bytes, representation, source/job/match and request/receipt/
+   persistence chronology are checked. No provider wire hash is claimed.
+
+A bare provider body cannot become a historical receipt. A payload hash alone is
+not a provider signature. The trust scope is a locally retained collector receipt
+assertion, with originalHistoricalAvailabilityProven=false, no independent
+terminal-state verification and no assertion of actual-live data. The selected
+older envelope has no persistence timestamp: payloadPersistedAt=null stays
+explicit. A full receipt preserves its actual payloadPersistedAt separately from
+receivedAt. The source-export bridge rejects a consumed full body persisted after
+the claimed export completion time. Neither source can prove availability before
+its actual collector receipt. No match-start/end plus assumed delay is used to
+create availability. Event end is computed only as an event-time consistency
+check from observed start and duration.
+
+Pure APIs
+
+- readRetainedOpenDotaResponse(sourceInputs) verifies exact bytes and returns an
+  owned immutable source/payload bundle.
+- deriveHistoricalFactVersion(sourceInputs) returns versionInput, versionSha256
+  and a version body under aegis.retained-opendota-fact-version.v1.
+- verifyHistoricalFactVersion(versionInput) re-derives the complete canonical
+  version from its embedded original source bytes. Re-pinning forged derived
+  values, timestamps, provenance or formula fields cannot pass this verifier.
+- selectHistoricalFactVersions({versionInputs,targetMapId,historyCutoffAt})
+  selects each field's latest admissible actual receipt <= cutoff, excluding the
+  current map. All comparisons use exact timezone-aware nanoseconds.
+- exportHistoricalFactsFromVersions({versionInputs,targetMapId,historyCutoffAt,
+  scope}) returns pinned aegis.prior-map-facts.v1, audit and source bindings for
+  the common historical algebra. scope is null or {population:<bounded ID>}.
+
+Every version binds derivation/version, source profile, match, receipt/body
+hashes and field path/value/status/knownAt. Player fields additionally bind the
+actual slot/side/hero/account tuple of that response. Absent fields do not erase
+an old observed field; an explicit null or invalid latest value is unavailable.
+Equal-time contradictory receipts are unavailable, with deterministic evidence
+ordering. Slots, known heroes and known accounts cannot be duplicated.
+
+Roster continuity barriers prevent A->B->A hero or account changes from reviving
+metrics from an earlier incompatible identity epoch. New account disclosure never
+attributes an older anonymous metric to that newly known account. A known hero
+remains eligible for hero statistics when its account is unknown. Clock arrays
+are an indivisible same-response times/value bundle; no old/new axis splice,
+final net-worth substitution, role inference or invented live trajectory occurs.
+
+Compatibility facts retain every original field availability and receipt version.
+outcomeObservedAt is the actual selected outcome receipt. completionInputsKnownAt
+combines observed start/duration/outcome dependencies. outcomeKnownAt is a
+conservative compatibility gate that also covers consumed team/score fields.
+playersKnownAt and heroesKnownAt combine their actual identity inputs with that
+gate; they are not a claim that rosters were first disclosed then. Native prior
+player metrics have individual metricAvailability and metricSources, with
+knownAt=max(actual result, hero, account when applicable, metric dependencies).
+
+The scope contract is aegis.retained-history-selection-scope.v1. Its universe is
+locally_retained_opendota_responses, selection=provided_version_inputs_only,
+completeWithinProvidedInputs=true, globalPopulationComplete=false. It reports
+the actual exported rowCount, cutoff and no truncation. This is neither the SQL
+population nor a complete pro/Immortal/global hero-meta cohort. Consumers must
+keep those populations distinct and report support within the supplied corpus.
+
+Append-only storage
+
+createAppendOnlyHistoryFactStore(directory,options) requires an explicit existing
+private plain absolute directory and validates its ancestors. It exposes append,
+load, references and exportAsOf. It writes a synced private temporary file, then
+publishes an immutable hash-derived filename by exclusive hard link. Independent
+writers therefore commute, identical content coalesces and later receipts never
+overwrite earlier versions. There is no mutable latest-row pointer or success
+cache. Every load verifies file bounds, exact hash and raw-source derivation;
+deletion/corruption after a successful read fails the next read. Unknown files
+fail population enumeration; abandoned uncommitted publication names are ignored
+and never promoted. Manual STOP/abort callbacks are checked at each boundary.
+
+The configured population byte/count bounds are read/export ceilings, not a
+retention/deletion policy. The host must separately manage disk/lease/deadline
+budgets before activating a writer. This module never deletes retained versions
+or recovers locks by age. Filesystem administrators and hostile TOCTOU changes
+are outside this coordination boundary. CAS contents include retained source
+bytes and are private data, never source/public fixtures.
+
+Frozen common-producer bridge
+
+createRetainedHistorySourceExport (also encodeRetainedHistorySourceExport) accepts
+draftPrefixInputs, matchId, computedAt, explicit exportedAt, versionInputs and
+optional scope. It replays the real pinned draft prefix and preserves the same
+draft/roster/sides/revision/validFrom/historyCutoff identity fields as the existing
+source export. The explicit exportedAt is required because a pure builder cannot
+know an actual host's completion time. The caller must record actual clocks.
+
+The bridge embeds exact consumed source version bytes, facts and draft prefix.
+It preserves conflict and identity-barrier evidence and excludes irrelevant
+future versions. Future appends and input permutations leave the prior export
+hash unchanged. Unknown->known target identities create a later validFrom
+revision while preserving the original first-complete-draft history cutoff.
+
+The native input is explicitly empty/not_provided; this bridge invents no prior
+Steam frames. factsUsable means only that the supplied retained corpus was
+completely replayed. allCollectionsComplete and nativeCandidatesPinned are false.
+verifyRetainedHistorySourceExport rebuilds all facts/identity/policy fields and
+checks recorded/reconstructed decision-time gates. historySourceVerifier.mjs is
+the single dispatcher to this contract or the unchanged old DB export verifier.
+Both branches retain their distinct source provenance. Source stores, pipeline
+and unified producer must call this dispatcher when admitting the new contract.
+
+Shared observed-context qualification
+
+historyCalculationCore.qualifyRetainedHistoryCorpus qualifies the explicit local
+retained scope, map source-version provenance and exact per-field receipt gates.
+The source-envelope verifier separately replays actual bytes; scope metadata
+alone is not raw source proof. The common hero cohort labels its population
+local_retained_response_known_hero_maps_90d, never global pro/meta.
+observedDraftHistory uses this separate scope to retain personal/team/hero forms
+within the supplied corpus instead of suppressing them for lacking SQL selector
+metadata. Each statistic carries sourcePopulation and globalPopulationComplete=false.
+
+The explicit third availability basis retained_receipt_reconstruction prevents
+old SQL projections being relabelled retained and retained inputs being called
+original recorded predictions. The producer records its source population and
+originalHistoricalAvailabilityProven=false. Existing SQL modes retain their
+previous checks. Rebuilding a private proof at actual later computedAt preserves
+that clock: an earlier decision requires readMode=reconstructed and still must
+be no earlier than identity validFrom. Default recorded mode rejects it.
+No materialization time is backdated to make replay pass.
+
+Evidence and remaining work
+
+Synthetic tests cover nanosecond/current-map exclusion, receipt order, old/new
+fields, null/missing distinctions, identity revisions/epochs, contradiction proof,
+future-prefix invariance, raw/derived tampering, same-clock arrays, append/restart,
+concurrent independent writers, corruption/deletion, STOP and corpus bounds.
+A bounded private pilot read three existing selected responses and their three
+full receipts/bodies: six versions, three maps, thirty known heroes/accounts and
+thirty native performance records. Six of six sources were unavailable one
+nanosecond before receipt and usable at receipt. Opposite arrival order produced
+identical facts; no conflicts, provider requests or database operations occurred.
+The pilot establishes reader/receipt behavior only, not historical source
+coverage, original early availability, model quality or operational availability.
+
+An additional hand-computable retained-context fixture uses five distinct maps:
+account1's player/hero/team win fractions and hero late tendency are0.6. Those
+values now appear in the actual common observed-history context. Anonymous
+historical accounts preserve the known hero cohort while personal form remains
+missing. Future per-field metadata and cohort relabelling are rejected. The
+combined source/context regression is90/90 technical tests, zero failed/skipped.
+
+Root owns broader relational/common-producer admission and pipeline/store wiring,
+including third-basis snapshot identity and explicit reconstructed replay mode
+propagation. Runtime
+activation, live host integration, independent series PRE/BETWEEN contexts,
+production schema/materializer deployment and feature-first/Astra acceptance
+remain separate unfinished work. No training or model promotion gate is opened.

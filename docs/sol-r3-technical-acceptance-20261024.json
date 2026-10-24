@@ -1,0 +1,622 @@
+{
+  "contract": "aegis.sol-r3-technical-acceptance.v1",
+  "date": "2026-10-24",
+  "baseMain": "9517e83dc3ebb608a07e34d55e3af7b08d1fd545",
+  "fullFeatureGateComplete": false,
+  "trainingRuns": 0,
+  "modelOutputsGenerated": 0,
+  "providerCallsByTests": 0,
+  "runtimeActivated": false,
+  "syntheticRegression": {
+    "uniqueTestsInFrozenSnapshot": 684,
+    "passed": 684,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 276913.9375,
+    "extendedSameTestAfterSnapshot": "staticHistoricalInputs.test.mjs minimumSupport3 vs schema5 rejects; focused1/1passed; no formula source change",
+    "adminAuthenticationServiceRuntimeTests": 5,
+    "adminRuntimePassed": 5
+  },
+  "typeCheck": {
+    "scope": "Changed API route/service overlay, noEmit, node type roots resolved",
+    "baselineDiagnostics": 12,
+    "candidateDiagnostics": 12,
+    "newDiagnostics": 0,
+    "fullWorkspaceBuildProven": false
+  },
+  "commonProducerMeasurement": {
+    "scope": "single Node process; synthetic pinned5-map history and2 explicitphase5 frames; performance.now generation including fixture current normalization; process.memoryUsage postserialization; process.resourceUsage maximumRSS; not sustained service acceptance",
+    "coldMs": 11122.859499999999,
+    "warmMs": 166.42010000000118,
+    "normalizedDefinitionBytes": 179550243,
+    "traceBytes": 2966813,
+    "maximumRssKiB": 2368092,
+    "fullRichTwoSecondServiceProven": false
+  },
+  "phaseProfiles": [
+    {
+      "mode": "PRE",
+      "targets": [
+        {
+          "id": "PRE_MAP_WIN",
+          "columns": 13468,
+          "stateMode": "PRE"
+        },
+        {
+          "id": "PRE_KILLS",
+          "columns": 13468,
+          "stateMode": "PRE"
+        },
+        {
+          "id": "PRE_DURATION",
+          "columns": 13468,
+          "stateMode": "PRE"
+        },
+        {
+          "id": "SERIES_PRE",
+          "columns": 13481,
+          "stateMode": "SERIES_PRE"
+        }
+      ]
+    },
+    {
+      "mode": "POST",
+      "targets": [
+        {
+          "id": "POST_MAP_WIN",
+          "columns": 50888,
+          "stateMode": "POST"
+        },
+        {
+          "id": "POST_KILLS",
+          "columns": 50888,
+          "stateMode": "POST"
+        },
+        {
+          "id": "POST_DURATION",
+          "columns": 50888,
+          "stateMode": "POST"
+        },
+        {
+          "id": "SERIES_LIVE",
+          "columns": 50932,
+          "stateMode": "observed_postdraft"
+        }
+      ]
+    },
+    {
+      "mode": "LIVE",
+      "targets": [
+        {
+          "id": "LIVE_MAP_WIN",
+          "columns": 141131,
+          "stateMode": "LIVE"
+        },
+        {
+          "id": "LIVE_KILLS",
+          "columns": 141131,
+          "stateMode": "LIVE"
+        },
+        {
+          "id": "LIVE_DURATION",
+          "columns": 141131,
+          "stateMode": "LIVE"
+        },
+        {
+          "id": "SERIES_LIVE",
+          "columns": 141175,
+          "stateMode": "observed_live"
+        }
+      ]
+    },
+    {
+      "mode": "SERIES_PRE",
+      "targets": [
+        {
+          "id": "SERIES_PRE",
+          "columns": 13481,
+          "stateMode": "SERIES_PRE"
+        }
+      ]
+    },
+    {
+      "mode": "BETWEEN",
+      "targets": [
+        {
+          "id": "SERIES_BETWEEN",
+          "columns": 13506,
+          "stateMode": "SERIES_BETWEEN"
+        }
+      ]
+    }
+  ],
+  "sourceTestHashes": [
+    {
+      "path": "artifacts/api-server/src/routes/admin.ts",
+      "sha256": "47741c5b7343dcfef84385db5b380f6f567590038b4a1eadf5cde8b55a83a935"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/featureDiagnostics.test.ts",
+      "sha256": "c621a267480bfd89ec2c9590d9749625e8dec51386d04bf7384cd32e2435de33"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/featureDiagnostics.ts",
+      "sha256": "0f2df81bcd0d16368c98aa99a9e98a055a41c5e973673b81fd93c8fbcdd9b6a3"
+    },
+    {
+      "path": "artifacts/api-server/src/services/FeatureDiagnosticAdmin.test.ts",
+      "sha256": "f4bfee6d0b8dee464a9a5dc8b20224725fb97ffc05950ca78ef9b7c3a8812391"
+    },
+    {
+      "path": "artifacts/api-server/src/services/FeatureDiagnosticAdmin.ts",
+      "sha256": "8b0b4ad1b0b4dc97afd66dd9045671e94736a2967c57eeab433325c124a93f37"
+    },
+    {
+      "path": "scripts/feature-registry/canonical-registry.mjs",
+      "sha256": "672cfb918b5f8f069e08fbe0f5c86aa4858c446d7949fca7afd20f04610dcc85"
+    },
+    {
+      "path": "scripts/feature-registry/canonical-registry.test.mjs",
+      "sha256": "e2f11c1ad3e3dd330cf5bf78187234355ad1e8fa1bf5d662f48284e7e4f66e8e"
+    },
+    {
+      "path": "scripts/feature-registry/historical-target-eligibility.mjs",
+      "sha256": "ab56d1831ccf431f80db79897f6e5083f7fbb482b0f10d9eebdf811c61b52f99"
+    },
+    {
+      "path": "scripts/feature-registry/historical-target-eligibility.test.mjs",
+      "sha256": "be4375eab3c1510a2e7ea9b85adee76a7833ab602d5fc1d6405bfffa000add28"
+    },
+    {
+      "path": "scripts/feature-registry/producer/feature-composer.fixtures.mjs",
+      "sha256": "c1749a8543106ffe4db6cf4f51e26e86e9260f7c2e7e2713da7a780664c45a6f"
+    },
+    {
+      "path": "scripts/feature-registry/producer/feature-composer.mjs",
+      "sha256": "0aa8ab0351beafc345b8bdf0e00037322d72f09f4b433aa4d4435a47606c88d7"
+    },
+    {
+      "path": "scripts/feature-registry/producer/feature-composer.test.mjs",
+      "sha256": "ba512c6515c32786088f13b51d3b9ede064e8faf8f6082e4e91aa47ec23ceb57"
+    },
+    {
+      "path": "scripts/feature-registry/registry-contract.fixtures.mjs",
+      "sha256": "610b352df4a82eca1fe8cada31fa0510c9d8c429ebeab7f11ebe768757d17b8c"
+    },
+    {
+      "path": "scripts/feature-registry/registry-contract.mjs",
+      "sha256": "00f6a8717aecdee0eaa70287ef5ab4fe3301ab331c99d8c238790abfb3f787fc"
+    },
+    {
+      "path": "scripts/feature-registry/registry-contract.test.mjs",
+      "sha256": "67ea4e139589304f697e14237273bf03e7399504d12622a9032bf84b8e02c3fd"
+    },
+    {
+      "path": "scripts/steam-live-collector/run-retained-diagnostic-host.mjs",
+      "sha256": "42e5cef2bf1f4f314fec34cba34ccdd20fbad9723f8e7ac6387130762c3da74f"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/appendOnlyHistoryFactStore.mjs",
+      "sha256": "2163341f18a02b9eefbde025fda344434297f18c479c83f8262b565723ae145e"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/appendOnlyHistoryFactStore.test.mjs",
+      "sha256": "c279802a329b4d5eeff3751a35402478275bde1c0cf627859060fff8ef425645"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/causalContext.mjs",
+      "sha256": "1899579b3d14d98ddc4f45b5673da8fb5a310466850cfdabe9a98ae026089d04"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/causalTime.mjs",
+      "sha256": "fef4f783f244fd5bc032c1056d9ece778433206957bfb42e7f66e24d6912ff0b"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/coherentEconomyContextFeatures.mjs",
+      "sha256": "490cf29585f0e752d0f01273100f827a64615051cbe941537b946549f9361a61"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/coherentEconomyContextFeatures.test.mjs",
+      "sha256": "a76038dcecfb5eba1e25e19400bcb7e33de4ac9a2a0de826c9eec847210edbee"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/currentSteamInput.mjs",
+      "sha256": "ac42e7f37c7eb814d42ec24d2ae8300e2ac8c11d9980962641bccc107ff43574"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureConsumer.astra.test.mjs",
+      "sha256": "018c9c079ac622a8deb7f3ef930af56e1cdf4b043a1cf4964524cc61548a8601"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureConsumer.mjs",
+      "sha256": "bd101d4810452db425eb04fd9c228cca3447d72ba8b6f77175e67ca7873a02ca"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureConsumer.test.mjs",
+      "sha256": "abf9cd64c766a87b4b04ff62666ff8581206dcdfd17bf999ec57d052617e90ea"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureJournal.cache.test.mjs",
+      "sha256": "d80bef3ee761524aca17f7c50f65f9831b791061e9349c110245f7ca2cadd7b2"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureJournal.mjs",
+      "sha256": "0014e84bca7643c3d419b489b30d94b13ff2b0b3ca250a63ab99ecd53e3fc066"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureJournal.test.mjs",
+      "sha256": "a6b252bc1baba137f3207c517fb6cf9a63e1e99f9a5387ae42f872a520faaf29"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureReadApi.mjs",
+      "sha256": "c85d0659510b9b00e0cb67070158d0fa3fd91ac8fe23fada85a03de5fc8fb51d"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticFeatureReadApi.test.mjs",
+      "sha256": "3c4f68fe1bd096ab4b6be85b0b8b2b5582205c687b1626dc6706d386c04d5603"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticTargetRouting.mjs",
+      "sha256": "14a65abca27efe3cf9bbc4abc0a9c37402e1818eee451b733c16ca7959db7ea0"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/diagnosticTargetRouting.test.mjs",
+      "sha256": "048bec17a0c3e2f95da0f13b8680856e9d9dc9a23609d0cdc3c253047569ffe8"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/draftHistoricalFactsDb.mjs",
+      "sha256": "b7b9035c20e395300b90e64ef61a4e47a706b2d638a410d70a27af95906a3314"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/draftHistoricalFactsDb.test.mjs",
+      "sha256": "2581d205c3a36a50a471d57c3efbb1d2b47cc25bff2bd80cdf0de12e283fe80a"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/draftIdentityFeatures.mjs",
+      "sha256": "657714d285cf47189671a2ef2f97b0351a99599a4a8ab93a8c24f375e8c5e390"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/draftIdentityFeatures.test.mjs",
+      "sha256": "c27666b3ed0b06bd957651fa59ae4633769337bb06e2d81928bb09b057c5d2a7"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/dynamicDbSink.mjs",
+      "sha256": "601f03710f6ad39442a4def9827b6a6df3528e1b578b4aa92d1cb180027dad1c"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+      "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/featureProjectionCompiler.mjs",
+      "sha256": "23a0a957a791888ba27c39b703062884224000c0d55288dac0556b8c3f6f0336"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/featureProjectionCompiler.test.mjs",
+      "sha256": "cc4862946773419dfb54fc12c36add969d0b38478495531c227f439631a1f0e1"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.fixtures.mjs",
+      "sha256": "0d035ec84f0d739bb08e6e125f8d171aceea02841e3b9eef17567ce58838873d"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+      "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.test.mjs",
+      "sha256": "ce15d4ee60f72cfcabfc767e7d8de2cab6fa20e94b319e33612e511c3c10848c"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/heroLateContext.fixtures.mjs",
+      "sha256": "2e3e65d0bc5b2403aba9010fd1c570f6867fa5ebcf493b6e5683f114821b3eaa"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/heroLateContext.test.mjs",
+      "sha256": "2fd1a84f7b880c8b2d2396ccc14a9c2ab4f30f061a0c6b3671d2f6af8ae18552"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalAlignment.compat.test.mjs",
+      "sha256": "836d955571f8b0aa9d4b61389c1266a2009d11e3b0bd8042d6334555d53b9048"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalAlignment.mjs",
+      "sha256": "8f0ddfbdff5ade5fe0ce934892a6971d309fd19ff52a04845342e57717441a06"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalAlignment.pinned.test.mjs",
+      "sha256": "5d38411e5a6a2c08762e9fbe43f3d76c75646f1643e464d774c4c33d660e5ac6"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalAlignment.test.mjs",
+      "sha256": "592f9620afb0ea0fd99c6b24b0f93037591731c14648e17b5987203896cc50bf"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalFactsDb.mjs",
+      "sha256": "ee66f356a4341adf5ef67e936a4ab867d15e41587350a107ee2abb69d15aa89c"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalFactsDb.test.mjs",
+      "sha256": "1c09579254b124217e2e4cd206f504668b86868fdfdc8ab01c2ce63ac66c78fd"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalPerformanceFields.mjs",
+      "sha256": "1b5bcf299fbec0d465d2e8425a0c9d8ae2468a2a36dc0cc6bca6c5bc81401af0"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalPerformanceFields.test.mjs",
+      "sha256": "9f043dba873a02745c0c64f345908c3129b64c5c156daa058371ff8ed68dbc77"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalRelationalFeatures.astra.test.mjs",
+      "sha256": "96b573ad4460fef9255f2618865c7e2482f19323dfadf408eb7149e7a4b9eb36"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalRelationalFeatures.mjs",
+      "sha256": "e6e185340e9e4763e9dbd7765132539ac4ab14b9e794ef990a0c3d087662839f"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historicalRelationalFeatures.test.mjs",
+      "sha256": "29a551d020fc6fe1580e515acf2a3d8cbb6024989f25dd5a1cf453e0de3b1736"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historyCalculationCore.mjs",
+      "sha256": "2409182966dbac6dd2b8a86fa3a29a7287c0c7e77f5431f64dbcd4cadb2bb672"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historySnapshotStore.mjs",
+      "sha256": "32f2e068b4f67da5ec129be89eac606cc9433d520646934ae3d59e1bb3334c76"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historySnapshotStore.test.mjs",
+      "sha256": "9bd200985b908f0d69682c6287827c3ba2223ca3d142401aebeb14d51ebf8bd2"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historySourceExport.mjs",
+      "sha256": "b54b146d84a2be871ea832e4a5fc3df969d6ca14a878c17dc08a38a95336d175"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historySourceExport.test.mjs",
+      "sha256": "79f58f11f134102d2266d7bc8cba321b185d5b03aa2023168a1c056fe9ed092d"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historySourceExportStore.mjs",
+      "sha256": "85d67de5007f7f50ff3b025b5bc50a1153b7b9e1df7683258d651c9b01ec798f"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/historySourceVerifier.mjs",
+      "sha256": "7a053753139e8db6b8929e74fea53f25caa9829de1568b31116a7292b573d214"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/ingestDynamicArchive.mjs",
+      "sha256": "1e9ba1c033b8742ca2cefb3f84294f8b04976ad6e3870167750d4dd0106750ac"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/jointFeatureAvailability.mjs",
+      "sha256": "53352b8348bf04909e19e150096fb645fe9fd12ae1b1aee7e2b5bb88f2862273"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/jointFeatureAvailability.test.mjs",
+      "sha256": "c6edc01bfc61dd3cfb2103caec49dcf7bcc08aa7893d61cbdb65cac3f43a3d1a"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/losslessJson.mjs",
+      "sha256": "9808a9b98dc87027317d68f68a3771b253eeb8dbaffcdcde6446e5510be3a8b9"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/nativeFieldEvidence.mjs",
+      "sha256": "fbd9cfcdeb0ad842af662a5aa94ba990ee1def26b897f1839117f842ea59885e"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraft.mjs",
+      "sha256": "13637c8901ecbdc477531f4460a3f2a78b7d7e0494c484979632ad41a83c46d6"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraft.test.mjs",
+      "sha256": "9a3e3cf225c742aa835365467272313c2131ea4c213d2bd223328721fa9db7f0"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftFeatureBundle.mjs",
+      "sha256": "2ce47d7867bdc1bb86f700d1efef7314d23ef357aef34ca936a4a74191c6e18f"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftFeatureBundle.test.mjs",
+      "sha256": "c61793c603164a85e1fe4229bcc46debc10365e779ca9e4018480040ae16a8d9"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftHistory.fixtures.mjs",
+      "sha256": "36443bf805651fed82d37afa5b1c06bf67aac51acd17a2d3c9cf0c12e6b0ac6e"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftHistory.mjs",
+      "sha256": "e8514686d78705ba833b2ac9f6f4eb6698ec63677f030a95991ea594e762ea2b"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftHistory.store.test.mjs",
+      "sha256": "9cbd3a87edbd5f0b26e6f02d19c36121f7e649eea7286f1544d691535753be55"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftHistory.test.mjs",
+      "sha256": "5c936cdb6be06cd0e431941ecce7d3480be8c88922f99cd22e53995f81e75480"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/observedDraftMonotoneIdentity.test.mjs",
+      "sha256": "5c660e5b94d2bebaaccbf60e11bcf4c87814f5932722c9462a7a7cb218ad7654"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+      "sha256": "4069714ce4c757ee6987a9793e9303ee65893f1a8371d6482262e27b3cdaf170"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.test.mjs",
+      "sha256": "c6f4effe16be0897f4f21e72c4f22911d6b03bc658cacedbf82d9a0c1084ab63"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/recordedNormalization.mjs",
+      "sha256": "05635befe3f2ff0ebad73b53399c9b7d3ced51d3eb9305b490040d26e55d9166"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/recordedNormalization.test.mjs",
+      "sha256": "82248f3a4e822a092d5bebbc35d665b853353d738d3170597a69aa8d47158977"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedDiagnosticBootstrap.mjs",
+      "sha256": "671f3a9f0257d674571f05da55e63c38c28bcda14a7e8e29990d45f3f0e3221d"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedDiagnosticHost.integration.test.mjs",
+      "sha256": "a3bb25e1daa787e0cffef4bc79a7fca413788c7980c6a07d7bdaf282b1884b43"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedDiagnosticHost.mjs",
+      "sha256": "50a2bd4ed3eed8908277787cb5c023b49ad25072e717c85f906c418429242f6d"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedDiagnosticHost.test.mjs",
+      "sha256": "0917de177597dbef18064c61bd0940cd2578b718e5b7cd0b6c3ba85ff35813a9"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedFeaturePipeline.astra.test.mjs",
+      "sha256": "ecf316faa1a79d7b0591b341c283507c9955a57f5ef65186025aa6d1279d6843"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedFeaturePipeline.mjs",
+      "sha256": "9912ded423897b861d7bae7750c24b34906a3c01146bb6b0dbd59947241165de"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedFeaturePipeline.resource.test.mjs",
+      "sha256": "aa8b15d43461af5161ed12441f4375b63872a5bf1d82ea990b4ec03ad62a9e1e"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedFeaturePipeline.test.mjs",
+      "sha256": "c402c70b741f9fec47d4a2bb6bf2c506eadd4d9ce3c8cdc0f30c409f8eb31633"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedHistoryContext.test.mjs",
+      "sha256": "349350df779c786df5d05c46ccabdb2d773c16ffc7e45c56d0538e0d5c249336"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedHistoryRevisionStore.mjs",
+      "sha256": "899baf4c2faa8a3101061c81f3b5c888c49f2bc2b16ec926ecdcdbb40e4fcba2"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedHistoryRevisionStore.test.mjs",
+      "sha256": "98f1107b5e4cd5ee71e7098190a2af4eab1b322f203220c126400a103276610f"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedHistorySourceExport.mjs",
+      "sha256": "d1defc9d5c68f8395b6c87433c9ab428c14470dfefcae62b599496911f2ff436"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedHistorySourceExport.test.mjs",
+      "sha256": "2dd7d9dd6bf4643b12b80b4a919d35b02ee4acce19a9ac568b6186ccc4c626c1"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedOpenDotaFacts.mjs",
+      "sha256": "cb144439722c35f31a8dbbe2d8d87cde2ba3d0f82f743a23a2054b23c2733135"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedOpenDotaFacts.test.mjs",
+      "sha256": "f1d1be077154a5044b695cb2bf5826cb8746288d2f7e3bd2becd80c4c73865ea"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/retainedReplayFrame.mjs",
+      "sha256": "562fa702bc007e88aafef743dfb9f1b0cfaa87dc52085a4c83880125746a8aec"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+      "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/seriesContextFeatures.astra.test.mjs",
+      "sha256": "2eeea12f905a896c5833c1ea71e3b0ba5793ded187b3fd652b04fc08e687294d"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/seriesContextFeatures.mjs",
+      "sha256": "29424ae9b59b6801fbf02a998c95d3c299259ddb072d29be6e8b60f093cb2aaa"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/seriesContextFeatures.test.mjs",
+      "sha256": "72a3283c5b7ce8e2173b45f83a83994628c6c3b40af8647b3dd136e5f16dc458"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/seriesHistoryTarget.mjs",
+      "sha256": "f71453f155453732075a117af987bc21b8151c3eed893ea48bc5c063cdee258b"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/seriesHistoryTarget.test.mjs",
+      "sha256": "9b691295ae0951f14bc88a81715306143679fb09265d2d1686a54cf05cbcd887"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/staticDiagnosticWriter.mjs",
+      "sha256": "bc4b90bdc46c5832af1a21c21ce8c759b3447ede2f8095cae448849f876b9628"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/staticDiagnosticWriter.test.mjs",
+      "sha256": "649818ebc263cdbfc3d26051bffa56e95e9ca1965d91ab23e0c1308a7a7b9e9f"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/staticHistoricalInputs.test.mjs",
+      "sha256": "634565f802795d49b9312c50b7206932e3801b097c6947519bdf4aef9ea86121"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamFeatureBundle.mjs",
+      "sha256": "a93455f5d69997a4d03c7ba3e47b92e2a7bba97a29e90c98020a2f544f9e8951"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamFeatureBundle.test.mjs",
+      "sha256": "ba5151e3c3bfd865d5d251c22eebed041abd12859ebbe8ef60cecc1bdb5aa6fa"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamFeatureDbReader.mjs",
+      "sha256": "8a96858af6f55b2013f0f3dd9adc80844feea9ace16782a19e19959a359acbc1"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamLiveAdapter.mjs",
+      "sha256": "b98a8685cabe14c236a09c02fdd14d839e7f4d6ff30c8d0a7268b657780dcb47"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamObservationIdentity.mjs",
+      "sha256": "12d5ca0c137342c9a31bb77bfa6808f3a3edabc728243afa3ebf68548772ec87"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamPhasePolicy.mjs",
+      "sha256": "2bc0d7e1b2bd5d925d8bac476853324a2c67c6172e66a2c7e1285a696c7b593e"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamPhasePolicy.test.mjs",
+      "sha256": "e295283d21c5095e6d06c1f83caaa6ede9926fc3c9420672563a77fd8161fb18"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamProgressionAdmission.mjs",
+      "sha256": "40ab5eaca967f45e2dd4ec27225420fab60ca056969cb78b0d7060b40803a11e"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamProgressionAdmission.test.mjs",
+      "sha256": "af048278763624b7a801e1ee1713732ace5023fc61bab8833bb327f1d5a03f45"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/steamSourceContract.test.mjs",
+      "sha256": "918f0d5d6bd3908a993b976d6128e04387441614043dfe44492a5646e759b2b4"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/unifiedFeatureProducer.astra.test.mjs",
+      "sha256": "321221c9b2a8223796e16632aa1569b8814db15bb2c936603c4f50fb54bed990"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/unifiedFeatureProducer.mjs",
+      "sha256": "2d283d9f4c79265efa2a6b0563b698d9b3225824d4e2fd9d36b6cdf85a85969c"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/unifiedFeatureProducer.test.mjs",
+      "sha256": "180987f624c27ecdbb7c9b532c85f6d0df9568d99dbb1f7f0a118bbcff40be33"
+    },
+    {
+      "path": "scripts/steam-live-collector/source-adapter/unifiedProducerConfig.mjs",
+      "sha256": "4851536fe76dc310f7b6c0350ac7370d395713c1fb528661a9f5aefd0f2d6b7c"
+    }
+  ],
+  "realDataEvidence": "Separate small retained-source pilots are documented in the review; not part of synthetic test counts or predictive quality",
+  "predictiveAccuracyMeasured": false,
+  "sourceOnly": true
+}

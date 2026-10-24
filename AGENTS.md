@@ -78,7 +78,7 @@ lightweight ready/commit check. Avoid a second manual rebuild or repeated full s
 Respect existing resource limits, provider budgets, STOP files, locks and manual
 pauses. Inspect active jobs before starting anything. Do not restart expired
 training leases, remove manual stops or reset spend counters. User-facing
-unavailable predictions say only "Прогноз недоступен"; diagnostics retain reasons.
+unavailable predictions say only "РџСЂРѕРіРЅРѕР· РЅРµРґРѕСЃС‚СѓРїРµРЅ"; diagnostics retain reasons.
 Use synthetic test data for public fixtures. Source parity does not establish
 model quality, data coverage, serving approval or a reproducible mobile build.
 
@@ -93,7 +93,7 @@ admission. All79 families remain in scope; partial implemented subsets do not
 close the full feature-first gate. Runtime/task activation is separate from
 source installation. Do not rerun prior manifests against changed local source.
 
-## Astra review and next Sol plan — 2026-10-24
+## Astra review and next Sol plan вЂ” 2026-10-24
 
 Read `docs/astra-sol-review-20261024.txt` and
 `docs/sol-feature-first-plan-20261024.txt` first. The latter supersedes the old
@@ -107,3 +107,16 @@ No new fits, HPO, calibration, quality evaluations, migrations, provider probes,
 schedule changes or candidate activation are implied. Preserve all manual stops.
 Record every implementation decision and actual check for Astra. Continue from
 the current installation/publication receipt, never re-run old install manifests.
+
+
+## Sol r3 implementation checkpoint — 2026-10-24
+
+Read docs/sol-feature-integration-review-20261024-r3.txt and the generated family
+integration ledger before continuing. This block implements portable registry,
+retained field versions, progressing Steam proof, broad current/history/draft
+features, independent series history, bounded schema/value production and an
+opt-in diagnostic host/reader/12-target adapter. Astra acceptance remains pending.
+No fits, provider probes, migrations, runtime/task activation or promotion.
+Replay source horizons never backdate actual calculation timestamps. Preserve
+all source/store/STOP/lock boundaries and distinguish generated family subsets
+from source availability and full semantic migration.

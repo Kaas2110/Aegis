@@ -39,6 +39,7 @@ import { modelPromotionDecision } from '../services/ModelPromotionPolicy';
 import { fetchDota2Odds } from '../services/OddsApiAdapter';
 import { listIntegrations, setIntegrationOverride, KNOWN_INTEGRATIONS, getApiKey } from '../services/ApiKeysService';
 import { requireAdminSession } from './adminAuth';
+import featureDiagnosticsRouter from './featureDiagnostics';
 import { pnpmCommand } from '../lib/processCommand';
 import { KNOWN_SOURCE_IDS, probeSource, clearBookmakerCache, getSourceTrackers, ENV_NAME_TO_SOURCE, type SourceProbeResult } from './bookmakers';
 import { clearResponseCache } from '../lib/responseCache';
@@ -114,6 +115,7 @@ const router: IRouter = Router();
 
 // Cookie session required (see adminAuth.ts).
 router.use(requireAdminSession);
+router.use('/feature-diagnostics', featureDiagnosticsRouter);
 
 // Read saved planning status only; this GET never invokes collection or training.
 router.get('/candidate-planner/current', (_req, res) => {

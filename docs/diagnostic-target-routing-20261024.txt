@@ -1,0 +1,108 @@
+AEGIS — VERIFIED DIAGNOSTIC TARGET ROUTING, 24 OCTOBER 2026
+
+Status and boundaries
+
+diagnosticTargetRouting.mjs is an owned adapter from verified journal feature
+traces to selection descriptors. It does not generate probabilities, load weights,
+activate a model, publish an app, change a UI or create original forecasts. All
+prediction fields are null; diagnostic/serving/training/promotion flags remain
+explicit. The adapter is suitable for private diagnostic integration only.
+
+Constructor and owned ports
+
+createDiagnosticTargetRouter({journal,targetDocument,expectedSchemaHashes})
+returns read plus a targetDocumentSha256. journal must supply owned loadTrace
+and loadSchema methods that verify actual retained bytes, schema/vector binding
+and any historical-input CAS reference. A JSON trace from a client is never an
+accepted argument. targetDocument comes from the validated canonical12-target
+registry. expectedSchemaHashes is an explicit deployment allowlist: every one of
+the12 target IDs maps to1..8 reviewed schema hashes. No filename/type heuristic,
+unknown schema fallback or inferred model selection is used.
+
+read({traceSha256,seriesInput,phase,currentMap,selection,decisionAt}) accepts:
+- traceSha256: null or an exact retained feature-trace reference;
+- seriesInput: actual byte-pinned aegis.series-map-receipts.v1;
+- phase: PRE, POST, LIVE, SERIES_PRE, BETWEEN, or nonpredictive COMPLETE;
+- currentMap: {mapId,mapNumber} for PRE/POST/LIVE, otherwise null;
+- selection: {kind:'entry'} or {kind:'manual',mapId};
+- decisionAt: the actual read/selection cutoff.
+
+The existing produceSeriesContext validates the series receipt, BO1/3/5 format,
+completed prefix, result/availability chronology and terminal state. The adapter
+does not duplicate that result logic. Selection cannot name an unknown future
+map or escape the known series. Entry defaults to current map. After a terminal
+series, entry selects its last actual completed map. Between maps with no current
+map, a prior manual selection remains usable; no fictitious next map is created.
+
+Selection contract
+
+Main always describes the whole series: SERIES_PRE for independent scheduled
+series or map PRE, SERIES_LIVE for current POST/LIVE, SERIES_BETWEEN between maps.
+Detail describes the selected current map through its corresponding PRE/POST/
+LIVE map-win/kills/duration target descriptors. Series team1/team2 orientation is
+explicit and separately bound to current Radiant/Dire; the winner orientation of
+a detail map stays map_radiant. BO1 retains separate series/map identities while
+declaring their same-event relationship. A map target does not substitute for a
+series target. Missing series target remains unavailable.
+
+All twelve targets are covered by the registry metadata:
+PRE_MAP_WIN, PRE_KILLS, PRE_DURATION;
+POST_MAP_WIN, POST_KILLS, POST_DURATION;
+LIVE_MAP_WIN, LIVE_KILLS, LIVE_DURATION;
+SERIES_PRE, SERIES_BETWEEN, SERIES_LIVE.
+SERIES_PRE needs neither map ID nor side assignment. The caller must use its
+independent phase; no map-oriented PRE proof is invented for this route.
+
+Each supplied trace must match the exact series, current map, requested phase,
+team orientation and decision horizon. Every route must have an allowed target,
+state mode and reviewed schema hash; the loaded schema must match target/state
+and feature count. Incompatible/unavailable evidence fails closed with the
+product text 'Прогноз недоступен'; safe diagnostic rejection codes remain separate.
+A future availability/features-ready time, including+1ns, cannot be selected.
+
+Manual past-map behavior and original forecasts
+
+A manual selection is returned unchanged so subsequent current-map updates can
+reuse it. Completed map detail comes from that map's own retained result, duration,
+kills and team-oriented hero arrays. Current-map heroes/results are not copied
+into it. Terminal series main returns its actual winner/score and stops target
+selection. Old diagnostic traces do not become historical forecasts.
+
+Original forecast replay is disabled and historicalForecast=null. A future
+extension requires a separately reviewed actual original model-output/receipt
+contract with its original context. A feature trace, retained reconstruction,
+retrospective body or boolean assertion cannot establish that evidence.
+
+Totals and source provenance
+
+Metric/unit/quantity come from canonical target metadata. Kills are discrete
+counts in kills; duration uses seconds. PRE/POST targets describe final totals;
+the current LIVE feature targets describe remaining totals. The descriptor marks
+model output metadata required, distribution=null and
+remainingToFinalConversionPerformed=false. Final-versus-remaining output binding,
+conditioning, pushes, thresholds, tails and bookmaker settlement remain the
+existing TotalsDistribution/BookmakerTotalsLadder services and future reviewed
+model-output contract; no distribution mathematics is copied here.
+
+SourceEvidence preserves sourceSnapshotHash and historicalInputRef when present,
+and states rawSourceReplayPerformedByRouter=false/providerAuthenticationClaimed=false.
+If a trace claims historicalBindings.kind=series_history or map_prematch, the new
+static-historical-input CAS reference is required. The owned journal verifies its
+actual header/facts/target/series bytes. The router checks its reference shape and
+does not claim that a schema/vector alone proves static source availability.
+
+Technical evidence and remaining integration
+
+Eleven synthetic unit tests pass, zero failed/skipped. Their cases cover all12
+targets, BO1/3/5, no-map/no-side SERIES_PRE, persistent manual historical selection,
+terminal actual results, team-side permutation, metadata-based total units and
+quantity, exact schema/phase/map/series/team mismatch rejection, future+1ns,
+static CAS requirement, series membership and complete deployment allowlist.
+The test journal is an owned-port fixture; root's actual journal/static-writer
+tests separately establish byte/CAS behavior. No real rows, quality evaluation,
+provider call, publication or public UI integration is claimed by this package.
+
+Root should integrate this helper with its actual journal/admin diagnostics and
+record actual adapter cases in the12-target ledger. The existing product UI and
+model activation remain separate. Return to Astra with source/causal/resource
+evidence before any training or promotion decision.

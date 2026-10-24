@@ -91,10 +91,13 @@ function readPerformance(x,heroes,players,cutoff,audit){
  if(!Array.isArray(x.heroPerformances)||x.heroPerformances.length>10)throw Error('relational_performance_bound');
  const result=[],seen=new Set();
  for(const p of x.heroPerformances){
-  if(!obj(p)||p.contract!==PERFORMANCE_CONTRACT||p.sourceProfile!=='opendota.completed-map.parsed-player'||!obj(p.sourceFields)||Object.entries(PERFORMANCE_FIELDS).some(([key,field])=>p.sourceFields[key]!==field)||!hero(p.heroId)||!SIDE.includes(p.side)||p.accountId!==null&&!account(p.accountId)||!obj(p.metrics))throw Error('relational_performance_identity_or_source_contract');
+  const retained=p?.sourceProfile==='opendota.completed-map.retained-response-player';
+  const profileAllowed=p?.sourceProfile==='opendota.completed-map.parsed-player'||retained&&audit.populationBasis==='bounded_provided_retained_corpus_not_global'&&x.availabilityBasis==='retained_collector_response_receipt'&&sha(x.sourceVersionSetSha256)&&p.availabilityBasis==='retained_collector_response_receipt'&&obj(p.metricAvailability)&&obj(p.metricSources);
+  if(!obj(p)||p.contract!==PERFORMANCE_CONTRACT||!profileAllowed||!obj(p.sourceFields)||Object.entries(PERFORMANCE_FIELDS).some(([key,field])=>p.sourceFields[key]!==field)||!hero(p.heroId)||!SIDE.includes(p.side)||p.accountId!==null&&!account(p.accountId)||!obj(p.metrics))throw Error('relational_performance_identity_or_source_contract');
   if(seen.has(Number(p.heroId)))throw Error('relational_performance_duplicate_hero');seen.add(Number(p.heroId));
   const at=instantNs(p.knownAt);if(at===null||at<instantNs(x.endedAt))throw Error('relational_performance_availability');
   if(at>cutoff){audit.unavailablePerformanceRows++;continue;}
+  if(retained&&Object.entries(p.metrics).some(([key,value])=>value!==null&&value!==undefined&&(!Object.hasOwn(PERFORMANCE_FIELDS,key)||!sha(p.metricSources[key])||instantNs(p.metricAvailability[key])===null||instantNs(p.metricAvailability[key])<instantNs(x.endedAt)||instantNs(p.metricAvailability[key])>at)))throw Error('relational_retained_performance_provenance');
   if(!heroes.some(h=>h.heroId===Number(p.heroId)&&h.side===p.side))throw Error('relational_performance_hero_conflict');
   const known=players.find(q=>q.heroId===Number(p.heroId));if(known&&p.accountId!==null&&(known.accountId!==p.accountId||known.side!==p.side))throw Error('relational_performance_account_conflict');
   const metrics={};for(const key of PERFORMANCE_KEYS)metrics[key]=null;
@@ -143,6 +146,16 @@ function readMaps(facts,cutoff,current,audit){
 
 function qualifiedScope(facts,cutoff){
  const s=facts.data.scope,validIds=a=>Array.isArray(a)&&a.every(id)&&new Set(a).size===a.length;
+ if(obj(s)&&s.contract==='aegis.retained-history-selection-scope.v1'&&s.sourceUniverse==='locally_retained_opendota_responses'&&s.selection==='provided_version_inputs_only'&&instantNs(s.asOf)===cutoff&&s.completeWithinProvidedInputs===true&&s.globalPopulationComplete===false&&s.truncated===false&&s.rowCount===facts.rows.length){
+  // Qualify only the explicitly supplied local corpus. Never relabel it as the
+  // SQL universe or global/pro/Immortal coverage. Selector discovery also obeys
+  // availability, so future-only identities cannot change an older vector.
+  const known=facts.rows.filter(m=>instantNs(m.outcomeKnownAt)!==null&&instantNs(m.outcomeKnownAt)<=cutoff);
+  const accounts=new Set(known.flatMap(m=>instantNs(m.playersKnownAt)!==null&&instantNs(m.playersKnownAt)<=cutoff?(m.players??[]).map(p=>p.accountId).filter(account):[]));
+  const teams=new Set(known.flatMap(m=>[m.radiantTeamId,m.direTeamId].filter(id)));
+  const heroes=new Set(known.flatMap(m=>instantNs(m.heroesKnownAt??m.playersKnownAt)!==null&&instantNs(m.heroesKnownAt??m.playersKnownAt)<=cutoff?(m.heroes??m.players??[]).map(p=>Number(p.heroId)).filter(hero):[]));
+  return{base:true,accounts,teams,heroes,evidence:s,populationBasis:'bounded_provided_retained_corpus_not_global',globalPopulationComplete:false};
+ }
  const base=obj(s)&&s.contract==='aegis.prior-map-selection-scope.v1'&&s.sourceUniverse==='local_pro_matches_join_match_parsed'&&s.selection==='target_teams_or_accounts_or_heroes'&&s.windowDays===90&&instantNs(s.asOf)===cutoff&&s.completeWithinSource===true&&s.truncated===false&&s.rowCount===facts.rows.length&&sha(s.selectionSqlSha256)&&typeof s.queryEvidenceRef==='string'&&s.queryEvidenceRef.length>0;
  return {base:!!base,accounts:new Set(base&&validIds(s.targetAccountIds)?s.targetAccountIds:[]),teams:new Set(base&&validIds(s.targetTeamIds)?s.targetTeamIds:[]),heroes:new Set(base&&Array.isArray(s.targetHeroIds)&&s.targetHeroIds.every(h=>Number.isInteger(h)&&h>0&&h<=250)&&new Set(s.targetHeroIds).size===s.targetHeroIds.length?s.targetHeroIds:[]),evidence:s??null};
 }
@@ -291,12 +304,43 @@ export function producePrematchHistoricalRelationalFeatures({targetInput,factsIn
  return calculateRelationalComponent({historyContext:context,factsInput,matchId:target.matchId,decisionAt,minimumSupport,phase:'PRE',targetBinding:{contract:target.contract,sha256:d.sha256,bytes:d.bytes,knownAt:target.knownAt}});
 }
 
+/** Series history has its own nominal team axes and no current map or heroes.
+ * The receipt is a host-held identity declaration, not provider authentication.
+ * Actual fact availability is still checked by the same historical algebra.
+ */
+export function produceSeriesHistoricalRelationalFeatures({targetInput,factsInput,decisionAt,minimumSupport=5}={}){
+ if(!Number.isSafeInteger(minimumSupport)||minimumSupport<3||minimumSupport>1000)throw Error('series_history_minimum_support');
+ const p=targetInput?.pin,utf8=targetInput?.utf8;
+ if(!obj(p)||typeof utf8!=='string'||Buffer.byteLength(utf8)>262144||Buffer.byteLength(utf8)!==p.bytes||!sha(p.sha256)||createHash('sha256').update(utf8).digest('hex')!==p.sha256)throw Error('series_history_target_pin');
+ const t=JSON.parse(utf8),keys=['contract','seriesId','phase','transitionId','historyCutoffAt','validFrom','identityKnownAt','lastSeriesReceiptAt','identityRevision','team1Id','team2Id','players'];
+ if(!obj(t)||t.contract!=='aegis.series-history-target.v1'||Object.keys(t).some(k=>!keys.includes(k))||typeof t.seriesId!=='string'||!t.seriesId.length||t.seriesId.length>128||!['SERIES_PRE','SERIES_BETWEEN'].includes(t.phase)||typeof t.transitionId!=='string'||!t.transitionId.length||t.transitionId.length>128||!id(t.team1Id)||!id(t.team2Id)||t.team1Id===t.team2Id||!Number.isSafeInteger(t.identityRevision)||t.identityRevision<0||!Array.isArray(t.players)||t.players.length>10)throw Error('series_history_target_contract');
+ const cutoff=instantNs(t.historyCutoffAt),valid=instantNs(t.validFrom),decision=instantNs(decisionAt);
+ const identityKnown=instantNs(t.identityKnownAt),lastSeriesReceipt=instantNs(t.lastSeriesReceiptAt);
+ if(cutoff===null||valid===null||decision===null||identityKnown===null||lastSeriesReceipt===null||cutoff>valid||valid>decision||identityKnown>valid||cutoff>lastSeriesReceipt||lastSeriesReceipt>decision)throw Error('series_history_target_times');
+ const players=t.players.map(p=>{
+  if(!obj(p)||Object.keys(p).some(k=>!['team','accountId'].includes(k))||!['team1','team2'].includes(p.team)||p.accountId!==null&&!account(p.accountId))throw Error('series_history_player_or_current_hero_forbidden');
+  return{accountId:p.accountId,teamId:p.team==='team1'?t.team1Id:t.team2Id,side:p.team==='team1'?'radiant':'dire',heroId:null};
+ });
+ if(new Set(players.filter(p=>p.accountId!==null).map(p=>p.accountId)).size!==players.filter(p=>p.accountId!==null).length||SIDE.some(s=>players.filter(p=>p.side===s).length>5))throw Error('series_history_roster_conflict');
+ for(const side of SIDE)while(players.filter(p=>p.side===side).length<5)players.push({accountId:null,heroId:null,side,teamId:side==='radiant'?t.team1Id:t.team2Id});
+ const context={historyCutoffAt:t.historyCutoffAt,validFrom:t.validFrom,computedAt:decisionAt,availabilityBasis:'host_declared_series_identity_receipt_not_authenticated',identityPlayers:players,producer:{bindings:{facts:factsInput?.pin}}};
+ const b=calculateRelationalComponent({historyContext:context,factsInput,matchId:null,decisionAt,minimumSupport,phase:'PRE',targetBinding:{contract:t.contract,sha256:p.sha256,bytes:p.bytes,knownAt:t.validFrom}});
+ const indices=b.definitions.flatMap((d,i)=>d.inputScopes.includes('current_draft')?[]:[i]);
+ const rename=s=>s.replace(/^histrel\./,'series_history.').replace(/\.radiant\./g,'.team1.').replace(/\.dire\./g,'.team2.').replace(/radiant_minus_dire/g,'team1_minus_team2');
+ const definitions=indices.map(i=>({...b.definitions[i],name:rename(b.names[i]),orientation:'team1/team2 nominal axes; never assumed Radiant/Dire',allowedTargets:[t.phase,'SERIES_LIVE']}));
+ const names=definitions.map(d=>d.name),values=indices.map(i=>b.values[i]),masks=indices.map(i=>b.masks[i]);
+ const schemaHash=historicalRelationalHash({contract:'aegis.series-historical-relational-features.v1',baseSchemaHash:b.schemaHash,phase:t.phase,definitions:definitions.map(({knownAt,supportRef,supportRefs,selectorRef,...d})=>d)});
+ const out={...b,contract:'aegis.series-historical-relational-features.v1',phase:t.phase,seriesId:t.seriesId,transitionId:t.transitionId,identityRevision:t.identityRevision,team1Id:t.team1Id,team2Id:t.team2Id,matchId:null,names,values,masks,definitions,schemaHash,targetInputPin:structuredClone(p),baseRelationalContentHash:b.contentHash,audit:{...b.audit,featureCount:names.length,currentMapExcluded:'no_current_map_in_series_target',nominalSideAliasesInternalOnly:true,currentHeroFeaturesExcluded:true},profiles:undefined,contentHash:undefined};
+ delete out.profiles;delete out.contentHash;
+ return{...out,contentHash:historicalRelationalHash(out)};
+}
+
 function calculateRelationalComponent({historyContext,factsInput,matchId,decisionAt,minimumSupport,phase,targetBinding}){
  const facts=pinned(factsInput,FACTS_CONTRACT,MAX_MAPS),binding=historyContext.producer?.bindings?.facts;
  if(!binding||binding.sha256!==facts.pin.sha256||binding.bytes!==facts.pin.bytes)throw Error('relational_facts_context_binding');
  const cutoff=instantNs(historyContext.historyCutoffAt),scope=qualifiedScope(facts,cutoff),roster=(historyContext.draftState?.identity.players??historyContext.identityPlayers).map(p=>({...p,heroId:p.heroId===null?null:Number(p.heroId)})).sort((a,b)=>SIDE.indexOf(a.side)-SIDE.indexOf(b.side)||slotCompare(a,b));
  if(roster.length!==10||phase!=='PRE'&&new Set(roster.map(p=>p.heroId)).size!==10||SIDE.some(s=>roster.filter(p=>p.side===s).length!==5)||roster.some(p=>phase==='PRE'?p.heroId!==null:!hero(p.heroId)||p.accountId!==null&&!account(p.accountId)))throw Error('relational_draft_roster');
- const audit={inputMaps:facts.rows.length,futureOutcomeExcluded:0,olderThan90DaysExcluded:0,unavailableHeroRosters:0,unavailablePlayerRosters:0,unavailablePerformanceRows:0,minimumSupport,scopeQualified:scope.base};
+ const audit={inputMaps:facts.rows.length,futureOutcomeExcluded:0,olderThan90DaysExcluded:0,unavailableHeroRosters:0,unavailablePlayerRosters:0,unavailablePerformanceRows:0,minimumSupport,scopeQualified:scope.base,populationBasis:scope.populationBasis??'local_sql_selected_corpus_not_global',globalPopulationComplete:false};
  const maps=readMaps(facts,cutoff,matchId,audit),selectors=selectorsFor(roster,scope),support={},supportRows={},supportCache=new Map(),statistics={},performanceStats={},selectorBindings={};
  const registerSupportRows=rows=>{
   const text=rows.map(r=>r.map.matchId+'@'+r.availableAt).join('|');if(supportCache.has(text))return supportCache.get(text);

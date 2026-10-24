@@ -5,7 +5,7 @@
 import {open,lstat,link,unlink,realpath} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {HISTORY_EXPORT_REFERENCE_CONTRACT,MAX_HISTORY_EXPORT_BYTES,verifyHistorySourceExport} from './historySourceExport.mjs';
+import {HISTORY_EXPORT_REFERENCE_CONTRACT,MAX_HISTORY_EXPORT_BYTES,verifyHistorySourceExport} from './historySourceVerifier.mjs';
 const hash=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const fileName=sha256=>sha256+'.history-source.json';
 function reference(r){if(r?.contract!==HISTORY_EXPORT_REFERENCE_CONTRACT||!hash(r.sha256)||!Number.isSafeInteger(r.bytes)||r.bytes<1||r.bytes>MAX_HISTORY_EXPORT_BYTES||Object.keys(r).some(k=>!['contract','sha256','bytes'].includes(k)))throw Error('history_source_store_reference');return structuredClone(r);}

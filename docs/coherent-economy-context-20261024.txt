@@ -1,0 +1,122 @@
+COHERENT RESOURCE DISTRIBUTION AND DRAFT/OBJECTIVE INTERACTIONS
+24 October 2026. Diagnostic source expansion, formula version
+aegis.coherent-economy-context-algebra.v1. No fitted state or model activation.
+
+Architecture and scope
+coherentEconomyContextFeatures.mjs is a pure helper called by the existing
+observedDraftFeatureBundle projectInteractions before semantic schema hashing.
+It reads one coherent admitted observation, the private producer's frozen history
+context/relational context and that observation's existing native bundle. It adds
+no admission authority, provider access, current-map label, temporal state or
+parallel train-only formula. Existing feature columns remain. The component's
+definition/schema hash changes with the added versioned definitions; old weights
+cannot be assumed compatible. Full family implementation is not claimed.
+
+Inputs are {observation,historyContext,relationalContext,nativeBundle,decisionAt}.
+The ten heroes, sides and team identities must form a coherent full draft. Public
+accounts may be null. Native economy fields remain literal NW, GPM and XPM with
+separate units/missingness. GPM/XPM concentration describes native rate distribution,
+not spendable gold. No NW/minute substitution or manual fighting-strength score.
+
+Current formulas and fixed width
+38,790 addon columns are explicitly defined, plus the existing separate missing
+mask for every value. They contribute to L05, L14 and R06 partial diagnostic scope:
+270 team concentration/minute/frozen-context columns; 900 economic-rank columns;
+31,500 hero/opposing-distribution/minute/frozen-form columns; 1,620 qualified
+objective/team-concentration/closing-style columns; 4,500 qualified objective/
+current-hero-NW/closing-style columns. Count is schema width, not useful signal,
+data availability, model quality or independent sample size.
+
+For each same-frame five-player nonnegative metric x, S=sum(x), p_i=x_i/S:
+top1_share=max(x)/S; top2_share=(largest+second_largest)/S; HHI=sum(p_i^2);
+Shannon entropy=-sum(p_i*ln(p_i)) with 0*ln(0)=0; Gini=sum_i sum_j|x_i-x_j|/(10*S);
+range=max(x)-min(x). Shares/entropy/Gini need S>0; an observed all-zero range is
+zero while its share-based statistics are missing. An absent/invalid operand is
+never silently filled with zero. Radiant, Dire and explicit Radiant-Dire products
+are retained, with minute and qualified team form/aggression/late-style variants.
+
+Descending economic ranks 1..5 use current literal NW/GPM/XPM, ties by hero ID.
+Native value, team share, opposing same-rank difference and positive-denominator
+ratio have minute and qualified frozen form variants. Economic rank never means
+carry/mid/offlane/support or a farm-role label. Existing native top-share/HHI and
+NW/GPM-rank arithmetic has explicit legacy-counterpart metadata where applicable;
+different identity/admission boundaries prevent unconditional alias claims.
+
+For every dictionary hero and metric, compare its observed current value v with
+the five actual opposing draft heroes: v-opponent_mean, v-opponent_max,
+v/opponent_mean, opposing midrank=(count(x<v)+0.5*count(x=v))/5,
+(v-opponent_mean)/opponent_population_sd, and v/own_sum-opponent_top1_share.
+Undefined ratios/scales are missing. The own-team sum is required only for its
+share comparison; a missing teammate metric does not erase an otherwise observed
+hero/opponent comparison. Apply side sign, minute, qualified own recent/player-hero/
+team/hero-late form and opposing-five-hero late-form mean as separate interactions.
+No measured or handcrafted hero fighting strength is asserted. A known absent
+hero in the complete observed ten-hero roster has structural zero; this is an
+explicit applicability convention, not imputation of a missing active operand.
+
+Historical and objective causality
+History comes from the existing private frozen context at original draft cutoff.
+Identity validFrom must precede the source receipt; materialization must precede
+decisionAt. Per-stat support/minimum/cohort gates apply; a stated availability
+timestamp after the cutoff is rejected. Relational closing profiles must bind
+the original history content hash/cutoff and be available by decisionAt. Unknown
+accounts suppress personal history, preserving qualified hero/team context.
+
+Objective operands are only existing qualified Roshan/Aegis native outputs:
+confirmed-death elapsed time, qualified respawn bounds/countdown, qualified alive/
+dead flags, confirmed-pickup elapsed/lifetime upper bound and linked confirmed
+steal. Native bundle map/observation/raw/profile/receipt must exactly match the
+current observation. Raw timer zero/positive is never a new proof of death/alive,
+pickup or countdown. Products with team concentration, current hero NW and frozen
+closing style are descriptive covariates. They do not attribute Aegis pickup,
+ownership or advantage to a side/hero without the existing evidence producer.
+
+State, bounds and validation
+The helper is stateless. Existing native/lead windows retain at most 600 game
+seconds plus 30-second anchor tolerance, hard-bounded to 2048 rows. Equal-clock
+explicit-phase receipts can reach that hard bound; no sustainable cadence claim
+is made. The progressing profile's separate 180-second last-advance lease still
+expires during prolonged equal-clock receipts. Root owns compact retained prefix,
+continuity outside historical caches and durable state-after-write integration.
+
+Synthetic tests use hand-calculable distributions and contrasts, permutation/tie
+invariance, anonymous identities, missing/negative/zero fields, future context/
+statistics/native frames, qualified events versus raw zero timer, source binding,
+legacy counterpart decisions and future-prefix immutability. Existing rich and
+progression tests include the addon. Private measurements record exact component
+width and serialized definition/vector bytes; root must measure normalized common
+schema/storage separately. No real rich-feature availability, throughput or ML
+quality acceptance follows. All activation flags remain false; R4-R9 and Astra
+feature-first review remain separate acceptance gates.
+
+Definition pooling
+The rich producer keeps at most two immutable definition semantics in a private
+LRU pool. Its key binds module/addon versions, source/admission profile, patch and
+reviewed rules pin, native contracts, historical producer/support/minute policies,
+relational schema/formula version and exact consumed definition/unit IDs, including
+definition presence/absence. Current values, history values/content hashes, clocks
+and materialization times are not cache keys or cached feature data. The helper's
+formula-only schema is one immutable entry for its fixed algebra version.
+
+Cold compilation constructs/freezes names, descriptors and semantic hash once.
+Lazy descriptor factories avoid large formula/descriptor construction on warm
+frames. Every warm frame checks name/order/count, recomputes values and masks,
+and reuses immutable name/definition arrays and hash. Actual semantic changes
+select another entry; a third rich semantics evicts the oldest. Callers retaining
+returned snapshots hold their own references; the entry bound is not a process
+peak-heap guarantee. Diagnostic pool status has no admission authority.
+
+The two-frame synthetic measurement preserved the exact pre-pool explicit hash
+and 90,243-column definitions. Cold projection865.338ms; warm112.749ms. Names,
+definitions and hash were reused, independent numeric arrays changed, and helper
+pool1/rich pool1 of maximum2 were observed. History-proof/fixture setup and later
+measurement serialization are excluded. RSS after cold782,548,992bytes and after
+warm799,690,752bytes are observations in that harness, not peak or sustainable
+throughput acceptance. No full real-source benchmark or model quality is claimed.
+
+A synthetic representative rich component has 90,243 columns: prior 51,453 plus
+38,790 addon columns. Its unnormalized component definition JSON is 111,238,339
+bytes and names/values/masks JSON 7,803,405 bytes in the recorded harness. This
+is not the root's normalized all-component schema size or a throughput benchmark.
+Retained reconstruction may validate source lease at a separately proved original
+source horizon; frozen context and calculation times remain at actual decisionAt.

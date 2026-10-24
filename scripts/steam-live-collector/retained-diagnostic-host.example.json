@@ -1,0 +1,18 @@
+{
+  "contract": "aegis.finite-retained-diagnostic-host.v1",
+  "enabled": false,
+  "archive": null,
+  "stateDirectory": null,
+  "historyFactDirectory": null,
+  "historyProfileSha256": null,
+  "materializationGeneration": "initial",
+  "stopFiles": [],
+  "limits": {
+    "maxReceipts": 512,
+    "maxMetadataBytes": 33554432,
+    "maxRawBytes": 67108864,
+    "maxRunMs": 60000,
+    "maxStateBytes": 8388608
+  },
+  "pipelineLimits": {}
+}

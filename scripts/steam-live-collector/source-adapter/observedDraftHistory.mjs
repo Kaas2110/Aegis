@@ -4,7 +4,7 @@ import {instantNs} from './causalTime.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {createDraftCaptureProof,advanceObservedDraft,draftHash} from './observedDraft.mjs';
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
-import {pinned,calculateHistoryCore,FACTS_CONTRACT,NATIVE_CONTRACT} from './historyCalculationCore.mjs';
+import {pinned,calculateHistoryCore,qualifyRetainedHistoryCorpus,FACTS_CONTRACT,NATIVE_CONTRACT} from './historyCalculationCore.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
 
 export const PRODUCER_CONTRACT='aegis.observed-draft-history-producer.v3';
@@ -61,7 +61,8 @@ export function validateObservedDraftHistory(context,{matchId,decisionAt,readMod
  if(!object(context)||context.contract!==CONTEXT_CONTRACT||context.mode!=='observed_draft_frozen'||!id(matchId)||context.matchId!==matchId||!['recorded','reconstructed'].includes(readMode))return reject('draft_history_contract');
  const cutoff=instantNs(context.historyCutoffAt),valid=instantNs(context.validFrom),computed=instantNs(context.computedAt),decision=instantNs(decisionAt);
  if(cutoff===null||valid===null||computed===null||decision===null||cutoff>valid||valid>computed||valid>decision||readMode==='recorded'&&computed>decision)return reject('draft_history_times');
- if(context.recordedPrediction!==false||context.eligibleForServing!==false||context.eligibleForTraining!==false||context.cutoffPolicy!=='first_complete_draft_receipt'||!['recorded_input_receipts','database_timestamp_reconstruction'].includes(context.availabilityBasis))return reject('draft_history_nonadmission_or_basis');
+ if(context.recordedPrediction!==false||context.eligibleForServing!==false||context.eligibleForTraining!==false||context.cutoffPolicy!=='first_complete_draft_receipt'||!['recorded_input_receipts','database_timestamp_reconstruction','retained_receipt_reconstruction'].includes(context.availabilityBasis))return reject('draft_history_nonadmission_or_basis');
+ if(context.availabilityBasis==='retained_receipt_reconstruction'&&(context.producer?.sourcePopulation?.basis!=='provided_retained_response_corpus_only'||context.producer.sourcePopulation.originalHistoricalAvailabilityProven!==false||context.producer.sourcePopulation.globalPopulationComplete!==false))return reject('draft_history_retained_population_required');
  const {contentHash,...body}=context;if(!hash(contentHash)||evidenceHash(body)!==contentHash)return reject('draft_history_content_hash');
  const draft=context.draftState,{stateHash,...draftBody}=draft??{};
  if(!draft||draft.matchId!==matchId||draft.historyCutoffAt!==context.historyCutoffAt||draft.validFrom!==context.validFrom||!hash(stateHash)||draftHash(draftBody)!==stateHash)return reject('draft_history_state_binding');
@@ -79,11 +80,13 @@ export function validateObservedDraftHistory(context,{matchId,decisionAt,readMod
 
 export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInputs,factsInput,nativeInput,minimumSupport=5,nativeEvidenceInputs=[],nativeAlignmentInputs=[],expectedProfileReviewSha256=null,availabilityBasis='database_timestamp_reconstruction'}={}){
  if(!Number.isSafeInteger(minimumSupport)||minimumSupport<3||minimumSupport>1000)throw Error('minimum_support_3_to_1000');
- if(!['recorded_input_receipts','database_timestamp_reconstruction'].includes(availabilityBasis))throw Error('draft_history_availability_basis');
+ if(!['recorded_input_receipts','database_timestamp_reconstruction','retained_receipt_reconstruction'].includes(availabilityBasis))throw Error('draft_history_availability_basis');
  const draft=replayPinnedDraftPrefix({draftPrefixInputs,matchId,computedAt});
  if(!draft.accepted)return blocked(draft.reason,{draftRejections:draft.rejections},{draftPrefix:draft.bindings});
  const state=draft.state,known=instantNs(state.historyCutoffAt);
  const facts=pinned(factsInput,FACTS_CONTRACT,100000),native=pinned(nativeInput,NATIVE_CONTRACT,20000);
+ const retainedScope=qualifyRetainedHistoryCorpus(facts.data,known),retained=retainedScope.verified;
+ if(availabilityBasis==='retained_receipt_reconstruction'&&!retained||facts.data.scope?.contract==='aegis.retained-history-selection-scope.v1'&&availabilityBasis!=='retained_receipt_reconstruction')throw Error('draft_history_retained_source_scope_or_basis');
  if(facts.rows.some(m=>m?.matchId===matchId))throw Error('draft_history_current_map_facts_not_allowed');
  const bindings={facts:facts.pin,nativeObservations:native.pin,draftPrefix:draft.bindings};
  const audit={factRows:facts.rows.length,nativeRows:native.rows.length,draftAcceptedObservations:draft.acceptedObservations,draftRejections:draft.rejections,prefixCompleteness:draft.prefixCompleteness};
@@ -96,13 +99,14 @@ export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInput
  // for different accounts is not a complete history for newly disclosed players.
  const scope=facts.data.scope,ids=xs=>Array.isArray(xs)&&xs.every(id)&&new Set(xs).size===xs.length;
  const scopeBase=object(scope)&&scope.contract==='aegis.prior-map-selection-scope.v1'&&scope.sourceUniverse==='local_pro_matches_join_match_parsed'&&scope.selection==='target_teams_or_accounts_or_heroes'&&scope.windowDays===90&&instantNs(scope.asOf)===known&&scope.completeWithinSource===true&&scope.truncated===false&&scope.rowCount===facts.rows.length&&hash(scope.selectionSqlSha256)&&typeof scope.queryEvidenceRef==='string'&&scope.queryEvidenceRef.length>0;
- const accountScope=scopeBase&&ids(scope.targetAccountIds),teamScope=scopeBase&&ids(scope.targetTeamIds);
+ const accountScope=retained||scopeBase&&ids(scope.targetAccountIds),teamScope=retained||scopeBase&&ids(scope.targetTeamIds);
  const suppress=(p,keys,reason)=>{for(const k of keys){p.values[k]=null;p.statistics[k]={...p.statistics[k],value:null,cohortQualified:false,reason,population:'conditional_provided_maps_only'};}};
  for(const p of players){
-  if(p.accountId!==null&&(!accountScope||!scope.targetAccountIds.includes(p.accountId)))suppress(p,PERSONAL_KEYS,'player_source_scope_coverage_unproven');
-  if(p.teamId!==null&&(!teamScope||!scope.targetTeamIds.includes(p.teamId)))suppress(p,TEAM_KEYS,'team_source_scope_coverage_unproven');
+  if(p.accountId!==null&&(!accountScope||!retained&&!scope.targetAccountIds.includes(p.accountId)))suppress(p,PERSONAL_KEYS,'player_source_scope_coverage_unproven');
+  if(p.teamId!==null&&(!teamScope||!retained&&!scope.targetTeamIds.includes(p.teamId)))suppress(p,TEAM_KEYS,'team_source_scope_coverage_unproven');
+  if(retained)for(const statistic of Object.values(p.statistics)){statistic.sourcePopulation='provided_retained_response_corpus_only';statistic.globalPopulationComplete=false;}
  }
- audit.targetHistoryScope={metadataValid:!!scopeBase,accountIdsQualified:accountScope?roster.filter(p=>p.accountId!==null&&scope.targetAccountIds.includes(p.accountId)).length:0,teamIdsQualified:teamScope?[...new Set(roster.map(p=>p.teamId).filter(x=>x!==null&&scope.targetTeamIds.includes(x)))].length:0};
+ audit.targetHistoryScope={metadataValid:!!scopeBase||retained,accountIdsQualified:accountScope?roster.filter(p=>p.accountId!==null&&(retained||scope.targetAccountIds.includes(p.accountId))).length:0,teamIdsQualified:teamScope?[...new Set(roster.map(p=>p.teamId).filter(x=>x!==null&&(retained||scope.targetTeamIds.includes(x))))].length:0,...(retained?{population:'provided_retained_response_corpus_only',globalPopulationComplete:false}: {})};
  const heroKeys=['heroLateTendency'],teamKeys=TEAM_KEYS;
  const subset=(p,keys)=>({values:Object.fromEntries(keys.map(k=>[k,p.values[k]])),definitions:Object.fromEntries(keys.map(k=>[k,p.definitions[k]])),statistics:Object.fromEntries(keys.map(k=>[k,p.statistics[k]]))});
  const heroes=players.map(p=>({heroId:p.heroId,side:p.side,teamId:p.teamId,...subset(p,heroKeys)}));
@@ -117,7 +121,7 @@ export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInput
  }
  const frameIds=new Set();for(const ref of references)for(const o of ref.sourceObservations){if(frameIds.has(o.observationId))continue;frameIds.add(o.observationId);dependencies.push({kind:'native_frame',matchId:o.matchId,availableAt:o.knownAt,sha256:native.pin.sha256,evidenceRef:native.ref+'#observation/'+o.observationId,rawSha256:o.rawSha256,observationId:o.observationId});}
  const body={contract:CONTEXT_CONTRACT,mode:'observed_draft_frozen',matchId,historyCutoffAt:state.historyCutoffAt,validFrom:state.validFrom,computedAt,cutoffPolicy:state.cutoffPolicy,availabilityBasis,draftState:state,sourceMatches,dependencies,featurePayload,
-  producer:{contract:PRODUCER_CONTRACT,bindings,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,nativeProofPolicy:'raw_replay_required',nativeAlignmentBindings:calculated.nativeAlignmentBindings,nativeEvidenceBindings:calculated.nativeEvidenceBindings,originalCutoffImmutable:true,lateIdentityDoesNotExpandHistory:true,zeroMinuteCohortClaimed:false,learnedState:null},
+  producer:{contract:PRODUCER_CONTRACT,bindings,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,nativeProofPolicy:'raw_replay_required',nativeAlignmentBindings:calculated.nativeAlignmentBindings,nativeEvidenceBindings:calculated.nativeEvidenceBindings,originalCutoffImmutable:true,lateIdentityDoesNotExpandHistory:true,zeroMinuteCohortClaimed:false,learnedState:null,...(retained?{sourcePopulation:{basis:'provided_retained_response_corpus_only',...retainedScope,originalHistoricalAvailabilityProven:false}}:{})},
   eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
  const context={...body,contentHash:evidenceHash(body)};
  const verified=validateObservedDraftHistory(context,{matchId,decisionAt:computedAt});if(!verified.accepted)throw Error('generated_draft_context_invalid:'+verified.reason);

@@ -1,0 +1,123 @@
+AEGIS — OPT-IN RETAINED DIAGNOSTIC HOST AND ADMIN READ API
+24 October 2026. Source installation does not activate any runtime or schedule.
+
+The finite host reads committed local Steam receipts and their original raw
+bodies, builds retained-source history through the shared pure producer and
+writes feature-only diagnostic traces. It has no listener, provider client,
+training path, weights, scheduler or migration. Opening a match or reading the
+admin diagnostics never runs this host. The example configuration is disabled.
+
+EXPLICIT ENTRY AND CONFIGURATION
+
+Entry: scripts/steam-live-collector/run-retained-diagnostic-host.mjs
+Command, only when separately opting into a local run:
+node scripts/steam-live-collector/run-retained-diagnostic-host.mjs --config <absolute-local-config.json>
+
+Copy retained-diagnostic-host.example.json outside published source, keep it
+disabled until configured, and supply absolute local directories: archive for
+the existing committed Steam archive, stateDirectory for this host's outputs,
+and historyFactDirectory for the append-only retained OpenDota fact store.
+Inputs and generated state must be separate. Supply the reviewed historical
+profile SHA256 and every applicable manual STOP path in stopFiles. The program
+does not remove STOP files, release a foreign lock, find credentials or enable
+any provider. No environment key or database connection is created by the CLI.
+
+Default bounds are 512 committed receipts, 32 MiB receipt metadata, 64 MiB raw
+bodies, 60 seconds runtime and 8 MiB progress state. Hard caps are 4096 receipts,
+128 MiB metadata, 512 MiB raw, 600 seconds and 16 MiB state. Pipeline resource
+limits remain independently bounded by its own contract. An inventory larger
+than the configured limit is rejected; the host never silently samples its tail.
+This is a finite snapshot, with no watch loop or recurring task.
+
+PORTS AND SOURCE AVAILABILITY
+
+runRetainedDiagnosticHost(config, ports) owns enumeration, STOP/abort/deadline,
+the host lock and restart references. It calls readCommittedSteamCapture and
+passes original receiptInput/rawInput unchanged to createRetainedFeaturePipeline.
+Every committed receipt participates, including missing-map and failed captures.
+A receipt/raw body that cannot be verified halts the run instead of being skipped.
+Order is actual receivedAt, with deterministic filename tie-breaking. A newly
+inserted older receipt, removed prefix or changed bytes invalidates restart.
+
+The default createRetainedDiagnosticHostPorts loads the append-only fact store,
+constructs createRetainedHistorySourceExport, source/revision CAS stores, the
+canonical unified producer and the diagnostic feature journal. Retained history
+has its own availability and bounded-corpus provenance. No mutable database read
+is made by the CLI. A separately owned programmatic pipeline factory may supply
+an existing controlled read-only DB port; that fallback remains reconstruction
+and requires its existing gates. The host never invents older source receipts.
+
+RESTART AND COMMIT BOUNDARIES
+
+HOST-PROGRESS.json records receipt/raw hashes and successful map-to-trace hashes.
+It stores no admission token or dynamic state object. A restart creates a fresh
+pipeline and replays the entire verified original prefix to reconstruct opaque
+draft/progression/feature state. Already committed maps use the pipeline's
+restoreTracesByMap/replayOnly contract: the actual saved trace must exist and
+recomputed schema/values/masks/raw/source-snapshot identity must match before
+the consumer restores state. Failed or unrecorded old captures replay barriers
+without inventing a successful feature generation. Changed schemas fail closed.
+
+After restoring a prior processed prefix and restoring/finishing any durable
+pending capture, the host calls the owned breakSourceContinuity port before
+its first genuinely new capture. It clears old
+progression proof continuity while preserving LIVE phase and clock watermarks,
+so a process restart requires two fresh qualifying captures. A STOP observed
+only by an external scheduler cannot be inferred from unchanged archive bytes;
+the process-restart barrier is conservative and does not claim such detection.
+
+Before journal append the bootstrap atomically saves a pending trace intent
+bound to the current input receipt. This closes the crash gap between trace CAS
+publication and final host progress. On restart an intended trace is loaded and
+verified: an existing trace is restored; an absent trace is generated normally.
+The intent alone never advances the completed receipt watermark. Partial captures
+can restore successful maps and generate only maps whose trace was not committed.
+The host clears pending state only after the capture completes successfully.
+
+Actual history/materialization/generation times remain calculation times. Source
+reconstruction horizons do not relabel replay as an old recorded prediction.
+Stop/abort/deadline checks apply before reading, creating ports, generation writes
+and progress commits. A foreign/stale HOST.lock remains for explicit operator
+review. An owned lock is removed only when its owner content still matches.
+
+AUTHENTICATED ADMIN INSPECTION
+
+The new router mounts at /api/admin/feature-diagnostics after the existing
+requireAdminSession middleware and also applies that guard locally. It is
+disabled unless AEGIS_FEATURE_DIAGNOSTICS_ENABLED=1, with explicit absolute
+AEGIS_FEATURE_DIAGNOSTICS_DIRECTORY (the state journal directory) and
+AEGIS_FEATURE_DIAGNOSTICS_APP_ROOT (installed application source root).
+Requests choose only a trace hash, target and bounded page; they cannot select
+filesystem paths or code. Default disabled requests perform no journal/module IO.
+
+GET /api/admin/feature-diagnostics/traces/<sha256>
+  Compact saved feature-only trace summary; no full vectors or schema bodies.
+GET /api/admin/feature-diagnostics/traces/<sha256>/features/<TARGET>?offset=0&limit=200
+  Bounded names/values/missing page from the saved trace and verified schema.
+
+The shared diagnosticFeatureReadApi enforces page, response and concurrent-read
+bounds. Reads are no-store; writes are rejected. Missing/corrupt configuration or
+evidence returns a generic unavailable response without paths or exception text.
+This API does not expose recorded model predictions and never requests collection,
+training or live inference. It does not change the mobile product UI.
+
+CHECKS AND LIMITS
+
+Eight host orchestration tests pass, including chronological failed/non-JSON and
+missing-map barriers, full-prefix restart, partial intent recovery, failed append,
+STOP/abort/deadline, foreign lock, changed prefix, missing raw and resource bounds.
+One actual-port integration test passes using five synthetic retained OpenDota
+envelopes and one synthetic Steam phase4 capture: real source/revision stores,
+producer and journal write a feature-only trace; restart restores it and leaves
+one trace in the journal. No real observations or database were used.
+
+Five admin tests pass, including the existing real requireAdminSession middleware
+with an issued synthetic session, rejection before any saved read, disabled no-IO
+behavior, explicit directory configuration, bounded URL forwarding and no-store.
+The tests invoke routers in memory; no server, socket or background task starts.
+
+These are technical source/contract checks. They do not establish live availability,
+provider authenticity, broad population coverage, peak resource acceptance, model
+quality, full-family completeness or operational activation. The full feature-first
+gate and Astra review remain open. No training, HPO, calibration, migration, provider
+probe, candidate promotion, app release or schedule change is implied.

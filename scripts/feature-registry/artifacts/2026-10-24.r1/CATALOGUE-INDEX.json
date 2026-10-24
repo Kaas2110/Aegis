@@ -1,0 +1,401 @@
+{
+  "contract": "aegis.unified-feature-catalogue-index.v1",
+  "version": "2026-10-24.r1",
+  "scopeDate": "2026-10-24",
+  "featureFamilyCount": 79,
+  "logicalTargets": 12,
+  "totalCatalogues": 14,
+  "catalogueOccurrenceCount": 465359,
+  "distinctNameSpellings": 203558,
+  "repeatedNameSpellings": 54002,
+  "maximumCatalogueMultiplicity": 7,
+  "unionMeaning": "Spelling inventory only; no blind concatenation, semantic deduplication, feature selection or source availability claim.",
+  "catalogues": [
+    {
+      "id": "postdraft6668",
+      "count": 6668,
+      "orderedNameHash": "c361b3d5a8f33d85acbab8cb3f167bc0fb4ad045a7455888cd5e435c4c77588b",
+      "source": {
+        "path": "artifacts/ml-service/src/research/assets/postdraft_corrected_c_diagnostic_v1/FEATURE-SCHEMA.json",
+        "bytes": 738144,
+        "sha256": "6390c49ad76777a806d2bb45386e8d4d8d4a2884a6d82c554f90bbecde7d28ef",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/postdraft6668-ORDERED-NAMES.json",
+        "bytes": 223209,
+        "sha256": "222ac05ac488bf7b3f636eef3e6398f5be44cb23176805d77886b6284839b59d",
+        "bundled": false
+      },
+      "sourceJsonKey": "featureNames",
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "6390c49ad76777a806d2bb45386e8d4d8d4a2884a6d82c554f90bbecde7d28ef",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "observed-live268",
+      "count": 268,
+      "orderedNameHash": "adb64f86946a66bda6bd83e8abd781ea6222dad794d0826608e9c628d48ac0b9",
+      "source": {
+        "path": "artifacts/ml-service/src/shadow_live_winner/manifest.json",
+        "bytes": 12609,
+        "sha256": "a686c4e7490ae2aebce3dd924185b031b7d712124f4838a8798bac6bb8488149",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/observed-live268-ORDERED-NAMES.json",
+        "bytes": 9323,
+        "sha256": "fd0cb0be1887e32c10acd25df28c42190fe3d3b2510e0eff93f3a2ce649fc96a",
+        "bundled": false
+      },
+      "sourceJsonKey": "featureNames",
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "a686c4e7490ae2aebce3dd924185b031b7d712124f4838a8798bac6bb8488149",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "historical-prior7148",
+      "count": 7148,
+      "orderedNameHash": "51f9cc2daef9db42acfddeed742d11a316d3b994d3795d47c169969dc8875a0d",
+      "source": {
+        "path": "artifacts/ml-service/src/research/wide_observed/feature-names.json",
+        "bytes": 246772,
+        "sha256": "21d2471095469362762c1f4d971fdbe59c07b166bd276f6265a75f34cac06b17",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/historical-prior7148-ORDERED-NAMES.json",
+        "bytes": 246773,
+        "sha256": "b3a299b410dfc80eb4c473f3f873013d7e98253de13db1c72bd1bde7696ae54d",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "6cda9871540f2044018c5ba69492e5853199a14d35f1b08e4f3ef4edeac89e1a",
+      "sourceBytePinMatchesPrevious": false,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "wide-live36114",
+      "count": 36114,
+      "orderedNameHash": "a0b8952ade5da01c5e368f21be96c75140fb97d243bf058ceab5f5e1f457d380",
+      "source": {
+        "path": "artifacts/ml-service/src/shadow_wide/artifacts/feature-names.json",
+        "bytes": 2302353,
+        "sha256": "a0b8952ade5da01c5e368f21be96c75140fb97d243bf058ceab5f5e1f457d380",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/wide-live36114-ORDERED-NAMES.json",
+        "bytes": 2410697,
+        "sha256": "6749870943b38234e728f9d9696fe9c97eafc9ede04869286a0d378681eb0c81",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "a0b8952ade5da01c5e368f21be96c75140fb97d243bf058ceab5f5e1f457d380",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "series14255",
+      "count": 14255,
+      "orderedNameHash": "1bf309042da1a9dba7a7bca4553dd9b47c6387093e45877007145776a9d84fe8",
+      "source": {
+        "path": "continuation-evidence/work/series-evidence-root-review-20261015/EXPANDED-MATRIX-v1/FEATURE-NAMES.json",
+        "bytes": 649842,
+        "sha256": "9f2d9862f95003a222659f81b3ce1fb92904f3a53bd994ef6f6667928734b9ac",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/series14255-ORDERED-NAMES.json",
+        "bytes": 649842,
+        "sha256": "9f2d9862f95003a222659f81b3ce1fb92904f3a53bd994ef6f6667928734b9ac",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "9f2d9862f95003a222659f81b3ce1fb92904f3a53bd994ef6f6667928734b9ac",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "totals37024",
+      "count": 37024,
+      "orderedNameHash": "4deaf4d8b4d8219aac910678ced559a648a2451c86584be98e540917fedaa267",
+      "source": {
+        "path": "continuation-evidence/work/rich-totals-feature-extension-20261016/STATE-FEATURE-NAMES.json",
+        "bytes": 2491553,
+        "sha256": "18c958613159f6c4272dc3d24f2b0d180dffecd204b077d82473ca08132fce78",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/totals37024-ORDERED-NAMES.json",
+        "bytes": 2491553,
+        "sha256": "18c958613159f6c4272dc3d24f2b0d180dffecd204b077d82473ca08132fce78",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "18c958613159f6c4272dc3d24f2b0d180dffecd204b077d82473ca08132fce78",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "totals-state6",
+      "count": 6,
+      "orderedNameHash": "a14b1c51a52f1b48d589966259ab0d28d3c31900d55f6710969928f7e2e93e89",
+      "source": {
+        "path": "artifacts/ml-service/src/research/assets/corrected_live_totals_diagnostic_v1/FEATURE-NAMES.json",
+        "bytes": 32864,
+        "sha256": "7b6d19d8fc35d347932966ebf5f9a6950c980f38582de3b7d97399e7fe4fdaf4",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/totals-state6-ORDERED-NAMES.json",
+        "bytes": 110,
+        "sha256": "c92bd6e29a73a2f01ad1f78f67db3e55fd5985fc267b9b94278b1c9cf230eff0",
+        "bundled": false
+      },
+      "sourceJsonKey": "state6",
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "7b6d19d8fc35d347932966ebf5f9a6950c980f38582de3b7d97399e7fe4fdaf4",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "totals-draft1006",
+      "count": 1006,
+      "orderedNameHash": "e8d2e9bf107704abcb66aebd9dfca0ff454d5e233fcd9b09fd7b9ff2637cde43",
+      "source": {
+        "path": "artifacts/ml-service/src/research/assets/hazard_totals_diagnostic_v1/FEATURE-NAMES.json",
+        "bytes": 32864,
+        "sha256": "7b6d19d8fc35d347932966ebf5f9a6950c980f38582de3b7d97399e7fe4fdaf4",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/totals-draft1006-ORDERED-NAMES.json",
+        "bytes": 29678,
+        "sha256": "ff2d4d640049686e57f1a91317099d7f7c962a7cd77f4cff0b56f653b37c4df6",
+        "bundled": false
+      },
+      "sourceJsonKey": "draft1006",
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "7b6d19d8fc35d347932966ebf5f9a6950c980f38582de3b7d97399e7fe4fdaf4",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "individual-live45938",
+      "count": 45938,
+      "orderedNameHash": "7c38167462d6c587ff50edbd332cfa3e309610cf1861cc7bffe55325357c5f69",
+      "source": {
+        "path": "continuation-evidence/work/individual-profile-appendix-20261019/FEATURE-NAMES.json",
+        "bytes": 3152933,
+        "sha256": "ad8077ce950954f45efbc7ff05c8757a679cb90bbc8ab3981f1b80b0d5639ef2",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/individual-live45938-ORDERED-NAMES.json",
+        "bytes": 3106993,
+        "sha256": "d67457fe23d66496276748494ce44cd9b70692355ae3cb3a72aa0ad8c042319b",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "ad8077ce950954f45efbc7ff05c8757a679cb90bbc8ab3981f1b80b0d5639ef2",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "Original schema; see pinned formulas",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "corrected-rich-totals46848",
+      "count": 46848,
+      "orderedNameHash": "9e326e1c28d767bee052d2bf552edba22872a79922fc07896d93eb33d412fb46",
+      "source": {
+        "path": "continuation-evidence/work/corrected-rich-totals-paired-20261020/PROTOCOL-PROPOSAL-v2.json",
+        "bytes": 33021,
+        "sha256": "7479fa4a51658dc5e7ee0a315ff464155a0ef5b76f197f5e983a5c725711ae10",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/corrected-rich-totals46848-ORDERED-NAMES.json",
+        "bytes": 3187849,
+        "sha256": "ae2e670afa1234e014ae77ae294c02242453179f84ce314ea425b69b0b5fcc00",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": false,
+      "previousSourceSha256": "7479fa4a51658dc5e7ee0a315ff464155a0ef5b76f197f5e983a5c725711ae10",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "state only; candidate integer axis documented separately",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "phase-totals37024",
+      "count": 37024,
+      "orderedNameHash": "4deaf4d8b4d8219aac910678ced559a648a2451c86584be98e540917fedaa267",
+      "source": {
+        "path": "continuation-evidence/outputs/Aegis-phase-totals-at-start-20261019/FEATURE-NAMES37024.json",
+        "bytes": 2528577,
+        "sha256": "394d68d028f39bc9a1ef454b0b92c86ec7a81bd54b8382baed747094c1c96510",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/phase-totals37024-ORDERED-NAMES.json",
+        "bytes": 2491553,
+        "sha256": "18c958613159f6c4272dc3d24f2b0d180dffecd204b077d82473ca08132fce78",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "394d68d028f39bc9a1ef454b0b92c86ec7a81bd54b8382baed747094c1c96510",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "state only; candidate integer axis documented separately",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "c3-networth80142",
+      "count": 80142,
+      "orderedNameHash": "44266b8da4fa3a101dc879ac25a16c0d324c7d5b9ce3e38d29fb80a9958c916e",
+      "source": {
+        "path": "continuation-evidence/work/c3-networth-projector-20261020-r1/C3-NAMES.json",
+        "bytes": 6069969,
+        "sha256": "5f726d9179b81c58c131c60947289222805785952ecda97e246cf44aff5ba8f8",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/c3-networth80142-ORDERED-NAMES.json",
+        "bytes": 6069969,
+        "sha256": "5f726d9179b81c58c131c60947289222805785952ecda97e246cf44aff5ba8f8",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "5f726d9179b81c58c131c60947289222805785952ecda97e246cf44aff5ba8f8",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "45938 unchanged C2 + 17102 measured-NW definitions + 17102 masks",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "earned-economy114450",
+      "count": 114450,
+      "orderedNameHash": "6dfc2b941920739298c28f5dd4b13f60ed841942e476d0c338d5bb8106c0928b",
+      "source": {
+        "path": "continuation-evidence/work/earned-economy-c2-source-20261020-r1/FEATURE-NAMES.json",
+        "bytes": 10647933,
+        "sha256": "aee6a628647cf1645a31bb2b3a6284ec4fe85a04ec715142ce9acb466e0221b2",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/earned-economy114450-ORDERED-NAMES.json",
+        "bytes": 10647933,
+        "sha256": "aee6a628647cf1645a31bb2b3a6284ec4fe85a04ec715142ce9acb466e0221b2",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": true,
+      "previousSourceSha256": "aee6a628647cf1645a31bb2b3a6284ec4fe85a04ec715142ce9acb466e0221b2",
+      "sourceBytePinMatchesPrevious": true,
+      "coordinate": "45938 unchanged C2 +34256 earned gold/XP values +34256 masks",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    },
+    {
+      "id": "steam-coherent38468-v2",
+      "count": 38468,
+      "orderedNameHash": "1cab2a91d241aa12c5b8a88bb35537e90cc36e5e36eb4addd008fa50ef36fc74",
+      "source": {
+        "path": "scripts/steam-live-collector/source-adapter/steamFeatureBundle.mjs",
+        "bytes": 3759,
+        "sha256": "4fa1af7ede5468444519b3b14ad8dc0eaea8c594e5b2a4785b3ea2507c0c04f1",
+        "bundled": false
+      },
+      "namesPin": {
+        "path": "legacy-name-evidence/steam-coherent38468-v2-ORDERED-NAMES.json",
+        "bytes": 2525755,
+        "sha256": "8e60c8dbd6b6e097d78c784fd6a765ed46267e89d1bfb3fcdcb2de9f9996695f",
+        "bundled": false
+      },
+      "sourceJsonKey": null,
+      "sourceContainsOrderedNames": false,
+      "previousSourceSha256": null,
+      "sourceBytePinMatchesPrevious": null,
+      "coordinate": "36726 player/native economy columns +871Roshan values+871Roshan masks",
+      "semanticIdentityPolicy": "catalogue ID + pinned old source + ordered-name hash + column index + exact spelling; no inferred semantic aliases",
+      "currentServingClaim": false
+    }
+  ],
+  "familyRegistry": {
+    "path": "FAMILY-REGISTRY.json",
+    "bytes": 173887,
+    "sha256": "8c386dce2cd385d40ed10c4797453888931de925a4fa12d1eff61912b010b8cc"
+  },
+  "targetMatrix": {
+    "path": "TWELVE-TARGET-MATRIX.json",
+    "bytes": 18014,
+    "sha256": "879de5c8d138426d42f78208b7a5eafa92a6e87b991265ba80935b5337e7594b"
+  },
+  "semanticDispositionLedger": {
+    "path": "SEMANTIC-DISPOSITION-LEDGER.json",
+    "bytes": 290119,
+    "sha256": "6c6c5f625828ea87244d1558df670e80801befd9820317c94747b771db058eb3"
+  },
+  "provenance": {
+    "path": "PROVENANCE.json",
+    "bytes": 919,
+    "sha256": "6a8c3482aea2c64446c28d45a026019aea9f1cda8d8e5f6fb2e95764c35f63ed"
+  },
+  "targetScopePolicy": {
+    "contract": "aegis.feature-target-scope-policy.v1",
+    "version": "2026-10-24.r1",
+    "undraftedTargets": [
+      "PRE_MAP_WIN",
+      "PRE_KILLS",
+      "PRE_DURATION",
+      "SERIES_PRE",
+      "SERIES_BETWEEN"
+    ],
+    "previousSeriesMapTargets": [
+      "SERIES_BETWEEN",
+      "SERIES_LIVE"
+    ],
+    "forbiddenPredictiveScopes": [
+      "current_map_label",
+      "presentation"
+    ],
+    "historyTimePolicy": "Every historical fact availableAt <= historyCutoffAt; current identity validFrom <= decisionAt; current map excluded.",
+    "currentTimePolicy": "One admitted source profile per coherent current frame; receipt <= decisionAt; no inferred event latency.",
+    "betweenPolicy": "Separate immutable team1/team2-oriented context; never reuse the previous map draft or sides as next-map inputs."
+  },
+  "metadata": {
+    "fullFeatureGateComplete": false,
+    "trainingAndExperimentationPaused": true,
+    "providerCalls": 0,
+    "nativeFits": 0,
+    "MLqualityEvaluation": false,
+    "publicPromotion": false
+  }
+}

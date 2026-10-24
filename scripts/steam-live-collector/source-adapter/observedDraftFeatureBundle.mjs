@@ -9,10 +9,17 @@ import {produceObservedDraftHistory,validateObservedDraftHistory,replayPinnedDra
 import {advanceSteamFeatureBundle,BUNDLE_CONTRACT} from './steamFeatureBundle.mjs';
 import {HERO_IDS,evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {produceHistoricalRelationalFeatures,HISTORICAL_PLAYER_PROFILE_KEYS} from './historicalRelationalFeatures.mjs';
+import {readSteamProgressionProof,ADMISSION_PROFILE} from './steamProgressionAdmission.mjs';
+import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+import {produceCoherentEconomyContextFeatures,CONTRACT as ECONOMY_CONTEXT_CONTRACT,FORMULA_VERSION as ECONOMY_CONTEXT_FORMULA_VERSION} from './coherentEconomyContextFeatures.mjs';
 
 export const CONTRACT='aegis.observed-draft-steam-feature-bundle.v2';
+export const PROGRESSING_CONTRACT='aegis.observed-draft-steam-feature-bundle.v3';
 export const HISTORY_PROOF_CONTRACT='aegis.verified-dynamic-history-context.v1';
 const histories=new WeakMap(),states=new WeakMap();
+const definitionSchemas=new Map(),MAX_DEFINITION_SCHEMAS=2;
+let compiledDefinitionSchemas=0,reusedDefinitionSchemas=0;
+export function readObservedFeatureSchemaPoolStatus(){return{contract:CONTRACT,semanticsCount:definitionSchemas.size,maximumSemantics:MAX_DEFINITION_SCHEMAS,compiledDefinitionSchemas,reusedDefinitionSchemas,semanticsKeys:[...definitionSchemas.keys()]};}
 const PROFILE='steam.GetLiveLeagueGames.v1.scoreboard',SIDES=['radiant','dire'];
 const METRICS={native_nw:['netWorth','gold_value','L02'],native_gpm:['goldPerMinute','gold_per_minute','L03'],native_xpm:['experiencePerMinute','xp_per_minute','L03'],native_level:['level','level','L04'],native_gold:['gold','provider_gold','L02']};
 const CONTEXT_KEYS=['recentForm','heroForm','teamForm','aggression','lateTendency','playerLateTendency','heroLateTendency','playerHeroLateTendency'];
@@ -66,12 +73,15 @@ export function readDynamicHistoryProof(historyProof,{matchId,decisionAt,readMod
  return {accepted:true,reason:'actual_byte_producer_context_from_owned_proof',context:history.context,relational:history.relational,eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false};
 }
 
-function descriptor(name,{familyId,formula,units,inputScopes=['current_live'],inputFields=[],historyDefinitions=[]}){
- return {contract:'aegis.executable-feature-definition.v1',id:CONTRACT+':'+name,name,version:'1',familyId,formula,formulaVersion:'1',units,dtype:'float64',missingPolicy:'null_with_separate_missing_mask; absent hero interaction is structural zero',timePolicy:'coherent current capture; prior history available no later than immutable first_complete_draft_receipt; receipt <= decision',sourceProfile:PROFILE,learnedStatePolicy:'none',inputScopes,allowedTargets:LIVE_TARGETS,semanticStatus:'specified',inputFields,historyDefinitions,legacyCounterpart:legacyCounterpartForDynamicFeature(name)};
+function descriptor(name,{familyId,formula,formulaVersion='1',units,inputScopes=['current_live'],inputFields=[],historyDefinitions=[]}){
+ return {contract:'aegis.executable-feature-definition.v1',id:CONTRACT+':'+name,name,version:'1',familyId,formula,formulaVersion,units,dtype:'float64',missingPolicy:'null_with_separate_missing_mask; absent hero interaction is structural zero',timePolicy:'coherent current capture; prior history available no later than immutable first_complete_draft_receipt; receipt <= decision',sourceProfile:PROFILE,learnedStatePolicy:'none',inputScopes,allowedTargets:LIVE_TARGETS,semanticStatus:'specified',inputFields,historyDefinitions,legacyCounterpart:legacyCounterpartForDynamicFeature(name)};
 }
 /** Mapping evidence, NOT a global alias/dedup assertion. The legacy columns stay
  * missing in the native-only component. Their v2 context gate is unchanged. */
 export function legacyCounterpartForDynamicFeature(name){
+ const concentration=name.match(/^draft_live\.coherent_economy\.team\.(radiant|dire|diff)\.(native_nw|native_gpm|native_xpm)\.(top1_share|hhi)\.base$/);
+ const rank=name.match(/^draft_live\.coherent_economy\.economic_rank\.(native_nw|native_gpm)\.([1-5])\.(radiant|dire|diff)\.(native_value|team_share)\.base$/);
+ if(concentration||rank)return {name:concentration?`native_economy.team.${concentration[1]}.${concentration[2]}.${concentration[3]==='top1_share'?'top_share':'hhi'}`:`native_economy.economic_rank.${rank[1]}.${rank[2]}.${rank[3]}.${rank[1]}.${rank[4]==='native_value'?'value':'team_share'}`,relationship:'same current arithmetic where both producers admit the same complete identity/metric operands; not unconditional alias',policy:'explicit rich current-resource projection; preserve old schemas and different unqualified/anonymous admission boundaries'};
  const product=name.match(/^draft_live\.hero\.(\d+)\.(native_nw|native_gpm|native_xpm)\.(recentForm|heroForm|teamForm|aggression|lateTendency|playerLateTendency|heroLateTendency|playerHeroLateTendency)\.history_product$/);
  const reference=name.match(/^draft_live\.hero\.(\d+)\.(native_nw|native_gpm|native_xpm)\.(hero_minute_residual|hero_minute_standardized)$/);
  const literal=name.match(/^draft_live\.hero\.(\d+)\.(native_nw|native_gpm|native_xpm)\.observed_value$/);
@@ -101,7 +111,8 @@ function summary(xs){return xs.length===5&&xs.every(finite)?{sum:xs.reduce((a,b)
  * host-review hashes. Their semantic truth remains a reviewed host assumption;
  * absence retains unknown Roshan/respawn/Aegis semantics.
  */
-export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,matchId,decisionAt,historyProof,patch=null,rulesEvidence=null,expectedRulesSha256=null,eventsEvidence=null,expectedEventsSha256=null}={}){
+export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,matchId,decisionAt,sourceDecisionAt=decisionAt,historyProof,patch=null,rulesEvidence=null,expectedRulesSha256=null,eventsEvidence=null,expectedEventsSha256=null,progressionProof=null,progressionProofs=[]}={}){
+ if(instantNs(sourceDecisionAt)===null||instantNs(decisionAt)===null||instantNs(sourceDecisionAt)>instantNs(decisionAt))return blocked('dynamic_source_decision_horizon');
  const history=readDynamicHistoryProof(historyProof,{matchId,decisionAt});
  if(!history.accepted)return blocked(history.reason);
  const {context,relational}=history;
@@ -113,8 +124,10 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
  const rules=boundEvidence(rulesEvidence,expectedRulesSha256,'rules'),eventDocument=boundEvidence(eventsEvidence,expectedEventsSha256,'events');
  if(eventDocument!==null&&(eventDocument.contract!=='aegis.confirmed-live-objective-events.v1'||!Array.isArray(eventDocument.events)||eventDocument.events.length>2048))throw Error('dynamic_events_contract');
  const events=eventDocument?.events??[];
- let native=internal?.nativeState??null,lastReceived=internal?.lastReceivedAt??null,lastClock=internal?.lastClock??null,lastObservation=null,lastNative=null,leadHistory=structuredClone(internal?.leadHistory??[]),bindings=[];
- for(const entry of livePrefixInputs){
+ if(!Array.isArray(progressionProofs)||progressionProofs.length>2048)return blocked('dynamic_progression_proofs_bound');
+ let native=internal?.nativeState??null,lastReceived=internal?.lastReceivedAt??null,lastClock=internal?.lastClock??null,lastObservation=null,lastNative=null,lastAdmission=null,lastAdmissionProfile=internal?.admissionProfile??null,leadHistory=structuredClone(internal?.leadHistory??[]),bindings=[];
+ for(let index=0;index<livePrefixInputs.length;index++){
+  const entry=livePrefixInputs[index];
   const raw=readPinnedHistoricalJson(entry.rawInput,{maxBytes:6*1024*1024}),metadata=readPinnedHistoricalJson(entry.metadataInput,{maxBytes:256*1024}).data;
   const capture={...metadata.capture,body:Buffer.from(entry.rawInput.utf8,'utf8'),rawSha256:raw.pin.sha256,payloadRef:'journal:'+raw.pin.sha256};
   const rows=normalizeLocalCapture(capture).observations.filter(o=>o.matchId===matchId&&o.observationId===metadata.observationId);
@@ -124,39 +137,59 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
   if(context.validFrom&&instantNs(context.validFrom)>receipt)return blocked('dynamic_context_not_known_at_capture');
   const players=SIDES.flatMap(side=>o.sides[side].players);
   if(evidenceHash(identity(players))!==evidenceHash(identity(context.draftState.identity.players)))return blocked('dynamic_history_roster_mismatch');
-  // Positive clock never upgrades an omitted phase to GAME_IN_PROGRESS.
-  // A future profile-specific live attestation is a separate reviewed contract.
-  if(o.dynamic.sourceProfile!==PROFILE||clock===null||clock<0||phase?.status!=='observed'||phase?.missing!==false||phase.value!==5||o.sourceQualityReasons?.includes('outcome_marker_present'))return blocked('dynamic_live_clock_or_phase_unavailable');
+  const explicitLive=phase?.status==='observed'&&phase?.missing===false&&phase.value===5;
+  // One proof per frame in a replay prefix; a single current-frame proof is
+  // sufficient for the online one-entry call. Proofs remain opaque references.
+  const held=progressionProofs[index]??(index===livePrefixInputs.length-1?progressionProof:null);
+  const proofAt=index===livePrefixInputs.length-1?sourceDecisionAt:metadata.decisionAt;
+  if(receipt>instantNs(sourceDecisionAt)||instantNs(metadata.decisionAt)>instantNs(sourceDecisionAt))return blocked('dynamic_source_horizon_before_capture');
+  const admission=held===null?null:readSteamProgressionProof(held,{matchId,observationId:o.observationId,rawSha256:raw.pin.sha256,sourceProfile:o.dynamic.sourceProfile,identityHash:steamObservationIdentity(o).key,decisionAt:proofAt,observation:o});
+  if(held!==null&&!admission?.accepted)return blocked(admission?.reason??'owned_progression_proof_required');
+  if(o.dynamic.sourceProfile!==PROFILE||clock===null||clock<0||(!explicitLive&&!admission?.accepted)||o.sourceQualityReasons?.includes('outcome_marker_present'))return blocked('dynamic_live_clock_or_phase_unavailable');
+  const currentAdmission=admission?.admissionProfile??null;
+  if(lastAdmissionProfile!==currentAdmission){native=null;leadHistory=[];}
   // Resetting a feature window is not authority to replace an accepted current
   // game with an earlier clock. A future remake/epoch needs its own proof.
   if(lastClock!==null&&clock<lastClock)return blocked('dynamic_game_clock_regression',{previousClockSeconds:lastClock,observedClockSeconds:clock,receivedAt:o.source.capture.receivedAt,rawSha256:raw.pin.sha256});
-  const frame=advanceSteamFeatureBundle(native,o,{patch,rules,events,historicalContext:null});
+  const frame=advanceSteamFeatureBundle(native,o,{patch,rules,events,historicalContext:null,progressionProof:held,decisionAt:proofAt});
   if(frame.resetReasons.length)leadHistory=[];
   leadHistory=leadHistory.filter(p=>p.clock>=clock-630&&p.observationId!==o.observationId);
   const nativeValues=new Map(frame.vector.names.map((name,i)=>[name,frame.vector.values[i]]));
   leadHistory.push({clock,knownAt:o.source.capture.receivedAt,observationId:o.observationId,leads:Object.fromEntries(LEAD_KEYS.map(k=>[k,nativeValues.get('roshan.'+k)??null]))});
   if(leadHistory.length>2048)throw Error('dynamic_lead_history_bound');
   native=frame.state;lastReceived=o.source.capture.receivedAt;lastClock=clock;
-  lastObservation=o;lastNative=frame;
+  lastObservation=o;lastNative=frame;lastAdmission=admission;lastAdmissionProfile=currentAdmission;
   bindings.push({observationId:o.observationId,rawSha256:raw.pin.sha256,metadataSha256:entry.metadataInput.pin.sha256,receivedAt:o.source.capture.receivedAt});
  }
  if(!lastObservation)return blocked('dynamic_live_prefix_empty');
- const result=projectInteractions(lastObservation,lastNative,context,relational,leadHistory);
- const state=Object.freeze({contract:CONTRACT+'.state',matchId,lastObservationId:result.observationId,historyContentHash:context.contentHash});
+ const result=projectInteractions(lastObservation,lastNative,context,relational,leadHistory,decisionAt,{patch,rulesSha256:rulesEvidence?.pin?.sha256??null});
+ if(lastAdmission?.accepted){
+  result.contract=PROGRESSING_CONTRACT;result.admissionProfile=ADMISSION_PROFILE;
+  result.componentContracts.native=lastNative.contract;
+ }
+ const state=Object.freeze({contract:result.contract+'.state',matchId,lastObservationId:result.observationId,historyContentHash:context.contentHash});
  // Do not expose the retained state through nativeBundle.state: callers can
  // inspect/mutate that public copy without mutating the trusted next-step state.
- states.set(state,{matchId,nativeState:deepFreeze(structuredClone(native)),leadHistory:deepFreeze(structuredClone(leadHistory)),lastReceivedAt:lastReceived,lastClock,historyContentHash:context.contentHash});
- return {...result,state,sourceBindings:bindings,historyRefs:{contentHash:context.contentHash,historyCutoffAt:context.historyCutoffAt,validFrom:context.validFrom,computedAt:context.computedAt,identityRevision:context.draftState.revision,factsSha256:context.producer.bindings.facts.sha256},semanticEvidence:{rulesSha256:rulesEvidence?.pin?.sha256??null,eventsSha256:eventsEvidence?.pin?.sha256??null,trust:'optional reviewed host-pinned artifact, not independent event truth'},sourceCoherence:{sourceProfile:PROFILE,oneNativeProfile:true,rawBytesReplayed:true,explicitPhase5:true,historyAsOfOriginalCutoff:true,receiptAuthenticity:'trusted host retained journal; no provider signature verified'},zeroMinuteCohortClaimed:false,jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false,recordedPrediction:false};
+ states.set(state,{matchId,nativeState:deepFreeze(structuredClone(native)),leadHistory:deepFreeze(structuredClone(leadHistory)),lastReceivedAt:lastReceived,lastClock,admissionProfile:lastAdmission?.admissionProfile??null,historyContentHash:context.contentHash});
+ return {...result,state,decisionAt,sourceDecisionAt,reconstructedSourceHorizon:instantNs(sourceDecisionAt)<instantNs(decisionAt),admissionProvenance:lastAdmission?.provenance??null,sourceBindings:bindings,historyRefs:{contentHash:context.contentHash,historyCutoffAt:context.historyCutoffAt,validFrom:context.validFrom,computedAt:context.computedAt,identityRevision:context.draftState.revision,factsSha256:context.producer.bindings.facts.sha256},semanticEvidence:{rulesSha256:rulesEvidence?.pin?.sha256??null,eventsSha256:eventsEvidence?.pin?.sha256??null,trust:'optional reviewed host-pinned artifact, not independent event truth'},sourceCoherence:{sourceProfile:PROFILE,admissionProfile:lastAdmission?.admissionProfile??'GLG_EXPLICIT_PHASE5.v1',oneNativeProfile:true,rawBytesReplayed:true,explicitPhase5:!lastAdmission?.accepted,historyAsOfOriginalCutoff:true,receiptAuthenticity:'trusted host retained journal; no provider signature verified'},zeroMinuteCohortClaimed:false,jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false,recordedPrediction:false};
 }
 
-function projectInteractions(o,native,context,relational,leadHistory){
+function definitionSemanticsKey(native,context,relational,{patch,rulesSha256}){
+ const first=(scope,key)=>{const d=relational.profiles[scope].find(p=>p.statistics?.[key])?.statistics[key];return{key,present:d!==undefined,definition:d?.definition??key,units:d?.units??'unresolved_historical_units'};};
+ return evidenceHash({contract:CONTRACT,progressingContract:PROGRESSING_CONTRACT,addonContract:ECONOMY_CONTEXT_CONTRACT,addonFormulaVersion:ECONOMY_CONTEXT_FORMULA_VERSION,sourceProfile:native.sourceProfile,admissionProfile:native.admissionProfile??'GLG_EXPLICIT_PHASE5.v1',patch,rulesSha256,nativeComponentContracts:native.componentContracts,historyContract:context.contract,historicalProducer:{contract:context.producer.contract,minimumSupport:context.producer.minimumSupport,newLateMinimumSupport:context.producer.newLateMinimumSupport,nativeProofPolicy:context.producer.nativeProofPolicy,nativeMinuteSelection:context.producer.nativeMinuteSelection},relationalContract:relational.contract,relationalFormulaVersion:relational.formulaVersion,relationalSchemaHash:relational.schemaHash,playerDefinitions:HISTORICAL_PLAYER_PROFILE_KEYS.map(k=>first('players',k)),teamDefinitions:[...new Set([...FINISH_KEYS,'formWinFraction30d','late40Fraction90d','winMeanDurationSeconds90d'])].map(k=>first('teams',k))});
+}
+function projectInteractions(o,native,context,relational,leadHistory,decisionAt,schemaOptions){
  // Fix arithmetic order by identity, including floating-point reductions. Raw
  // array positions and economic ranks are not identity or farm roles.
  const players=SIDES.flatMap(side=>[...o.sides[side].players].sort((a,b)=>Number(a.identity.heroId)-Number(b.identity.heroId))),minute=field(o.providerGameClockSeconds)/60;
- const names=[],values=[],masks=[],definitions=[],put=(name,value,definition)=>{names.push(name);values.push(finite(value)?value:null);masks.push(finite(value)?0:1);definitions.push(descriptor(name,definition));};
+ const semanticsKey=definitionSemanticsKey(native,context,relational,schemaOptions),cached=definitionSchemas.get(semanticsKey)??null;
+ if(cached){definitionSchemas.delete(semanticsKey);definitionSchemas.set(semanticsKey,cached);reusedDefinitionSchemas++;}
+ else if(definitionSchemas.size>=MAX_DEFINITION_SCHEMAS)definitionSchemas.delete(definitionSchemas.keys().next().value);
+ const names=cached?.names??[],values=[],masks=[];let definitions=cached?.definitions??[];
+ const put=(name,value,definition)=>{const index=values.length;if(cached){if(names[index]!==name)throw Error('dynamic_definition_schema_sequence');}else{names.push(name);definitions.push(descriptor(name,typeof definition==='function'?definition():definition));}values.push(finite(value)?value:null);masks.push(finite(value)?0:1);};
  const nativeValues=new Map(native.vector.names.map((name,i)=>[name,native.vector.values[i]]));
  const nativeValue=name=>nativeValues.get('roshan.'+name)??null;
- const base=(name,value,familyId,units,inputFields,formula)=>put('draft_live.base.'+name,value,{familyId,units,inputFields,formula,inputScopes:['current_live']});
+ const base=(name,value,familyId,units,inputFields,formula)=>put('draft_live.base.'+name,value,()=>({familyId,units,inputFields,formula,inputScopes:['current_live']}));
  base('clock_seconds',nativeValue('clock_seconds'),'L01','game_seconds',['providerGameClockSeconds'],'literal coherent provider game clock from the admitted current capture');
  base('phase_code',nativeValue('phase_code'),'L01','DOTA_GameState',['dynamic.phase'],'literal observed provider phase; never inferred from clock');
  for(const side of SIDES)base(side+'_kills',nativeValue(side+'_score'),'L01','kills',['sides.'+side+'.score'],'literal same-frame provider team score');
@@ -173,32 +206,32 @@ function projectInteractions(o,native,context,relational,leadHistory){
  for(const side of SIDES)for(const k of CONTEXT_KEYS)profileBySide[side+'|'+k]=summary(players.filter(p=>p.identity.side===side).map(p=>historiesByHero.get(Number(p.identity.heroId))[k]));
  for(const heroId of HERO_IDS){
   const p=players.find(p=>Number(p.identity.heroId)===heroId),sign=p?.identity.side==='radiant'?1:-1,h=p?historiesByHero.get(heroId):null;
-  for(const [metric,[fieldName,units,familyId]]of Object.entries(METRICS))put(`draft_live.hero.${heroId}.${metric}.observed_value`,p?product(field(p[fieldName]),sign):0,{familyId,formula:'side_sign * literal native metric for raw-confirmed hero; public player account not required; no field substitution',units,inputScopes:['current_live','current_draft'],inputFields:[fieldName]});
+  for(const [metric,[fieldName,units,familyId]]of Object.entries(METRICS))put(`draft_live.hero.${heroId}.${metric}.observed_value`,p?product(field(p[fieldName]),sign):0,()=>({familyId,formula:'side_sign * literal native metric for raw-confirmed hero; public player account not required; no field substitution',units,inputScopes:['current_live','current_draft'],inputFields:[fieldName]}));
   for(const [metric,[fieldName,units,familyId]]of Object.entries(METRICS))for(const key of CONTEXT_KEYS)for(const term of ['history_product','history_minute_product']){
    const v=p?product(field(p[fieldName]),h[key],term==='history_minute_product'?minute:1,sign):0;
-   put(`draft_live.hero.${heroId}.${metric}.${key}.${term}`,v,{familyId:'L14',formula:'side_sign * native_metric * qualified_frozen_history'+(term==='history_minute_product'?' * (clock_seconds / 60)':''),units:units+' * '+(CONTEXT_UNITS[key]??'fraction')+(term==='history_minute_product'?' * minute':''),inputScopes:['current_live','current_draft','prior_maps'],inputFields:[fieldName,key,'providerGameClockSeconds'],historyDefinitions:[key]});
+   put(`draft_live.hero.${heroId}.${metric}.${key}.${term}`,v,()=>({familyId:'L14',formula:'side_sign * native_metric * qualified_frozen_history'+(term==='history_minute_product'?' * (clock_seconds / 60)':''),units:units+' * '+(CONTEXT_UNITS[key]??'fraction')+(term==='history_minute_product'?' * minute':''),inputScopes:['current_live','current_draft','prior_maps'],inputFields:[fieldName,key,'providerGameClockSeconds'],historyDefinitions:[key]}));
   }
-  for(const [key,[fieldName,units,familyId]]of Object.entries(PLAYER_DYNAMICS))put(`draft_live.hero.${heroId}.${key}`,p?product(field(p.dynamic?.[fieldName]),sign):0,{familyId,formula:'side_sign * observed provider field; no state interpretation',units,inputScopes:['current_live','current_draft'],inputFields:['players.dynamic.'+fieldName]});
+  for(const [key,[fieldName,units,familyId]]of Object.entries(PLAYER_DYNAMICS))put(`draft_live.hero.${heroId}.${key}`,p?product(field(p.dynamic?.[fieldName]),sign):0,()=>({familyId,formula:'side_sign * observed provider field; no state interpretation',units,inputScopes:['current_live','current_draft'],inputFields:['players.dynamic.'+fieldName]}));
   const rawBool=p?.dynamic?.hasBuyback;
-  put(`draft_live.hero.${heroId}.has_buyback_raw`,p?(rawBool?.missing===false&&typeof rawBool.value==='boolean'?Number(rawBool.value):null):0,{familyId:'L15',formula:'literal observed has_buyback boolean mapped false=0,true=1; no cooldown/gold inference and no semantic availability claim',units:'provider_boolean',inputScopes:['current_live','current_draft'],inputFields:['players.dynamic.hasBuyback']});
-  put(`draft_live.hero.${heroId}.net_gold_raw`,p?product(field(p.netGoldRaw),sign):0,{familyId:'L02',formula:'side_sign * literal provider net_gold; semantics unresolved; not earned gold or native NW',units:'provider_net_gold_raw',inputScopes:['current_live','current_draft'],inputFields:['players.netGoldRaw']});
-  for(let slot=0;slot<6;slot++)put(`draft_live.hero.${heroId}.item${slot}_raw_id`,p?field(p.observedItemFields?.[slot]):0,{familyId:'L13',formula:'literal provider item'+slot+' ID; hero identity or nonapplicable structural zero; no active/backpack/empty inference',units:'categorical_provider_item_id',inputScopes:['current_live','current_draft'],inputFields:['observedItemFields['+slot+']']});
+  put(`draft_live.hero.${heroId}.has_buyback_raw`,p?(rawBool?.missing===false&&typeof rawBool.value==='boolean'?Number(rawBool.value):null):0,()=>({familyId:'L15',formula:'literal observed has_buyback boolean mapped false=0,true=1; no cooldown/gold inference and no semantic availability claim',units:'provider_boolean',inputScopes:['current_live','current_draft'],inputFields:['players.dynamic.hasBuyback']}));
+  put(`draft_live.hero.${heroId}.net_gold_raw`,p?product(field(p.netGoldRaw),sign):0,()=>({familyId:'L02',formula:'side_sign * literal provider net_gold; semantics unresolved; not earned gold or native NW',units:'provider_net_gold_raw',inputScopes:['current_live','current_draft'],inputFields:['players.netGoldRaw']}));
+  for(let slot=0;slot<6;slot++)put(`draft_live.hero.${heroId}.item${slot}_raw_id`,p?field(p.observedItemFields?.[slot]):0,()=>({familyId:'L13',formula:'literal provider item'+slot+' ID; hero identity or nonapplicable structural zero; no active/backpack/empty inference',units:'categorical_provider_item_id',inputScopes:['current_live','current_draft'],inputFields:['observedItemFields['+slot+']']}));
   for(const [metric,[fieldName,units]]of Object.entries(METRICS))for(const key of ['hero_minute_residual','hero_minute_standardized']){
    const references=context.featurePayload.heroMinuteReferences.filter(r=>Number(r.heroId)===heroId&&r.metric===metric&&Number.isSafeInteger(r.minute)&&r.minute<=minute&&minute-r.minute<=5&&finite(r.mean)&&finite(r.scale)&&r.scale>0&&Number.isSafeInteger(r.supportMaps)&&r.supportMaps>=1).sort((a,b)=>b.minute-a.minute);
    const ref=references.length&&references.filter(x=>x.minute===references[0].minute).length===1?references[0]:null,v=p?field(p[fieldName]):null;
-   put(`draft_live.hero.${heroId}.${metric}.${key}`,p?(v!==null&&ref?sign*(v-ref.mean)/(key==='hero_minute_standardized'?ref.scale:1):null):0,{familyId:'L06',formula:'side_sign * (native_metric - latest qualified prior hero/minute mean)'+(key==='hero_minute_standardized'?' / prior sample scale':''),units:key==='hero_minute_standardized'?'z_score':units,inputScopes:['current_live','current_draft','prior_maps'],inputFields:[fieldName,'heroMinuteReferences','providerGameClockSeconds']});
+   put(`draft_live.hero.${heroId}.${metric}.${key}`,p?(v!==null&&ref?sign*(v-ref.mean)/(key==='hero_minute_standardized'?ref.scale:1):null):0,()=>({familyId:'L06',formula:'side_sign * (native_metric - latest qualified prior hero/minute mean)'+(key==='hero_minute_standardized'?' / prior sample scale':''),units:key==='hero_minute_standardized'?'z_score':units,inputScopes:['current_live','current_draft','prior_maps'],inputFields:[fieldName,'heroMinuteReferences','providerGameClockSeconds']}));
   }
  }
  for(const side of [...SIDES,'diff'])for(const [metric,[fieldName,units]]of Object.entries(METRICS))for(const key of CONTEXT_KEYS)for(const term of ['native_history_sum','native_weighted_history_mean','native_opponent_history_product_sum']){
   const calc=s=>{const ps=players.filter(p=>p.identity.side===s),opposite=s==='radiant'?'dire':'radiant',vs=ps.map(p=>field(p[fieldName])),hs=ps.map(p=>historiesByHero.get(Number(p.identity.heroId))[key]);if(!vs.every(finite))return null;if(term==='native_opponent_history_product_sum'){const opp=profileBySide[opposite+'|'+key];return opp?vs.reduce((a,b)=>a+b,0)*opp.mean:null;}if(!hs.every(finite))return null;const sum=vs.reduce((a,b,i)=>a+b*hs[i],0);return term==='native_history_sum'?sum:vs.reduce((a,b)=>a+b,0)>0?sum/vs.reduce((a,b)=>a+b,0):null;};
   const v=side==='diff'?(finite(calc('radiant'))&&finite(calc('dire'))?calc('radiant')-calc('dire'):null):calc(side);
-  put(`draft_live.team.${side}.${metric}.${key}.${term}`,v,{familyId:'L14',formula:term+' over five same-frame players; all required history present; diff=Radiant-Dire; descriptive interaction, not fitted strength',units:term==='native_weighted_history_mean'?(CONTEXT_UNITS[key]??'fraction'):units+' * '+(CONTEXT_UNITS[key]??'fraction'),inputScopes:['current_live','prior_maps'],inputFields:[fieldName,key],historyDefinitions:[key]});
+  put(`draft_live.team.${side}.${metric}.${key}.${term}`,v,()=>({familyId:'L14',formula:term+' over five same-frame players; all required history present; diff=Radiant-Dire; descriptive interaction, not fitted strength',units:term==='native_weighted_history_mean'?(CONTEXT_UNITS[key]??'fraction'):units+' * '+(CONTEXT_UNITS[key]??'fraction'),inputScopes:['current_live','prior_maps'],inputFields:[fieldName,key],historyDefinitions:[key]}));
  }
  for(const basis of ['native_nw','native_gpm'])for(let rank=1;rank<=5;rank++)for(const side of SIDES){
   const ps=players.filter(p=>p.identity.side===side),fieldName=METRICS[basis][0],ranked=ps.every(p=>field(p[fieldName])!==null)?[...ps].sort((a,b)=>field(b[fieldName])-field(a[fieldName])||Number(a.identity.heroId)-Number(b.identity.heroId)):null,p=ranked?.[rank-1];
-  for(const key of HISTORICAL_PLAYER_PROFILE_KEYS){const prof=p?relByHero.get(Number(p.identity.heroId)):null,h=historyValue(prof,key),d=profileDefinition(key);for(const [metric,[nativeField,units]]of Object.entries(METRICS))put(`draft_live.economic_rank.${basis}.${rank}.${side}.${metric}.${key}.product`,p?product(field(p[nativeField]),h):null,{familyId:'L14',formula:'native_metric * qualified player history at native economic rank; ties by hero ID; rank is not role',units:units+' * '+(d?.units??'unresolved_historical_units'),inputScopes:['current_live','prior_maps','current_draft'],inputFields:[nativeField,key],historyDefinitions:[d?.definition??key]});}
+  for(const key of HISTORICAL_PLAYER_PROFILE_KEYS){const prof=p?relByHero.get(Number(p.identity.heroId)):null,h=historyValue(prof,key),d=profileDefinition(key);for(const [metric,[nativeField,units]]of Object.entries(METRICS))put(`draft_live.economic_rank.${basis}.${rank}.${side}.${metric}.${key}.product`,p?product(field(p[nativeField]),h):null,()=>({familyId:'L14',formula:'native_metric * qualified player history at native economic rank; ties by hero ID; rank is not role',units:units+' * '+(d?.units??'unresolved_historical_units'),inputScopes:['current_live','prior_maps','current_draft'],inputFields:[nativeField,key],historyDefinitions:[d?.definition??key]}));}
  }
- for(const side of SIDES){const team=relational.profiles.teams.find(p=>p.side===side&&p.teamId===o.sides[side].teamId);for(const rk of ROSHAN_KEYS)for(const lead of LEAD_KEYS)for(const finish of FINISH_KEYS){const r=native.vector.values[native.vector.names.indexOf('roshan.'+rk)],l=native.vector.values[native.vector.names.indexOf('roshan.'+lead)],h=historyValue(team,finish),d=teamDefinition(finish);put(`draft_live.roshan.${side}.${rk}.${lead}.${finish}`,product(r,l,h),{familyId:'R06',formula:'existing causal Roshan feature * coherent native Radiant-Dire lead * qualified same-side frozen historical closing-style statistic; no invented timer semantics',units:(ROSHAN_UNITS[rk]??'seconds')+' * '+LEAD_UNITS[lead]+' * '+(d?.units??'unresolved_historical_units'),inputScopes:['current_live','prior_maps'],inputFields:['roshan.'+rk,'roshan.'+lead,finish],historyDefinitions:[d?.definition??finish]});}}
+ for(const side of SIDES){const team=relational.profiles.teams.find(p=>p.side===side&&p.teamId===o.sides[side].teamId);for(const rk of ROSHAN_KEYS)for(const lead of LEAD_KEYS)for(const finish of FINISH_KEYS){const r=native.vector.values[native.vector.names.indexOf('roshan.'+rk)],l=native.vector.values[native.vector.names.indexOf('roshan.'+lead)],h=historyValue(team,finish),d=teamDefinition(finish);put(`draft_live.roshan.${side}.${rk}.${lead}.${finish}`,product(r,l,h),()=>({familyId:'R06',formula:'existing causal Roshan feature * coherent native Radiant-Dire lead * qualified same-side frozen historical closing-style statistic; no invented timer semantics',units:(ROSHAN_UNITS[rk]??'seconds')+' * '+LEAD_UNITS[lead]+' * '+(d?.units??'unresolved_historical_units'),inputScopes:['current_live','prior_maps'],inputFields:['roshan.'+rk,'roshan.'+lead,finish],historyDefinitions:[d?.definition??finish]}));}}
  const clock=field(o.providerGameClockSeconds);
  for(const lead of LEAD_KEYS)for(const window of WINDOWS){
   // Same game-clock values can have distinct causal receipts. The latest
@@ -209,12 +242,20 @@ function projectInteractions(o,native,context,relational,leadHistory){
   if(valid){changes=0;let sign=0;for(const p of rows){const current=Math.sign(p.leads[lead]);if(current!==0){if(sign!==0&&current!==sign){changes++;lastChange=p.clock;}sign=current;}}}
   const stats={observed_span_seconds:rows.length?clock-rows[0].clock:null,observations:rows.length||null,min:valid?Math.min(...vs):null,max:valid?Math.max(...vs):null,recovery_from_observed_min:valid?vs.at(-1)-Math.min(...vs):null,retreat_from_observed_max:valid?Math.max(...vs)-vs.at(-1):null,observed_sign_changes:changes,seconds_since_observed_sign_change:lastChange===null?null:clock-lastChange,change_per_played_minute:valid?(vs.at(-1)-vs[0])/((clock-rows[0].clock)/60):null};
   for(const [stat,v]of Object.entries(stats)){
-   const base=`draft_live.trajectory.${lead}.past_${window}s.${stat}`,definition={familyId:'L09',formula:stat+' across retained same-map/profile/identity frames from latest receipt-order anchor <= current-clock-window, max30s anchor gap; exclude earlier equal-clock receipts; complete finite lead required; observed transitions are not unseen event times',units:stat.includes('seconds')?'seconds':stat==='observations'||stat==='observed_sign_changes'?'count':stat==='change_per_played_minute'?LEAD_UNITS[lead]+'_per_minute':LEAD_UNITS[lead],inputScopes:['current_live'],inputFields:[lead,'retained causal native prefix','providerGameClockSeconds']};
+   const base=`draft_live.trajectory.${lead}.past_${window}s.${stat}`,definition=()=>({familyId:'L09',formula:stat+' across retained same-map/profile/identity frames from latest receipt-order anchor <= current-clock-window, max30s anchor gap; exclude earlier equal-clock receipts; complete finite lead required; observed transitions are not unseen event times',units:stat.includes('seconds')?'seconds':stat==='observations'||stat==='observed_sign_changes'?'count':stat==='change_per_played_minute'?LEAD_UNITS[lead]+'_per_minute':LEAD_UNITS[lead],inputScopes:['current_live'],inputFields:[lead,'retained causal native prefix','providerGameClockSeconds']});
    put(base,v,definition);
-   for(const side of SIDES){const team=relational.profiles.teams.find(p=>p.side===side&&p.teamId===o.sides[side].teamId);for(const historyKey of ['formWinFraction30d','late40Fraction90d','winMeanDurationSeconds90d']){const d=teamDefinition(historyKey);put(base+'.'+side+'.'+historyKey+'.product',product(v,historyValue(team,historyKey)),{...definition,familyId:'L14',formula:definition.formula+' * qualified frozen '+historyKey,units:definition.units+' * '+(d?.units??'unresolved_historical_units'),inputScopes:['current_live','prior_maps'],historyDefinitions:[d?.definition??historyKey]});}}
+   for(const side of SIDES){const team=relational.profiles.teams.find(p=>p.side===side&&p.teamId===o.sides[side].teamId);for(const historyKey of ['formWinFraction30d','late40Fraction90d','winMeanDurationSeconds90d']){const d=teamDefinition(historyKey);put(base+'.'+side+'.'+historyKey+'.product',product(v,historyValue(team,historyKey)),()=>({...definition(),familyId:'L14',formula:definition().formula+' * qualified frozen '+historyKey,units:definition().units+' * '+(d?.units??'unresolved_historical_units'),inputScopes:['current_live','prior_maps'],historyDefinitions:[d?.definition??historyKey]}));}}
   }
  }
- if(names.length!==new Set(names).size||names.length!==values.length||definitions.length!==names.length)throw Error('dynamic_interaction_schema');
- const semanticSchemaHash=evidenceHash({contract:CONTRACT,nativeComponentContracts:native.componentContracts,historicalProducer:{contract:context.producer.contract,minimumSupport:context.producer.minimumSupport,newLateMinimumSupport:context.producer.newLateMinimumSupport,nativeProofPolicy:context.producer.nativeProofPolicy,nativeMinuteSelection:context.producer.nativeMinuteSelection},relationalSchemaHash:relational.schemaHash,definitions});
- return {contract:CONTRACT,status:'diagnostic_produced',matchId:o.matchId,observationId:o.observationId,sourceProfile:PROFILE,knownAt:o.source.capture.receivedAt,eventClockSeconds:field(o.providerGameClockSeconds),nativeBundle:native,vector:{names,values,masks,definitions,featureCount:names.length,semanticSchemaHash},componentContracts:{native:BUNDLE_CONTRACT,history:context.contract,relational:relational.contract},families:[...new Set(definitions.map(d=>d.familyId))].map(familyId=>({familyId,status:'implemented_partial_diagnostic',fullFamilyComplete:false})),historyReuse:{legacyV2GateChanged:false,v3DisguisedAsV2:false,nativeStaticContextSupplied:false,sourceFieldSubstitution:false,handmadeStrengthCoefficient:false},noNetWorthDividedByMinuteGpm:true};
+ const economyContext=produceCoherentEconomyContextFeatures({observation:o,historyContext:context,relationalContext:relational,nativeBundle:native,decisionAt});
+ if(economyContext.status!=='diagnostic_produced')throw Error('dynamic_economy_context:'+economyContext.reason);
+ for(const feature of economyContext.features)put(feature.name,feature.value,feature.definition);
+ if((!cached&&names.length!==new Set(names).size)||names.length!==values.length||definitions.length!==names.length)throw Error('dynamic_interaction_schema');
+ let compiled=cached;
+ if(!compiled){
+  let semanticSchemaHash=evidenceHash({contract:CONTRACT,nativeComponentContracts:native.componentContracts,historicalProducer:{contract:context.producer.contract,minimumSupport:context.producer.minimumSupport,newLateMinimumSupport:context.producer.newLateMinimumSupport,nativeProofPolicy:context.producer.nativeProofPolicy,nativeMinuteSelection:context.producer.nativeMinuteSelection},relationalSchemaHash:relational.schemaHash,definitions});
+  if(native.admissionProfile===ADMISSION_PROFILE){definitions=definitions.map(d=>({...d,id:PROGRESSING_CONTRACT+':'+d.name,version:'2',admissionProfile:ADMISSION_PROFILE}));semanticSchemaHash=evidenceHash({contract:PROGRESSING_CONTRACT,admissionProfile:ADMISSION_PROFILE,explicitSchemaHash:semanticSchemaHash,definitions});}
+  compiled=deepFreeze({names,definitions,semanticSchemaHash,families:[...new Set(definitions.map(d=>d.familyId))].map(familyId=>({familyId,status:'implemented_partial_diagnostic',fullFamilyComplete:false}))});definitionSchemas.set(semanticsKey,compiled);compiledDefinitionSchemas++;
+ }
+ return {contract:CONTRACT,status:'diagnostic_produced',matchId:o.matchId,observationId:o.observationId,sourceProfile:PROFILE,knownAt:o.source.capture.receivedAt,eventClockSeconds:field(o.providerGameClockSeconds),nativeBundle:native,economyContextAudit:economyContext.audit,definitionSchemaPool:{semanticsKey,reused:cached!==null,maximumSemantics:MAX_DEFINITION_SCHEMAS},vector:{names:compiled.names,values,masks,definitions:compiled.definitions,featureCount:compiled.names.length,semanticSchemaHash:compiled.semanticSchemaHash},componentContracts:{native:BUNDLE_CONTRACT,history:context.contract,relational:relational.contract,coherentEconomyContext:ECONOMY_CONTEXT_CONTRACT},families:compiled.families,historyReuse:{legacyV2GateChanged:false,v3DisguisedAsV2:false,nativeStaticContextSupplied:false,sourceFieldSubstitution:false,handmadeStrengthCoefficient:false},noNetWorthDividedByMinuteGpm:true};
 }

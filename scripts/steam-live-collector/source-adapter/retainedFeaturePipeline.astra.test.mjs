@@ -11,7 +11,7 @@ function fixture(){
  const a=draftArgs({accounts:true}),rows=JSON.parse(a.factsInput.utf8).maps.map(m=>({...m,players:m.players.map((p,i)=>({account_id:Number(p.accountId),hero_id:Number(p.heroId),player_slot:p.side==='radiant'?i%5:128+i%5,historical_performance:{}}))}));
  const objects=new Map(),revisions=new Map();let queries=0,writes=0;
  const [index,familyDocument,targetDocument]=syntheticRegistry();
- const producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:Object.fromEntries(['history','live','series'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});
+ const producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});
  const pipeline=createRetainedFeaturePipeline({producer,now:()=>NOW,historyProfileSha256:'b'.repeat(64),
   db:{async query(sql){queries++;return {rows:structuredClone(sql.includes('FROM pro_matches')?rows:[])};}},
   sourceStore:{async put(e){objects.set(e.sourceSnapshotHash,e);return {reference:e.reference,sourceSnapshotHash:e.sourceSnapshotHash};},async load(r){return objects.get(r.sha256);}},

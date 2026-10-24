@@ -1,0 +1,34 @@
+{
+  "contract": "aegis.portable-feature-registry-bundle.v1",
+  "version": "2026-10-24.r1",
+  "registrySha256": "bc54fbbebe3461ae3e25a96b075e8c434a9b073c5f619a18ded519c0d1e6cf31",
+  "artifacts": [
+    {
+      "path": "CATALOGUE-INDEX.json",
+      "bytes": 18082,
+      "sha256": "e41aa7ece13383afd5a9d49c4ee77f86364d922f17fde989cf1d8e1224c8d903"
+    },
+    {
+      "path": "FAMILY-REGISTRY.json",
+      "bytes": 173887,
+      "sha256": "8c386dce2cd385d40ed10c4797453888931de925a4fa12d1eff61912b010b8cc"
+    },
+    {
+      "path": "TWELVE-TARGET-MATRIX.json",
+      "bytes": 18014,
+      "sha256": "879de5c8d138426d42f78208b7a5eafa92a6e87b991265ba80935b5337e7594b"
+    },
+    {
+      "path": "SEMANTIC-DISPOSITION-LEDGER.json",
+      "bytes": 290119,
+      "sha256": "6c6c5f625828ea87244d1558df670e80801befd9820317c94747b771db058eb3"
+    },
+    {
+      "path": "PROVENANCE.json",
+      "bytes": 919,
+      "sha256": "6a8c3482aea2c64446c28d45a026019aea9f1cda8d8e5f6fb2e95764c35f63ed"
+    }
+  ],
+  "scopePolicySha256": "4b53656e98904b6fa2f210c97ec93b04f6a0b5a79ca639a8b7df99ddbeef9970",
+  "fullFeatureGateComplete": false
+}

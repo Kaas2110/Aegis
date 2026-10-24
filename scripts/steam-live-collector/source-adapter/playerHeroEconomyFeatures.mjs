@@ -3,7 +3,9 @@ import {createHash} from 'node:crypto';
 import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
+import {readSteamProgressionProof} from './steamProgressionAdmission.mjs';
 export const CONTRACT='aegis.player-hero-native-economy-features.v3';
+export const PROGRESSING_ECONOMY_CONTRACT='aegis.player-hero-native-economy-features.v4';
 export const HERO_IDS=Object.freeze(Array.from({length:250},(_,i)=>i+1));
 const METRICS={native_nw:'netWorth',native_gpm:'goldPerMinute',native_xpm:'experiencePerMinute'};
 const CONTEXTS=['recentForm','heroForm','teamForm','aggression','lateTendency','playerLateTendency','heroLateTendency','playerHeroLateTendency'];
@@ -17,7 +19,7 @@ const proof=x=>typeof x==='string'&&x.length>0&&x.length<=512;
 const digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const key=p=>p.identity.side+'|'+String(p.identity.teamId)+'|'+String(p.identity.accountId)+'|'+String(p.identity.heroId);
 function at(s){try{return instantNs(s);}catch{return null;}}
-function snapshot(o){
+function snapshot(o,{allowAnonymous=false}={}){
  const time=at(o?.source?.capture?.receivedAt),clock=value(o?.providerGameClockSeconds),profile=o?.dynamic?.sourceProfile;
  if(typeof o?.matchId!=='string'||!/^[1-9]\d{0,19}$/.test(o.matchId)||profile!=='steam.GetLiveLeagueGames.v1.scoreboard'||o?.source?.capture?.endpoint!=='GetLiveLeagueGames/v1'||time===null||clock===null||clock<0||!digest(o?.source?.capture?.rawSha256)||!digest(o?.observationId))return null;
  if(o.sourceQualityReasons?.includes('outcome_marker_present'))return null;
@@ -26,9 +28,10 @@ function snapshot(o){
  if(!absentPhase&&(phase?.missing!==false||phase.status==='invalid'||phase.value!==5))return null;
  if(SIDES.some(side=>!Array.isArray(o.sides?.[side]?.players)||o.sides[side].players.some(p=>p?.identity?.side!==side)))return null;
  const players=SIDES.flatMap(side=>o.sides[side].players);
- if(players.length!==10||SIDES.some(s=>players.filter(p=>p.identity.side===s).length!==5)||players.some(p=>!(typeof p.identity.accountId==='string'&&/^[1-9]\d{0,9}$/.test(p.identity.accountId)&&BigInt(p.identity.accountId)<4294967295n)||!Number.isSafeInteger(Number(p.identity.heroId))||Number(p.identity.heroId)<1)||new Set(players.map(p=>String(p.identity.accountId))).size!==10||new Set(players.map(p=>Number(p.identity.heroId))).size!==10)return null;
+ const known=players.filter(p=>p.identity.accountId!==null);
+ if(players.length!==10||SIDES.some(s=>players.filter(p=>p.identity.side===s).length!==5)||players.some(p=>!(allowAnonymous&&p.identity.accountId===null)&&!(typeof p.identity.accountId==='string'&&/^[1-9]\d{0,9}$/.test(p.identity.accountId)&&BigInt(p.identity.accountId)<4294967295n)||!Number.isSafeInteger(Number(p.identity.heroId))||Number(p.identity.heroId)<1)||new Set(known.map(p=>String(p.identity.accountId))).size!==known.length||new Set(players.map(p=>Number(p.identity.heroId))).size!==10)return null;
  const identity=steamObservationIdentity(o);if(identity.key===null)return null;
- return{o,time,clock,profile,players,identityKey:identity.key,byKey:new Map(players.map(p=>[key(p),p]))};
+ return{o,time,clock,profile,players,allowAnonymous,identityKey:identity.key,byKey:new Map(players.map(p=>[key(p),p]))};
 }
 function contextFor(c,s){
  if(!c)return{valid:false,reason:'static_context_missing'};
@@ -56,7 +59,7 @@ function causalEconomyPrefix(history,s){
   .sort((a,b)=>a.time<b.time?-1:a.time>b.time?1:String(a.o.observationId).localeCompare(String(b.o.observationId)));
  let accepted=[],lastClock=null;
  for(const {o}of ordered){
-  const x=snapshot(o);
+  const x=snapshot(o,{allowAnonymous:s.allowAnonymous});
   // A changed/invalid intervening roster is a barrier, even if identity later
   // returns to an earlier value. Filtering out only the conflicting row leaks a
   // pre-reset trajectory into an offline vector that online replay has cleared.
@@ -80,9 +83,11 @@ export function featureNames(){
  * Context scores are independent features, never hand-combined into a strength score.
  * Unknown roles remain unknown; sorted wealth slots are never interpreted as positions.
  */
-export function projectPlayerHeroEconomy(observation,{staticContext=null,history=[]}={}){
+export function projectPlayerHeroEconomy(observation,{staticContext=null,history=[],progressionProof=null,decisionAt=observation?.source?.capture?.receivedAt}={}){
  if(!Array.isArray(history)||history.length>2048)throw Error('bounded_history_required');
- const s=snapshot(observation);if(!s)throw Error('complete_coherent_economy_snapshot_required');
+ let admission=null;
+ if(progressionProof!==null){admission=readSteamProgressionProof(progressionProof,{matchId:observation?.matchId,observationId:observation?.observationId,rawSha256:observation?.source?.capture?.rawSha256,sourceProfile:observation?.dynamic?.sourceProfile,identityHash:steamObservationIdentity(observation).key,decisionAt,observation});if(!admission.accepted)throw Error(admission.reason);}
+ const s=snapshot(observation,{allowAnonymous:admission?.accepted===true});if(!s)throw Error('complete_coherent_economy_snapshot_required');
  if(s.players.some(p=>!HERO_IDS.includes(Number(p.identity.heroId))))throw Error('hero_dictionary_revision_required');
  const c=contextFor(staticContext,s),minute=s.clock/60,out={},put=(name,v)=>{out[name]=finite(v)?v:null;out[name+'__missing']=finite(v)?0:1;},teams={},terms=new Map(),roles=new Map();
  const past=causalEconomyPrefix(history,s);
@@ -105,5 +110,5 @@ export function projectPlayerHeroEconomy(observation,{staticContext=null,history
  for(const basis of ['native_nw','native_gpm'])for(let rank=1;rank<=5;rank++)for(const metric of Object.keys(METRICS))for(const term of TERMS){const values={};for(const side of SIDES){const p=ranking[basis+'|'+side]?.[rank-1],v=p?terms.get(key(p))[metric][term]:null;values[side]=v;put(`native_economy.economic_rank.${basis}.${rank}.${side}.${metric}.${term}`,v);}put(`native_economy.economic_rank.${basis}.${rank}.diff.${metric}.${term}`,finite(values.radiant)&&finite(values.dire)?values.radiant-values.dire:null);}
  const names=featureNames(),values=names.map(n=>out[n]);if(values.some(v=>v===undefined))throw Error('feature_schema_incomplete');
  const activeValueNames=names.filter(n=>!n.endsWith('__missing')&&!/\.hero\.(\d+)\./.test(n)||!n.endsWith('__missing')&&s.players.some(p=>n.startsWith('native_economy.hero.'+p.identity.heroId+'.')));
- return{contract:CONTRACT,matchId:s.o.matchId,observationId:s.o.observationId,sourceProfile:s.profile,rawSha256:s.o.source.capture.rawSha256,knownAt:s.o.source.capture.receivedAt,eventClockSeconds:s.clock,featureNames:names,values,featureCount:names.length,staticContextStatus:c.reason??'validated_asof_metadata',staticContextBasis:c.valid?c.basis:null,staticContextHash:c.valid?staticContext.contentHash:null,verifiedRoleCount:out['native_economy.roles_verified_count'],validPastSnapshots:past.length,activeValueColumns:activeValueNames.length,knownActiveValueColumns:activeValueNames.filter(n=>out[n]!==null).length,heroStructuralZeroColumnsExcludedFromCoverage:true,networthDividedByMinuteIsNotGpm:true,sourceFieldSubstitution:false,jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false};
+ return{contract:admission?PROGRESSING_ECONOMY_CONTRACT:CONTRACT,admissionProfile:admission?.admissionProfile??null,matchId:s.o.matchId,observationId:s.o.observationId,sourceProfile:s.profile,rawSha256:s.o.source.capture.rawSha256,knownAt:s.o.source.capture.receivedAt,eventClockSeconds:s.clock,featureNames:names,values,featureCount:names.length,staticContextStatus:c.reason??'validated_asof_metadata',staticContextBasis:c.valid?c.basis:null,staticContextHash:c.valid?staticContext.contentHash:null,verifiedRoleCount:out['native_economy.roles_verified_count'],validPastSnapshots:past.length,activeValueColumns:activeValueNames.length,knownActiveValueColumns:activeValueNames.filter(n=>out[n]!==null).length,heroStructuralZeroColumnsExcludedFromCoverage:true,networthDividedByMinuteIsNotGpm:true,sourceFieldSubstitution:false,jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false};
 }
