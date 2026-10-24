@@ -1,0 +1,160 @@
+AEGIS — SOL FEATURE INTEGRATION R3, FOR ASTRA REVIEW
+24 October 2026. Source/test/documentation block; no training or activation.
+
+DECISION AND STATUS
+
+The seven owner-requested implementation areas now have concrete diagnostic
+implementations and explicit remaining boundaries. This is not acceptance of
+all79 feature families, prospective data coverage, predictive quality, or release.
+Keep every inferenceVector null and serving/training flags false. Astra must
+review causality, source coverage, resource limits and remaining family semantics
+before any fit/HPO/calibration/model-quality experiment is authorized.
+
+1. PORTABLE REGISTRY AND SEMANTIC ACCOUNTING
+
+scripts/feature-registry/canonical-registry.mjs loads version2026-10-24.r1 via
+import.meta.url. Source-safe artifacts retain79 families,14 legacy schemas and12
+targets. The465359 old column occurrences have explicit disposition ranges and
+name/source pins; these are inventory accounting, not465359 verified executable
+aliases. Source/formula conflicts, missing inputs and learned-state needs remain
+visible. Current producer schemas include the registry, scoped formula inventory
+and the central target/scope policy. Current source outranks an indexed snapshot.
+
+2. APPEND-ONLY HISTORY AND ONE IMMUTABLE CUTOFF
+
+retainedOpenDotaFacts derives field versions from actual retained selected/full
+response bytes and original receipt/persisted times. appendOnlyHistoryFactStore
+publishes immutable CAS versions; every read re-verifies bytes and derivation.
+The as-of selector excludes the current map, future outcomes, future field values
+and identity contradictions. Arrival order does not repair an unavailable past.
+Later account disclosure creates a new validFrom revision while preserving t0.
+
+The retained source export qualifies only its provided local corpus. Its
+retained_receipt_reconstruction basis is distinct from recorded predictions and
+mutable database reconstruction. It never claims global professional/Immortal
+population completeness. Existing mutable parsed rows stay reconstruction-only.
+Actual source envelopes and the supplied version corpus are capped at64MiB.
+Whole-archive streaming/reference materialization is still a separate design
+and acceptance task; no silent truncation or production migration occurred.
+
+3. STEAM SOURCE ADMISSION WITHOUT A FABRICATED PHASE
+
+GLG_PROGRESSING_OBSERVED.v1 is separate from explicit-phase5 admission. The
+normalizer keeps missing game_state missing. Actual committed raw receipts mint
+private proof only after two consecutive coherent positive-clock captures, a
+gap<=180s and deltaClock<=deltaReceipt+30s. Equal clocks do not renew the180s
+last-progress lease. Identity/profile changes, failures, missing maps, terminal
+markers, STOP and restart are explicit continuity boundaries. A serialized token
+or hash-shaped flag grants no admission.
+
+Retained replay uses an opaque original-receipt-bound source horizon; actual
+history materialization, input cutoff, calculation start/end and commit time stay
+current. It never makes an old frame fresh. Restore replays original bytes and
+compares exact source snapshot, stable collector receipt, schema, values/masks,
+target and observation bindings to the durable trace. It rewrites no old trace.
+Pending append intent precedes CAS append; restart verifies committed evidence.
+Old/pending reconstruction finishes before the first-new-capture restart barrier.
+
+4. BROAD HISTORY, DRAFT AND CURRENT-RESOURCE FEATURES
+
+draftIdentityFeatures adds1500 nominal hero/side/account-known/team-known columns
+over the existing1..250 adapter coordinates. Unpicked known heroes are structural
+zero; incomplete or unknown current fields are not zero. Coordinates are not a
+claim that250 heroes exist, a fighting-strength ranking or an ordinal mechanic.
+
+Existing broad player/hero/team/player-hero/pair/triple/opponent performance and
+finishing-style algebra remains available under its causal support policies.
+The new coherent economy helper adds38790 descriptive interactions: concentration,
+economic-rank comparisons, selected hero versus the opposing resource distribution,
+minute and frozen form, plus qualified Roshan/Aegis/finishing-style combinations.
+The rich component has90243 columns in the measured synthetic profile; the common
+LIVE_MAP_WIN projection has141131 including history/draft/series components.
+Counts describe generated coordinates, not observed field coverage or fitted models.
+
+GPM is never substituted with NW/minute; economic rank is never called a role.
+Anonymous accounts retain observed hero/economy/team information and leave personal
+history missing. Unknown mechanics, roles, global meta, patch-letter evidence and
+unobserved events remain explicit gaps. Roshan raw timer0 does not establish alive;
+respawn/death/Aegis/steal semantics need qualified rule/event evidence. No Aegis
+holder observation is reinterpreted as proof of the killing or stealing team.
+
+5. INDEPENDENT SERIES HISTORY
+
+seriesHistoryTarget freezes team1/team2 history before the series and at each
+received inter-map transition. It requires neither a fictional first-map ID nor
+Radiant/Dire assignment. Roster disclosures move validFrom, never the cutoff.
+HistoricalRelationalFeatures shares the same arithmetic with nominal team axes.
+SERIES_PRE and BETWEEN reject current draft/live inputs. A PRE forecast for map2
+does not emit SERIES_PRE: use the separately frozen BETWEEN series context.
+Prior-map score/results and current-map side orientation remain explicit.
+
+6. ONE PRODUCER, BOUNDED REPRESENTATION AND DURABLE EVIDENCE
+
+unifiedFeatureProducer is the logical formula entry for PRE, POST, LIVE,
+SERIES_PRE and BETWEEN. Shared modules are implementation boundaries, not separate
+offline formulas. featureProjectionCompiler caches immutable semantic definitions
+and target index plans; row values/masks are new each frame. The rich definition
+pool is bounded to2 semantic signatures and invalidates support/rules/admission
+changes. Source identity includes the normalizer, identity/time helpers and scope
+policy, not only their importing file. New incompatible schemas fail closed.
+
+The journal registers definitions once, pools equal vectors across output heads
+and verifies file fingerprints before cached reads. Static PRE/series contexts
+also persist exact facts/target/series bytes and minimum-support policy in a CAS
+input set before writing the trace. Traces bind those inputs; corruption is not
+hidden by a successful read cache. The joint-availability audit keeps all explicit
+expected slots in the denominator and tests simultaneous required-field coverage.
+It cannot establish absolute event lag or prospective95% availability by itself.
+
+The finite retained host/bootstrap/CLI are opt-in and disabled by default. They
+connect committed capture -> source version/context -> same producer -> schema/
+vector journal. They do not fetch providers, open listeners, restart schedulers or
+invoke models. The admin reader is behind existing session authentication and
+returns compact summaries or bounded feature pages. The mobile UI triggers no
+collection and exposes only "Прогноз недоступен" for unavailable predictions.
+
+7. TARGET ROUTING AND ACCEPTANCE BOUNDARY
+
+diagnosticTargetRouting uses the canonical12-target metadata and an exact reviewed
+schema allowlist. Main always refers to the whole BO1/BO3/BO5 series; detail to
+the selected map. Entry selects the current map; manual completed-map selection
+keeps that map's heroes/results. Terminal series return actual results. Feature
+traces are never original model forecasts. Such forecast replay stays disabled.
+Totals descriptors identify kills versus seconds and final versus remaining;
+the existing distribution/BookmakerTotalsLadder owns probabilities/settlement.
+No bookmaker odds, probability, final-duration conversion or model output is
+invented by a feature adapter. No UI redesign or public candidate activation.
+
+EVIDENCE AND LIMITS
+
+Synthetic regression results and source hashes are recorded in the consolidated
+technical receipt accompanying this block. The prior real retained pilots remain
+small:6 source versions from3 maps for history, and8 Steam receipts with189
+per-map capture decisions across27 maps for progression (94 admitted decisions,
+2 native diagnostic vectors). These are connectivity/causal admission checks,
+not prediction accuracy, full-archive coverage or a joint95% service study.
+
+Separate resource checks:2403 synthetic captures/4803 map rows over4804 source
+seconds kept3 prefix frames per map, with zero rich generation or journal writes.
+26 rich frames over750 source seconds retained22 native frames/630s and21
+observations in the600s trajectory. These checks must not be combined into a
+claim that the full rich service sustains two-second updates across many maps.
+The complete-schema size, cold/warm time and RSS are a measured baseline; output
+storage/cadence, multi-map sustained load and large-corpus materialization still
+need review before activation. No comparison to the old model accuracy is implied.
+
+ASTRA NEXT ACTION
+
+Review the exact installed/published delta and counterexamples, especially:
+as-of field versions, t0/t1 identity, source-horizon versus actual calculation,
+STOP/pending/restart restoration, source dependency/schema identity, PRE-map2
+versus BETWEEN routing, and static context persistence. Decide which remaining
+family variants require new source evidence, a versioned mechanics contract,
+historical series/lead trajectories or future TRAIN-only learned state. Review
+bounded large-corpus references, sparse storage and multi-map resource acceptance.
+Only after an explicit feature-first acceptance and owner instruction may Sol
+prepare pinned matrices and the already specified model experiment program.
+
+No fits, calibration, HPO, provider probing, production writes/migrations,
+schedules, purchases, model promotion or application publication belong to this
+block. STRATZ access remains deferred and its configured token is unchanged.

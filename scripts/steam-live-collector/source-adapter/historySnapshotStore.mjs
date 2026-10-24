@@ -33,7 +33,7 @@ function validateIdentity(x){
  jsonBound(x);
  if(!object(x)||x.contract!==IDENTITY_CONTRACT||!id(x.matchId)||x.cutoffPolicy!==FREEZE_POLICY||!text(x.producerVersion)||![x.schemaHash,x.sourceSnapshotHash,x.patchEvidenceHash,x.draftHash,x.rosterHash,x.sideIdentityHash,x.validFromObservationId,x.draftStateHash].every(digest))throw Error('history_snapshot_identity_contract');
  const cutoff=instantNs(x.historyCutoffAt),valid=instantNs(x.validFrom);
- if(cutoff===null||valid===null||cutoff>valid||!text(x.sourceProfile)||!['recorded_input_receipts','database_timestamp_reconstruction'].includes(x.availabilityBasis))throw Error('history_snapshot_identity_times_or_basis');
+ if(cutoff===null||valid===null||cutoff>valid||!text(x.sourceProfile)||!['recorded_input_receipts','database_timestamp_reconstruction','retained_receipt_reconstruction'].includes(x.availabilityBasis))throw Error('history_snapshot_identity_times_or_basis');
  if(x.learnedState!==null){
   const s=x.learnedState;
   if(!object(s)||!digest(s.learnedTransformStateSha256)||s.fitPartition!=='TRAIN'||!digest(s.trainingSplitSha256)||!text(s.foldId)||!text(s.cohortId))throw Error('history_snapshot_learned_state_binding');

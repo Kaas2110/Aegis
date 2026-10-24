@@ -1,0 +1,3919 @@
+{
+  "contract": "aegis.unified-feature-families.v1",
+  "version": "2026-10-24.r1",
+  "scope": "Preserved discussed scope of 79 families; partial generated diagnostic subsets do not establish full-family completion or predictive value.",
+  "statusesAreNotQualityClaims": true,
+  "families": [
+    {
+      "id": "I01",
+      "title": "Map, side, account, hero and team identity",
+      "formula": "Bind account, hero, side and team; hash roster and draft. Array order never proves role.",
+      "units": "IDs and hashes; never ordinal strength",
+      "kind": "binding",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "I01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/steamLiveAdapter.mjs",
+          "bytes": 16485,
+          "sha256": "b98a8685cabe14c236a09c02fdd14d839e7f4d6ff30c8d0a7268b657780dcb47",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/per-player-asof-profiles-20261019/profiles.py",
+          "bytes": 13684,
+          "sha256": "97e1708c93e99265479da7cd9f47e030476681863bad621a7a465913f23852bf",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "I02",
+      "title": "Partial and late roster disclosure",
+      "formula": "Known flags and coverage; account disclosure at t1 creates a validFrom revision while retaining history cutoff t0.",
+      "units": "flags, fractions and observation references",
+      "kind": "binding",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "I02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/roster.py",
+          "bytes": 8076,
+          "sha256": "7b72fd5977b442f0f440def3067a4399daa5c37b2eda06920213a3eea5c9d72c",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "I03",
+      "title": "Proven roles and distinct economic ranks",
+      "formula": "Farm roles 1-5 require evidence; NW/GPM ranks 1-5 and historical lane categories 1-4 are separate.",
+      "units": "role categories, economic ranks and shares",
+      "kind": "history_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "I03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/individual-profile-appendix-20261019/appendix.py",
+          "bytes": 15164,
+          "sha256": "50fb670ed57a4999608620a09b2b0ff7bccaab52cf49e93ca3a0ce4e79387ebe",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/player.py",
+          "bytes": 10442,
+          "sha256": "883decc8ba9ea39f578c382dca342f67e1902687459967b349206351f4b811bd",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "I04",
+      "title": "Format, tournament, region, schedule and rest",
+      "formula": "Known BO format, wins required and map number; rest days, recent match counts and versioned league/tier/region.",
+      "units": "days, counts and categories",
+      "kind": "history_context",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "I04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/api-server/src/lib/team-extended.ts",
+          "bytes": 2602,
+          "sha256": "bdc03439aa06885e095675938d0aaa664bbefacfec9acae209ec3b23693ec582",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/causal.py",
+          "bytes": 17791,
+          "sha256": "9c267c2a48cdfac4a0571e99149fc6add3ad8761fd16090508c1948f8a62745d",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H01",
+      "title": "Historical team strength and uncertainty",
+      "formula": "Chronological result rating and expected win, with support and uncertainty; preserve side differences.",
+      "units": "rating, expected probability and counts",
+      "kind": "history",
+      "status": "learned_state_pending",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/causal.py",
+          "bytes": 17791,
+          "sha256": "9c267c2a48cdfac4a0571e99149fc6add3ad8761fd16090508c1948f8a62745d",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/src/compute-player-glicko.ts",
+          "bytes": 10015,
+          "sha256": "ef4da40a758a52077025f33d75642421fba7e0eec927afa5bfe70b3178f612db",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H02",
+      "title": "Team form, streaks and recent trend",
+      "formula": "Raw and explicitly smoothed win fractions over 7/30/90 days, streaks, weighted recent-minus-long trends and support.",
+      "units": "fractions, games and days",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/causal.py",
+          "bytes": 17791,
+          "sha256": "9c267c2a48cdfac4a0571e99149fc6add3ad8761fd16090508c1948f8a62745d",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/src/lib/team-extended.ts",
+          "bytes": 9094,
+          "sha256": "c25c06ea28612de59f8376bea12e3d7db4a86a484c9a6821ca9ab99f652db745",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H03",
+      "title": "Head-to-head and prior opponent strength",
+      "formula": "Weighted head-to-head win fractions and support; result/performance residual against a historically available expectation.",
+      "units": "fractions, residuals and effective counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/causal.py",
+          "bytes": 17791,
+          "sha256": "9c267c2a48cdfac4a0571e99149fc6add3ad8761fd16090508c1948f8a62745d",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/lib/hero-features.ts",
+          "bytes": 9699,
+          "sha256": "ae311950cb1910ee082512a9b5be6d429e2252ca85eba75e1967d05cc6c337c1",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H04",
+      "title": "Roster continuity and shared experience",
+      "formula": "Overlap with previous N rosters, stability and days together; distribution of shared distinct-map counts.",
+      "units": "fractions, days and distinct maps",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/src/compute-team-extended.ts",
+          "bytes": 9378,
+          "sha256": "c624f82560130a8f6facd13add33c747e0a05283eaaa8737e070d89f3dbe4dcc",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H05",
+      "title": "Individual player form",
+      "formula": "Raw and explicitly smoothed win fractions over 7/30/90 days, trends and roster min/max/SD/quantiles.",
+      "units": "fractions and counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H05"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/player.py",
+          "bytes": 10442,
+          "sha256": "883decc8ba9ea39f578c382dca342f67e1902687459967b349206351f4b811bd",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/per-player-asof-profiles-20261019/profiles.py",
+          "bytes": 13684,
+          "sha256": "97e1708c93e99265479da7cd9f47e030476681863bad621a7a465913f23852bf",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H06",
+      "title": "Selected player-hero form and comfort",
+      "formula": "Win fractions over 30/90 days and lifetime, effective support, pick share, days since last pick and hero-minus-player form.",
+      "units": "fractions, counts and days",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H06"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/player.py",
+          "bytes": 10442,
+          "sha256": "883decc8ba9ea39f578c382dca342f67e1902687459967b349206351f4b811bd",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/per-player-asof-profiles-20261019/profiles.py",
+          "bytes": 13684,
+          "sha256": "97e1708c93e99265479da7cd9f47e030476681863bad621a7a465913f23852bf",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H07",
+      "title": "Individual result-rating proxy",
+      "formula": "Chronological player result Elo/Glicko, uncertainty and support; these do not measure personal MMR or mechanical skill.",
+      "units": "rating, rating deviation and counts",
+      "kind": "history",
+      "status": "learned_state_pending",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H07"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/player.py",
+          "bytes": 10442,
+          "sha256": "883decc8ba9ea39f578c382dca342f67e1902687459967b349206351f4b811bd",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/src/compute-player-glicko.ts",
+          "bytes": 10015,
+          "sha256": "ef4da40a758a52077025f33d75642421fba7e0eec927afa5bfe70b3178f612db",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H08",
+      "title": "Historical player performance",
+      "formula": "Past observed GPM/XPM, hero/tower damage per minute, deaths/minute, KDA, last hits/minute and wards/minute over 30/90 days.",
+      "units": "native rates and ratios",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H08"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/performance.py",
+          "bytes": 4137,
+          "sha256": "ce517db1a009de2a1fbf494bd6ea3ab1bc324c480310c461235d646ebfcf587c",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/per-player-asof-profiles-20261019/profiles.py",
+          "bytes": 13684,
+          "sha256": "97e1708c93e99265479da7cd9f47e030476681863bad621a7a465913f23852bf",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H09",
+      "title": "Player-hero performance relative to self and population",
+      "formula": "Player-hero minus hero-population mean, divided by available population SD; player-hero minus player and 7/30 versus 90-day trends.",
+      "units": "z scores, native deltas and support",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H09"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/wide_interactions.py",
+          "bytes": 3363,
+          "sha256": "287322accc393628ca801db718b8d2332cccc9afeeaee56e25627021c7680975",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/per-player-asof-profiles-20261019/profiles.py",
+          "bytes": 13684,
+          "sha256": "97e1708c93e99265479da7cd9f47e030476681863bad621a7a465913f23852bf",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/individual-profile-appendix-20261019/appendix.py",
+          "bytes": 15164,
+          "sha256": "50fb670ed57a4999608620a09b2b0ff7bccaab52cf49e93ca3a0ce4e79387ebe",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H10",
+      "title": "Player by team by hero",
+      "formula": "Player-team lift, selected-hero-in-team lift and (player-team-hero minus player-team) minus (player-hero minus player).",
+      "units": "fractions, native performance and lifts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H10"
+      },
+      "implementationEvidence": [
+        {
+          "path": "continuation-evidence/work/per-player-asof-profiles-20261019/profiles.py",
+          "bytes": 13684,
+          "sha256": "97e1708c93e99265479da7cd9f47e030476681863bad621a7a465913f23852bf",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/individual-profile-appendix-20261019/appendix.py",
+          "bytes": 15164,
+          "sha256": "50fb670ed57a4999608620a09b2b0ff7bccaab52cf49e93ca3a0ce4e79387ebe",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H11",
+      "title": "Player resource efficiency and pressure",
+      "formula": "Historical hero/tower damage, GPM and deaths ratios; damage/GPM and opponent-pressure cross-products with explicit units.",
+      "units": "explicit ratios and products",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H11"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/wide_interactions.py",
+          "bytes": 3363,
+          "sha256": "287322accc393628ca801db718b8d2332cccc9afeeaee56e25627021c7680975",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/individual-profile-appendix-20261019/appendix.py",
+          "bytes": 15164,
+          "sha256": "50fb670ed57a4999608620a09b2b0ff7bccaab52cf49e93ca3a0ce4e79387ebe",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H12",
+      "title": "Roster profile distributions",
+      "formula": "Quartiles, min/max/SD, coverage, all 25 opposing player comparisons, dominance and overlap; role pairing requires proof.",
+      "units": "quantiles, fractions and gaps",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H12"
+      },
+      "implementationEvidence": [
+        {
+          "path": "continuation-evidence/work/individual-profile-appendix-20261019/appendix.py",
+          "bytes": 15164,
+          "sha256": "50fb670ed57a4999608620a09b2b0ff7bccaab52cf49e93ca3a0ce4e79387ebe",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/relative-roster-state-extension-20261019/relative_roster.py",
+          "bytes": 9269,
+          "sha256": "53158781b44bb0752ea375d41f67168a29430b404ac511f457fc3e2bdd59fa0e",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H13",
+      "title": "Team late-game duration tendency",
+      "formula": "Historical fraction with duration at least 40 minutes over 90 days with support at least 5; retain proposed threshold curves 25-80 and quantiles.",
+      "units": "fractions, minutes and counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H13"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "H14",
+      "title": "Player, hero and player-hero late-game tendency",
+      "formula": "Three separate 90-day fractions with duration at least 40 minutes; hero population includes known heroes with anonymous accounts.",
+      "units": "fractions and distinct maps",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "H14"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D01",
+      "title": "Observed draft identities and bans",
+      "formula": "Signed hero one-hot; picks, bans, slots and order only when actually observed. Known unpicked zero differs from unknown draft.",
+      "units": "binary and categorical indicators",
+      "kind": "draft",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/lib/hero-features.ts",
+          "bytes": 9699,
+          "sha256": "ae311950cb1910ee082512a9b5be6d429e2252ca85eba75e1967d05cc6c337c1",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D02",
+      "title": "Historical hero strength and popularity",
+      "formula": "Hero win fraction, pick share and ban rate with 30/90-day decay and effective counts; raw and smoothed estimates remain distinct.",
+      "units": "fractions and effective counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/lib/hero-features.ts",
+          "bytes": 9699,
+          "sha256": "ae311950cb1910ee082512a9b5be6d429e2252ca85eba75e1967d05cc6c337c1",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D03",
+      "title": "Allied hero pairs",
+      "formula": "Pair identities plus historical pair win fraction, support, decay and lift relative to hero marginal rates.",
+      "units": "binary, fractions, lift and counts",
+      "kind": "history_draft",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/causal.py",
+          "bytes": 17791,
+          "sha256": "9c267c2a48cdfac4a0571e99149fc6add3ad8761fd16090508c1948f8a62745d",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D04",
+      "title": "Directed counters and protective bans",
+      "formula": "Directed hero A against hero B historical win fractions; weighted mean/min counter and removal of an adverse matchup by a known ban.",
+      "units": "fractions and log-count-weighted scores",
+      "kind": "history_draft",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/lib/hero-features.ts",
+          "bytes": 9699,
+          "sha256": "ae311950cb1910ee082512a9b5be6d429e2252ca85eba75e1967d05cc6c337c1",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D05",
+      "title": "Team-hero comfort pool",
+      "formula": "Team-hero win fraction, support and pick share; selected-draft comfort and undrafted pool summaries use distinct definitions.",
+      "units": "fractions and counts",
+      "kind": "history_draft",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D05"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/lib/e1-features.ts",
+          "bytes": 24296,
+          "sha256": "c0be111d6ba825f6e43a9b92d55738fecc0c2e8147aa13619eca0eeb413f5c3c",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D06",
+      "title": "Patch and letter revision meta",
+      "formula": "Patch-conditioned pick/ban/win rates and 7/30/90-day trends; old-to-new patch change, uncertainty, side and proven-role strata.",
+      "units": "rates, deltas, days and counts",
+      "kind": "history_context",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D06"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/src/lib/match-patch-resolver.ts",
+          "bytes": 7603,
+          "sha256": "947b4b429d0ae091d8d5056d39367e2c5a23baafbc255551b413eeeff6bf289a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D07",
+      "title": "Pro, Immortal, regional and role populations",
+      "formula": "Separate meta rates and residuals by declared population/rank/region/role; transfer priors only with an explicit namespace.",
+      "units": "fractions, support and strata",
+      "kind": "history_context",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D07"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "D08",
+      "title": "Hero mechanics and rules version",
+      "formula": "Versioned hero attributes, ability types, scaling, push/save/control descriptors and patch-valid facets/innates.",
+      "units": "categories, counts and explicit mechanics descriptors",
+      "kind": "history_context",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "D08"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "P01",
+      "title": "Allied player pairs",
+      "formula": "Conditional result/performance for account A and B; raw/smoothed rates, lift versus individuals and 30/90-day distinct-map support.",
+      "units": "fractions, residuals and counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "P01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/src/compute-team-extended.ts",
+          "bytes": 9378,
+          "sha256": "c624f82560130a8f6facd13add33c747e0a05283eaaa8737e070d89f3dbe4dcc",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "P02",
+      "title": "Player-hero with a specific ally",
+      "formula": "Result/performance for account A on hero A given ally account B, minus the account-hero baseline.",
+      "units": "fractions, lifts, performance and counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "P02"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "P03",
+      "title": "Player-hero with an allied hero",
+      "formula": "Conditional account A, hero A and ally hero B, compared with own-hero and hero-pair baselines.",
+      "units": "fractions, lifts, performance and counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "P03"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "P04",
+      "title": "Two specified players on two heroes",
+      "formula": "Conditional account A/hero A/account B/hero B with a symmetric teammate key; opposing variants stay separate.",
+      "units": "fractions, residuals and effective counts",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "P04"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "P05",
+      "title": "Individual opposition and hero triples",
+      "formula": "Player-hero versus opponent player-hero, team triples/archetypes and separate additive versus conditional residuals.",
+      "units": "identities and supported conditional statistics",
+      "kind": "history_draft",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "P05"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "S01",
+      "title": "Historical team tempo and aggression",
+      "formula": "Kills/deaths per played minute, early engagements, farm-versus-fight and tempo distributions; name proxies explicitly.",
+      "units": "events per minute, time and distributions",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "S01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "S02",
+      "title": "Historical item, ward and buyback style",
+      "formula": "Past observed Blink/BKB/Midas/Battlefury/Radiance purchase timing and shares, ward and buyback rates.",
+      "units": "seconds, minutes, fractions and rates",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "S02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/performance.py",
+          "bytes": 4137,
+          "sha256": "ce517db1a009de2a1fbf494bd6ea3ab1bc324c480310c461235d646ebfcf587c",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "S03",
+      "title": "Results against opponent style",
+      "formula": "Similarity-weighted result/style residual against historically available opponent style, expectation and supported response cohorts.",
+      "units": "fractions, residuals and effective counts",
+      "kind": "history",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "S03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "S04",
+      "title": "Draft compatibility with team style",
+      "formula": "Team style minus hero-draft profile, player-hero comfort style and draft against the known opponent context.",
+      "units": "style deltas and products",
+      "kind": "history_draft",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "POST",
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "S04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/rich.py",
+          "bytes": 14400,
+          "sha256": "a5f0c5fc71990ca8f949cd97bfbeb111edfca4954900e8944450e67e763a9cc9",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "S05",
+      "title": "Closing speed and late-game style",
+      "formula": "Historical time to close conditional on earlier advantage/minute/draft/Roshan, high-ground conversion and median/upper quartile.",
+      "units": "seconds, hazard, fractions and support",
+      "kind": "history",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "S05"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "S06",
+      "title": "Form by current trajectory",
+      "formula": "Form by current score leader/recovery/hero/minute and style by momentum; preserve independent main effects.",
+      "units": "explicit products",
+      "kind": "history_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "S06"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/wide_observed/frozen_form.py",
+          "bytes": 2004,
+          "sha256": "29f5693119f8e71f12b1abf802bbb42af25733cce0d9db6453ca6cf5f36ab3ec",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/individual-profile-appendix-20261019/appendix.py",
+          "bytes": 15164,
+          "sha256": "50fb670ed57a4999608620a09b2b0ff7bccaab52cf49e93ca3a0ce4e79387ebe",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L01",
+      "title": "Observed clock, score and phase",
+      "formula": "Elapsed seconds/minutes/log/minute-80 clip, side kills, difference, total and rate; phase flags require valid admission.",
+      "units": "seconds, minutes, kills and kills per minute",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/shadow_live_winner/adapter.py",
+          "bytes": 17611,
+          "sha256": "db82df89deeb4066a5b731c0d5f5075bef5f58eb54544f52bea983edaf723c0d",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/steamLiveAdapter.mjs",
+          "bytes": 16485,
+          "sha256": "b98a8685cabe14c236a09c02fdd14d839e7f4d6ff30c8d0a7268b657780dcb47",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L02",
+      "title": "Native per-hero net worth",
+      "formula": "Observed NW, log1p, team share, centered values, team/side summaries and hero by NW by minute.",
+      "units": "gold value and fractions",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/c3-networth-projector-20261020-r1",
+          "sha256": null,
+          "hashStatus": "directory_reference_only_not_formula_evidence",
+          "kind": "historical_directory_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L03",
+      "title": "Native per-hero GPM and XPM",
+      "formula": "Observed native GPM/XPM, shares, centered values and minute/context products; NW divided by time is not GPM.",
+      "units": "gold per minute and XP per minute",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L04",
+      "title": "Observed levels and XP thresholds",
+      "formula": "Observed level/team differences; XP-to-next and ability thresholds require raw XP plus versioned rules.",
+      "units": "level, XP and fractions",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L05",
+      "title": "Economic rank and resource distribution",
+      "formula": "NW/GPM ranks 1-5, rank-pair gaps, HHI, top share, spread and median; rank never implies farm role.",
+      "units": "gold, rates, gaps, shares and HHI",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L05"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L06",
+      "title": "Hero-minute economic reference deviations",
+      "formula": "Observed native metric minus past hero-minute mean, with SD-based z score, support and explicit windows.",
+      "units": "native economy, z scores and counts",
+      "kind": "history_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L06"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L07",
+      "title": "Reconstructed earned-gold and XP prefixes",
+      "formula": "Cumulative earned gold/XP prefix slopes, shares and hero/context interactions; keep this source profile distinct from net worth.",
+      "units": "cumulative earned gold and XP",
+      "kind": "reconstructed_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L07"
+      },
+      "implementationEvidence": [
+        {
+          "path": "continuation-evidence/work/earned-economy-c2-source-20261020-r1",
+          "sha256": null,
+          "hashStatus": "directory_reference_only_not_formula_evidence",
+          "kind": "historical_directory_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L08",
+      "title": "Observed trajectories and actual gaps",
+      "formula": "Deltas over actual time gaps for 60/120/180/300/600-second windows; report true span/count and remain missing without prefix support.",
+      "units": "rates, seconds and counts",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L08"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/wide_observed/frozen_wide.py",
+          "bytes": 9891,
+          "sha256": "bdb010d85962ef3dfb98b0a2b010bf2b393290c4c2ef624a5a9d63d5a5226404",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L09",
+      "title": "Lead retention and recovery",
+      "formula": "Min/max lead, sign changes, recovery from minimum, retreat from maximum, time since lead change and short-long momentum.",
+      "units": "kills, gold, seconds and rates",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L09"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/wide_observed/frozen_wide.py",
+          "bytes": 9891,
+          "sha256": "bdb010d85962ef3dfb98b0a2b010bf2b393290c4c2ef624a5a9d63d5a5226404",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "continuation-evidence/work/relative-roster-state-extension-20261019/relative_roster.py",
+          "bytes": 9269,
+          "sha256": "53158781b44bb0752ea375d41f67168a29430b404ac511f457fc3e2bdd59fa0e",
+          "kind": "historical_local_evidence_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L10",
+      "title": "Current per-player combat and farm",
+      "formula": "Observed kills/deaths/assists, death rate, last hits/denies, participation and hero/context residuals.",
+      "units": "counts, ratios and rates",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L10"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L11",
+      "title": "Alive heroes, health, mana and return times",
+      "formula": "Observed alive counts, respawn timers, weighted absence, health/mana ratios and staggered returns.",
+      "units": "seconds, counts and fractions",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L11"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L12",
+      "title": "Ultimates and key abilities",
+      "formula": "Observed readiness/cooldown windows and teamfight ability availability with patch-valid hero-ability mapping.",
+      "units": "state, seconds and levels",
+      "kind": "dynamic",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L12"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L13",
+      "title": "Items, backpack, neutral slots and consumables",
+      "formula": "Observed per-hero item identities and semantic groups, BKB/Blink/save/dispel/break/counter items with distinct slots.",
+      "units": "categories, counts and charges",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L13"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L14",
+      "title": "Hero and draft resource power timings",
+      "formula": "Hero by level/items/NW/minute, distance to historical thresholds and five-player power distributions/matchups.",
+      "units": "explicit thresholds, residuals and products",
+      "kind": "history_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L14"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L15",
+      "title": "Buyback and death consequences",
+      "formula": "Observed buyback availability/cost/cooldown, dead hero by buyback by high-ground risk and native unreliable gold if present.",
+      "units": "booleans, gold and seconds",
+      "kind": "dynamic",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L15"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L16",
+      "title": "Positions, zones and prospective engagements",
+      "formula": "Same-frame positions to team spread, objective distance and heroes near Roshan/high-ground using versioned geometry.",
+      "units": "map units, distance and counts",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L16"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L17",
+      "title": "Vision, wards, smoke and map control",
+      "formula": "Observed ward/smoke states, coverage/expiry and objective vision, using only prefix event logs.",
+      "units": "counts, seconds, area and fractions",
+      "kind": "dynamic",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L17"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L18",
+      "title": "Structures and exposed high ground",
+      "formula": "Verified native decoder for lane structures alive/destroyed, exposed tiers/base, lane asymmetry and lead by conversion.",
+      "units": "counts, states and observed HP",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L18"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/services/legacyLiveServingAdmission.ts",
+          "bytes": 4456,
+          "sha256": "eb9a6a06b9c38c5060bd3c4cad13d2f6b35c92f89fe45fc00528d486f7062eb9",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L19",
+      "title": "Other objectives and day/night",
+      "formula": "Patch-valid Tormentor/rune/Wisdom/Lotus availability, windows, control, day/night and known objective history.",
+      "units": "seconds, state and counts",
+      "kind": "dynamic",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L19"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "L20",
+      "title": "Lane pressure and ability to finish",
+      "formula": "Observed creep/wave positions if available; alive push heroes by items, structures, Aegis and historical team closing style.",
+      "units": "explicit contextual products and proximity",
+      "kind": "history_dynamic",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "L20"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R01",
+      "title": "Raw Roshan timer semantics",
+      "formula": "Retain the raw timer and separate semantic proof; zero never proves alive and a countdown is not an absolute event time.",
+      "units": "raw provider units; seconds only when attested",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/dynamicFields.mjs",
+          "bytes": 3838,
+          "sha256": "be97503ed79423f252efd84574278aa5c9c9ec7e832773fc9fd7b78df9a4ee12",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R02",
+      "title": "Roshan death, respawn and uncertain intervals",
+      "formula": "Confirmed events to elapsed time; patch min/max rules to earliest/latest respawn; inferred intervals stay separately named.",
+      "units": "seconds, states and intervals",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R03",
+      "title": "Aegis holder, side, lifetime and consumption",
+      "formula": "Observed pickup to holder/side; known lifetime to expiry; consumed, lost and expired remain distinct.",
+      "units": "identity, state and seconds",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R04",
+      "title": "Aegis steal and separate killer/picker",
+      "formula": "Compare proven Roshan killer side with Aegis picker side or a direct snatch event; retain contested-fight context.",
+      "units": "booleans, categories and seconds",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R05",
+      "title": "Roshan ordinal and rewards",
+      "formula": "Known completed Roshan count and patch-valid reward availability and beneficiary context.",
+      "units": "counts and categories",
+      "kind": "dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R05"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R06",
+      "title": "Roshan by economy, form and closing style",
+      "formula": "Respawn window/Aegis time by NW/GPM/score/level difference by frozen form/style, preserving side asymmetry.",
+      "units": "explicit products",
+      "kind": "history_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R06"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/roshanFeatures.mjs",
+          "bytes": 14045,
+          "sha256": "381b4c89ae5e29d644433841927bf25362933d824f621bd8bcba510fbbca103a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "R07",
+      "title": "Roshan-taking and contest strength",
+      "formula": "Observed hero/items/ultimate/alive composition near the pit and historical Roshan speed, contest and steal tendencies.",
+      "units": "distance, counts, timing and support",
+      "kind": "history_dynamic",
+      "status": "unavailable_input",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "R07"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q01",
+      "title": "Series score and wins required",
+      "formula": "Known BO format, team1/team2 score and wins required, map position and terminal state; current sides bind separately.",
+      "units": "counts and categories",
+      "kind": "series_context",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "series_context"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/shadow_series_rich/contract.py",
+          "bytes": 5907,
+          "sha256": "420bed4579ace39fcdc801474becde1b25bb32b0f144f03cff55c886a415da0a",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/services/PredictionContract.ts",
+          "bytes": 18613,
+          "sha256": "646bc1afdb75f33a55e040f1779e43866f6afb0a06d57c6d8cdbc28ca037ffff",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q02",
+      "title": "Completed previous series maps",
+      "formula": "Previously received winner/duration/kills/lead trajectory/draft/items/style/strength residuals and latest available summaries.",
+      "units": "counts, seconds, rates and sequences",
+      "kind": "series_history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "series_context",
+        "previous_series_maps"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "continuation-evidence/work/series-evidence-root-review-20261015",
+          "sha256": null,
+          "hashStatus": "directory_reference_only_not_formula_evidence",
+          "kind": "historical_directory_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q03",
+      "title": "Historical recovery and reverse sweeps",
+      "formula": "Past probability of next win given previous loss, expectation, format and roster; recovery pace and comeback counts.",
+      "units": "fractions, residuals and counts",
+      "kind": "history",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q03"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q04",
+      "title": "Draft adaptation between maps",
+      "formula": "Prior draft exposures to changes in observed bans/picks, repeat heroes and roster disclosures; future draft stays unknown.",
+      "units": "counts, categories and fractions",
+      "kind": "series_history",
+      "status": "not_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "series_context",
+        "previous_series_maps"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q04"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q05",
+      "title": "Map probability and contextual series branches",
+      "formula": "Additional versioned map probability; conditional series branches or a direct series model retain the full admissible rich shared context.",
+      "units": "probabilities",
+      "kind": "series_dynamic",
+      "status": "learned_state_pending",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q05"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/shadow_series_rich/contract.py",
+          "bytes": 5907,
+          "sha256": "420bed4579ace39fcdc801474becde1b25bb32b0f144f03cff55c886a415da0a",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/services/RichSeriesDiagnostic.ts",
+          "bytes": 3760,
+          "sha256": "8f360db374418a7e2571846f760f4c2498a5aa4693dcb7c892b5af7a89193948",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q06",
+      "title": "Earlier model estimate as an extra prior",
+      "formula": "Versioned earlier probability/logit with support and uncertainty, separate from the complete historical vector; future OOF binding required.",
+      "units": "probability and logit",
+      "kind": "model_context",
+      "status": "learned_state_pending",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "LIVE",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q06"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/api-server/src/services/LiveWinnerModel.ts",
+          "bytes": 9032,
+          "sha256": "12687a1d47e1fbbb86939fc187c598af906691243c311bae537285a97b0af898",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "Q07",
+      "title": "Complete shared series context",
+      "formula": "All admissible player/hero/team history, form/style, current observed draft/live state, previous maps, format/score, recovery and adaptation; phase/source/time masks preserve scope.",
+      "units": "typed shared context; probability only at output",
+      "kind": "series_context",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity",
+        "series_context",
+        "previous_series_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "Q07"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/shadow_series_rich/contract.py",
+          "bytes": 5907,
+          "sha256": "420bed4579ace39fcdc801474becde1b25bb32b0f144f03cff55c886a415da0a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "T01",
+      "title": "Historical kill and duration distributions",
+      "formula": "Team/player/hero/style means, SD, quantiles and tail fractions, conditional on admissible context; previous maps only after receipt.",
+      "units": "kills, seconds and fractions",
+      "kind": "history",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "T01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "continuation-evidence/work/rich-totals-feature-extension-20261016",
+          "sha256": null,
+          "hashStatus": "directory_reference_only_not_formula_evidence",
+          "kind": "historical_directory_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/frozenPlayerContext.mjs",
+          "bytes": 4414,
+          "sha256": "e67643eed3e02e6a783a56c5b0c34847db537c4cfc6826ab10d7e4688f8e82fc",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "T02",
+      "title": "Live finishing risk and kill intensity",
+      "formula": "Remaining hazard conditioned on current clock/score/economy/Roshan/structures/style, recent kill tempo and lulls.",
+      "units": "remaining kills, seconds and hazard",
+      "kind": "history_dynamic",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "LIVE_KILLS",
+        "LIVE_DURATION"
+      ],
+      "eligiblePhases": [
+        "LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_draft",
+        "current_live"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "T02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "continuation-evidence/work/corrected-rich-totals-paired-20261020",
+          "sha256": null,
+          "hashStatus": "directory_reference_only_not_formula_evidence",
+          "kind": "historical_directory_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/hazard_totals_diagnostic.py",
+          "bytes": 12793,
+          "sha256": "5e4bd76b8c461dcd23b40f18d946bf57759d02283b56f30bec8d3a91272724a5",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "T03",
+      "title": "Candidate axis and distribution support",
+      "formula": "Final or remaining count/time candidate crossed with state, monotone CDF, observed lower bound, push mass and right tail.",
+      "units": "kills and seconds",
+      "kind": "model_axis",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_KILLS",
+        "LIVE_DURATION"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "candidate_axis"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "T03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/ml-service/src/research/corrected_live_totals_contract.py",
+          "bytes": 5123,
+          "sha256": "50b016dca3a133102e44d043e1ef9873f6a00bf776dad70caa9a62149274be98",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/api-server/src/services/ExactHazardFinite.ts",
+          "bytes": 16717,
+          "sha256": "92ab96667f1db4d8907f9ed2c53e395410150806cf2c1a1aedafdf910529a66d",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "T04",
+      "title": "Bookmaker markets and own line grid",
+      "formula": "Own grid derived from the coherent model CDF; chosen bookmaker lines evaluated with our CDF, with separate odds/push/settlement metadata.",
+      "units": "lines, decimal odds and probabilities",
+      "kind": "presentation_context",
+      "status": "presentation_only",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_KILLS",
+        "LIVE_DURATION"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "presentation"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "T04"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/api-server/src/services/PredictionContract.ts",
+          "bytes": 18613,
+          "sha256": "646bc1afdb75f33a55e040f1779e43866f6afb0a06d57c6d8cdbc28ca037ffff",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "O01",
+      "title": "Completeness, masks, support and uncertainty",
+      "formula": "Value, missingness, exact support and effective sample size; distinguish structural zero and unknown; joint availability includes failed attempts.",
+      "units": "booleans, fractions and counts",
+      "kind": "observability",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "O01"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/playerHeroEconomyFeatures.mjs",
+          "bytes": 16266,
+          "sha256": "8b0209baf5d19f79f6c938624537cb1d45bbf78892553c629704422c10c31ec5",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "artifacts/ml-service/src/research/postdraft_full/wide_history.py",
+          "bytes": 6111,
+          "sha256": "4acb3ae4fc239442d7c1bca8b81ce747d4ba37ddaf68ae1a3b1e2e7808b6eace",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "O02",
+      "title": "Latency, clock gaps and source eligibility",
+      "formula": "Receipt age, measured event delay where proven, actual prefix gaps and profile/phase admission; cross-stream gaps do not prove event latency.",
+      "units": "seconds and flags",
+      "kind": "observability",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "O02"
+      },
+      "implementationEvidence": [
+        {
+          "path": "artifacts/api-server/src/lib/liveStateFreshness.ts",
+          "bytes": 8868,
+          "sha256": "eaf6d7606acfb49f7c18b30a8e69b99bdbd75936eadf3305f3e113fb673423b8",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/steamFeatureBundle.mjs",
+          "bytes": 3759,
+          "sha256": "1aac0c97abd0bc14af398f71073a78e411fb8d0c788c086950ae843bfc10d551",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "O03",
+      "title": "Patch, causal basis and provenance",
+      "formula": "Recorded/reconstructed status, exact availability, source/hash/transform/fold binding and patch-assignment provenance.",
+      "units": "timestamps, references and categories",
+      "kind": "binding",
+      "status": "partially_generated",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "eligiblePhases": [
+        "PRE",
+        "POST",
+        "LIVE",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "dependencyScopeUnion": [
+        "prior_maps",
+        "current_identity"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "O03"
+      },
+      "implementationEvidence": [
+        {
+          "path": "scripts/steam-live-collector/source-adapter/causalContext.mjs",
+          "bytes": 2623,
+          "sha256": "1899579b3d14d98ddc4f45b5673da8fb5a310466850cfdabe9a98ae026089d04",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/steam-live-collector/source-adapter/causalTime.mjs",
+          "bytes": 950,
+          "sha256": "fef4f783f244fd5bc032c1056d9ece778433206957bfb42e7f66e24d6912ff0b",
+          "kind": "application_source_reference",
+          "bundled": false
+        },
+        {
+          "path": "scripts/src/lib/match-patch-resolver.ts",
+          "bytes": 7603,
+          "sha256": "947b4b429d0ae091d8d5056d39367e2c5a23baafbc255551b413eeeff6bf289a",
+          "kind": "application_source_reference",
+          "bundled": false
+        }
+      ],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    },
+    {
+      "id": "O04",
+      "title": "Current-map labels and final metrics",
+      "formula": "Current winner/final kills/final duration belong only to label/evaluator joins; changing a label must not change earlier features.",
+      "units": "targets only",
+      "kind": "label_only",
+      "status": "label_only",
+      "missingPolicy": "Unknown or unsupported inputs remain null with a missing mask and explicit reason; structural absence is distinct from unknown.",
+      "availabilityGate": "All prior-map facts available no later than the frozen history cutoff; identity and current source receipt no later than decision; never use current-map labels.",
+      "eligibleTargets": [],
+      "eligiblePhases": [],
+      "dependencyScopeUnion": [
+        "current_map_label"
+      ],
+      "scopeMeaning": "Union of proposed family variants; every executable definition declares and validates its exact scopes.",
+      "formulaVersion": "catalogue-specification.2026-10-24.r1",
+      "legacyFormulaPin": {
+        "document": "reviewed-family-registry.2026-10-24",
+        "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+        "familyId": "O04"
+      },
+      "implementationEvidence": [],
+      "fullFamilyComplete": false,
+      "gap": "Complete per-definition semantic migration, phase/profile source availability, all proposed variants and unified application projections; exact scope is recorded in the semantic disposition ledger."
+    }
+  ],
+  "targetEligibilityPolicy": {
+    "contract": "aegis.historical-target-eligibility-policy.v2",
+    "version": "2026-10-24.r1",
+    "familyIds": [
+      "H10",
+      "H11",
+      "H12",
+      "H14",
+      "P01",
+      "P05"
+    ],
+    "addedTargets": [
+      "PRE_MAP_WIN",
+      "PRE_KILLS",
+      "PRE_DURATION",
+      "SERIES_PRE",
+      "SERIES_BETWEEN"
+    ],
+    "guard": "Only current_identity/prior_maps definitions reach undrafted targets. Current draft/live/labels remain prohibited; BETWEEN uses a separately frozen team1/team2 history context."
+  }
+}

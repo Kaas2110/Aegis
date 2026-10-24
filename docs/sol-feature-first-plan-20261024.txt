@@ -1,4 +1,12 @@
-AEGIS — SOL IMPLEMENTATION PLAN AFTER ASTRA REVIEW
+IMPLEMENTATION CHECKPOINT — SOL R3, 24 OCTOBER 2026
+
+The sequence below is the accepted Astra architecture, preserved as requirements.
+Read sol-feature-integration-review-20261024-r3.txt for implementation status,
+actual technical evidence and remaining gates. Do not rerun completed stages or
+interpret this checkpoint as training/activation acceptance. Return to Astra
+before further model experiments.
+
+AEGIS вЂ” SOL IMPLEMENTATION PLAN AFTER ASTRA REVIEW
 24 October 2026. Authoritative next-work sequence; supersedes the work sequence
 in sol-feature-first-plan-20261023.txt and AEGIS-SOL-PLAN-2026-10-23.txt.
 
@@ -25,7 +33,7 @@ for Astra at each substantive checkpoint.
 
 REVIEWED FOUNDATION AND LIMITS
 
-The October23–24 work provides useful diagnostic components: raw-byte replay,
+The October23вЂ“24 work provides useful diagnostic components: raw-byte replay,
 an observed-draft trigger, frozen historical contexts and immutable export/cache
 references, rich historical and live formulas, series context, one diagnostic
 producer, durable feature trace ports and a retained-capture orchestration layer.
@@ -194,10 +202,10 @@ the ten hero identities; metadata selectors are not numeric features. A zero
 one-hot for a known unpicked hero differs from unknown/incomplete draft.
 Do not assume a historical winrate alone teaches current hero mechanics.
 
-Complete player, hero, team, player–hero, player–team–hero, ally and opponent
+Complete player, hero, team, playerвЂ“hero, playerвЂ“teamвЂ“hero, ally and opponent
 pair/triple histories; recency, performance, role-qualified form, style and
 style matchup; historical finishing speed/late tendency for team/player/hero/
-player–hero; population-conditioned reference curves by hero/minute/patch and
+playerвЂ“hero; population-conditioned reference curves by hero/minute/patch and
 proven role. Preserve support across distinct maps, effective sample count for
 the exact metric subset, decay/window, uncertainty/missingness and provenance.
 Unknown account must not exclude a known hero from population statistics.
@@ -205,7 +213,7 @@ Unknown account must not exclude a known hero from population statistics.
 Meta populations are explicitly separate (pro and Immortal), with patch letters,
 time window, side/role where proven. Population built only from target players'
 matches is not global hero meta. Current aggregate endpoints cannot be joined
-retroactively without their historical availability. Roles1–5 are not array slots
+retroactively without their historical availability. Roles1вЂ“5 are not array slots
 or economic rank. Smoothed estimates require an explicit prior; learned baselines,
 target encodings and latent ratings need future TRAIN-only/OOF state, no fit now.
 
@@ -325,7 +333,7 @@ Every trace carries target, map/series ID, source observation/raw hash, historic
 cutoff/context/version, schema/rules/learned-state, values/masks, phase profile,
 receipt/clock/completion times and rejection provenance. Stored feature-only traces
 are never described as recorded model predictions. On unavailable inputs expose
-only 'Прогноз недоступен' in the product; technical reasons remain in diagnostics.
+only 'РџСЂРѕРіРЅРѕР· РЅРµРґРѕСЃС‚СѓРїРµРЅ' in the product; technical reasons remain in diagnostics.
 
 Acceptance: durable replay after restart; no duplicates/lost watermarks; failed
 journal write doesn't advance state; forgetting cache invalidates successful
@@ -379,7 +387,7 @@ Return to Astra before training: she reviews causal availability, source-profile
 proof, all-family disposition, identity/routing, resource acceptance and offline/
 online equivalence. Passing counts alone do not open this gate.
 
-FUTURE EXPERIMENTS — STILL BLOCKED
+FUTURE EXPERIMENTS вЂ” STILL BLOCKED
 
 After a separate reviewed feature-first decision and owner instruction: boosting
 (LightGBM/CatBoost/XGBoost), rich variants then planned ablations/HPO on pinned data;
@@ -389,5 +397,5 @@ is not an independent holdout. Fixed-minute5/10/... cohorts per map and80+group;
 report support and avoid repeated frames as independent trials. Compare unified
 minute-aware versus phase-specialized models on identical admissible cohorts.
 Separate prematch, postdraft, live, series and totals; probability calibration,
-equal-team slices and comeback/error cohorts. No promised80–99%accuracy. This plan
+equal-team slices and comeback/error cohorts. No promised80вЂ“99%accuracy. This plan
 authorizes neither those runs nor publication or RuStore release.

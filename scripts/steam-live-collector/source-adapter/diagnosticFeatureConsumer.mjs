@@ -5,8 +5,9 @@
 import {readDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
 import {encodeDiagnosticFeatureTrace,UNIFIED_PRODUCER_CONTRACT} from './unifiedFeatureProducer.mjs';
 import {instantNs} from './causalTime.mjs';
+import {readCurrentSteamInput} from './currentSteamInput.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
-export const CONSUMER_CONTRACT='aegis.background-diagnostic-feature-consumer.v1';
+export const CONSUMER_CONTRACT='aegis.background-diagnostic-feature-consumer.v2';
 const SHA=/^[a-f0-9]{64}$/,ID=/^[1-9]\d{0,19}$/;
 const DEFAULTS={maxMaps:8,maxPending:16,maxReceipts:64,maxSchemas:32,maxInputBytes:128*1024*1024,maxPendingBytes:128*1024*1024,maxTraceBytes:16*1024*1024};
 const CAPS={maxMaps:16,maxPending:64,maxReceipts:256,maxSchemas:128,maxInputBytes:128*1024*1024,maxPendingBytes:512*1024*1024,maxTraceBytes:64*1024*1024};
@@ -14,7 +15,7 @@ const flags={diagnosticOnly:true,eligibleForServing:false,eligibleForTraining:fa
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const receipt=(status,reason,extra={})=>({contract:CONSUMER_CONTRACT,status,reason,stateAdvanced:false,...extra,...flags});
 const freeze=x=>{if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.values(x).forEach(freeze);Object.freeze(x);}return x;};
-const INPUT_KEYS=['matchId','decisionAt','historyProof','sourceExportInput','expectedSourceSnapshotHash','livePrefixInputs','seriesInput','currentMapNumber','mode','patch','rulesEvidence','expectedRulesSha256','eventsEvidence','expectedEventsSha256'];
+const INPUT_KEYS=['matchId','decisionAt','historyProof','sourceExportInput','expectedSourceSnapshotHash','livePrefixInputs','seriesInput','currentMapNumber','mode','patch','rulesEvidence','expectedRulesSha256','eventsEvidence','expectedEventsSha256','progressionProof','retainedReplayProof'];
 function inputSize(input){
  let bytes=0;
  const allowed=(value,keys)=>object(value)&&Object.keys(value).every(k=>keys.includes(k));
@@ -30,7 +31,7 @@ function inputSize(input){
  if(bytes>CAPS.maxInputBytes)throw Error('input_bytes_bound');
  // Include escape expansion, scalar metadata, pin objects and punctuation. The
  // opaque proof is held by reference and is not serialized/cloned as trusted JSON.
- const {historyProof,...serializable}=input;
+ const {historyProof,progressionProof,retainedReplayProof,...serializable}=input;
  return Buffer.byteLength(JSON.stringify(serializable));
 }
 
@@ -40,8 +41,8 @@ function inputSize(input){
  * Callbacks must be bounded/abort-aware in the actual host. A pending write is
  * not forcibly cancelled; after it settles the consumer checks stop again.
  */
-export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrace,shouldContinue=()=>true,signal=null,limits={}}={}){
- if(producer?.contract!==UNIFIED_PRODUCER_CONTRACT||typeof producer.generateFeatureBundle!=='function'||typeof producer.getSchema!=='function'||typeof writeSchema!=='function'||typeof appendTrace!=='function'||typeof shouldContinue!=='function'||signal!==null&&(typeof signal.aborted!=='boolean'||typeof signal.addEventListener!=='function'))throw Error('diagnostic_consumer_owned_ports_required');
+export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrace,loadCommittedTrace=null,shouldContinue=()=>true,signal=null,limits={},now=()=>new Date().toISOString()}={}){
+ if(typeof now!=='function'||producer?.contract!==UNIFIED_PRODUCER_CONTRACT||typeof producer.generateFeatureBundle!=='function'||typeof producer.getSchema!=='function'||typeof writeSchema!=='function'||typeof appendTrace!=='function'||typeof shouldContinue!=='function'||signal!==null&&(typeof signal.aborted!=='boolean'||typeof signal.addEventListener!=='function'))throw Error('diagnostic_consumer_owned_ports_required');
  if(!object(limits)||Object.keys(limits).some(k=>!Object.hasOwn(DEFAULTS,k)))throw Error('diagnostic_consumer_limit_keys');
  const config={...DEFAULTS,...limits};for(const [k,v]of Object.entries(config))if(!Number.isSafeInteger(v)||v<1||v>CAPS[k]||k==='maxTraceBytes'&&v<1024)throw Error('diagnostic_consumer_limit_bound:'+k);
  const maps=new Map(),flights=new Map(),completed=new Map(),schemas=new Map(),schemaFlights=new Map();let pending=0,pendingBytes=0;
@@ -54,7 +55,7 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   if(!schemaFlights.has(hash)){
    if(schemas.size+schemaFlights.size>=config.maxSchemas)throw Error('schema_cache_bound');
    const schema=producer.getSchema(hash);if(!schema)throw Error('schema_reference_unavailable');
-   const immutable=freeze(structuredClone(schema));
+   const immutable=Object.isFrozen(schema)?schema:freeze(structuredClone(schema));
    const promise=Promise.resolve().then(()=>writeSchema({schemaHash:hash,schema:immutable})).then(r=>{
     if(!r||!['created','existing_verified'].includes(r.status)||r.schemaHash!==hash)throw Error('schema_write_receipt_invalid');
     schemas.set(hash,{schemaHash:hash,status:r.status});
@@ -63,17 +64,21 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   }
   await schemaFlights.get(hash);
  }
- function prepare(input){
+ function prepare(input,{restoreTraceSha256=null}={}){
+  if(restoreTraceSha256!==null&&(!SHA.test(restoreTraceSha256)||typeof loadCommittedTrace!=='function'))throw Error('owned_trace_restore_port_required');
   if(!object(input)||Object.keys(input).some(k=>!INPUT_KEYS.includes(k))||!ID.test(input.matchId??'')||instantNs(input.decisionAt)===null||!SHA.test(input.expectedSourceSnapshotHash??'')||input.sourceExportInput===null||input.sourceExportInput===undefined)throw Error('host_input_contract');
   const mode=input.mode??'AUTO';if(!['AUTO','POST','LIVE'].includes(mode))throw Error('host_map_phase_only');
   const h=readDynamicHistoryProof(input.historyProof,{matchId:input.matchId,decisionAt:input.decisionAt});if(!h.accepted)throw Error(h.reason);
   const size=inputSize(input);if(size>config.maxInputBytes)throw Error('input_bytes_bound');
-  const {historyProof,...data}=input,copy=structuredClone(data);copy.mode=mode;
+  const {historyProof,progressionProof=null,retainedReplayProof=null,...data}=input,copy=structuredClone(data);copy.mode=mode;
+  let progressionBindingHash=null;
+  let replayBinding=null;
+  if(progressionProof!==null||retainedReplayProof!==null){const current=readCurrentSteamInput({prefix:copy.livePrefixInputs,context:h.context,matchId:copy.matchId,decisionAt:copy.decisionAt,progressionProof,retainedReplayProof});progressionBindingHash=current.admission.progressionBindingHash??null;replayBinding=current.reconstruction;}
   // All actual bytes and review pins participate. Pin-only deduplication would
   // let a changed corrupt body reuse an earlier successful job.
-  const key=evidenceHash({contract:CONSUMER_CONTRACT,input:copy,historyContentHash:h.context.contentHash});
+  const key=evidenceHash({contract:CONSUMER_CONTRACT,input:copy,progressionBindingHash,replayBinding,restoreTraceSha256,historyContentHash:h.context.contentHash});
   const historyKey=evidenceHash({contentHash:h.context.contentHash,sourceSnapshotHash:copy.expectedSourceSnapshotHash,envelopePin:copy.sourceExportInput.pin??null});
-  return{input:freeze(copy),historyProof,context:h.context,historyKey,key,size};
+  return{input:freeze(copy),historyProof,progressionProof,retainedReplayProof,restoreTraceSha256,context:h.context,historyKey,key,size};
  }
  async function execute(job,slot){
   const input=job.input,meta={matchId:input.matchId,decisionAt:input.decisionAt,jobKey:job.key};
@@ -87,19 +92,37 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   const reset=prior!==null&&prior.historyKey!==job.historyKey,previousLiveState=prior&&!reset?prior.liveState:null;
   // A new historical export resets feature windows, not the observed progress
   // of this map. Only explicit forgetMap releases this independent watermark.
-  let liveWatermark=prior?.liveWatermark??null,bundle,trace;
+  let liveWatermark=prior?.liveWatermark??null,bundle,trace;const generationStartedAt=now();
   try{
-   bundle=producer.generateFeatureBundle({...input,historyProof:job.historyProof,previousLiveState});
+   if(instantNs(generationStartedAt)===null||instantNs(generationStartedAt)<instantNs(input.decisionAt))throw Error('generation_clock_contract');
+   bundle=producer.generateFeatureBundle({...input,historyProof:job.historyProof,previousLiveState,progressionProof:job.progressionProof,retainedReplayProof:job.retainedReplayProof});
    if(bundle?.contract!==UNIFIED_PRODUCER_CONTRACT||bundle.matchId!==input.matchId||bundle.decisionAt!==input.decisionAt||bundle.sourceSnapshotHash!==input.expectedSourceSnapshotHash||bundle.historyContextHash!==context.contentHash||instantNs(bundle.historyCutoffAt)!==instantNs(context.historyCutoffAt)||!['POST','LIVE'].includes(bundle.mode)||bundle.eligibleForServing!==false||bundle.eligibleForTraining!==false||bundle.recordedPrediction!==false||!Array.isArray(bundle.routes)||bundle.routes.some(r=>r.eligibleForServing!==false||r.eligibleForTraining!==false||r.inferenceVector!==null))throw Error('producer_output_identity_or_admission');
    if(liveWatermark!==null&&bundle.mode!=='LIVE')throw Error('map_phase_regression_after_history_reset');
    if(bundle.mode==='LIVE'){
     const admission=bundle.sourceAdmission,clock=admission?.clock,received=instantNs(admission?.provenance?.receivedAt);
-    if(admission?.classification!=='observed_live'||admission.dynamicDiagnosticAllowed!==true||typeof clock!=='number'||!Number.isFinite(clock)||clock<0||received===null||received>instantNs(input.decisionAt))throw Error('live_watermark_source_admission');
+    if(!['observed_live','observed_progressing_live'].includes(admission?.classification)||admission.dynamicDiagnosticAllowed!==true||typeof clock!=='number'||!Number.isFinite(clock)||clock<0||received===null||received>instantNs(input.decisionAt))throw Error('live_watermark_source_admission');
     if(liveWatermark!==null&&(clock<liveWatermark.clockSeconds||received<instantNs(liveWatermark.receivedAt)))throw Error('map_clock_or_receipt_regression_after_history_reset');
     liveWatermark={clockSeconds:clock,receivedAt:admission.provenance.receivedAt};
    }
+   const featuresReadyAt=now();
+   if(instantNs(generationStartedAt)===null||instantNs(featuresReadyAt)===null||instantNs(generationStartedAt)<instantNs(input.decisionAt)||instantNs(featuresReadyAt)<instantNs(generationStartedAt))throw Error('generation_clock_contract');
+   bundle.timings={decisionInputCutoff:input.decisionAt,generationStartedAt,featuresReadyAt,originalPredictionTimingClaimed:false};
    trace=freeze(encodeDiagnosticFeatureTrace(bundle,{maxBytes:config.maxTraceBytes}));
   }catch{failed++;return receipt('failed','generation_or_source_contract_failed',meta);}
+  if(job.restoreTraceSha256!==null){
+   try{
+    const stored=await loadCommittedTrace(job.restoreTraceSha256),fresh=JSON.parse(trace.utf8);
+    // Re-materialization time/context hash may change after restart. Only a
+    // verified durable trace with exactly the same source and computed vector
+    // can restore the newly reconstructed opaque state. Never rewrite it.
+    const keys=['contract','producerContract','matchId','seriesId','mode','historyCutoffAt','sourceSnapshotHash','historicalBindings','historicalInputRef','semanticEvidence','targetBinding','sourceAdmission','inputSourceBindings','draftObservation','liveRejection','nativeObservationId','nativeRawSha256','nativeKnownAt','nativeGameClock','seriesReceiptPin','routes','vectors','eligibleForTraining','eligibleForServing','recordedPrediction'];
+    const select=x=>({...Object.fromEntries(keys.map(k=>[k,x[k]??null])),reconstruction:x.reconstruction===null||x.reconstruction===undefined?null:Object.fromEntries(Object.entries(x.reconstruction).filter(([k])=>k!=='reconstructedAt'))});
+    if(!stored||evidenceHash(select(stored))!==evidenceHash(select(fresh)))throw Error('durable_trace_reconstruction_mismatch');
+    if(!continuing())return blockedReceipt('manual_stop_during_trace_restore',meta);
+    slot.committed={historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveState:bundle.nextLiveState??null,liveWatermark};
+    const result=receipt('restored_diagnostic_state',null,{...meta,mode:bundle.mode,traceSha256:job.restoreTraceSha256,restoredFromTraceSha256:job.restoreTraceSha256,traceCommitted:true,stateAdvanced:true,generationTimings:bundle.timings});remember(job.key,result);return result;
+   }catch{failed++;return receipt('failed','durable_trace_restore_failed',meta);}
+  }
   if(!continuing())return blockedReceipt('manual_stop_before_schema_write',meta);
   try{for(const hash of [...new Set(bundle.routes.map(r=>r.schemaRef?.sha256))]){if(!SHA.test(hash??''))throw Error('schema_reference_invalid');await ensureSchema(hash);if(!continuing())return blockedReceipt('manual_stop_after_schema_write',meta);}}
   catch{failed++;return receipt('failed','schema_registration_failed',meta);}
@@ -108,17 +131,19 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   try{saved=await appendTrace(trace);if(!saved||!['created','existing_verified'].includes(saved.status)||saved.sha256!==expectedTraceSha256)throw Error('trace_write_receipt_invalid');}
   catch{failed++;return receipt('failed','trace_append_failed',{...meta,traceCommitStatus:'unknown_callback_failed'});}
   if(!continuing())return blockedReceipt('manual_stop_after_trace_commit',{...meta,traceSha256:trace.sha256,traceCommitted:true});
+  const journalCommittedAt=now();
+  if(instantNs(journalCommittedAt)===null||instantNs(journalCommittedAt)<instantNs(bundle.timings.featuresReadyAt)){failed++;return receipt('failed','journal_commit_clock_contract',{...meta,traceSha256:trace.sha256,traceCommitted:true});}
   // Commit the opaque next state ONLY after durable schema+trace receipts.
   slot.committed={historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveState:bundle.nextLiveState??null,liveWatermark};
   recorded++;
-  const result=receipt('recorded_diagnostic',null,{...meta,mode:bundle.mode,seriesId:bundle.seriesId??null,traceSha256:trace.sha256,traceBytes:trace.bytes,vectorPoolSize:trace.vectorPoolSize,schemaRefs:bundle.routes.map(r=>r.schemaRef),traceCommitted:true,provenanceReset:reset,stateAdvanced:true});
+  const result=receipt('recorded_diagnostic',null,{...meta,mode:bundle.mode,seriesId:bundle.seriesId??null,traceSha256:trace.sha256,traceBytes:trace.bytes,vectorPoolSize:trace.vectorPoolSize,schemaRefs:bundle.routes.map(r=>r.schemaRef),traceCommitted:true,journalCommittedAt,generationTimings:bundle.timings,provenanceReset:reset,stateAdvanced:true});
   remember(job.key,result);return result;
  }
  return Object.freeze({
   contract:CONSUMER_CONTRACT,
-  consume(input){
+  consume(input,options={}){
    if(!continuing())return Promise.resolve(blockedReceipt('manual_stop_or_session_abort'));
-   let job;try{job=prepare(input);}catch{return Promise.resolve(blockedReceipt('host_input_or_history_contract'));}
+   let job;try{if(!object(options)||Object.keys(options).some(k=>k!=='restoreTraceSha256'))throw Error('consume_options');job=prepare(input,options);}catch{return Promise.resolve(blockedReceipt('host_input_or_history_contract'));}
    if(completed.has(job.key))return Promise.resolve({...structuredClone(completed.get(job.key)),stateAdvanced:false,reusedReceipt:true});
    if(flights.has(job.key))return flights.get(job.key).then(r=>({...structuredClone(r),stateAdvanced:false,coalescedReceipt:true}));
    if(pending>=config.maxPending||pendingBytes+job.size>config.maxPendingBytes)return Promise.resolve(blockedReceipt('pending_work_bound',{matchId:job.input.matchId}));

@@ -1,0 +1,83 @@
+AEGIS — REMAINING WORK AFTER SOL R3
+24 October2026. Review sequence; not permission to train, probe or activate.
+
+FIRST: ASTRA ARCHITECTURAL ACCEPTANCE
+
+Read sol-feature-integration-review-20261024-r3.txt, the technical acceptance
+receipt and79-family ledger. Inspect the exact completed-block delta and local
+independent counterexamples. Reuse unchanged test evidence; do not rerun fits,
+reingest the archive or compare the whole source tree to reconstruct context.
+
+A1. Confirm source authority and causality: prior completed facts at t0, field
+versions, future+1ns controls, t1 identity revisions, actual current-frame source,
+retained source horizon, actual calculation/commit clocks and original prediction
+non-claims. Confirm old mutable DB cohorts remain reconstruction-only.
+
+A2. Confirm map/series routing and context persistence: no-map-ID SERIES_PRE;
+separately frozen BETWEEN history; upcoming map2 PRE cannot erase series score;
+LIVE plus prior-series results uses the exact side/team mapping. Review static
+facts/target/series/support-policy CAS and exact source/schema/value restoration.
+
+A3. Review both Steam profiles and boundaries: explicit phase5 versus progressing
+missing-phase proof; failed/missing captures;180s last-advance lease; manual STOP;
+pending-intent recovery before restart continuity break; source closure and clock
+watermark. An unavailable true pause is an explicit consequence of conservative
+admission. Absolute real-event delay and joint prospective95% are still unproven.
+
+A4. Review remaining feature semantics rather than declaring79 families complete.
+The registry records all legacy occurrences but has not proven exact aliases for
+them. Preserve proposed rich alternatives. In particular decide the pure causal
+historical opponent-style and lead-conditioned finishing/resilience construction,
+role-qualified curves, global pro versus Immortal meta, patch/subpatch mechanics,
+and learned ratings/encodings. Some need source evidence; others need more pure
+implementation or a future TRAIN-only learned-state contract. Keep their reasons
+separate. Never infer roles from wealth or global meta from selected players.
+
+A5. Review Roshan/event/rule availability. Raw timer alone does not establish a
+death, live state, exact spawn, pickup, consumption or steal. Confirm versioned
+patch-specific semantics and actual event evidence before filling those columns.
+The columns/interactions already exist and stay missing where inputs are unknown.
+
+A6. Review scaling before enabling the finite host:64MiB retained corpus/envelope
+is bounded supplied-data support, not whole-archive materialization. Specify a
+reviewed immutable-reference/streaming source contract if the full archive exceeds
+it. Current pipeline repeats raw normalization and source-envelope verification.
+Consider an owned immutable source proof instead of repeated large-envelope parsing,
+without weakening byte/causal authority. Preserve exact offline/online arithmetic.
+
+A7. Review representation and resource acceptance:141131 map-live/141175 series-
+live columns are broad diagnostic coordinates. The179550243-byte schema is stored
+once; values/masks still cost space per frame. Define sparse/equivalent storage,
+output/disk budgets and multi-map cadence. Separate >80min prefix bounds from the
+modest rich-window check; full rich service at2s across multiple maps is not proven.
+Do not solve representation limits by unauthorized feature pruning.
+
+SECOND: SOL IMPLEMENTATION AFTER ASTRA'S WRITTEN DECISIONS
+
+Implement the explicitly accepted remaining pure feature variants and scalable
+source/state/storage contracts. Expand hand-computable/swap/future tests, run the
+same actual producer through diagnostic host/reader/target router, and populate
+the field availability study from a genuinely scheduled denominator when collection
+is separately authorized. Keep old source journals and trace/context versions.
+No app request may start a provider fetch or training. Opening old maps preserves
+their own heroes/results; only verified originally recorded forecasts may appear.
+
+Return those changes for Astra review. A prepared adapter or684 passing technical
+tests does not automatically complete this feature-first gate.
+
+THIRD: ONLY AFTER FEATURE-FIRST ACCEPTANCE AND OWNER INSTRUCTION
+
+Pin the admissible datasets and build matrices from the shared producer, with
+map/series temporal grouping and the reviewed embargo/split checks. Preserve all
+phase/target distinctions and existing historical inspected-holdout disclosures.
+Then run the already planned rich boosting experiments, bounded HPO/ablations and
+probability/totals calibration. Compare minute-aware and time-specialized live
+models on identical map cohorts and fixed-minute cuts;80+ is one late group.
+One native fit, four threads, <=16GiB total training and>=4GiB free remain limits.
+No promised80–99% performance, candidate promotion, purchase, RuStore release or
+model activation is authorized by this document.
+
+STRATZ transport/account access and the source-replacement decision remain
+separate Astra/owner questions. Preserve existing configured credentials and
+API budgets. Source-only PR merge and automatic Graphify refresh do not deploy
+the application or change which models return public predictions.

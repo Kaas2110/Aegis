@@ -173,6 +173,37 @@ function addPerformance(f){
  for(const [i,m]of f.maps.entries())m.heroPerformances=m.heroes.map(h=>({contract:PERFORMANCE_CONTRACT,sourceProfile:'opendota.completed-map.parsed-player',sourceFields:PERFORMANCE_FIELDS,accountId:m.players.find(p=>p.heroId===h.heroId)?.accountId??null,heroId:h.heroId,side:h.side,knownAt:m.playersKnownAt,metrics:{gpm:400+i*10+h.heroId,xpm:500+i*10+h.heroId,kills:10+i,deaths:2,assists:10,lastHits:200,denies:10,heroDamage:20000+i*1000,towerDamage:4000,heroHealing:1000,level:25,netWorth:15000+i*1000,goldSpent:null,totalGold:22000,totalXp:30000,observerWardsPlaced:5,sentryWardsPlaced:8,observerWardsKilled:3,sentryWardsKilled:2}}));
 }
 
+function retainedPrematch({mutate=null}={}){
+ const args=draftArgs({accounts:true}),facts=JSON.parse(args.factsInput.utf8),cutoff='2026-10-23T11:58:00Z';
+ for(const m of facts.maps){m.heroes=m.players.map(p=>({heroId:p.heroId,side:p.side}));m.heroesKnownAt=m.playersKnownAt;}
+ addPerformance(facts);
+ facts.scope={contract:'aegis.retained-history-selection-scope.v1',sourceUniverse:'locally_retained_opendota_responses',selection:'provided_version_inputs_only',asOf:cutoff,completeWithinProvidedInputs:true,globalPopulationComplete:false,truncated:false,rowCount:facts.maps.length};
+ for(const m of facts.maps){
+  m.availabilityBasis='retained_collector_response_receipt';m.sourceVersionSetSha256='a'.repeat(64);
+  for(const p of m.heroPerformances){p.sourceProfile='opendota.completed-map.retained-response-player';p.availabilityBasis='retained_collector_response_receipt';p.metricAvailability={};p.metricSources={};for(const [key,value]of Object.entries(p.metrics))if(value!==null){p.metricAvailability[key]=p.knownAt;p.metricSources[key]='a'.repeat(64);}}
+ }
+ if(mutate)mutate(facts);
+ const targetInput=pinned({contract:'aegis.prematch-history-target.v1',matchId:args.matchId,knownAt:cutoff,historyCutoffAt:cutoff,teams:{radiant:'100',dire:'200'},players:[]});
+ // Team historical metrics remain meaningful without invented current heroes.
+ return producePrematchHistoricalRelationalFeatures({targetInput,factsInput:pinned(facts),decisionAt:'2026-10-23T12:30:00Z',minimumSupport:3});
+}
+
+test('retained native performance is admitted only with explicit bounded scope and source provenance',()=>{
+ const c=retainedPrematch();
+ assert.equal(c.audit.populationBasis,'bounded_provided_retained_corpus_not_global');
+ assert.equal(c.profiles.teams[0].values.meanPast_gpm90d,423);
+ assert.throws(()=>retainedPrematch({mutate:f=>{f.scope.sourceUniverse='local_pro_matches_join_match_parsed';}}),/performance_identity_or_source_contract/);
+ assert.throws(()=>retainedPrematch({mutate:f=>{delete f.maps[0].sourceVersionSetSha256;}}),/performance_identity_or_source_contract/);
+ assert.throws(()=>retainedPrematch({mutate:f=>{f.maps[0].heroPerformances[0].sourceProfile='unreviewed-profile';}}),/performance_identity_or_source_contract/);
+ assert.throws(()=>retainedPrematch({mutate:f=>{f.maps[0].heroPerformances[0].metricSources.gpm='not-a-pin';}}),/retained_performance_provenance/);
+});
+
+test('retained future performance remains missing and cannot borrow earlier field timestamps',()=>{
+ const c=retainedPrematch({mutate:f=>{for(const m of f.maps)m.heroPerformances[0].knownAt='2026-10-23T11:58:00.000000001Z';}});
+ assert.equal(c.profiles.teams[0].values.meanPast_gpm90d,null);assert.equal(c.audit.unavailablePerformanceRows,5);
+ assert.throws(()=>retainedPrematch({mutate:f=>{f.maps[0].heroPerformances[0].metricAvailability.gpm='2026-10-23T11:58:00.000000001Z';}}),/retained_performance_provenance/);
+});
+
 test('native prior-player scalar means, hero normalization and efficiency are distinct',()=>{
  const c=fixture({mutateFacts:addPerformance}).component;
  assert.equal(c.profiles.players[0].values.playerMeanPast_gpm90d,421);

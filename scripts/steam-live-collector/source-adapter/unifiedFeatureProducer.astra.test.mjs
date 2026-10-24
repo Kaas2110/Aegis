@@ -5,7 +5,7 @@ import {createDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
 import {draftArgs,draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
 const AT='2026-10-23T12:40:00Z',args=draftArgs({accounts:true}),h=createDynamicHistoryProof(args);
-const factory=()=>{const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:Object.fromEntries(['history','live','series'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});};
+const factory=()=>{const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});};
 const base={matchId:args.matchId,decisionAt:AT,historyProof:h.proof};
 const entry=options=>draftEntry({accounts:true,time:'2026-10-23T12:31:00Z',clock:900,...options});
 const series=(reverse=false,wrong=false)=>pinned({contract:'aegis.series-map-receipts.v1',seriesId:'synthetic-series',bestOf:3,team1Id:wrong?'300':reverse?'200':'100',team2Id:wrong?'400':reverse?'100':'200',availableAt:'2026-10-23T11:50:00Z',completeThroughMapNumber:0,previousMaps:[]});

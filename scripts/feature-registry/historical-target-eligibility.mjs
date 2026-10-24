@@ -5,10 +5,10 @@
  */
 import {FAMILY_IDS,TARGET_IDS} from './registry-contract.mjs';
 export const HISTORICAL_TARGET_ELIGIBILITY_POLICY=Object.freeze({
- contract:'aegis.historical-target-eligibility-policy.v1',version:'2026-10-24',
+ contract:'aegis.historical-target-eligibility-policy.v2',version:'2026-10-24.r1',
  familyIds:Object.freeze(['H10','H11','H12','H14','P01','P05']),
- addedTargets:Object.freeze(['PRE_MAP_WIN','PRE_KILLS','PRE_DURATION','SERIES_PRE']),
- guard:'Individual definitions still require phase-available scopes; current_draft/current_live/current_map_label remain prohibited in PRE.'
+ addedTargets:Object.freeze(['PRE_MAP_WIN','PRE_KILLS','PRE_DURATION','SERIES_PRE','SERIES_BETWEEN']),
+ guard:'Only current_identity/prior_maps definitions reach undrafted targets. Current draft/live/labels remain prohibited; BETWEEN uses a separately frozen team1/team2 history context.'
 });
 const fail=x=>{throw Error('historical_target_eligibility:'+x);};
 const unique=a=>Array.isArray(a)&&a.every(x=>typeof x==='string')&&new Set(a).size===a.length;

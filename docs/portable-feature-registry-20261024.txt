@@ -1,0 +1,98 @@
+AEGIS — PORTABLE CANONICAL FEATURE REGISTRY, 24 OCTOBER 2026
+
+The installed application can load the reviewed 79-family, 14-input-schema,
+12-target inventory from source-safe versioned artifacts. It does not need the
+continuation workspace. The registry retains 465359 old column occurrences by
+exact schema/source/name pins and complete zero-based occurrence ranges. This
+is complete inventory disposition coverage, not completed semantic migration.
+Every old occurrence remains explicitly unresolved for migration, outside the
+current executable projection. No spelling match authorizes an alias or concat.
+
+INTERFACES
+
+scripts/feature-registry/canonical-registry.mjs exports:
+- loadCanonicalRegistry({expectedRegistrySha256 = null} = {}) returns immutable
+  index, familyDocument, targetDocument, ledger, provenance, registrySha256,
+  provenanceSha256 and manifestSha256. Files resolve relative to import.meta.url.
+- bindLegacyCatalogueNames(catalogueId, orderedNames) verifies the entire exact
+  ordered-name hash and width, then exposes dispositionAt(columnIndex). A caller
+  cannot establish occurrence membership using only a plausible name or hash.
+  Names are copied before binding; caller mutation cannot change the identity.
+
+registry-contract.mjs exports TARGET_SCOPE_POLICY and
+projectionScopeRejection(definition, targetId, stateMode). The scope helper returns
+null on a permitted definition or a reason string. validateProjection uses this
+same helper after validating the executable semantic definition and family union.
+Actual producers must still verify source bytes, identity, phase and as-of inputs.
+The helper does not authenticate a source or compute a feature value.
+
+The historical eligibility policy v2 preserves historical PRE eligibility and
+adds SERIES_BETWEEN to H10, H11, H12, H14, P01 and P05. Their independent historical
+current_identity/prior_maps variants remain eligible while selected-current-hero,
+current-live and label variants fail the undrafted scope gate. BETWEEN requires
+its own frozen team1/team2-oriented history context; this union change does not
+prove that such a context has already been produced. No D-family expansion occurs.
+
+PROVENANCE AND INVALIDATION
+
+artifacts/2026-10-24.r1 contains the index, family document, target matrix, semantic
+disposition ledger, provenance and bundle manifest. Their metadata is portable;
+historical local evidence references are descriptive relative identifiers and are
+never opened by the runtime loader. Raw observations, databases, archives, fitted
+weights and credentials are absent. Legacy ordered-name bodies are not duplicated.
+Original Russian family names/formulas are retained only as explicitly identified
+quoted historical evidence; authoritative family descriptions are in English.
+
+The bundle loader checks artifact byte lengths/hashes, registry structure, scope
+policy, exact ledger coverage and cross-artifact bindings. The index includes
+ledger/provenance pins and the scope policy, so changing those inputs changes the
+semantic registry hash used by downstream schemas. An optional expected hash
+rejects a stale binding. These host-owned metadata checks are not a signature or
+proof of provider truth. The immutable registry is cached per module lifetime;
+install a changed bundle through a new reviewed version and restart its consumer.
+
+The ledger distinguishes not generated, partially generated, exact alias,
+unavailable input, learned-state pending, label-only and presentation-only. It
+authorizes no exact aliases. A family containing a generated subset remains
+incomplete. Old formulas with no exact executable migration have null new IDs,
+formulas and versions. A directory evidence reference explicitly has no content
+hash and cannot stand in for a formula pin. Source references are historical pins,
+not an assertion that the referenced file still has those bytes after later work.
+
+DECISIONS AND ALTERNATIVES
+
+The occurrence ranges preserve all old alternatives without duplicating roughly
+34 MB of names in every application checkout. Supplying a name corpus remains an
+explicit audit operation, and its full ordered hash must match first. Blindly
+concatenating C1/C2/ProfileBuilder/native vectors was rejected because identical
+names and widths do not establish formula, unit, profile or availability equality.
+Declaring all families implemented from one column was rejected. Unresolved rows
+retain a precise next action instead of invented aliases or feature availability.
+
+CHECKS AND EVIDENCE
+
+The registry/eligibility/composer regression suite passed 87/87 tests at this
+checkpoint. It includes all eligible historical identity/prior-map unions across
+PRE and BETWEEN, prohibited draft/live/label variants, malformed allowance/mode
+rejection, relocation to an unrelated temporary directory, stale expected hashes,
+corrupt artifact bytes, cross-artifact mutation and caller-mutation protection.
+Synthetic scope probes test contracts; they are not generated historical features.
+
+A bounded metadata audit validated all 14 retained ordered-name files and all
+465359 occurrence dispositions against their exact pins. It read zero game rows,
+used zero provider calls and ran zero training jobs. That audit establishes name
+inventory preservation only. It establishes no formula parity, causal source
+availability, population coverage, model accuracy or full-family completion.
+
+CONTINUATION AND LIMITS
+
+The root integration must use the canonical loader in the actual unified producer
+and reuse the scope helper for its filters. Test that actual PRE/POST/LIVE and the
+separate series-oriented histories route the generated definitions correctly.
+Then continue exact per-definition legacy migration, profile eligibility and
+source-time proof; preserve every unresolved alternative until reviewed.
+
+The full feature-first gate remains incomplete. Training, HPO, calibration,
+quality evaluation, source probing, runtime/task activation, migrations, model
+promotion and app release remain outside this block. Return the consolidated
+architecture and causal-availability evidence to Astra before training.

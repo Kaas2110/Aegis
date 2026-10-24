@@ -9,6 +9,37 @@ const TARGET_CONTRACTS=Object.fromEntries(TARGET_IDS.map(id=>[id,{
 }]));
 const SHA = /^[a-f0-9]{64}$/;
 const SCOPES = new Set(['prior_maps','current_identity','current_draft','current_live','series_context','previous_series_maps','current_map_label','candidate_axis','presentation']);
+// One scope policy for producer filtering and final projection validation. Family
+// target unions remain necessary but never attest a particular input's scope.
+export const TARGET_SCOPE_POLICY = Object.freeze({
+ contract:'aegis.feature-target-scope-policy.v1',version:'2026-10-24.r1',
+ undraftedTargets:Object.freeze(['PRE_MAP_WIN','PRE_KILLS','PRE_DURATION','SERIES_PRE','SERIES_BETWEEN']),
+ previousSeriesMapTargets:Object.freeze(['SERIES_BETWEEN','SERIES_LIVE']),
+ forbiddenPredictiveScopes:Object.freeze(['current_map_label','presentation']),
+ historyTimePolicy:'Every historical fact availableAt <= historyCutoffAt; current identity validFrom <= decisionAt; current map excluded.',
+ currentTimePolicy:'One admitted source profile per coherent current frame; receipt <= decisionAt; no inferred event latency.',
+ betweenPolicy:'Separate immutable team1/team2-oriented context; never reuse the previous map draft or sides as next-map inputs.'
+});
+export function projectionScopeRejection(definition,targetId,stateMode) {
+ if(!TARGET_IDS.includes(targetId))return 'projection_target';
+ const expected=targetId==='SERIES_LIVE'?['observed_postdraft','observed_live']:[TARGET_CONTRACTS[targetId].phase];
+ if(!expected.includes(stateMode))return 'projection_state_mode';
+ if(!definition||!Array.isArray(definition.inputScopes)||!definition.inputScopes.length||definition.inputScopes.some(s=>!SCOPES.has(s))||new Set(definition.inputScopes).size!==definition.inputScopes.length)return 'input_scope';
+ if(!Array.isArray(definition.allowedTargets)||!definition.allowedTargets.length||definition.allowedTargets.some(t=>!TARGET_IDS.includes(t))||new Set(definition.allowedTargets).size!==definition.allowedTargets.length)return 'allowed_targets';
+ if(!definition.allowedTargets.includes(targetId))return 'feature_target_ineligible';
+ const scopes=definition.inputScopes,live=stateMode==='LIVE'||stateMode==='observed_live',draft=live||stateMode==='POST'||stateMode==='observed_postdraft';
+ if(scopes.includes('current_map_label'))return 'current_map_label_predictive';
+ if(scopes.includes('presentation'))return 'presentation_is_not_predictor';
+ if(scopes.includes('current_live')&&!live)return 'dynamic_in_nonlive_projection';
+ if(scopes.includes('current_draft')&&!draft)return 'draft_in_undrafted_projection';
+ if(scopes.includes('previous_series_maps')&&!TARGET_SCOPE_POLICY.previousSeriesMapTargets.includes(targetId))return 'previous_series_scope';
+ if(scopes.includes('candidate_axis')){
+  const expectedCoordinate=targetId.startsWith('LIVE_')?'remaining':'final';
+  if(!/_(KILLS|DURATION)$/.test(targetId)||definition.coordinate!==expectedCoordinate)return 'candidate_axis_coordinate';
+  if(definition.units!==(targetId.endsWith('_DURATION')?'seconds':'kills'))return 'candidate_axis_units';
+ }
+ return null;
+}
 function fail(reason) { throw new Error(reason); }
 function text(v, name) { if(typeof v!=='string'||!v.trim()) fail('required:'+name); }
 function unique(v, name) { if(!Array.isArray(v)||v.some(x=>typeof x!=='string'||!x)||new Set(v).size!==v.length) fail('unique_strings:'+name); }
@@ -55,8 +86,8 @@ export function validateRegistry(index, familyDocument, targetDocument) {
 
 // This identity preserves all occurrences without making a semantic-alias claim.
 export function occurrenceId(catalogue, index, name) {
-  if(!Number.isSafeInteger(index)||index<0||index>=catalogue.count) fail('column_index'); text(name,'column_name');sha(catalogue.orderedNameHash,'orderedNameHash');
-  return catalogue.id+'@'+catalogue.orderedNameHash+':'+index+':'+encodeURIComponent(name);
+  if(!Number.isSafeInteger(index)||index<0||index>=catalogue.count) fail('column_index'); text(name,'column_name');sha(catalogue.orderedNameHash,'orderedNameHash');sha(catalogue.source?.sha256,'sourceSha256');
+  return catalogue.id+'@'+catalogue.source.sha256+'@'+catalogue.orderedNameHash+':'+index+':'+encodeURIComponent(name);
 }
 
 // The prose family catalogue is an inventory. Every executable projection needs
@@ -80,18 +111,9 @@ export function validateProjection({targetId,stateMode,definitions}, registry) {
   const t=registry.targets.get(targetId);if(!t) fail('projection_target');if(!t.stateModes.includes(stateMode)) fail('projection_state_mode');
   if(!Array.isArray(definitions)||!definitions.length) fail('projection_definitions');
   unique(definitions.map(d=>d.id),'projection_ids');unique(definitions.map(d=>d.name),'projection_names');
-  const live=stateMode==='LIVE'||stateMode==='observed_live';
-  const draft=live||stateMode==='POST'||stateMode==='observed_postdraft';
   for(const d of definitions) {
-    validateDefinition(d,registry);if(!d.allowedTargets.includes(targetId)) fail('feature_target_ineligible:'+d.id);
-    if(d.inputScopes.includes('current_live')&&!live) fail('dynamic_in_nonlive_projection:'+d.id);
-    if(d.inputScopes.includes('current_draft')&&!draft) fail('draft_in_undrafted_projection:'+d.id);
-    if(d.inputScopes.includes('previous_series_maps')&&!['SERIES_BETWEEN','SERIES_LIVE'].includes(targetId)) fail('previous_series_scope:'+d.id);
-    if(d.inputScopes.includes('candidate_axis')) {
-      const expected=targetId.startsWith('LIVE_')?'remaining':'final';
-      if(!/_(KILLS|DURATION)$/.test(targetId)||d.coordinate!==expected) fail('candidate_axis_coordinate:'+d.id);
-      const unit=targetId.endsWith('_DURATION')?'seconds':'kills';if(d.units!==unit) fail('candidate_axis_units:'+d.id);
-    }
+    validateDefinition(d,registry);
+    const rejection=projectionScopeRejection(d,targetId,stateMode);if(rejection)fail(rejection+':'+d.id);
   }
   return {contract:'aegis.feature-projection-validation.v1',targetId,stateMode,featureCount:definitions.length,definitionHash:digest(definitions),trainingAdmitted:false,servingAdmitted:false};
 }

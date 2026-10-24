@@ -1,0 +1,70 @@
+AEGIS — DIAGNOSTIC JOURNAL CACHE AND OWNED READ API, 24 OCTOBER 2026
+
+This source block reduces repeated immutable-schema work and adds a disabled
+read-only admin handler. It does not start an HTTP server or background task,
+call a provider, migrate a database, compute a model prediction or admit training.
+The feature-first/Astra gate remains open. Root owns actual host/CLI/auth wiring.
+
+createDiagnosticFeatureJournal preserves writeSchema, appendTrace, loadSchema
+and loadTrace. Schemas and definitions now use bounded persistent LRU caches.
+Every cache access still checks bigint file size, mtimeNs, ctimeNs, device and
+inode; an unchanged fingerprint permits reuse of already verified immutable
+content. A changed or missing file cannot return old cached success. Cold loads
+verify actual content hashes and recomposed schema hashes; concurrent cold
+readers share one definitions parse. Same-size corruption with restored mtime
+is caught by the remaining fingerprint and hash validation. This integrity
+boundary does not cover a hostile filesystem administrator who can forge all
+filesystem metadata or races after the final check.
+
+Cached schemas and all nested definitions are deeply immutable. Callers must not
+expect to mutate loadSchema results. The definitions name digest is computed
+once, and each unique pooled vector is validated once per trace. Warm routes no
+longer reparse/canonicalize/hash full definitions or full schemas for every
+frame. Actual value/mask/vector bindings and file fingerprints are still checked.
+
+Limits: maxSchemaBytes defaults to 256MiB and is capped at 256MiB; schemas retain
+the existing 150000-definition count ceiling. maxCachedSchemas defaults to32,
+cap128; maxCachedDefinitions defaults to8, cap64; maxCachedDefinitionBytes defaults
+to256MiB, cap512MiB. The byte allowance is serialized definition content, not an
+assertion that parsed V8 memory is equal to those bytes. Headers/indices have
+finite count limits; parsed object overhead and caller-retained references need
+separate host memory measurement. Oversized-for-cache definitions are verified
+without caching; LRU eviction drops dependent internal schema references.
+Older explicit 128MiB schema limits remain valid. cacheStats exposes operation
+counts and retained serialized bytes; clearCache forces fresh retained replay.
+
+createDiagnosticFeatureReadApi accepts a trusted journal, enabled=false by
+default, a configured basePath, page/response ceilings and maxConcurrentReads.
+It returns an owned handle({method,url}) function yielding {status,headers,body}.
+There is no listener or client-selected journal directory. The host must put
+this handler behind its existing admin authentication and local binding policy.
+
+With the default basePath=/admin/feature-diagnostics, GET /traces/<sha256> returns
+compact trace identity, provenance scalars, targets, schema references and
+observed/missing counts. It omits raw captures, private source paths, full schemas
+and full vectors. GET /traces/<sha256>/features/<TARGET>?offset=0&limit=200 returns
+one exact target/schema page of index/name/value/missing. Observed zero and
+unavailable null stay distinct. The trace is still feature evidence, with
+recordedPrediction=false and both serving/training flags false.
+
+Page size defaults to200 (cap1000); response bytes default1MiB (cap4MiB); concurrent
+reads default4 (cap16). Overflow returns429 without queuing another read. Disabled
+handlers return404 before touching the journal; writes return405; invalid hashes,
+duplicate/unknown query parameters or invalid pages return400. Stored evidence
+failure returns a generic503 without private exception/path fragments. The root
+host separately owns socket/request deadlines, authentication and lifecycle.
+
+Technical evidence is synthetic: all six existing journal regressions, six new
+cache tests and six new reader tests passed (18 total, zero failed/skipped).
+Tests include cached-file corruption, same-size restored-mtime tampering,
+simultaneous cold readers, immutable returned objects, eviction/clear, ceilings,
+disabled/no-IO default, paging identity, zero/missing and overload behavior.
+
+A bounded synthetic journal-only measurement used3000 definitions with2048-byte
+metadata, 6364891 serialized definition bytes, three shared-definition target
+schemas and one pooled vector. Cold validation performed one definitions parse,
+three schema digests and one names digest. Twelve subsequent frames added36
+schema cache hits and no further definition parse/schema/names digest. The saved
+private receipt records actual wall/CPU/RSS/OS peak methods and results. It is not
+the full rich schema, an80-minute multi-map host measurement, a source-continuity
+or process-restart acceptance test, or a claim of complete resource acceptance.

@@ -4,7 +4,10 @@
 import {createHash} from 'node:crypto';
 import {advanceRoshanFeatures,FEATURE_CONTRACT} from './roshanFeatures.mjs';
 import {projectPlayerHeroEconomy,featureNames,CONTRACT as ECONOMY_CONTRACT} from './playerHeroEconomyFeatures.mjs';
+import {readSteamProgressionProof} from './steamProgressionAdmission.mjs';
+import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 export const BUNDLE_CONTRACT='aegis.steam-coherent-feature-bundle.v3';
+export const PROGRESSING_BUNDLE_CONTRACT='aegis.steam-coherent-feature-bundle.v4';
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const clock=o=>o?.providerGameClockSeconds?.missing===false?o.providerGameClockSeconds.value:null;
 const EXPECTED_ECONOMY_ERRORS=new Set(['complete_coherent_economy_snapshot_required','hero_dictionary_revision_required']);
@@ -12,13 +15,18 @@ const EXPECTED_ECONOMY_ERRORS=new Set(['complete_coherent_economy_snapshot_requi
  * source observations, never labels. Static history uses the explicit frozen v2
  * context; unproven history is missing, not an invented player-strength value.
  */
-export function advanceSteamFeatureBundle(previous,observation,{patch=null,rules=null,events=[],historicalContext=null}={}){
- if(previous!==null&&previous!==undefined&&(previous.contract!==BUNDLE_CONTRACT||!Array.isArray(previous.history)||previous.history.length>2048))throw Error('steam_feature_bundle_state');
+export function advanceSteamFeatureBundle(previous,observation,{patch=null,rules=null,events=[],historicalContext=null,progressionProof=null,decisionAt=observation?.source?.capture?.receivedAt}={}){
+ let admission=null;
+ if(progressionProof!==null){admission=readSteamProgressionProof(progressionProof,{matchId:observation?.matchId,observationId:observation?.observationId,rawSha256:observation?.source?.capture?.rawSha256,sourceProfile:observation?.dynamic?.sourceProfile,identityHash:steamObservationIdentity(observation).key,decisionAt,observation});if(!admission.accepted)throw Error(admission.reason);}
+ const admissionProfile=admission?.admissionProfile??null,bundleContract=admission?PROGRESSING_BUNDLE_CONTRACT:BUNDLE_CONTRACT;
+ if(previous!==null&&previous!==undefined&&(![BUNDLE_CONTRACT,PROGRESSING_BUNDLE_CONTRACT].includes(previous.contract)||!Array.isArray(previous.history)||previous.history.length>2048))throw Error('steam_feature_bundle_state');
+ const admissionChanged=previous!=null&&(previous.admissionProfile??null)!==admissionProfile;
+ if(admissionChanged)previous=null;
  const roshan=advanceRoshanFeatures(previous?.roshanState??null,observation,{patch,rules,events,historicalContext});
  const reset=roshan.resetReasons.length>0;
  const history=reset?[]:(previous?.history??[]);
  let economy=null,economyReason=null;
- try{economy=projectPlayerHeroEconomy(observation,{staticContext:historicalContext,history});}
+ try{economy=projectPlayerHeroEconomy(observation,{staticContext:historicalContext,history,progressionProof,decisionAt});}
  catch(error){if(!EXPECTED_ECONOMY_ERRORS.has(error.message))throw error;economyReason=error.message;}
  const names=[],values=[];
  for(const name of Object.keys(roshan.features).sort()){
@@ -33,14 +41,14 @@ export function advanceSteamFeatureBundle(previous,observation,{patch=null,rules
  let nextHistory=history.filter(o=>clock(o)!==null&&clock(o)>=currentClock-630&&o.observationId!==observation.observationId);
  if(economy)nextHistory.push(observation);
  if(nextHistory.length>2048)throw Error('steam_feature_bundle_history_bound');
- const state={contract:BUNDLE_CONTRACT,roshanState:roshan.state,history:nextHistory};
- return {contract:BUNDLE_CONTRACT,matchId:observation.matchId,observationId:observation.observationId,
+ const state={contract:bundleContract,admissionProfile,roshanState:roshan.state,history:nextHistory};
+ return {contract:bundleContract,admissionProfile,admissionProvenance:admission?.provenance??null,matchId:observation.matchId,observationId:observation.observationId,
   sourceProfile:roshan.sourceProfile,knownAt:roshan.knownAt,eventClockSeconds:roshan.gameClockSeconds,
   sourceInputHash:roshan.sourceInputHash,rawSha256:roshan.rawSha256,
-  componentContracts:{roshan:FEATURE_CONTRACT,economy:ECONOMY_CONTRACT},
-  vector:{names,values,schemaHash:digest(names),featureCount:names.length},
+  componentContracts:{roshan:FEATURE_CONTRACT,economy:economy?.contract??ECONOMY_CONTRACT},
+  vector:{names,values,schemaHash:admission?digest({contract:bundleContract,admissionProfile,names}):digest(names),featureCount:names.length},
   roshan:{state:roshan.roshan.state,rulesAccepted:roshan.rulesAccepted,timerSemanticsAccepted:roshan.timerSemanticsAccepted,historyContext:roshan.historyContext},
   economy:economy?{status:'coherent_diagnostic_features',staticContextStatus:economy.staticContextStatus,verifiedRoleCount:economy.verifiedRoleCount,knownActiveValueColumns:economy.knownActiveValueColumns,activeValueColumns:economy.activeValueColumns}:{status:'unavailable',reason:economyReason},
-  resetReasons:roshan.resetReasons,state,
+  resetReasons:admissionChanged?['admission_profile_changed',...roshan.resetReasons]:roshan.resetReasons,state,
   jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false};
 }

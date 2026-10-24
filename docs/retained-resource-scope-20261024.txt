@@ -1,0 +1,81 @@
+AEGIS — BOUNDED RETAINED STATE CHECKS AND FAMILY STATUS SCOPE
+24 October 2026. Synthetic technical evidence only; feature-first gate remains open.
+
+SOURCE PREFIX OVER MORE THAN EIGHTY MINUTES
+
+The actual retainedFeaturePipeline consumed 2403 full pinned synthetic committed
+captures at a two-second cadence over 4804 source seconds (80 minutes 4 seconds).
+Each normal capture contained two maps with full ten-hero drafts. One committed
+non-JSON HTTP failure broke continuity for both maps, one capture omitted the
+second map, and account identities were disclosed later. This produced 4803
+normal map rows, with map capture counts 2402 and 2401 respectively.
+
+The test set maxFramesPerMap=4. Each map finished with three retained draft/current
+frames, two immutable draft/identity anchors and 9743 retained draft bytes. No old
+512-frame termination occurred. The test used replayOnly=true with no prior trace
+restoration. Source factories, history materialization, rich generation, schema
+registration and trace writes were deliberately unreachable and were called zero
+times. This tests original-byte replay, capture barriers and bounded prefix state.
+It does not test rich feature generation or journal throughput at two-second cadence.
+
+Measured source-prefix run: 17007.8978 ms wall time, 18625 ms process user CPU and
+171 ms system CPU. Initial RSS was 48336896 bytes. RSS sampled every hundred
+captures and at completion peaked at 294227968 bytes; process.resourceUsage maxRSS
+converted from KiB was 298303488 bytes. CPU and maxRSS are process measurements,
+including runtime/GC work, not per-map independent estimates or a latency promise.
+
+MODEST RICH ROLLING HISTORY CHECK
+
+A separate actual advanceObservedDraftFeatureBundle replay used an owned private
+history proof and its returned opaque temporal state for 26 synthetic explicit
+phase5 frames at 30-second intervals over 750 source seconds. No private state
+object was fabricated. The returned diagnostic native history stayed at no more
+than 22 frames inside the inclusive 630-second retention horizon. Its final
+600-second score trajectory had 21 supported observations. The rich vector had
+90243 columns; this component count is separate from the complete common vector.
+
+The rich loop took 3523.5366 ms after history-proof setup; the entire test took
+4264.6265 ms. RSS before the loop was 444264448 bytes (including the constructed
+history proof), sampled loop peak was 1090699264 bytes, and process lifetime
+maximum RSS was 1098969088 bytes. These 26 frames test rolling state and a 600-second
+trajectory. They establish neither an eighty-minute rich replay nor sustained
+two-second rich-service resource acceptance. Zero real rows/providers/training.
+
+MEASUREMENT METHOD AND REPRODUCTION
+
+scripts/steam-live-collector/source-adapter/retainedFeaturePipeline.resource.test.mjs
+contains both cases. Node v24.19.0 used performance.now for elapsed wall time,
+process.cpuUsage for process CPU and process.memoryUsage().rss for sampled RSS.
+process.resourceUsage().maxRSS is the process lifetime high-water measurement.
+No sampler claims to observe every instantaneous allocation; the process maximum
+and sampled values are reported separately. The two targeted runs each passed.
+
+The prefix-only case was executed before the final R3 representation pool update;
+it never invokes the changed rich/schema construction path. The rolling-rich case
+used the final pooled Steam stage. Exact scoped source pins and check receipts
+belong to the local review package. Reuse the recorded evidence for unchanged
+inputs; a later consolidated run should not be counted as independent evidence.
+
+ALL-FAMILY DISPOSITION VERSUS GENERATED SUBSETS
+
+generated-family-integration-status-20261024.json maps every one of the 79 canonical
+families across all 12 target unions and records measured generated counts for one
+specific LIVE_MAP_WIN baseline. It binds the original two-frame synthetic common
+producer measurement by SHA256. That baseline has 141131 columns and 41 families
+with generated columns. The remaining 38 had no columns in that measured target;
+this does not establish their status in every other target or profile.
+
+Generated counts include explicit missing or structural-zero columns. They are
+not counts of observed values, available source fields, exact legacy migrations,
+completed families or useful predictors. Raw opaque cooldown/timer proposals may
+have columns while their semantics remain unavailable. Catalogue partial status
+and measured current projection status remain separate fields. All families stay
+fullFamilyComplete=false. Unmeasured target counts remain null rather than being
+filled from a different phase or series route.
+
+The 14 legacy input schemas and 465359 old occurrences remain retained with exact
+pins and unresolved per-occurrence semantic migration. There is no blind concat
+or inferred exact alias. Completing the entire feature-first gate still requires
+review of source availability, semantic migration, causal context, all projections
+and application/operational contracts. No fit, HPO, calibration, quality evaluation,
+provider probe, model activation, public promotion or release is authorized here.

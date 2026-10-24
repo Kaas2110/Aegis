@@ -98,8 +98,26 @@ function statistics(rows,{minimumSupport,definition,windowDays,units,value}){
  return result;
 }
 function latestInstants(rows){let latest=null,text=null;for(const row of rows){if(latest===null||row.at>latest){latest=row.at;text=row.iso;}}return text;}
+/** Structural qualification of a distinct bounded retained-response population.
+ * The source-envelope verifier separately replays actual receipt/version bytes;
+ * this function never converts scope metadata into provider authentication. */
+export function qualifyRetainedHistoryCorpus(data,known){
+ const s=data?.scope,reject=reason=>({verified:false,reason,population:'conditional_provided_maps_only',globalPopulationComplete:false});
+ if(!object(s)||s.contract!=='aegis.retained-history-selection-scope.v1')return reject('retained_source_scope_missing');
+ const cutoff=typeof known==='bigint'?known:instantNs(known);
+ if(cutoff===null||s.sourceUniverse!=='locally_retained_opendota_responses'||s.selection!=='provided_version_inputs_only'||s.completeWithinProvidedInputs!==true||s.globalPopulationComplete!==false||s.truncated!==false||instantNs(s.asOf)!==cutoff||typeof s.population!=='string'||!/^[a-zA-Z0-9_.-]{1,96}$/.test(s.population)||!Array.isArray(data.maps)||s.rowCount!==data.maps.length)return reject('retained_source_scope_contract');
+ const versionSets=new Set();
+ for(const m of data.maps){
+  if(m?.availabilityBasis!=='retained_collector_response_receipt'||m.originalHistoricalAvailabilityProven!==false||!digest(m.sourceVersionSetSha256)||!object(m.fieldAvailability)||Object.keys(m.fieldAvailability).length>500)return reject('retained_map_provenance_required');
+  versionSets.add(m.sourceVersionSetSha256);
+  if(Object.values(m.fieldAvailability).some(f=>!object(f)||!['observed','explicit_null','invalid','conflicting_receipt'].includes(f.status)||!digest(f.versionSha256)||instantNs(f.knownAt)===null||instantNs(f.knownAt)>cutoff))return reject('retained_field_availability_invalid');
+ }
+ if(versionSets.size>1)return reject('retained_source_version_set_conflict');
+ return{verified:true,reason:null,population:'local_retained_response_known_hero_maps_90d',sourceUniverse:s.sourceUniverse,inputPopulation:s.population,scopeSha256:evidenceHash(s),sourceVersionSetSha256:versionSets.size?[...versionSets][0]:null,globalPopulationComplete:false,availabilityBasis:'retained_receipt_reconstruction'};
+}
 function heroScope(data,target,known){
  const s=data.scope,reject=reason=>({verified:false,reason,population:'conditional_provided_maps_only'});
+ if(s?.contract==='aegis.retained-history-selection-scope.v1')return qualifyRetainedHistoryCorpus(data,known);
  if(!object(s)||s.contract!=='aegis.prior-map-selection-scope.v1')return reject('hero_source_scope_missing');
  if(s.sourceUniverse!=='local_pro_matches_join_match_parsed'||s.selection!=='target_teams_or_accounts_or_heroes'||s.windowDays!==90||instantNs(s.asOf)!==known)return reject('hero_source_scope_selection_or_cutoff');
  if(s.completeWithinSource!==true||s.truncated!==false||s.rowCount!==data.maps.length||!digest(s.selectionSqlSha256)||!proof(s.queryEvidenceRef))return reject('hero_source_scope_completeness_unproven');

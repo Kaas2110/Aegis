@@ -1,0 +1,105 @@
+STEAM OBSERVED PROGRESSION: DIAGNOSTIC CONTRACT
+24 October 2026. Source/technical implementation; no runtime or model activation.
+
+Problem and decision
+Retained GLG packets omit game_state. Normalization v2 continues to preserve that
+absence; sourceProfile stays steam.GetLiveLeagueGames.v1.scoreboard. Positive
+duration alone is insufficient. GLG_PROGRESSING_OBSERVED.v1 is a separate admission
+profile supported by two consecutive original committed raw captures. It does not
+assert provider phase 5, a winner, true event latency or prediction quality.
+
+Host API and evidence ownership
+steamProgressionAdmission.mjs exports ADMISSION_CONTRACT, ADMISSION_PROFILE,
+SOURCE_PROFILE, PROGRESSION_POLICY, advanceSteamProgressionAdmission and
+readSteamProgressionProof. The pure advance function accepts an opaque previous
+token and {retainedPrefixInputs, matchId, decisionAt, policy, stopped}. Each prefix
+entry is {rawInput, receiptInput}, using actual UTF-8 bytes and byte/SHA-256/path
+pins of the original collector completion receipt and raw body. It rechecks pins,
+receipt chronology and complete raw normalization. At most 2048 entries and
+64 MiB are allowed. The policy is exact and versioned, not caller-adjustable.
+
+The trusted host must feed every committed capture in receipt order to every
+tracked map, including failures, invalid captures and missing-map captures.
+The pure module cannot independently prove complete enumeration of a journal.
+Do not filter inconvenient captures before admission. Original committed local
+receipts are trusted host evidence, not a provider signature. This API belongs
+to the retained/background host, never a card or public route.
+
+Results include status, reason, privateProof, provenance, expiresAt and
+nextPrivateToken. Commit nextPrivateToken even when status is blocked: it holds
+the intervening barrier. STOP uses stopped=true and clears continuity. A terminal
+indicator closes that token lineage. Retrying a receipt is not a second capture;
+the host may reuse its recorded idempotent result, but must not count it twice.
+Tokens and proofs are frozen handles in module-private WeakMaps. Public hashes,
+JSON, structuredClone, provenance copies and reviewed=true convey no authority.
+Restart replays original committed raw/receipt inputs from null. A serialized
+summary or a new mutable historical query cannot reconstruct admission.
+
+Admission rules
+Both clocks must be positive. Consecutive captures must share a coherent full
+ten-hero/account/team identity and this one native profile. Null accounts remain
+null. Disclosure/team changes start evidence for a new identity. Missing maps,
+invalid/incomplete captures and explicit unsupported phase break the pair.
+Receipt instants strictly increase, the gap is at most 180 seconds, clock never
+rewinds and deltaClock is at most deltaReceipt + 30 seconds. The latter is a
+plausibility guard. It is not an absolute source-age measurement. Any terminal
+phase or raw completion-marker presence blocks, without interpreting its winner.
+
+A lease expires 180 seconds after the last actual clock increase. Equal clocks
+can retain an unexpired proof; they never move its expiry. After expiry or a long
+gap, renewed consecutive evidence is required. Read gates compare exact
+nanosecond instants for receipt, capture completion, progress and lease expiry.
+An unknown true pause may therefore become temporarily unavailable.
+
+The read API requires matchId, observationId, rawSha256, sourceProfile,
+identityHash and decisionAt. identityHash is steamObservationIdentity(o).key.
+Feature callers additionally pass observation:o to bind every normalized field,
+or use the recursively immutable original observation returned by read. Reads
+return accepted, reason, admissionProfile, bindingHash, provenance, observation
+and expiresAt. bindingHash/provenance are for diagnostic tracing and deduplication,
+never replacements for passing the actual opaque proof reference.
+
+Feature integration and versions
+advanceObservedDraftFeatureBundle accepts progressionProof for a single current
+entry. Offline prefixes accept progressionProofs as a positional array matching
+livePrefixInputs: each admitted frame needs its own opaque proof. Earlier frames
+are read at their committed metadata decisionAt; the final frame is read at the
+current decisionAt. This prevents an old expired lease admitting a new decision.
+For a diagnostic retained reconstruction the trusted host may supply
+sourceDecisionAt<=decisionAt only after validating its separate opaque proof of
+the original committed raw/receipt replay. The final/current progression and
+native proof reads then use sourceDecisionAt; intermediate reads retain their
+original metadata decisionAt, and every prefix receipt/metadata decision must
+already exist by the source horizon. History reads/materialization remain at
+actual decisionAt; computedAt is never backdated. Returned decisionAt,
+sourceDecisionAt and reconstructedSourceHorizon distinguish this newly computed
+reconstruction from a prediction originally emitted then. A card/public route
+must never choose an alternate horizon or substitute a public reviewed flag.
+The first seed packet remains evidence only until progress is established; a
+rich offline prefix begins at the first admitted frame, with prior seed evidence
+held by that frame's proof.
+
+The explicit phase-5 observed bundle retains v2. The progressing observed bundle
+uses v3, native coherent bundle v4 and native economy v4, with distinct semantic
+schema hashes and admission metadata. Raw phase remains missing in both vectors.
+Admission-profile transitions clear incompatible native/lead windows. Historical
+materialization is independent: the host retains progression/phase/clock tokens
+outside the history revision cache and never treats a refresh as a new game epoch.
+
+The proof-qualified economy route accepts coherent anonymous players for native
+hero/team arithmetic. Their accounts stay null; personal history and roles remain
+missing. Existing unqualified legacy calls keep their prior diagnostic behavior.
+Native GPM/XPM/NW remain distinct literal fields; no NW/minute substitution or
+new Roshan, Aegis or item semantics are introduced.
+
+Validation and limits
+Synthetic technical tests cover single/equal/nonpositive clocks, exact 180-second
+and +1ns receipt/lease boundaries, implausible advance, rewind, reorder, phase and
+completion markers, identity disclosure, missing/failing capture barriers, opaque
+proof/state forgery, raw/receipt tamper, STOP, actual-raw restart, rich/native
+connectivity and offline/sequential equality. Existing dynamic/base tests pass.
+A bounded private retained replay checks actual raw/native connectivity separately;
+no real captures or receipts are shipped as fixtures. Source/profile connectivity
+does not prove real-history completeness, sustainable throughput, joint source
+availability, event-to-application lag or model quality. All outputs retain false
+serving/training/promotion admission. Feature-first/Astra gates remain open.

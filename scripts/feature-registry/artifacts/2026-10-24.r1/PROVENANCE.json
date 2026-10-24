@@ -1,0 +1,27 @@
+{
+  "contract": "aegis.feature-registry-provenance.v1",
+  "reviewedSourceMain": "9517e83dc3ebb608a07e34d55e3af7b08d1fd545",
+  "sourceMetadataInputs": [
+    {
+      "id": "reviewed-CATALOGUE-INDEX.json",
+      "bytes": 27918,
+      "sha256": "8ec069e556d2cf43637ba90e7f74003ffa8f0b3d1e6c380292a541a7ed118b2f",
+      "bundled": false
+    },
+    {
+      "id": "reviewed-FAMILY-REGISTRY.json",
+      "bytes": 143956,
+      "sha256": "d6825b8388a8ec391875aa8ae96200a5a49493a5ac5a4cf683b618923c0f1496",
+      "bundled": false
+    },
+    {
+      "id": "reviewed-TWELVE-TARGET-MATRIX.json",
+      "bytes": 17602,
+      "sha256": "66bf275babcda67c4566a28657f94b597ea9968b87e72c13997f0490d7fff72c",
+      "bundled": false
+    }
+  ],
+  "scope": "Metadata and source references only; no raw observations, weights, credentials or local absolute paths.",
+  "namesCorpusBundled": false,
+  "legacyFormulaCompletenessAttested": false
+}
