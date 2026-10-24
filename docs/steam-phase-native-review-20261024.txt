@@ -1,0 +1,150 @@
+AEGIS: STEAM PHASE AND NATIVE FEATURE REVIEW
+24 October 2026. Source-only diagnostic contracts. No model admission.
+
+1. Phase classifier and responsibility
+
+steamPhasePolicy.mjs exports classifySteamObservationPhase(observation,
+{decisionAt=null}). The input must already be an actual-byte replayed normalized
+Steam observation owned by the host. This pure classifier does not authenticate
+bytes, interpret an untrusted HTTP/client object, or repair a source payload.
+It returns classification/reason, dynamicDiagnosticAllowed,
+staticDraftDiagnosticAllowed, terminal, outcomeKnown=false, cohort, phase, clock,
+identity and original observation/raw/profile/receipt provenance. Serving and
+training eligibility remain false.
+
+- Observed phase5 + nonnegative finite game clock + coherent ten-hero identity:
+  observed_live. Clock alone never establishes this classification.
+- Observed phase2/3/4 + complete draft: observed_postdraft, static diagnostics.
+- Absent phase + complete draft: unclassified_static_draft_only. This preserves
+  available draft/history context but is NOT an early postdraft cohort or LIVE.
+- Observed phase5 with absent/negative clock: blocked, never static fallback.
+- Observed phase6: observed_post_game, no predictive route and no inferred winner.
+- Existing normalized outcome-marker indicator: predictive routes blocked;
+  presence is not an actual result or winner. An unclassified raw completion
+  marker is blocked without asserting the map finished.
+- Phase7 DISCONNECT and other unsupported explicit states remain blocked.
+- Invalid phase representation, source profile, future receipt or conflicting/
+  incomplete hero identities cannot yield a static fallback.
+
+The shared producer/consumer must preserve this classification and any original
+live rejection in the durable trace. A map previously admitted LIVE must not be
+downgraded to an early POST forecast when a later live packet is unavailable.
+Raw pin, chronology, roster, terminal and malformed-source failures must not be
+converted into successful POST output. Those routing/trace changes are separate
+root-owned integration work, not hidden in this classifier.
+
+The normalization v2 contract and recorded raw-normalized comparison remain
+unchanged. Its rawPacket is a retained read-set, not every original game field.
+New completion indicator fields outside that read-set require actual raw-host
+inspection or a separately versioned future normalization; do not change v2
+replay expectations silently. No such new indicator occurred in the reviewed
+retained GLG corpus.
+
+2. Dynamic component v2
+
+observedDraftFeatureBundle.mjs changes the diagnostic component contract from
+aegis.observed-draft-steam-feature-bundle.v1 to .v2. Feature definition IDs and
+semantic schema hashes therefore change; old archives retain their old version.
+
+A lower game clock within the same owned map/history/profile state now blocks
+with dynamic_game_clock_regression. This applies to a multi-frame replay and a
+single next packet. The old implementation reset its windows and still produced
+a new vector at the lower clock, allowing stale state to replace newer state.
+A blocked packet does not mutate the previously accepted opaque state. A remake
+or other clock epoch requires a separate explicit future contract; it is never
+guessed from a rewind. Equal clocks are allowed and do not fabricate progress.
+
+The v2 vector appends33 explicit standalone base columns. They are independent of
+historical support or trajectory-window availability:
+- clock_seconds, phase_code and Radiant/Dire/total/difference kills;
+- native NW/GPM/XPM/level and score Radiant-minus-Dire leads;
+- literal Roshan timer, positivity and observed decreasing-pair indicator;
+- existing event/rule-qualified Roshan death/respawn intervals and alive/dead;
+- existing qualified Aegis holder/current item observation, pickup elapsed,
+  lifetime upper bound and linked confirmed steal.
+
+These columns directly project existing coherent native component values, with
+separate missing masks and per-column source/formula/unit/family descriptors.
+Basic score/clock use L01; NW uses L02, GPM/XPM L03, level L04, and Roshan/Aegis
+use R01-R04. Earned-gold history L07 is not substituted for current NW. The
+kills_diff and score_diff base columns explicitly expose the same native score
+difference under their declared names; they are not a global alias rule.
+The previous native38468 vector remains separately available for diagnosis and
+is not blindly concatenated. Current-only base inputs have current_live scope;
+they do not acquire prior_maps requirements merely because rich history is also
+present in the bundle. Missing operands remain missing.
+
+3. Actual retained evidence and the remaining source gap
+
+An offline recheck of the frozen23October manifest verified468 unique GLG body
+pins,8664 game rows. Every row omitted game_state. Thus the present explicit
+phase5 dynamic gate cannot admit those actual GLG packets, including6125
+positive-clock full-hero rows. Preserving this gate is a correct fail-closed
+boundary, but does not complete practical GLG live support.
+
+The distinct14 retained RT bodies all included match.game_state: phase2 in4,
+phase4 in2, phase5 in8. RT is a separate source profile, with different observed
+fields and clocks. Its phase must not be copied into a GLG packet as if observed
+there. A schema declaration is not proof of a received HTTP field.
+
+Literal GLG player field counts were82165 for NW/GPM/XPM/gold/level; net_gold
+was absent. gold and net_worth differed in81462 player rows. Of61276 rows with
+positive clock and native GPM/NW,60190 had |GPM - NW/minute| >1. This is direct
+evidence against treating these native fields as interchangeable. It is not a
+replacement for their full patch-specific semantic contracts.
+
+Roshan timer was present zero6970 times, positive1281 times, absent413 times.
+Zero does not establish alive; a positive observed number does not by itself
+confirm an exact countdown, a death timestamp, respawn, pickup or Aegis steal.
+The earlier two-map retrospective timer/objective join is useful research, not
+an admitted real-time event producer. Postmatch objective labels must not gain
+an invented earlier availability time. Qualified event/rule inputs remain
+optional and missing until actually supplied and reviewed.
+
+4. Accepted next Sol task: a distinct observed-progression diagnostic profile
+
+Do not loosen missing-phase admission by testing clock>0 or adding a caller
+reviewed=true flag. Implement a new versioned GLG_PROGRESSING_OBSERVED profile
+with a private producer proof generated only from consecutive actual raw replay:
+
+a. Two consecutive successful complete retained GLG receipts contain the same
+   map/profile/ten-hero/known-account/team identity; account/team disclosure or
+   conflict is a barrier/new identity revision, not a retroactive rewrite.
+b. Both clocks are positive, no rewind, with at least one actual clock increase.
+   Explicit non-live/terminal or any outcome marker blocks this profile. Missing
+   phase remains missing, with no synthetic phase5 value.
+c. Receipt order is causal and strictly increasing; maximum receipt gap180s.
+   Require deltaClock <= deltaReceipt +30s as a conservative plausibility bound,
+   not an estimate of event-to-app lag. Long absence, invalid/intervening packet,
+   source/profile change, identity change or clock regression resets the proof.
+d. A dynamic lease expires no later than180s after the last actual clock advance.
+   Equal-clock updates may reflect pause or stale source; they never renew this
+   progress lease indefinitely. Unknown pause can temporarily be unavailable.
+e. Proof must be private/opaque and bind actual source pins, prefix, identity,
+   observed progression, current receipt, expiry and admission policy version.
+   A serialized content hash or caller-supplied review flag is not admission.
+f. Keep explicit-phase and observed-progression profiles distinct in schema,
+   trace, source labels and future cohorts. Neither establishes absolute event
+   latency, original real-event time, provider authenticity or95% timely coverage.
+
+The180s bound is evidence-derived without changing collection cadence. In467
+existing successful collector receipts,6047 adjacent same-identity pairs had
+5955 clock increases and92 equal clocks; no observed rewind, one identity barrier.
+For5707 positive-to-positive increasing pairs, minimum receipt gap120.538s,
+median120.857s and p95 122.127s. A120s cap admits ZERO pairs because the collector
+waits120s after completion. A180s cap admits5591 pairs from359 maps, all satisfying
+deltaClock <= deltaReceipt +30s. Repeated pairs/maps are not independent samples
+and this is not a coverage or model-quality estimate. The profile is planned,
+not implemented by these source changes.
+
+5. Verification scope
+
+25 dynamic and12 phase technical tests pass on synthetic pinned data. Retained
+real body/receipt censuses reverify their actual pins without source calls or
+fabricated receipt times. The preserved pre-fix rewind counterexample produced
+a300s vector after900s; corrected sequential and replay paths block it. Unknown
+Roshan state, missing GPM/scores, explicit phase5 without clock, raw completion
+marker ambiguity, terminal states, identity conflicts and nanosecond future
+receipts have focused controls. Root still owns changed shared-producer/consumer
+tests, integration, exact commit publication and independent review acceptance.
+No training, HPO, calibration, provider request, task change or model promotion.

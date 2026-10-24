@@ -43,3 +43,9 @@ test('archive child junctions cannot redirect raw reads outside the named archiv
  const archive=join(root,'junction-archive'),elsewhere=join(root,'elsewhere');await mkdir(archive);await mkdir(join(archive,'observations'));await mkdir(elsewhere);await symlink(elsewhere,join(archive,'raw'),process.platform==='win32'?'junction':'dir');
  await assert.rejects(readCommittedSteamCapture({archive,receiptFile:'1792756680000-00000000-0000-0000-0000-000000000000.json'}),/archive_directory/);
 }));
+
+test('explicit map release rebuilds state from original prefix instead of reusing an old receipt only',()=>fixture(async({makePipeline,sourceStore,journal})=>{
+ const database=db(),p=makePipeline({db:database,producer:producer(),sourceStore,featureJournal:journal,now:()=>NOW}),c=capture(draftEntry({accounts:true}));
+ const a=await p.consumeCapture(c);assert.equal(a.results[0].status,'recorded_diagnostic');assert.equal(p.forgetMap('90001').released,true);
+ const b=await p.consumeCapture(c);assert.equal(b.reusedReceipt,undefined);assert.equal(b.results[0].stateAdvanced,true);assert.equal(database.queries,2);assert.equal((await journal.loadTrace(a.results[0].traceSha256)).sourceSnapshotHash,(await journal.loadTrace(b.results[0].traceSha256)).sourceSnapshotHash);
+}));

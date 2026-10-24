@@ -10,7 +10,8 @@ import { db, proMatchesTable, matchDraftsTable, matchParsedTable } from '@worksp
 import { sql, eq } from 'drizzle-orm';
 import { fetchJsonGet, OpenDotaGetError } from './lib/fetchJsonGet.js';
 import { prepareMatchDetail } from './lib/match-detail-payload.js';
-import { mergeParsedPayload, PARSED_PAYLOAD_SCHEMA_VERSION } from './lib/parsed-payload.js';
+import { PARSED_PAYLOAD_SCHEMA_VERSION } from './lib/parsed-payload.js';
+import { planParsedWrite } from './lib/parsed-write.js';
 import { readRawMatchResponse, retainRawMatchResponse } from './lib/raw-match-response.js';
 import { makeMatchObservation, planMatchObservationFile, readMatchObservation, writeMatchObservation } from './lib/match-observation.js';
 import { coolingMatchIds, completedDetailAttempt, detailRetryAt, detailLimit, DETAIL_COOLDOWN_MS, isPersistenceRetry,
@@ -107,6 +108,14 @@ export async function refreshMatchDetails(options: {archive?: boolean; limit?: n
         const receivedAt = new Date(observation.receivedAt);
         const parts = prepareMatchDetail(observation.payload, matchId);
         await db.transaction(async tx => {
+          if (parts.parsed || parts.draft || parts.firstBloodTime !== null) {
+            // Serialize both parsed writers, including the first insert. Locking
+            // only match_parsed would leave the absent-row race unprotected.
+            // Draft/first-blood writes use the same parent-first lock order.
+            const parent = await tx.select({ matchId: proMatchesTable.matchId }).from(proMatchesTable)
+              .where(eq(proMatchesTable.matchId, matchId)).limit(1).for('update');
+            if (!parent.length) throw new Error('parsed_write_parent_missing');
+          }
           if (parts.draft) {
             await tx.insert(matchDraftsTable).values({ matchId, ...parts.draft, fetchedAt: receivedAt })
               .onConflictDoUpdate({ target: matchDraftsTable.matchId, set: { ...parts.draft, fetchedAt: receivedAt },
@@ -117,10 +126,14 @@ export async function refreshMatchDetails(options: {archive?: boolean; limit?: n
           }
           if (parts.parsed) {
             const existing = await tx.select().from(matchParsedTable).where(eq(matchParsedTable.matchId, matchId)).limit(1);
-            const payload = mergeParsedPayload(existing[0] ?? null, parts.parsed);
-            await tx.insert(matchParsedTable).values({ matchId, ...payload, parsedAt: receivedAt })
-              .onConflictDoUpdate({ target: matchParsedTable.matchId, set: { ...payload, parsedAt: receivedAt } });
-            await tx.update(proMatchesTable).set({ isParsed: true, parsedAt: receivedAt }).where(eq(proMatchesTable.matchId, matchId));
+            const plan = planParsedWrite(existing[0] ?? null, parts.parsed, { receivedAt, materializedAt: new Date() });
+            if (plan.status === 'write') {
+              const written = await tx.insert(matchParsedTable).values({ matchId, ...plan.values, parsedAt: plan.parsedAt })
+                .onConflictDoUpdate({ target: matchParsedTable.matchId, set: { ...plan.values, parsedAt: plan.parsedAt },
+                  setWhere: sql`${matchParsedTable.parsedAt} IS NULL OR ${matchParsedTable.parsedAt} < ${plan.parsedAt}` })
+                .returning({ matchId: matchParsedTable.matchId });
+              if (written.length) await tx.update(proMatchesTable).set({ isParsed: true, parsedAt: plan.parsedAt }).where(eq(proMatchesTable.matchId, matchId));
+            }
           }
           if (parts.firstBloodTime !== null) await tx.update(proMatchesTable)
             .set({ firstBloodTime: parts.firstBloodTime }).where(eq(proMatchesTable.matchId, matchId));

@@ -20,7 +20,7 @@ function heroes(x){
  return [...x].sort((a,b)=>a-b);
 }
 function frozen(x){if(x&&typeof x==='object'){Object.values(x).forEach(frozen);Object.freeze(x);}return x;}
-export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,currentMapNumber=null,currentDraft=null}={}){
+export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,currentMapNumber=null,currentDraft=null,currentMapSides=null}={}){
  const data=pin(seriesInput),decision=time(decisionAt,'decision_time');
  if(data?.contract!=='aegis.series-map-receipts.v1'||!sid(data.seriesId)||![1,3,5].includes(data.bestOf)||!id(data.team1Id)||!id(data.team2Id)||data.team1Id===data.team2Id||!Array.isArray(data.previousMaps)||data.previousMaps.length>data.bestOf)fail('identity_format');
  const known=time(data.availableAt,'series_availability');if(known>decision)fail('series_future');
@@ -44,7 +44,14 @@ export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,c
  }
  const ended=scores.some(s=>s>=needed);
  if(!ended&&currentMapNumber!==null&&currentMapNumber!==maps.length+1)fail('current_map_number');
- if(ended&&(currentMapId!==null||currentDraft!==null))fail('current_map_after_series_end');
+ if(ended&&(currentMapId!==null||currentDraft!==null||currentMapSides!==null))fail('current_map_after_series_end');
+ let sides=null;
+ if(currentMapSides!==null){
+  if(!currentMapSides||Object.getPrototypeOf(currentMapSides)!==Object.prototype||Object.keys(currentMapSides).sort().join(',')!=='availableAt,direTeamId,mapId,radiantTeamId,seriesId'||currentMapId===null||currentMapSides.mapId!==currentMapId||currentMapSides.seriesId!==data.seriesId||currentMapSides.radiantTeamId===currentMapSides.direTeamId||![data.team1Id,data.team2Id].includes(currentMapSides.radiantTeamId)||![data.team1Id,data.team2Id].includes(currentMapSides.direTeamId))fail('current_map_sides_identity');
+  const at=time(currentMapSides.availableAt,'current_map_sides_time');
+  if(at>decision||priorEnd!==null&&at<priorEnd)fail('current_map_sides_future_or_before_prior_end');
+  sides=structuredClone(currentMapSides);
+ }
  let draft=null;
  if(currentDraft!==null){
   if(currentMapId===null||currentDraft.mapId!==currentMapId||currentDraft.seriesId!==data.seriesId||time(currentDraft.availableAt,'draft_time')>decision||priorEnd!==null&&time(currentDraft.availableAt,'draft_time')<priorEnd)fail('current_draft_identity_or_future');
@@ -53,10 +60,10 @@ export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,c
   draft={...currentDraft,team1Heroes:h1,team2Heroes:h2};
  }
  const values={},definitions=[];
- const add=(name,value,familyId,formula,units='count',draftDependent=false)=>{
+ const add=(name,value,familyId,formula,units='count',draftDependent=false,metadata={})=>{
   if(value!==null&&!finite(value))fail('nonfinite_feature');
   const full='series_context.'+name;values[full]=value;
-  definitions.push({name:full,familyId,formula,formulaVersion:'series-causal.v1',units,inputScopes:[...(maps.length?['previous_series_maps']:['series_context']),...(draftDependent?['current_draft']:[])],knownAt:draftDependent?(draft?.availableAt??null):data.availableAt});
+  definitions.push({name:full,familyId,formula,formulaVersion:'series-causal.v2',units,inputScopes:[...(maps.length?['previous_series_maps']:['series_context']),...(draftDependent?['current_draft']:[])],knownAt:draftDependent?(draft?.availableAt??null):data.availableAt,...metadata});
  };
  add('best_of',data.bestOf,'Q01','declared series format');
  add('wins_needed',needed,'Q01','(bestOf+1)/2');
@@ -68,6 +75,9 @@ export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,c
   add('team'+(i+1)+'_match_point',!ended&&scores[i]===needed-1?1:0,'Q01','team is one win from series victory','flag');
  }
  add('score_difference',scores[0]-scores[1],'Q01','team1 wins - team2 wins');
+ // History/live map features are Radiant/Dire-oriented. Never make a series
+ // model infer this bridge from numeric team IDs or from previous-map sides.
+ for(const [team,teamId]of [['team1',data.team1Id],['team2',data.team2Id]])add(team+'_current_side_sign',sides?(sides.radiantTeamId===teamId?1:-1):null,'Q01','+1 when the oriented series team is confirmed Radiant on the current map; -1 when Dire; otherwise missing','side_sign',false,{inputScopes:['series_context','current_identity'],knownAt:sides?.availableAt??null,allowedTargets:['SERIES_PRE','SERIES_LIVE']});
  const avg=(xs)=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
  const last=maps.at(-1);
  add('previous_duration_support',maps.filter(m=>m.durationSeconds!==null).length,'Q02','distinct prior maps with available duration');
@@ -82,8 +92,8 @@ export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,c
  add('last_map_kill_margin',last&&last.team1Kills!==null&&last.team2Kills!==null?last.team1Kills-last.team2Kills:null,'Q02','last map team1-team2 kills','kills');
  let winnerChanges=0,recoveries=[0,0];
  for(let i=1;i<maps.length;i++)if(maps[i].winnerTeamId!==maps[i-1].winnerTeamId){winnerChanges++;recoveries[maps[i].winnerTeamId===data.team1Id?0:1]++;}
- add('winner_changes',maps.length>1?winnerChanges:null,'Q03','count consecutive-map winner changes; not historical recovery skill');
- for(const i of [0,1])add('team'+(i+1)+'_within_series_recoveries',maps.length>1?recoveries[i]:null,'Q03','count current-series wins immediately after losing a map');
+ add('winner_changes',maps.length>1?winnerChanges:null,'Q02','count consecutive-map winner changes; not historical recovery skill');
+ for(const i of [0,1])add('team'+(i+1)+'_within_series_recoveries',maps.length>1?recoveries[i]:null,'Q02','count current-series wins immediately after losing a map; not historical recovery skill');
  const shape=maps.map(m=>m.winnerTeamId===data.team1Id?1:0);
  // One universal five-slot schema for BO1/BO3/BO5. Unplayed/out-of-format slots
  // stay missing; format is an explicit feature, not a data-dependent schema width.
@@ -100,7 +110,7 @@ export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,c
   add(team+'_current_hero_novelty',draft&&knownHeroMaps.length?draft[team+'Heroes'].filter(h=>!prior.has(h)).length:null,'Q04','current heroes not in observed earlier drafts; partial draft history remains qualified','count',true);
  }
  const names=definitions.map(d=>d.name),vector={names,values:names.map(n=>values[n]),masks:names.map(n=>values[n]===null)};
- const availableAt=draft&&time(draft.availableAt,'draft_time')>known?draft.availableAt:data.availableAt;
- const out={contract:SERIES_CONTEXT_CONTRACT,seriesId:data.seriesId,currentMapId,currentMapNumber,bestOf:data.bestOf,team1Id:data.team1Id,team2Id:data.team2Id,score:{team1:scores[0],team2:scores[1]},terminal:ended,actualWinnerTeamId:ended?(scores[0]===needed?data.team1Id:data.team2Id):null,availableAt,sourcePin:structuredClone(seriesInput.pin),currentDraftBinding:draft?{sha256:sha(JSON.stringify(draft)),availableAt:draft.availableAt,sourceAuthenticityAttested:false}:null,sourceMapIds:maps.map(m=>m.mapId),definitions,vector,availabilityBasis:'retained_series_receipt',sourceAuthenticityAttested:false,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
+ const availableAt=[data.availableAt,draft?.availableAt,sides?.availableAt].filter(Boolean).reduce((a,b)=>time(a,'component_time')>time(b,'component_time')?a:b);
+ const out={contract:SERIES_CONTEXT_CONTRACT,seriesId:data.seriesId,currentMapId,currentMapNumber,bestOf:data.bestOf,team1Id:data.team1Id,team2Id:data.team2Id,score:{team1:scores[0],team2:scores[1]},terminal:ended,actualWinnerTeamId:ended?(scores[0]===needed?data.team1Id:data.team2Id):null,availableAt,sourcePin:structuredClone(seriesInput.pin),currentDraftBinding:draft?{sha256:sha(JSON.stringify(draft)),availableAt:draft.availableAt,sourceAuthenticityAttested:false}:null,currentMapSidesBinding:sides?{...sides,sha256:sha(JSON.stringify(sides)),sourceAuthenticityAttested:false}:null,sourceMapIds:maps.map(m=>m.mapId),definitions,vector,availabilityBasis:'retained_series_receipt_and_optional_host_side_binding',sourceAuthenticityAttested:false,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
  return frozen({...out,contentHash:sha(JSON.stringify(out))});
 }

@@ -90,3 +90,9 @@ test('actual unified producer binds retained export and refuses inconsistent cur
  const bad=await c.consume({...base.input,seriesInput:series,currentMapNumber:2});assert.equal(bad.reason,'generation_or_source_contract_failed');assert.equal(s.traces.length,0);
  const good=await c.consume({...base.input,seriesInput:series,currentMapNumber:1});assert.equal(good.status,'recorded_diagnostic',JSON.stringify({good,errors}));const body=JSON.parse(s.traces[0].utf8);assert.equal(body.seriesId,'synthetic-series');assert.ok(body.routes.some(r=>r.targetId==='SERIES_LIVE'));assert.equal(body.matchId,'90001');assert.equal(body.historyCutoffAt,base.h.context.historyCutoffAt);
 });
+
+test('explicit map release clears success dedupe so original bytes reconstruct fresh state',async()=>{
+ const p=instrumentedProducer(),s=ports(),c=createDiagnosticFeatureConsumer({...p,...s});
+ const a=await c.consume(base.input);assert.equal(a.status,'recorded_diagnostic');assert.equal(c.forgetMap('90001').released,true);
+ const b=await c.consume(base.input);assert.equal(b.reusedReceipt,undefined);assert.equal(b.stateAdvanced,true);assert.equal(p.calls.length,2);assert.equal(p.calls[1].previousLiveState,null);
+});

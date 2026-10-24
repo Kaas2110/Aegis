@@ -92,3 +92,18 @@ vector remains diagnostic, with inferenceVector=null and no serving/training
 admission. All79 families remain in scope; partial implemented subsets do not
 close the full feature-first gate. Runtime/task activation is separate from
 source installation. Do not rerun prior manifests against changed local source.
+
+## Astra review and next Sol plan — 2026-10-24
+
+Read `docs/astra-sol-review-20261024.txt` and
+`docs/sol-feature-first-plan-20261024.txt` first. The latter supersedes the old
+October 23 implementation sequence; prior reports remain historical evidence.
+The reviewed source corrections preserve history/live causality and diagnostic
+routing. Full feature-first acceptance and active host/model integration remain
+incomplete. The actual retained GLG corpus omits phase; a distinct private-proof
+progressing admission profile is specified for Sol, not implemented or activated.
+Mutable historical rows remain reconstruction-only until source versioning.
+No new fits, HPO, calibration, quality evaluations, migrations, provider probes,
+schedule changes or candidate activation are implied. Preserve all manual stops.
+Record every implementation decision and actual check for Astra. Continue from
+the current installation/publication receipt, never re-run old install manifests.

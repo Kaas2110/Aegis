@@ -1,0 +1,180 @@
+AEGIS — ASTRA REVIEW OF THE23–24 OCTOBER SOL BLOCK
+24 October2026. Source/architecture review, not ML quality evaluation.
+
+VERDICT
+
+Retain the Sol foundation, but do not admit it to training or public serving yet.
+The rich diagnostic producer and immutable export/trace infrastructure are useful.
+They do not yet form an operational application path. Important source/temporal
+defects were found, reproduced and corrected in this review. Remaining architecture
+decisions and implementation gates are in sol-feature-first-plan-20261024.txt.
+No fits, HPO, calibration, new provider requests, DB migrations, scheduled-task
+changes, model activation or app release were performed in this review block.
+
+Scope: installed PR3/PR4 diagnostic foundations, retained source->history->feature
+flow, phase/profile admission, current-map/series orientation, rich feature
+eligibility/semantics, writer causality, cache/state behavior and actual wiring.
+Canonical main at review start:303e0470cffb593c0aa0c4cdd60e9b800beef7af.
+Graphify was ready on that exact main (8277nodes,19048edges); current local source
+and diffs were inspected. This is a scoped architectural review of the whole
+block's contracts, not a claim to have independently re-read every unrelated file.
+
+CORRECTED DEFECTS AND RATIONALE
+
+A1. Invalid live packets could become successful POST results.
+unifiedFeatureProducer AUTO previously converted any dynamic rejection into POST.
+Terminal/outcome/invalid phase and mismatched roster examples reproduced this.
+It now replays current pinned raw/metadata bytes, checks context identity/validFrom,
+classifies the actual observation and stops invalid/terminal transitions. A genuine
+explicit-live failure cannot silently fall back to a fresh static forecast.
+Missing phase with a full draft remains static-only, with unknown/late cohort,
+original observation pins, source receipt and reason in the durable trace. It is
+not an early postdraft result or a measured live prediction. No current observation
+can be invented merely because a historical context exists.
+
+A2. Historical refresh erased map progression.
+The consumer reset dynamic state when its history key changed. An actual-producer
+fixture demonstrated LIVE -> refreshed same-roster history -> missing-phase POST.
+It now retains an independent committed phase/clock/receipt watermark through
+history changes. Dynamic windows can reset; an observed live map cannot downgrade
+or rewind. State commits only after durable schema+trace receipts. Explicit cache
+release still requires original retained replay on restart, not a new fabricated
+early prefix. Four focused actual-producer regressions cover reset, rewind,
+late identity disclosure and explicit release; they are synthetic source fixtures.
+
+A3. Raw clock rewind could be accepted by the dynamic component.
+A retained synthetic sequence900s ->300s previously yielded another live vector.
+observedDraftFeatureBundle.v2 now rejects it without advancing the prior opaque
+state. Offline prefix and sequential paths have the same rule. Source-profile
+switch/remake semantics are not guessed from a backward clock.
+
+A4. Newly disclosed teams were treated as contradictions.
+observedDraft accepted unknown->known accounts but required the team-side hash
+to stay identical. Complete hero drafts followed by known team IDs were blocked.
+Monotone team/account disclosure now creates a new revision valid at t1 while
+preserving original history cutoff t0. Known replacements/redactions still require
+explicit correction evidence. Later identity is never backdated into the old vector.
+
+A5. Old retained responses could backdate newer historical values.
+refresh-match-details merged optional values from a newer current parsed row and
+then assigned an older incoming response's timestamp to the merged row. The pure
+counterexample retained NW15000 from12:10 under an11:00 timestamp. Shared
+planParsedWrite now skips old/equal receipts and never assigns an earlier time than
+its inputs. Unknown prior availability uses materialization time conservatively.
+Both writers lock the parent match before reading/merging, with guarded upsert
+and RETURNING before updating parent timestamps. Refresh follows parent-first
+locking for all its writes, including draft-only transactions, to avoid an inverted
+lock order. Source/type tests do not claim production concurrency was exercised.
+Existing rows are not retroactively fixed; they remain reconstruction-only.
+
+A6. Valid historical features were excluded from PRE projections.
+The family union for H10,H11,H12,H14,P01,P05 omitted PRE targets even though some
+definitions use only known player/team identities and prior maps. The reviewed
+eligibility overlay adds24 family-target edges across four PRE targets. Per-definition
+current_draft/current_live gates remain strict. An actual producer check against
+the canonical registry shows24 previously absent identity-only family-target
+combinations now present, without admitting current heroes/live values to PRE.
+
+A7. Conditional support and performance semantics were misleading.
+Metric-specific effective support now uses only the observations that supply that
+metric, including winner-only duration subsets. Duplicate player_slot records are
+rejected. Team performance definitions explicitly describe mean-of-five individual
+values/ratios, not a team sum. Historical formula version advances to v2; existing
+weights cannot silently consume the revised contract as if unchanged.
+
+A8. Series orientation was under-specified.
+The unified producer binds exact current map teams to the series before projecting
+any PRE/POST/LIVE series head. Series context adds two side-sign columns (42->44)
+and an explicit currentMapSides binding; target trace distinguishes map Radiant win
+from series team1 win. Team swaps change orientation correctly. Current-series
+recoveries/winner changes are Q02 context, not Q03 historical resilience skill.
+BETWEEN still needs its own rich historical target; the plan specifies that gap.
+
+A9. Basic live operands were not independent projected features.
+The rich vector contained interactions and historical comparisons but omitted
+some standalone current bases. Without historical support, interactions could all
+be missing. Dynamic v2 adds33 base columns for clock/observed phase, scores, economy
+leads and existing raw/qualified Roshan–Aegis values. This preserves rich interactions
+and leaves the old native vector separate until semantic reconciliation. It does
+not turn unsupported timer interpretations or events into observed facts.
+
+A10. Explicit cache release could return obsolete successful receipt results.
+forgetMap now purges per-map consumer receipts and pipeline capture entries that
+include that map. Replay reconstructs state; a successful old receipt cannot stand
+in for rebuilding it. Durable source/trace storage is preserved and reused.
+
+A11. Pipeline rejection classification could permanently poison a valid map.
+A single invalid phase after an accepted draft was assigned the same permanent
+quarantine as an identity conflict. The corrected pipeline rejects that capture
+without appending it to the accepted prefix; later valid packets can recover.
+Actual terminal/outcome evidence closes the source stream separately and cannot
+be reopened automatically by a later live packet. Genuine identity contradictions
+still require manual review. This is not permission to skip bad observations when
+the future progressing-profile proof requires consecutive valid captures.
+
+A12. Schema-cache rejection occurred after retaining the rejected schema.
+The producer inserted a new schema before checking its32-entry cap. Repeated
+rejected variations could keep growing the cache. Capacity is now checked before
+new insertion, while existing hashes remain reusable. This finding was established
+by source inspection; no synthetic110MB×33 stress allocation was used as evidence.
+The larger repeated-schema cost remains a separate R6 implementation task.
+
+ACTUAL SOURCE EVIDENCE VERSUS FIXTURES
+
+Bounded retained Steam census:468 distinct GLG bodies,8664 game rows, no game_state
+field in any row;6125 positive-clock complete drafts. Three actual raw/receipt
+pairs replayed64 observations with zero normalizer rejections:51 complete drafts
+classified static-unknown and13 incomplete drafts blocked. This explains why the
+existing strict literalphase5 gate cannot admit this retained GLG corpus. It does
+not prove all Steam methods omit phase, API failure, current production coverage
+or real-event latency. RT is a different profile with different fields/timing.
+
+Progression research measured6047 consecutive same-identity pairs,5955 advancing
+clocks and92 equal. Positive-pair receipt gaps were min120.538s,median120.857s,
+p95122.127s. A120s cap admitszero;180s admits5591 pairs across359 maps. All retained
+accepted pairs also pass deltaClock<=deltaReceipt+30s. The plan specifies a distinct
+private-proof progressing profile and180s lease; it is NOT implemented or activated
+by this review. Equal clocks cannot renew it forever. These are source measurements,
+not prediction accuracy or evidence of joint95% field availability.
+
+All regression examples involving terminal/rewind, availability backdating,
+identity disclosure, series orientation, support and cache races are synthetic,
+hand-checkable fixtures or exact pure reproductions with canonical source pins.
+Writer modules were not executed against the database. Static TypeScript overlay
+checks the changed writer/helper integration against installed dependencies.
+The local acceptance receipt records exact final test source hashes/results.
+Prior completed tests are reused only where their inputs/source remain unchanged.
+
+Final assembled integration run:69 tests passed,0 failed,0 skipped (producer,
+consumer, retained pipeline and dynamic component together). Additional focused
+evidence:58 historical/performance/series tests,5 target-policy tests,12 phase
+tests,19 draft tests and7 pure parsed-writer tests passed; these are reported by
+scope, not summed with overlapping runs. Final TypeScript overlay:0 baseline and
+0 candidate diagnostics. Canonical-registry connectivity is an actual producer
+test on synthetic histories, not real-world coverage. No new model accuracy result
+was computed. See the local review receipt for exact source/log hashes.
+
+ACCEPTED NEXT ARCHITECTURE DECISIONS
+
+- Versioned historical facts or retained raw-receipt replay before genuine as-of
+  matrix admission. Current mutable-row exports cannot reconstruct missing past
+  versions, and immutable CAS only preserves versions actually exported.
+- A distinct GLG_PROGRESSING_OBSERVED diagnostic profile with verified two-packet
+  progression, <=180s gap, plausibility bound and180s progress lease. Raw phase stays
+  missing. Source/identity barriers and restart proof are explicit. Never mix RT
+  phase/economy with GLG current-state fields to make a packet seem complete.
+- Explicit draft hero/side indicators in POST/LIVE; broad frozen history remains
+  useful throughout live. Historical selectors/metadata are not a replacement for
+  numeric current draft representation. No unsupported role or hero mechanics.
+- Portable full registry and a semantic disposition for every old family/name;
+  consolidate verification with the actual shared producer, not metadata only.
+- Separate immutable schema/history from per-frame values; bounded original-draft
+  anchor plus rolling trajectory history and durable cursors; accurate calculation
+  completion times and measured resource/coverage gates before host activation.
+- Rich series context on the main card and selected-map predictions/totals inside.
+  BETWEEN gets a separate oriented historical context; no stale last-map proof.
+
+The revised plan specifies exact modules, interfaces, dependency order, negative
+controls, real-versus-synthetic evidence and the next Astra return gate. Source
+installation/merge does not authorize executing the new host, applying migrations,
+training, activating weights or publishing the application.

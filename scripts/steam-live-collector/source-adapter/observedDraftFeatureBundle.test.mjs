@@ -79,8 +79,23 @@ test('latest equal-clock window anchor excludes older receipts at that clock',()
 test('mutating public native state cannot contaminate an owned state token',()=>{
  const h=history(),a=liveEntry(),b=liveEntry({time:'2026-10-23T12:32:00Z',clock:960,offset:600}),first=run(h,a);first.nativeBundle.state.history[0].sides.radiant.players[0].netWorth.value=999999;first.nativeBundle.state.roshanState.lastEconomy.nw_sum_diff=999999;const online=run(h,b,first.state),offline=run(h,[a,b]);assert.deepEqual(online.nativeBundle.vector,offline.nativeBundle.vector);assert.deepEqual(online.vector,offline.vector);
 });
-test('clock rewinds reset native trajectory; historical context remains frozen',()=>{
- const h=history(),a=run(h,liveEntry()),b=run(h,liveEntry({time:'2026-10-23T12:32:00Z',clock:300,offset:600}),a.state);assert.ok(b.nativeBundle.resetReasons.includes('game_clock_regression'));assert.equal(b.historyRefs.contentHash,a.historyRefs.contentHash);
+test('clock rewind blocks without replacing accepted state, in sequential and offline replay',()=>{
+ const h=history(),first=liveEntry(),a=run(h,first),rewind=liveEntry({time:'2026-10-23T12:32:00Z',clock:300,offset:600}),b=run(h,rewind,a.state);
+ assert.equal(b.status,'blocked');assert.equal(b.reason,'dynamic_game_clock_regression');assert.equal(b.vector,null);assert.equal(run(h,[first,rewind]).reason,'dynamic_game_clock_regression');
+ const next=liveEntry({time:'2026-10-23T12:33:00Z',clock:1020,offset:1000}),continued=run(h,next,a.state),offline=run(h,[first,next]);assert.deepEqual(continued.vector,offline.vector);assert.equal(continued.historyRefs.contentHash,a.historyRefs.contentHash);
+});
+test('standalone current base values are projected without historical products or trajectory support',()=>{
+ const r=run(history(),liveEntry());assert.equal(r.contract,'aegis.observed-draft-steam-feature-bundle.v2');
+ assert.equal(value(r,'draft_live.base.clock_seconds'),900);assert.equal(value(r,'draft_live.base.phase_code'),5);assert.equal(value(r,'draft_live.base.radiant_kills'),20);assert.equal(value(r,'draft_live.base.dire_kills'),10);assert.equal(value(r,'draft_live.base.total_kills'),30);assert.equal(value(r,'draft_live.base.kills_diff'),10);
+ for(const key of ['nw_sum_diff','gpm_sum_diff','xpm_sum_diff','level_sum_diff'])assert.equal(value(r,'draft_live.base.'+key),r.nativeBundle.vector.values[r.nativeBundle.vector.names.indexOf('roshan.'+key)]);
+ assert.equal(value(r,'draft_live.base.roshan_timer_raw'),0);assert.equal(value(r,'draft_live.base.roshan_timer_positive'),0);assert.equal(value(r,'draft_live.base.roshan_alive'),null);assert.equal(value(r,'draft_live.base.roshan_elapsed_since_confirmed_death'),null);assert.equal(value(r,'draft_live.base.aegis_confirmed_steal'),null);
+ assert.ok(r.vector.definitions.filter(d=>d.name.startsWith('draft_live.base.')).every(d=>d.inputScopes.length===1&&d.inputScopes[0]==='current_live'));
+});
+test('missing current base operands remain missing, never imputed from history or other metrics',()=>{
+ const r=run(history(),liveEntry({missingGpm:true}));assert.equal(value(r,'draft_live.base.gpm_sum_diff'),null);assert.notEqual(value(r,'draft_live.base.nw_sum_diff'),null);
+ const entry=liveEntry(),raw=JSON.parse(entry.rawInput.utf8),m=JSON.parse(entry.metadataInput.utf8);delete raw.result.games[0].scoreboard.radiant.score;
+ const rawInput=pinned(raw),o=normalizeLocalCapture({...m.capture,body:Buffer.from(rawInput.utf8),rawSha256:rawInput.pin.sha256,payloadRef:'journal:'+rawInput.pin.sha256}).observations[0],r2=run(history(),{rawInput,metadataInput:pinned({...m,observationId:o.observationId})});
+ assert.equal(value(r2,'draft_live.base.radiant_kills'),null);assert.equal(value(r2,'draft_live.base.total_kills'),null);assert.equal(value(r2,'draft_live.base.kills_diff'),null);assert.equal(value(r2,'draft_live.base.dire_kills'),10);
 });
 test('raw byte pin tamper, future receipt, terminal packet and missing clock are rejected',()=>{
  const h=history(),e=liveEntry();assert.throws(()=>run(h,{...e,rawInput:{...e.rawInput,utf8:e.rawInput.utf8+' '}}));assert.throws(()=>run(h,liveEntry({time:'2026-10-23T12:41:00Z'})));assert.equal(run(h,liveEntry({outcome:true})).status,'blocked');assert.equal(run(h,liveEntry({clock:null})).reason,'dynamic_live_clock_or_phase_unavailable');
