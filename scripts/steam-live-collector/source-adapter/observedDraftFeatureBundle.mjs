@@ -10,7 +10,7 @@ import {advanceSteamFeatureBundle,BUNDLE_CONTRACT} from './steamFeatureBundle.mj
 import {HERO_IDS,evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {produceHistoricalRelationalFeatures,HISTORICAL_PLAYER_PROFILE_KEYS} from './historicalRelationalFeatures.mjs';
 
-export const CONTRACT='aegis.observed-draft-steam-feature-bundle.v1';
+export const CONTRACT='aegis.observed-draft-steam-feature-bundle.v2';
 export const HISTORY_PROOF_CONTRACT='aegis.verified-dynamic-history-context.v1';
 const histories=new WeakMap(),states=new WeakMap();
 const PROFILE='steam.GetLiveLeagueGames.v1.scoreboard',SIDES=['radiant','dire'];
@@ -25,6 +25,15 @@ const ROSHAN_UNITS={roshan_timer_raw:'provider_timer_seconds_candidate',roshan_d
 const FINISH_KEYS=['meanDurationSeconds90d','winMeanDurationSeconds90d','lossMeanDurationSeconds90d','late40Fraction90d','meanOwnKillsPerMinute90d'];
 const WINDOWS=[60,180,300,600];
 const LIVE_TARGETS=['LIVE_MAP_WIN','LIVE_KILLS','LIVE_DURATION','SERIES_LIVE'];
+// Explicit source-backed base projection. Never concatenate the old native
+// bundle or make basic current inputs conditional on historical support.
+const ROSHAN_BASE_FIELDS={
+ roshan_timer_raw:['R01','provider_timer_seconds_candidate'],roshan_timer_positive:['R01','boolean'],roshan_timer_decreasing_pair:['R01','boolean'],
+ roshan_elapsed_since_confirmed_death:['R02','seconds'],roshan_respawn_lower_seconds:['R02','seconds'],roshan_respawn_upper_seconds:['R02','seconds'],roshan_confirmed_countdown_seconds:['R02','seconds'],
+ roshan_inferred_death_game_clock_lower_seconds:['R02','game_seconds'],roshan_inferred_death_game_clock_upper_seconds:['R02','game_seconds'],roshan_inferred_elapsed_since_death_lower_seconds:['R02','seconds'],roshan_inferred_elapsed_since_death_upper_seconds:['R02','seconds'],
+ roshan_dead:['R02','boolean'],roshan_alive:['R02','boolean'],roshan_confirmed_death_count:['R02','confirmed_event_count_not_spawn_ordinal'],
+ aegis_observed_in_slot:['R03','boolean'],aegis_holder_side:['R03','side_sign'],aegis_holder_hero:['R03','hero_id'],aegis_holder_nw:['R03','gold_value'],aegis_holder_level:['R03','level'],aegis_elapsed_since_confirmed_pickup:['R03','seconds'],aegis_lifetime_upper_seconds:['R03','seconds'],aegis_confirmed_steal:['R04','boolean']
+};
 const finite=x=>typeof x==='number'&&Number.isFinite(x),field=x=>x?.missing===false&&finite(x.value)?x.value:null;
 const sha=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const blocked=(reason,audit={})=>({contract:CONTRACT,status:'blocked',reason,vector:null,audit,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false,recordedPrediction:false});
@@ -104,7 +113,7 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
  const rules=boundEvidence(rulesEvidence,expectedRulesSha256,'rules'),eventDocument=boundEvidence(eventsEvidence,expectedEventsSha256,'events');
  if(eventDocument!==null&&(eventDocument.contract!=='aegis.confirmed-live-objective-events.v1'||!Array.isArray(eventDocument.events)||eventDocument.events.length>2048))throw Error('dynamic_events_contract');
  const events=eventDocument?.events??[];
- let native=internal?.nativeState??null,lastReceived=internal?.lastReceivedAt??null,lastObservation=null,lastNative=null,leadHistory=structuredClone(internal?.leadHistory??[]),bindings=[];
+ let native=internal?.nativeState??null,lastReceived=internal?.lastReceivedAt??null,lastClock=internal?.lastClock??null,lastObservation=null,lastNative=null,leadHistory=structuredClone(internal?.leadHistory??[]),bindings=[];
  for(const entry of livePrefixInputs){
   const raw=readPinnedHistoricalJson(entry.rawInput,{maxBytes:6*1024*1024}),metadata=readPinnedHistoricalJson(entry.metadataInput,{maxBytes:256*1024}).data;
   const capture={...metadata.capture,body:Buffer.from(entry.rawInput.utf8,'utf8'),rawSha256:raw.pin.sha256,payloadRef:'journal:'+raw.pin.sha256};
@@ -118,13 +127,16 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
   // Positive clock never upgrades an omitted phase to GAME_IN_PROGRESS.
   // A future profile-specific live attestation is a separate reviewed contract.
   if(o.dynamic.sourceProfile!==PROFILE||clock===null||clock<0||phase?.status!=='observed'||phase?.missing!==false||phase.value!==5||o.sourceQualityReasons?.includes('outcome_marker_present'))return blocked('dynamic_live_clock_or_phase_unavailable');
+  // Resetting a feature window is not authority to replace an accepted current
+  // game with an earlier clock. A future remake/epoch needs its own proof.
+  if(lastClock!==null&&clock<lastClock)return blocked('dynamic_game_clock_regression',{previousClockSeconds:lastClock,observedClockSeconds:clock,receivedAt:o.source.capture.receivedAt,rawSha256:raw.pin.sha256});
   const frame=advanceSteamFeatureBundle(native,o,{patch,rules,events,historicalContext:null});
   if(frame.resetReasons.length)leadHistory=[];
   leadHistory=leadHistory.filter(p=>p.clock>=clock-630&&p.observationId!==o.observationId);
   const nativeValues=new Map(frame.vector.names.map((name,i)=>[name,frame.vector.values[i]]));
   leadHistory.push({clock,knownAt:o.source.capture.receivedAt,observationId:o.observationId,leads:Object.fromEntries(LEAD_KEYS.map(k=>[k,nativeValues.get('roshan.'+k)??null]))});
   if(leadHistory.length>2048)throw Error('dynamic_lead_history_bound');
-  native=frame.state;lastReceived=o.source.capture.receivedAt;
+  native=frame.state;lastReceived=o.source.capture.receivedAt;lastClock=clock;
   lastObservation=o;lastNative=frame;
   bindings.push({observationId:o.observationId,rawSha256:raw.pin.sha256,metadataSha256:entry.metadataInput.pin.sha256,receivedAt:o.source.capture.receivedAt});
  }
@@ -133,7 +145,7 @@ export function advanceObservedDraftFeatureBundle(previous,{livePrefixInputs,mat
  const state=Object.freeze({contract:CONTRACT+'.state',matchId,lastObservationId:result.observationId,historyContentHash:context.contentHash});
  // Do not expose the retained state through nativeBundle.state: callers can
  // inspect/mutate that public copy without mutating the trusted next-step state.
- states.set(state,{matchId,nativeState:deepFreeze(structuredClone(native)),leadHistory:deepFreeze(structuredClone(leadHistory)),lastReceivedAt:lastReceived,historyContentHash:context.contentHash});
+ states.set(state,{matchId,nativeState:deepFreeze(structuredClone(native)),leadHistory:deepFreeze(structuredClone(leadHistory)),lastReceivedAt:lastReceived,lastClock,historyContentHash:context.contentHash});
  return {...result,state,sourceBindings:bindings,historyRefs:{contentHash:context.contentHash,historyCutoffAt:context.historyCutoffAt,validFrom:context.validFrom,computedAt:context.computedAt,identityRevision:context.draftState.revision,factsSha256:context.producer.bindings.facts.sha256},semanticEvidence:{rulesSha256:rulesEvidence?.pin?.sha256??null,eventsSha256:eventsEvidence?.pin?.sha256??null,trust:'optional reviewed host-pinned artifact, not independent event truth'},sourceCoherence:{sourceProfile:PROFILE,oneNativeProfile:true,rawBytesReplayed:true,explicitPhase5:true,historyAsOfOriginalCutoff:true,receiptAuthenticity:'trusted host retained journal; no provider signature verified'},zeroMinuteCohortClaimed:false,jointTimelyCoverageProven:false,eligibleForServing:false,eligibleForTraining:false,publicPromotion:false,recordedPrediction:false};
 }
 
@@ -142,6 +154,17 @@ function projectInteractions(o,native,context,relational,leadHistory){
  // array positions and economic ranks are not identity or farm roles.
  const players=SIDES.flatMap(side=>[...o.sides[side].players].sort((a,b)=>Number(a.identity.heroId)-Number(b.identity.heroId))),minute=field(o.providerGameClockSeconds)/60;
  const names=[],values=[],masks=[],definitions=[],put=(name,value,definition)=>{names.push(name);values.push(finite(value)?value:null);masks.push(finite(value)?0:1);definitions.push(descriptor(name,definition));};
+ const nativeValues=new Map(native.vector.names.map((name,i)=>[name,native.vector.values[i]]));
+ const nativeValue=name=>nativeValues.get('roshan.'+name)??null;
+ const base=(name,value,familyId,units,inputFields,formula)=>put('draft_live.base.'+name,value,{familyId,units,inputFields,formula,inputScopes:['current_live']});
+ base('clock_seconds',nativeValue('clock_seconds'),'L01','game_seconds',['providerGameClockSeconds'],'literal coherent provider game clock from the admitted current capture');
+ base('phase_code',nativeValue('phase_code'),'L01','DOTA_GameState',['dynamic.phase'],'literal observed provider phase; never inferred from clock');
+ for(const side of SIDES)base(side+'_kills',nativeValue(side+'_score'),'L01','kills',['sides.'+side+'.score'],'literal same-frame provider team score');
+ const rs=nativeValue('radiant_score'),ds=nativeValue('dire_score');
+ base('total_kills',finite(rs)&&finite(ds)?rs+ds:null,'L01','kills',['sides.radiant.score','sides.dire.score'],'Radiant score + Dire score, only when both observed in the same frame');
+ base('kills_diff',nativeValue('score_diff'),'L01','kills',['sides.radiant.score','sides.dire.score'],'existing coherent native Radiant score - Dire score');
+ for(const lead of LEAD_KEYS)base(lead,nativeValue(lead),lead.startsWith('nw_')?'L02':lead.startsWith('level_')?'L04':lead.startsWith('score_')?'L01':'L03',LEAD_UNITS[lead],['native.vector.roshan.'+lead],'existing same-frame native component Radiant-Dire lead; five observed players per side required for economy aggregates');
+ for(const [name,[familyId,units]]of Object.entries(ROSHAN_BASE_FIELDS))base(name,nativeValue(name),familyId,units,['native.vector.roshan.'+name],'direct projection of existing reviewed causal Roshan/Aegis component value; preserve missing, rule/event qualification and unresolved raw timer semantics; no new inference');
  const historiesByHero=new Map(players.map(p=>[Number(p.identity.heroId),contextValues(context,p)]));
  const relByHero=new Map(players.map(p=>[Number(p.identity.heroId),relationalFor(relational,p)]));
  const profileDefinition=key=>relational.profiles.players.find(p=>p.statistics?.[key])?.statistics[key]??null;

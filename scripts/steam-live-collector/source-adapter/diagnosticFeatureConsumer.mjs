@@ -85,10 +85,19 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
    if(context.draftState.revision<prior.revision||instantNs(context.computedAt)<instantNs(prior.historyComputedAt))return blockedReceipt('stale_history_provenance',meta);
   }
   const reset=prior!==null&&prior.historyKey!==job.historyKey,previousLiveState=prior&&!reset?prior.liveState:null;
-  let bundle,trace;
+  // A new historical export resets feature windows, not the observed progress
+  // of this map. Only explicit forgetMap releases this independent watermark.
+  let liveWatermark=prior?.liveWatermark??null,bundle,trace;
   try{
    bundle=producer.generateFeatureBundle({...input,historyProof:job.historyProof,previousLiveState});
    if(bundle?.contract!==UNIFIED_PRODUCER_CONTRACT||bundle.matchId!==input.matchId||bundle.decisionAt!==input.decisionAt||bundle.sourceSnapshotHash!==input.expectedSourceSnapshotHash||bundle.historyContextHash!==context.contentHash||instantNs(bundle.historyCutoffAt)!==instantNs(context.historyCutoffAt)||!['POST','LIVE'].includes(bundle.mode)||bundle.eligibleForServing!==false||bundle.eligibleForTraining!==false||bundle.recordedPrediction!==false||!Array.isArray(bundle.routes)||bundle.routes.some(r=>r.eligibleForServing!==false||r.eligibleForTraining!==false||r.inferenceVector!==null))throw Error('producer_output_identity_or_admission');
+   if(liveWatermark!==null&&bundle.mode!=='LIVE')throw Error('map_phase_regression_after_history_reset');
+   if(bundle.mode==='LIVE'){
+    const admission=bundle.sourceAdmission,clock=admission?.clock,received=instantNs(admission?.provenance?.receivedAt);
+    if(admission?.classification!=='observed_live'||admission.dynamicDiagnosticAllowed!==true||typeof clock!=='number'||!Number.isFinite(clock)||clock<0||received===null||received>instantNs(input.decisionAt))throw Error('live_watermark_source_admission');
+    if(liveWatermark!==null&&(clock<liveWatermark.clockSeconds||received<instantNs(liveWatermark.receivedAt)))throw Error('map_clock_or_receipt_regression_after_history_reset');
+    liveWatermark={clockSeconds:clock,receivedAt:admission.provenance.receivedAt};
+   }
    trace=freeze(encodeDiagnosticFeatureTrace(bundle,{maxBytes:config.maxTraceBytes}));
   }catch{failed++;return receipt('failed','generation_or_source_contract_failed',meta);}
   if(!continuing())return blockedReceipt('manual_stop_before_schema_write',meta);
@@ -100,7 +109,7 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   catch{failed++;return receipt('failed','trace_append_failed',{...meta,traceCommitStatus:'unknown_callback_failed'});}
   if(!continuing())return blockedReceipt('manual_stop_after_trace_commit',{...meta,traceSha256:trace.sha256,traceCommitted:true});
   // Commit the opaque next state ONLY after durable schema+trace receipts.
-  slot.committed={historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveState:bundle.nextLiveState??null};
+  slot.committed={historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveState:bundle.nextLiveState??null,liveWatermark};
   recorded++;
   const result=receipt('recorded_diagnostic',null,{...meta,mode:bundle.mode,seriesId:bundle.seriesId??null,traceSha256:trace.sha256,traceBytes:trace.bytes,vectorPoolSize:trace.vectorPoolSize,schemaRefs:bundle.routes.map(r=>r.schemaRef),traceCommitted:true,provenanceReset:reset,stateAdvanced:true});
   remember(job.key,result);return result;
@@ -121,7 +130,7 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
    promise.finally(()=>{pending--;pendingBytes-=job.size;slot.pending--;flights.delete(job.key);if(slot.pending===0&&slot.committed===null)maps.delete(job.input.matchId);});
    return promise.then(structuredClone);
   },
-  forgetMap(matchId){const slot=maps.get(matchId);if(!slot)return{released:false,reason:'map_not_cached'};if(slot.pending)return{released:false,reason:'map_work_pending'};maps.delete(matchId);return{released:true,reason:'explicit_host_cache_release; durable_trace_unchanged'};},
+  forgetMap(matchId){const slot=maps.get(matchId);if(!slot)return{released:false,reason:'map_not_cached'};if(slot.pending)return{released:false,reason:'map_work_pending'};maps.delete(matchId);for(const[key,r]of completed)if(r.matchId===matchId)completed.delete(key);return{released:true,reason:'explicit_host_cache_release; durable_trace_unchanged'};},
   status(){return{contract:CONSUMER_CONTRACT,maps:maps.size,pending,pendingBytes,successfulReceipts:completed.size,registeredSchemas:schemas.size,schemaWritesInFlight:schemaFlights.size,recorded,failed,blocked,limits:{...config},...flags};}
  });
 }

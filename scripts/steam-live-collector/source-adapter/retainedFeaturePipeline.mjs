@@ -11,6 +11,7 @@ import {collectDraftHistorySourceExport} from './historySourceExport.mjs';
 import {createDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
 import {createDiagnosticFeatureConsumer} from './diagnosticFeatureConsumer.mjs';
 import {instantNs} from './causalTime.mjs';
+import {classifySteamObservationPhase} from './steamPhasePolicy.mjs';
 export const RETAINED_PIPELINE_CONTRACT='aegis.retained-steam-feature-pipeline.v1';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const flags={diagnosticOnly:true,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
@@ -56,14 +57,30 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   const results=[];
   for(const o of decoded.normalized.observations){
    if(!continuing())return status('blocked','manual_stop_or_abort',{results});
-   let slot=maps.get(o.matchId);if(!slot){if(maps.size>=config.maxMaps){results.push(status('blocked','map_bound',{matchId:o.matchId}));continue;}slot={prefix:[],prefixBytes:0,source:null,proof:null,revision:null,lastObservationId:null,blockedReason:null};maps.set(o.matchId,slot);}
+   let slot=maps.get(o.matchId);if(!slot){if(maps.size>=config.maxMaps){results.push(status('blocked','map_bound',{matchId:o.matchId}));continue;}slot={prefix:[],prefixBytes:0,source:null,proof:null,revision:null,lastObservationId:null,blockedReason:null,closedSource:null};maps.set(o.matchId,slot);}
    if(slot.blockedReason){results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
+   if(slot.closedSource){results.push(status('source_closed','terminal_source_closed',{matchId:o.matchId,terminalSource:{...slot.closedSource}}));continue;}
    const entry={rawInput:input.rawInput,metadataInput:pinned({contract:DRAFT_METADATA_CONTRACT,matchId:o.matchId,observationId:o.observationId,decisionAt:decoded.receipt.completedAt,capture:decoded.capture},'steam-archive/draft-metadata.json')};
    const bytes=entry.rawInput.pin.bytes+entry.metadataInput.pin.bytes,isNew=slot.lastObservationId!==o.observationId;
    if(isNew&&slot.prefix.length&&instantNs(decoded.receipt.receivedAt)<instantNs(JSON.parse(slot.prefix.at(-1).metadataInput.utf8).capture.receivedAt)){results.push(status('blocked','out_of_order_retained_capture',{matchId:o.matchId}));continue;}
+   const admission=classifySteamObservationPhase(o,{decisionAt});
+   if(admission.terminal){
+    // A source closure is not a winner label or an identity contradiction. It
+    // cannot reopen from a later live packet without explicit host release.
+    slot.closedSource={classification:admission.classification,observationId:o.observationId,receivedAt:o.source.capture.receivedAt};
+    results.push(status('source_closed','terminal_source_closed',{matchId:o.matchId,terminalSource:{...slot.closedSource}}));continue;
+   }
+   if(!admission.dynamicDiagnosticAllowed&&!admission.staticDraftDiagnosticAllowed&&admission.reason!=='complete_coherent_draft_required'){
+    // A rejected frame never joins the accepted history prefix or poisons the
+    // map's identity checkpoint. An initial incomplete draft still replays below.
+    results.push(status('blocked','current_source_rejected:'+admission.reason,{matchId:o.matchId}));continue;
+   }
    if(isNew&&(slot.prefix.length>=config.maxFramesPerMap||slot.prefixBytes+bytes>config.maxPrefixBytesPerMap)){results.push(status('blocked','retained_prefix_bound',{matchId:o.matchId}));continue;}
    const proposedPrefix=isNew?[...slot.prefix,entry]:slot.prefix;
    let replay;try{replay=replayPinnedDraftPrefix({matchId:o.matchId,computedAt:decisionAt,draftPrefixInputs:proposedPrefix});}catch{slot.blockedReason='draft_prefix_requires_manual_review';results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
+   if(!replay.accepted&&['draft_terminal_or_invalid_phase','ten_confirmed_heroes_and_sides_required'].includes(replay.reason)){
+    results.push(status('blocked','current_source_rejected:'+replay.reason,{matchId:o.matchId}));continue;
+   }
    if(!replay.accepted&&replay.reason!=='complete_draft_not_observed'){slot.blockedReason='draft_identity_requires_manual_review';results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
    if(isNew){slot.prefix=proposedPrefix;slot.prefixBytes+=bytes;slot.lastObservationId=o.observationId;}
    if(!replay.accepted){results.push(status('blocked',replay.reason,{matchId:o.matchId}));continue;}
@@ -108,7 +125,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    let owned;try{if(!input||Object.keys(input).some(k=>!['receiptInput','rawInput','seriesByMatch'].includes(k)))fail('capture_keys');verified(input.receiptInput,65536);verified(input.rawInput,4*1024*1024);if(input.seriesByMatch!==undefined&&Buffer.byteLength(JSON.stringify(input.seriesByMatch))>4*1024*1024)fail('series_bound');owned=structuredClone(input);}catch{return Promise.resolve(status('blocked','capture_input_bound'));}
    pending++;const promise=tail.catch(()=>{}).then(()=>execute(owned)).catch(()=>status('failed','unexpected_pipeline_failure'));tail=promise;promise.finally(()=>{pending--;});return promise;
   },
-  forgetMap(matchId){const slot=maps.get(matchId);if(pending)return{released:false,reason:'pipeline_work_pending'};if(!slot)return{released:false,reason:'map_not_cached'};consumer.forgetMap(matchId);maps.delete(matchId);return{released:true,reason:'explicit_host_release_restart_requires_retained_prefix_replay'};},
+  forgetMap(matchId){const slot=maps.get(matchId);if(pending)return{released:false,reason:'pipeline_work_pending'};if(!slot)return{released:false,reason:'map_not_cached'};consumer.forgetMap(matchId);maps.delete(matchId);for(const[key,r]of completed)if(r.results.some(x=>x.matchId===matchId))completed.delete(key);return{released:true,reason:'explicit_host_release_restart_requires_retained_prefix_replay'};},
   status(){return{contract:RETAINED_PIPELINE_CONTRACT,maps:maps.size,pending,limits:{...config},consumer:consumer.status(),...flags};}
  });
 }

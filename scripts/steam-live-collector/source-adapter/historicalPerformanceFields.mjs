@@ -18,17 +18,17 @@ export function attachPriorPlayerPerformance(maps,sourceRows,{historyCutoffAt,cu
  return maps.map(m=>{
   const row=byId.get(m.matchId),known=instantNs(m.playersKnownAt),outcome=instantNs(m.outcomeKnownAt);
   if(!row||m.matchId===currentMapId||known===null||outcome===null||known<outcome||known>cutoff||!Array.isArray(row.players)||row.players.length>10)fail('map_availability_or_identity');
-  const seenHeroes=new Set(),seenAccounts=new Set(),sideCounts={radiant:0,dire:0},heroPerformances=[];
+  const seenHeroes=new Set(),seenAccounts=new Set(),seenSlots=new Set(),sideCounts={radiant:0,dire:0},heroPerformances=[];
   for(const p of row.players){
    const slot=p?.player_slot,side=Number.isInteger(slot)&&slot>=0&&slot<=4?'radiant':Number.isInteger(slot)&&slot>=128&&slot<=132?'dire':null;
    const heroId=typeof p?.hero_id==='number'?p.hero_id:typeof p?.hero_id==='string'&&/^[1-9]\d*$/.test(p.hero_id)?Number(p.hero_id):null;
    if(!side||!Number.isSafeInteger(heroId)||heroId<1||heroId>250)continue;
    const a=String(p.account_id??''),accountId=id(a)&&BigInt(a)<4294967295n?a:null;
-   if(seenHeroes.has(heroId)||accountId!==null&&seenAccounts.has(accountId)||++sideCounts[side]>5)fail('roster_conflict');
+   if(seenSlots.has(slot)||seenHeroes.has(heroId)||accountId!==null&&seenAccounts.has(accountId)||++sideCounts[side]>5)fail('roster_conflict');
    if(!m.heroes.some(h=>Number(h.heroId)===heroId&&h.side===side))fail('hero_side_conflict');
    const known=(m.players??[]).find(p=>Number(p.heroId)===heroId||p.accountId===accountId&&accountId!==null);
    if(known&&(known.accountId!==accountId||Number(known.heroId)!==heroId||known.side!==side))fail('known_player_conflict');
-   seenHeroes.add(heroId);if(accountId!==null)seenAccounts.add(accountId);
+   seenSlots.add(slot);seenHeroes.add(heroId);if(accountId!==null)seenAccounts.add(accountId);
    const source=p.historical_performance;
    if(source===undefined)fail('selected_namespace_missing');
    if(source===null||typeof source!=='object'||Array.isArray(source))fail('metric_namespace');

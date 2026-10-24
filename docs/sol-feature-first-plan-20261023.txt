@@ -1,3 +1,6 @@
+SUPERSEDED ON 24 OCTOBER 2026: read docs/sol-feature-first-plan-20261024.txt first.
+The text below is retained historical architecture/implementation context.
+
 PUBLIC PORTABLE COPY — 2026-10-23
 Status: designed / partially implemented / not fully integrated.
 This English translation preserves the decisions and recorded baseline of the

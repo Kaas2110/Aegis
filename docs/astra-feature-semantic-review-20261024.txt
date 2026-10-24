@@ -1,0 +1,64 @@
+AEGIS — ASTRA FEATURE SEMANTICS AND TARGET CORRECTIONS
+24 October 2026. Diagnostic source corrections; no training or serving admission.
+
+Findings and decisions
+
+1. Series models consume a team1-oriented target, while current-map history/live
+   features are Radiant/Dire-oriented. The old component omitted their explicit
+   bridge. produceSeriesContext now accepts optional currentMapSides containing
+   mapId, seriesId, radiantTeamId, direTeamId and availableAt. It validates exact
+   known teams, current-map identity and chronology. Two additive features encode
+   team1/team2 side as +1 Radiant or -1 Dire. Unknown sides remain missing. They
+   are eligible only for SERIES_PRE/SERIES_LIVE; no next-map side is guessed
+   between maps. Root supplies this binding from validated identity, never IDs'
+   numerical order. The shared series schema has 44 columns, series-causal.v2.
+
+2. Broad family target lists excluded safe historical subsets from undrafted
+   targets: teammate history P01, player-team H10, past performance ratios H11,
+   player aggregates H12, overall player late/duration H14 and player-versus-
+   opponent-player history P05. The explicit historical-target-eligibility policy
+   expands only these six families' union
+   to PRE_MAP_WIN/PRE_KILLS/PRE_DURATION/SERIES_PRE. Individual current_draft,
+   current_live and current_map_label scope guards remain mandatory. Selected
+   hero history is still prohibited before the draft. This preserves all 79
+   families and original catalogue alternatives; it is not feature pruning.
+
+3. Some metric metadata overstated effective support. For example, a kill mean
+   based on three complete maps inherited an effective count near five from the
+   wider five-map outcome cohort. Win-only duration had the same defect. The
+   corrected effectiveCount is (sum(w)^2)/sum(w^2) over that metric's contributing
+   map subset, with unchanged explicit decay. Formula version is now
+   aegis.prior-map-relational-statistics.v2. Schema hashes change accordingly.
+
+4. Team native performance already averaged all five same-side player values.
+   Descriptors now state that explicitly, including that a mean player ratio is
+   calculated per player before the five-player mean. These features are not
+   team sums or ratios of team totals. This correction changes their schema
+   description, not their existing numerical aggregation.
+
+5. The prior-performance mapper now rejects duplicate native player_slot values,
+   even if hero/account IDs differ. A malformed five-row side cannot masquerade
+   as five independent valid player slots.
+
+6. Current-series winner changes/recovery counts are classified as Q02 observed
+   previous-map context. They are not Q03 historical recovery skill. Their
+   numerical values are unchanged. Detailed historical recovery remains pending.
+
+Verification and limits
+
+Nine new synthetic semantic regression tests failed against the installed
+baseline and passed against the staged corrections. The historical, native
+performance and series regression group passed 58 tests; five additional target
+policy tests passed. An actual canonical-catalogue/shared-producer check proved
+24 safe subset/target links missing before the eligibility correction and present
+after it (six features across four undrafted targets). The same projections
+contained no current_draft/current_live definitions. These are technical synthetic
+controls, not additional real-provider evidence or model quality measurements.
+
+The current POST projection still needs explicit confirmed draft hero identities
+and side encodings before future training; selecting historical cohorts does not
+replace all hero identity main effects. Full family implementation, verified
+roles, patch/letter/population conditioning, causal opponent-style response,
+historical series recovery, rich BETWEEN identity, C1/C2/C3 reconciliation and
+source coverage/resource gates remain open. No simple or compact model is
+silently substituted. Training/HPO/calibration/quality evaluation remain paused.

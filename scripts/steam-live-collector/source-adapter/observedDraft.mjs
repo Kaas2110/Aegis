@@ -81,14 +81,24 @@ export function advanceObservedDraft(previous,observation,{decisionAt,prefixBasi
  let reason=previous?'draft_identity_unchanged':'first_complete_draft',revision=previous?.revision??0;
  if(previous&&current.rosterHash!==previous.identity.rosterHash){
   const old=previous.identity;
-  const onlyDisclosure=current.draftHash===old.draftHash&&current.sideIdentityHash===old.sideIdentityHash&&old.players.every(p=>current.players.some(q=>q.heroId===p.heroId&&q.side===p.side&&(p.accountId===null||p.accountId===q.accountId)));
+  // A previously unknown account or team can become known later. This is an
+  // identity revision at this receipt, never permission to move the first draft
+  // cutoff or to replace/redact an already known identity without evidence.
+  const onlyDisclosure=current.draftHash===old.draftHash
+   &&old.sides.every(p=>current.sides.some(q=>q.side===p.side&&(p.teamId===null||p.teamId===q.teamId)))
+   &&old.players.every(p=>current.players.some(q=>q.heroId===p.heroId&&q.side===p.side
+    &&(p.teamId===null||p.teamId===q.teamId)&&(p.accountId===null||p.accountId===q.accountId)));
+  const teamDisclosed=onlyDisclosure&&current.sideIdentityHash!==old.sideIdentityHash;
+  const accountDisclosed=onlyDisclosure&&old.players.some(p=>p.accountId===null&&current.players.some(q=>q.heroId===p.heroId&&q.side===p.side&&q.accountId!==null));
   if(!onlyDisclosure){
    const proof=identityCorrection;
    if(!object(proof)||proof.fromStateHash!==previous.stateHash||proof.toRosterHash!==current.rosterHash||!digest(proof.evidenceSha256)||typeof proof.evidenceUtf8!=='string'||Buffer.byteLength(proof.evidenceUtf8)>262144||createHash('sha256').update(proof.evidenceUtf8).digest('hex')!==proof.evidenceSha256||typeof proof.reason!=='string'||proof.reason.length<1||proof.reason.length>256||instantNs(proof.knownAt)===null||instantNs(proof.knownAt)>at)return reject('draft_identity_correction_evidence_required',previous);
    let evidence;try{evidence=JSON.parse(proof.evidenceUtf8);}catch{return reject('draft_identity_correction_evidence_invalid',previous);}
    if(evidence.contract!=='aegis.draft-identity-correction.v1'||evidence.matchId!==o.matchId||evidence.fromStateHash!==previous.stateHash||evidence.toRosterHash!==current.rosterHash||evidence.observationId!==o.observationId||evidence.knownAt!==proof.knownAt||evidence.reason!==proof.reason)return reject('draft_identity_correction_evidence_invalid',previous);
   }
-  revision++;reason=onlyDisclosure?'account_identity_disclosed':'proven_identity_correction';
+  revision++;reason=!onlyDisclosure?'proven_identity_correction':teamDisclosed
+   ?accountDisclosed?'team_and_account_identity_disclosed':'team_identity_disclosed'
+   :'account_identity_disclosed';
  }
  const clock=o.providerGameClockSeconds;
  const firstClock=previous?previous.firstClock:(clock?.missing===false&&typeof clock.value==='number'&&Number.isFinite(clock.value)?clock.value:null);

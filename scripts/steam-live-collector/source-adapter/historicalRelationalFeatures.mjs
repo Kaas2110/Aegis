@@ -9,7 +9,7 @@ import {validateObservedDraftHistory} from './observedDraftHistory.mjs';
 import {PERFORMANCE_CONTRACT,PERFORMANCE_FIELDS} from './historicalPerformanceFields.mjs';
 
 export const HISTORICAL_RELATIONAL_CONTRACT='aegis.historical-relational-features.v1';
-export const HISTORICAL_RELATIONAL_FORMULA_VERSION='aegis.prior-map-relational-statistics.v1';
+export const HISTORICAL_RELATIONAL_FORMULA_VERSION='aegis.prior-map-relational-statistics.v2';
 const WINDOWS=[7,30,90],DAY=86400n*1000000000n,MAX_MAPS=50000;
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
@@ -203,7 +203,7 @@ function selectorsFor(roster,scope){
 
 function calculateStats(rows,{windowDays,minimumSupport,cutoff,qualified,reason,supportRef,latestKnownAt}){
  const n=rows.length,win=rows.reduce((s,r)=>s+Number(r.won),0),p=n?win/n:0,weights=rows.map(r=>2**(-Number(cutoff-r.map.known)/Number(DAY)/windowDays)),sw=weights.reduce((a,b)=>a+b,0),sw2=weights.reduce((a,b)=>a+b*b,0);
- const duration=rows.map(r=>r.map.durationSeconds),wins=rows.filter(r=>r.won).map(r=>r.map.durationSeconds),losses=rows.filter(r=>!r.won).map(r=>r.map.durationSeconds);
+ const winningRows=rows.filter(r=>r.won),losingRows=rows.filter(r=>!r.won),duration=rows.map(r=>r.map.durationSeconds),wins=winningRows.map(r=>r.map.durationSeconds),losses=losingRows.map(r=>r.map.durationSeconds);
  const completeKills=rows.filter(r=>r.map.kills.radiant!==null&&r.map.kills.dire!==null),kills=completeKills.map(r=>r.map.kills.radiant+r.map.kills.dire);
  const own=rows.filter(r=>r.map.kills[r.side]!==null),opp=rows.filter(r=>r.map.kills[r.side==='radiant'?'dire':'radiant']!==null);
  const z=1.959963984540054,center=n?(p+z*z/(2*n))/(1+z*z/n):null,half=n?z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/(1+z*z/n):null;
@@ -211,11 +211,14 @@ function calculateStats(rows,{windowDays,minimumSupport,cutoff,qualified,reason,
  for(const r of ordered){if(r.won!==ordered[0]?.won)break;streak+=r.won?1:-1;}
  const raw={supportMaps:n,effectiveCount:sw2?sw*sw/sw2:0,rawWinFraction:n?p:null,smoothedWinFraction:(win+10)/(n+20),decayedWinFraction:sw?rows.reduce((s,r,i)=>s+weights[i]*Number(r.won),0)/sw:null,smoothedDecayedWinFraction:(rows.reduce((s,r,i)=>s+weights[i]*Number(r.won),0)+10)/(sw+20),winFractionStandardError:n?Math.sqrt(p*(1-p)/n):null,wilsonLower95:n?center-half:null,wilsonUpper95:n?center+half:null,
   meanDurationSeconds:mean(duration),durationSampleSdSeconds:variance(duration)===null?null:Math.sqrt(variance(duration)),durationP25Seconds:quantile(duration,.25),durationMedianSeconds:quantile(duration,.5),durationP75Seconds:quantile(duration,.75),late40Fraction:n?duration.filter(d=>d>=2400).length/n:null,late50Fraction:n?duration.filter(d=>d>=3000).length/n:null,winMeanDurationSeconds:mean(wins),lossMeanDurationSeconds:mean(losses),meanTotalKills:mean(kills),totalKillsSampleSd:variance(kills)===null?null:Math.sqrt(variance(kills)),totalKillsP25:quantile(kills,.25),totalKillsMedian:quantile(kills,.5),totalKillsP75:quantile(kills,.75),meanOwnKillsPerMinute:mean(own.map(r=>r.map.kills[r.side]/(r.map.durationSeconds/60))),meanOpponentKillsPerMinute:mean(opp.map(r=>r.map.kills[r.side==='radiant'?'dire':'radiant']/(r.map.durationSeconds/60))),meanTotalKillsPerMinute:mean(completeKills.map(r=>(r.map.kills.radiant+r.map.kills.dire)/(r.map.durationSeconds/60))),daysSinceLastObservedMap:n?Number(cutoff-rows.reduce((m,r)=>r.map.ended>m?r.map.ended:m,rows[0].map.ended))/Number(DAY):null,trailingOutcomeStreak:n?streak:null};
- const metricCount=k=>k==='winMeanDurationSeconds'?wins.length:k==='lossMeanDurationSeconds'?losses.length:['meanTotalKills','totalKillsSampleSd','totalKillsP25','totalKillsMedian','totalKillsP75','meanTotalKillsPerMinute'].includes(k)?kills.length:k==='meanOwnKillsPerMinute'?own.length:k==='meanOpponentKillsPerMinute'?opp.length:n;
+ const metricRows=k=>k==='winMeanDurationSeconds'?winningRows:k==='lossMeanDurationSeconds'?losingRows:['meanTotalKills','totalKillsSampleSd','totalKillsP25','totalKillsMedian','totalKillsP75','meanTotalKillsPerMinute'].includes(k)?completeKills:k==='meanOwnKillsPerMinute'?own:k==='meanOpponentKillsPerMinute'?opp:rows;
+ const effectiveCounts=new Map([[rows,raw.effectiveCount]]);
  const at=latestKnownAt;
  return Object.fromEntries(Object.entries(METRICS).map(([key,m])=>{
-  const count=metricCount(key),ok=qualified&&(m.supportAlways||count>=minimumSupport),value=ok&&finite(raw[key])?raw[key]:null;
-  return[key,{value,supportMaps:count,effectiveCount:raw.effectiveCount,cohortQualified:qualified,reason:!qualified?reason:count<minimumSupport&&!m.supportAlways?'below_minimum_support':value===null?'metric_missing_or_insufficient_variance':null,definition:HISTORICAL_RELATIONAL_FORMULA_VERSION+'/'+key,formula:m.formula,units:m.units,windowDays,minimumSupport,latestHistoryAvailabilityAt:at,supportRef}];
+  const used=metricRows(key),count=used.length,ok=qualified&&(m.supportAlways||count>=minimumSupport),value=ok&&finite(raw[key])?raw[key]:null;
+  if(!effectiveCounts.has(used)){const w=used.map(r=>2**(-Number(cutoff-r.map.known)/Number(DAY)/windowDays)),sum=w.reduce((a,b)=>a+b,0),squares=w.reduce((a,b)=>a+b*b,0);effectiveCounts.set(used,squares?sum*sum/squares:0);}
+  const metricEffectiveCount=effectiveCounts.get(used);
+  return[key,{value,supportMaps:count,effectiveCount:metricEffectiveCount,cohortQualified:qualified,reason:!qualified?reason:count<minimumSupport&&!m.supportAlways?'below_minimum_support':value===null?'metric_missing_or_insufficient_variance':null,definition:HISTORICAL_RELATIONAL_FORMULA_VERSION+'/'+key,formula:m.formula,units:m.units,windowDays,minimumSupport,latestHistoryAvailabilityAt:at,supportRef}];
  }));
 }
 
@@ -255,7 +258,7 @@ function performanceStatistics(selector,rows,{windowDays,minimumSupport,qualifie
   const selection=indices.join(',');if(!rowRefCache.has(selection))rowRefCache.set(selection,registerSupportRows(observed));
   const at=supportLatestAt(rowRefCache.get(selection));
   supports[ref]={cohortRef:supportRef,metric,sourceFieldsDefinition:definition.formula,teamRequiresAllFive:selector.kind==='team',supportMaps:count,sourceRowsRef:rowRefCache.get(selection),rowsAreDistinctMaps:true};
-  for(const [stat,value]of Object.entries({mean:mean(values),sampleSd:variance(values)===null?null:Math.sqrt(variance(values)),median:quantile(values,.5)}))out[metric+'.'+stat]={value:qualified&&count>=minimumSupport&&finite(value)?value:null,supportMaps:count,effectiveCount:count,cohortQualified:qualified,reason:!qualified?'source_selection_or_identity_unproven':count<minimumSupport?'native_previous_performance_missing_or_below_support':value===null?'metric_insufficient_variance':null,definition:HISTORICAL_RELATIONAL_FORMULA_VERSION+'/past_performance/'+metric+'/'+stat,formula:stat+' across distinct-map values of '+definition.formula,units:definition.units,windowDays,minimumSupport,latestHistoryAvailabilityAt:at,supportRef:ref};
+  for(const [stat,value]of Object.entries({mean:mean(values),sampleSd:variance(values)===null?null:Math.sqrt(variance(values)),median:quantile(values,.5)}))out[metric+'.'+stat]={value:qualified&&count>=minimumSupport&&finite(value)?value:null,supportMaps:count,effectiveCount:count,cohortQualified:qualified,reason:!qualified?'source_selection_or_identity_unproven':count<minimumSupport?'native_previous_performance_missing_or_below_support':value===null?'metric_insufficient_variance':null,definition:HISTORICAL_RELATIONAL_FORMULA_VERSION+'/past_performance/'+metric+'/'+stat,formula:stat+' across distinct-map '+(selector.kind==='team'?'arithmetic means of all five observed same-side player values; per-map ratios are calculated per player before this mean; ':'individual observed player values; ')+definition.formula,units:definition.units,windowDays,minimumSupport,latestHistoryAvailabilityAt:at,supportRef:ref};
  }
  return{statistics:out,supports};
 }

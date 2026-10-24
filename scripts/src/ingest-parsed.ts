@@ -30,7 +30,8 @@ import {
 import { and, eq, sql } from 'drizzle-orm';
 import { withOpenDotaKey, odThrottleMs } from './lib/openDotaUrl';
 import { retainRawMatchResponse } from './lib/raw-match-response.js';
-import { extractParsedPayload, mergeParsedPayload, PARSED_PAYLOAD_SCHEMA_VERSION } from './lib/parsed-payload';
+import { extractParsedPayload, PARSED_PAYLOAD_SCHEMA_VERSION } from './lib/parsed-payload';
+import { planParsedWrite } from './lib/parsed-write.js';
 
 // Every request uses the shared free OpenDota budget gate.
 const RATE_LIMIT_MS = odThrottleMs(50);
@@ -59,24 +60,24 @@ interface OdMatchDetail {
   draft_timings?: unknown;
 }
 
-async function fetchMatch(matchId: number): Promise<{ data: OdMatchDetail | null; error: string | null }> {
+async function fetchMatch(matchId: number): Promise<{ data: OdMatchDetail | null; receivedAt: Date | null; error: string | null }> {
   try {
     const requestStartedAt = new Date();
     const r = await fetch(withOpenDotaKey(`https://api.opendota.com/api/matches/${matchId}`), {
       signal: AbortSignal.timeout(20_000),
     });
-    if (!r.ok) return { data: null, error: `HTTP ${r.status}` };
+    if (!r.ok) return { data: null, receivedAt: null, error: `HTTP ${r.status}` };
     const data = (await r.json()) as OdMatchDetail;
-    if (data.match_id !== matchId) return { data: null, error: 'Provider returned a different match ID' };
+    if (data.match_id !== matchId) return { data: null, receivedAt: null, error: 'Provider returned a different match ID' };
     const receivedAt = new Date();
     // The existing direct parser still receives the same complete object.
     const raw = retainRawMatchResponse(process.env.AEGIS_STATE_DIR, data,
       { matchId, job: 'ingest_parsed', requestStartedAt, receivedAt });
     if (raw.status === 'not_retained') console.warn(`[raw-match-json] ${matchId}: ${raw.reason}`);
-    return { data, error: null };
+    return { data, receivedAt, error: null };
   } catch (e) {
     if (e instanceof OdQuotaExhaustedError) throw e;
-    return { data: null, error: e instanceof Error ? e.message : String(e) };
+    return { data: null, receivedAt: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -117,7 +118,7 @@ async function main(): Promise<void> {
   for (let i = 0; i < todo.length; i++) {
     const { matchId, requestedAt, attempts } = todo[i];
     const ageMs = Date.now() - new Date(requestedAt).getTime();
-    const { data, error } = await fetchMatch(matchId);
+    const { data, receivedAt, error } = await fetchMatch(matchId);
     const payload = extractParsedPayload(data);
 
     if (error) {
@@ -129,21 +130,27 @@ async function main(): Promise<void> {
           updatedAt: new Date(),
         })
         .where(eq(matchParseQueueTable.matchId, matchId));
-    } else if (payload) {
+    } else if (payload && receivedAt) {
       // ✓ parsed — три записи в одной транзакции, чтобы не оставить
       // несогласованное состояние (parsed row есть, но queue всё ещё queued
       // или pro_matches.is_parsed=false) при прерывании процесса.
       const now = new Date();
       await db.transaction(async (tx) => {
+        const parent = await tx.select({ matchId: proMatchesTable.matchId }).from(proMatchesTable)
+          .where(eq(proMatchesTable.matchId, matchId)).limit(1).for('update');
+        if (!parent.length) throw new Error('parsed_write_parent_missing');
         const existing = await tx.select().from(matchParsedTable).where(eq(matchParsedTable.matchId, matchId)).limit(1);
-        const values = mergeParsedPayload(existing[0] ?? null, payload);
-        await tx.insert(matchParsedTable)
-          .values({ matchId, ...values })
-          .onConflictDoUpdate({ target: matchParsedTable.matchId, set: { ...values, parsedAt: now } });
-
-        await tx.update(proMatchesTable)
-          .set({ isParsed: true, parsedAt: now })
-          .where(eq(proMatchesTable.matchId, matchId));
+        const plan = planParsedWrite(existing[0] ?? null, payload, { receivedAt, materializedAt: new Date() });
+        if (plan.status === 'write') {
+          const written = await tx.insert(matchParsedTable)
+            .values({ matchId, ...plan.values, parsedAt: plan.parsedAt })
+            .onConflictDoUpdate({ target: matchParsedTable.matchId, set: { ...plan.values, parsedAt: plan.parsedAt },
+              setWhere: sql`${matchParsedTable.parsedAt} IS NULL OR ${matchParsedTable.parsedAt} < ${plan.parsedAt}` })
+            .returning({ matchId: matchParsedTable.matchId });
+          if (written.length) await tx.update(proMatchesTable)
+            .set({ isParsed: true, parsedAt: plan.parsedAt })
+            .where(eq(proMatchesTable.matchId, matchId));
+        }
 
         await tx.update(matchParseQueueTable)
           .set({ status: 'parsed', lastError: null, updatedAt: now })
