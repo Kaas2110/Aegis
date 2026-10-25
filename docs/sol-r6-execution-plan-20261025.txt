@@ -1,0 +1,330 @@
+Publication note: first R6 core block is partial. Read current core review and next-work first.
+
+AEGIS — SOL R6 EXECUTION PLAN: COMPLETE FEATURES, THEN MODELS
+25 October 2026. English documentation; Russian owner communication.
+
+1. AUTHORITY, PURPOSE AND CURRENT BASELINE
+
+Owner direction: retain the FULL agreed scope. Accelerate execution by assigning
+implementation, measurement and routine decisions to Sol, not by dropping work.
+Astra supplies architecture and reviews difficult causality/math decisions. Do not
+return to Astra after every helper module or repeat unchanged audits for context.
+This is an execution-plan addendum to accepted AD1–AD10, not a claim that PR9 has
+received a new comprehensive source audit or that its open gates have passed.
+
+Start from installed PR9 source, main 9f81621f70ced421f03687eac9cade74ea6656cd,
+reviewed head 0ad0e01fdd93525b5893bd142bc7e9d9161253cb. Canonical app:
+<canonical local app>. Private workspace:
+<private workspace>.
+Read the latest R5 exact continuation/review once, then this plan. Never rerun old
+assembly/install guards or completed fits. Local installed deltas do not imply
+local Git HEAD equals remote main. No routine full-source/byte parity audit.
+
+Implemented evidence: 41/41 small contracts, 32/32 history/writer/series/API and one
+actual rich roundtrip, all with synthetic inputs. Map-live columns 141138; series
+live 141182. These are measured schemas, not universal target sizes or ML quality.
+Generation 12.046s; cold write 133.733s; reload 51.517s; owned peak commit 2.78GiB.
+The last two times concern diagnostic persistence/reload, NOT model inference.
+Exact source/runtime bottleneck attribution has not been measured yet.
+
+Graphify was checked ready on PR9 during this planning turn: build
+77b3c36c-d15c-4d25-8766-2693019a2cfd; indexed commit 9f81621f70ced421f03687eac9cade74ea6656cd.
+This new plan is local until its next reviewed documentation/source publication.
+Graph memory includes incomplete verification and unreviewed candidates; it is
+navigation context, not independent architectural approval. No duplicate build.
+
+CURRENT PERMISSION: implement R6.0–R6.5, run bounded technical correctness and
+performance checks on pinned data. NO training, HPO, calibration, feature selection
+experiments, predictive evaluation, provider probing/refresh, task changes, serving
+activation or promotion now. R6.6–R6.9 below preserve the complete later workload;
+their explicit gates are not authorization to execute it automatically.
+
+2. NON-NEGOTIABLE CONTRACTS
+
+- One logical versioned producer and descriptor catalogue offline and online.
+  Preserve all 79 families, all 14 legacy groups and rich proposed interactions.
+  Catalogue completeness is not evidence that each source field is obtainable.
+  Every definition must be generated, unavailable, inapplicable, label-only or
+  train-only for a documented reason; no silent omissions or fabricated values.
+- History can feed every eligible phase. Freeze observed-draft history at t0, the
+  first complete retained draft receipt. Later identity t1 changes selectors, never
+  t0. Exclude current-map finals. SERIES_PRE and each BETWEEN transition have their
+  own causal cutoffs; prior-map facts require actual availability by the decision.
+- Retain ALL corpus versions/tombstones/identity epochs. Only a target-specific
+  as-of view resolves versions. Include hero/meta cohorts beyond the two teams.
+  Reconstructed history must retain its original-availability limitations.
+- One coherent current dynamic source per admitted profile. Do not mix clocks,
+  infer current GPM from net worth/minute, or fill live holes with final statistics.
+  Historical player/hero/team form plus current hero/role/minute/economy remains
+  required scope; source-unknown roles, Roshan events and timers stay explicit nulls.
+- Preserve 300s state retention and the separate 180s absent-phase qualification.
+  Receipt, clock-bearing anchor and qualified state time remain separate. Repeats
+  do not renew the anchor. Only qualified pause evidence supports pause retention.
+- Main card predicts whole BO1/BO3/BO5 series, including during the current map.
+  Detail predicts selected map winner/kills/duration. Default current map; previous
+  maps retain their heroes/actuals. User selection never changes background state.
+- Keep v1 readable, native Float64/missingness and exact support/quantile/arithmetic
+  contracts. No pruning, approximations or cap increases to make technical tests pass.
+- Serial native execution: verified owned JobObject, 8GiB hard job, four CPUs,
+  >=4GiB free, finite wall and STOP/cancel. Admit only when known project use plus
+  reservation fits 16GiB. The global 16GiB supervisor is NOT already active.
+  Do not kill unrelated processes, remove manual stops/foreign locks or resume jobs.
+
+3. EXECUTION ORDER AND OWNERSHIP
+
+R6.0 is a short interface/measurement preparation, not another general audit.
+Then run independent source tracks in parallel when slots/resources permit:
+  Track A: R6.2 exact history and historical proof.
+  Track B: R6.1 shared assets/performance and the native-code experiment.
+  Track C: R6.3 semantics/targets/data and evaluation manifest preparation.
+Root owns integration R6.4, all native test execution and consolidated evidence.
+Give disjoint files to agents; freeze seams before concurrent edits. Agents may
+inspect/review while the sole native job runs; no competing native test processes.
+If an agent slot is unavailable, continue sequentially; do not research slot limits.
+
+R6.0 — FREEZE SEAMS AND PREPARE ONE MEASUREMENT
+Output: work/sol-r6-20261025/INTERFACES.txt and STATUS.json.
+Record exact input/output ownership, release, cutoff, hashes and failure states for:
+verified corpus generation/view; reducer output+proof; shared schema/history handle;
+writer transaction/ref; compact trace; emitted-definition receipt; series route.
+Use accepted AD1–AD10 and current APIs, not a new generic framework. Check local
+diffs and owned jobs/STOPs before execution. Pin exact fixture, source and guard.
+Prepare scoped instrumentation for generation, history aggregation, projection,
+factoring, hashing, encode, writer verification/flush, decode, paging and IPC.
+Separate cold, warm and restart measurements; include bytes, allocations and cache
+hits. Do not claim the slowest phase's internal cause without these measurements.
+Acceptance: each next track has explicit seams, a decisive small fixture and owner.
+
+R6.1 — SHARE ASSETS AND MEASURE C++ WHERE IT CAN HELP
+Primary files: featureProjectionCompiler.mjs, unifiedFeatureProducer.mjs,
+compactFeatureAssets.mjs, compactFeatureJournal.mjs and their resource interfaces.
+Use immutable byte-owned plans/schema definitions/dictionaries/history/proofs once
+per valid identity, with leases for active users. Queue small descriptors/handles.
+Per frame, calculate dynamic values and references, not expanded metadata for every
+head. Same schema does NOT mean same target/source authority; retain route bindings.
+Cache keys bind relevant schema/formula/profile/generation/cutoff/revision semantics.
+Untrusted JSON/hash strings cannot mint handles; reload verifies actual disk bytes.
+Do not silently remove existing corruption checks to gain speed. Page diagnostics
+on demand. Reuse reviewed proofs in memory under ownership; avoid repeated history
+construction. Charge transient encode/decode and reader-held bytes after eviction.
+
+Owner conditionally authorizes meaningful C++ acceleration. Sol must evaluate it,
+not merely mention it. First measure current path, then assess each material CPU
+cost: exact history reductions, interactions/projection, hashing/factoring/codec.
+Reuse an existing native implementation if it preserves contracts and is practical;
+do not rewrite optimized library internals or IO orchestration without evidence.
+Prototype ONE dominant coarse kernel first. Include marshalling/IPC/build/runtime
+cost in the comparison. Use the same inputs, outputs, semantics and memory bounds.
+No full application rewrite before a demonstrated benefit; no UI/network rewrite
+for a CPU problem. No new downloads/toolchain installation without normal applicable
+access approval. Record unavailable toolchain as a concrete blocker, not a reason
+to stop independent work.
+
+Native kernel contract: one versioned descriptor/formula source consumed by both
+offline and live paths; deterministic Float64/order/missingness/support rules;
+bounded length-checked buffers and explicit units; owned cancellation/error states;
+no fast-math, approximate quantiles or unreviewed arithmetic changes. Keep the
+current implementation as a parity oracle until acceptance, not as a divergent
+production feature generator. Native children remain inside the owned job.
+
+Proposed adoption gate: >=30% reduction of the affected COMPLETE operation time
+(at least three paired post-warm-up repetitions of the short representative path),
+with exact golden parity, no material memory regression and all fixed caps met.
+Report raw repetitions, median and tail; do not infer stable p99 from three runs.
+A microbenchmark win alone is insufficient. Cold and warm cannot be cherry-picked.
+Compare against the optimized shared-assets path, not only the obsolete slow path.
+This threshold is an engineering decision, not a promised result. If it fails,
+record measured rejection/limit and leave that native migration unadopted under
+the owner's conditional instruction; retain all feature/model work. If it passes,
+port other measured major kernels incrementally under the same gate.
+
+R6.2 — COMPLETE EXACT HISTORY REDUCTION AND SOURCE-PROOF BRIDGE
+Primary files: retainedReferenceCorpus.mjs, historyCalculationCore.mjs,
+historicalRelationalFeatures.mjs, historySourceVerifier.mjs, source export/view
+adapters, compactFeatureJournal.mjs proof port (coordinate with Track B).
+Implement descriptor-driven bounded exact aggregation over all eligible pinned
+corpus parts. Numeric map-ID arithmetic order differs from lexical serialization;
+preserve both. Use bounded scalar batches/external sorted runs for exact quantiles;
+share cohort/support chunks instead of duplicating maps/IDs in each descriptor.
+Cache immutable target/t0/revision aggregates. Validate every original generation
+reference at intake, including excluded future/current-map parts. Keep tombstones,
+conflicts and null updates; no globally collapsed latest table or hidden truncation.
+Complete real dependency validation of compact historicalInputRef and bind it to
+the current target/horizon/identity/formula/inventory. Metadata alone is insufficient.
+Participating v2 appenders use the one owned writer before any path is enabled.
+Acceptance: small exact v1-compatible golden parity, adversarial t0/t1/correction/
+mutation/STOP/corruption cases; >64MiB source through actual producer, persistence,
+restart and reader. Also reconcile the full pinned archive inventory/dispositions:
+crossing 64MiB alone does not prove complete-year support. Keep v1 64MiB guard.
+
+R6.3 — FINISH ALL FEATURES, SEMANTICS AND MODEL INPUT CONTRACTS
+Primary files: registry/generated-definition-ledger, actual feature family modules,
+seriesHistoryTarget, seriesContextFeatures and target routing contracts.
+Generate definition metadata from the SAME templates as values, rather than hand
+writing 141k descriptions. Validate emitted schemas for 12 targets/13 modes and
+every occurrence of 14 legacy groups: units, support/population, knownAt, game/event
+time, role/patch applicability, missingness and eligible phase. Alias only proven
+same semantics; same spelling or high correlation is not identity.
+Finish the agreed historical player x hero, role/opponent, ally pairs/counters,
+team style/form, patch/meta, timing/power, comeback/momentum, previous-map/series
+and totals interactions where their real input contracts permit. Preserve independent
+hero IDs/sides as well as hero-conditioned history. Sparse support remains explicit.
+Roshan/Aegis: last qualified death, elapsed time, alive state and respawn bounds only
+when supported by source/rules for that patch; known pickup/holder/expiry/steal episodes
+require their own evidence. No guessed exact respawn from a generic timer field.
+
+Prepare frozen dataset/export/split contracts now, WITHOUT fits or model scoring.
+Label tables stay separate; final winner/kills/duration are targets, never early
+current-map features. Record observed live vs retrospective reconstructed rows.
+Report joint required-source coverage from retained records as retrospective only;
+missing/error/stale slots cannot disappear from the denominator. Final prospective
+>=95% admission remains a separate evidence/authorization gate. Do not label data
+available just because a fixture or completed-match response contains it.
+Acceptance: no unexplained/unassigned family or definition; unsupported inputs are
+documented unavailable, not declared implemented. Any actual implementation gap
+keeps its gate open. Preserve full inventory, even if a particular phase cannot use it.
+
+R6.4 — CONNECT THE ACTUAL DIAGNOSTIC APPLICATION PATH
+Primary files: retainedFeaturePipeline, retainedDiagnosticBootstrap,
+diagnosticFeatureReadApi, diagnosticTargetRouting, owned series context stores.
+Integrate tracks A/B/C with the actual producer/journal/reader, keeping listeners,
+public inference and task schedules OFF. Existing opt-in helpers alone do not count.
+Verify whole-series main vs selected-map detail across BO1/3/5, unknown initial map
+and sides, complete draft, live, BETWEEN, previous-map views, corrections and terminal.
+Recheck owned source/series state after async IO; stale or cross-map current claims
+fail closed. User-facing unavailable output remains only "Прогноз недоступен".
+Prepare and technically verify aggregate-supervisor contracts without attaching or
+restarting current independent tasks. Existing 16GiB admission and owned 8GiB runner
+remain required regardless of whether a native kernel is used.
+
+R6.5 — ONE INTEGRATED ACCEPTANCE AND RETURN TO ASTRA
+Reuse passing unchanged evidence; rerun changed contracts and dependent regressions.
+Order: small negative/golden checks -> actual rich source-proof/persistence/restart
+-> short repeated-state slice -> sustained 326-state suite if dependencies pass.
+Existing targets remain: cold <=30s; warm p95<=2s,p99<=5s,no frame>15s; service peak
+<=6GiB; job<=8GiB,4 CPUs,>=4GiB free; <=20min/run; owned stress output<=4GiB;
+warm charged growth<=64MiB except enumerated schema changes. No silent cap raise.
+Use 324 advancing states plus two explicit zero-time DRAFT states for two 81-minute
+map contexts, with separate PRE/BETWEEN/terminal coverage. Exercise STOP/cancel,
+backpressure/schema churn/repeats/gaps/errors/identity changes/restart/corruption.
+No mocked vectors, fabricated zero-time live admission or tiny-case coverage claims.
+If a dependency fails, repair that exact track; do not repeatedly launch the long
+suite or reopen all architecture. Preserve failed receipts and current source hashes.
+
+Output one ASTRA-REVIEW.txt: changed files/interfaces, rationale/alternatives,
+causal/source dispositions, real vs synthetic evidence, resources/performance,
+native go/no-go measurements, remaining questions, exact training readiness state.
+Tests alone do not authorize training. Return a finite list of unresolved decisions,
+not an undifferentiated request to review the whole repository again.
+
+4. ALL MODEL OUTPUTS — SCOPE IS UNCHANGED
+
+Target(s)                         Trigger                  Display / meaning
+SERIES_PRE                        Before first map         Main: series winner
+PRE_MAP_WIN/PRE_KILLS/PRE_DURATION Before selected draft    Detail: map winner/totals
+POST_MAP_WIN/POST_KILLS/POST_DURATION Complete draft         Detail: map winner/totals
+SERIES_LIVE [postdraft]            Complete current draft   Main: series winner
+LIVE_MAP_WIN/LIVE_KILLS/LIVE_DURATION Admitted live state    Detail: map winner/totals
+SERIES_LIVE [live]                 Admitted live state      Main: series winner
+SERIES_BETWEEN                     After a completed map    Main: series winner
+
+These are 12 logical targets and 13 target/mode combinations, not a promise of 12
+physical estimators. Terminal actuals are not predictions. Main series forecast
+uses format/score, prior completed maps, current draft/live state and history.
+It is not a renamed current-map probability. Any child model prediction used as
+a training feature must be chronologically out-of-fold with compatible versions.
+
+Totals exist before draft, after draft and live. Without a bookmaker, generate
+lines from the model distribution and recompute on admitted updates. With a selected
+bookmaker, keep its actual event/line/odds and evaluate that SAME distribution at
+those lines; do not substitute another bookmaker's market. Preserve map identity,
+units, final-vs-remaining interpretation and integer-line push probability.
+
+5. CONDITIONAL MODEL STAGES — PREPARE NOW, EXECUTE ONLY AFTER THE GATE
+
+R6.6 — PIN DATASETS AND EVALUATION BEFORE FIRST NEW FIT
+Astra must review feature/source/causality/runtime evidence and close or explicitly
+resolve each gate; owner training permission is separately required. Missing source
+qualification does not silently become permission for research or deployment.
+Freeze chronological train/validation/holdout boundaries at series level. Keep all
+maps/snapshots of a series together; purge overlapping series and respect collection
+availability. Fit aggregates/encoders only on eligible past data. Use separate
+tuning, early-stopping and final evaluation roles; previously inspected holdouts
+are not untouched independent tests. Reuse pinned sources; no per-test refresh.
+Specify historical windows/patch weighting before comparison; letter patches matter.
+No numeric row count/accuracy is promised until inventory/eligibility is measured.
+
+Live evaluation: fixed 5,10,15,...,80-minute landmarks and one 80+ stratum. Select
+the last eligible observation at or BEFORE each landmark within a predeclared age
+bound; never the nearest future sample. A map ended before a landmark is not at
+risk and is excluded with an explicit count; source-missing ongoing maps remain
+in coverage. Report unique maps/series and missingness at every minute. Do not
+classify a match by majority vote across its frames or count frames as independent.
+Map/series-weight training snapshots to avoid long games dominating unnoticed.
+
+R6.7 — FIRST COMPLETE BOOSTING BENCHMARK
+Use the full eligible rich feature set for each target; no early importance pruning.
+Start with existing suitable boosted-tree tooling (LightGBM/CatBoost/XGBoost), not
+new linear replacements. Predeclare one reference configuration and a bounded job
+manifest: maximum native fits, threads, memory, per-fit and total wall time. A totals
+package can contain several quantile/distribution estimators; count EACH native fit.
+If budget cannot cover all outputs, save a queue, not a selectively reported success.
+One native fit at a time. Existing completed artifacts can be comparators only with
+their exact cohort/schema caveats; never present them as this new benchmark.
+
+Compare unified live model with time/context features against 5-minute specialists
+plus one 80+ head on identical chronological cohorts and weights. Sparse windows
+must expose insufficient support rather than fabricate strong results. More elapsed
+game information does not imply more independent training maps or guaranteed gain.
+Compare unified series context against staged heads only if support permits; BO5
+remains supported and separately reported, never silently reduced to BO3.
+
+Metrics: winner accuracy + logloss/Brier/calibration/coverage; all maps and equal-
+strength cohorts defined using pre-decision information, strong-team subset and
+predeclared comeback slices. Report paired uncertainty clustered by series.
+Totals: MAE plus quantile loss, interval coverage/width and probability quality at
+fixed/available bookmaker lines, by phase/minute. Enforce support constraints:
+final kills>=current kills, final duration>=elapsed time, monotone CDF, valid push
+mass and complementarity. MAE of nine kills/six minutes alone does not calibrate odds.
+
+R6.8 — TUNING, FEATURE SELECTION/MERGING AND SECOND NATIVE PASS
+Owner authorizes feature reduction AFTER full-set experimentation. Keep the complete
+catalogue and full baseline artifact permanently. Compare family removals, interaction
+groups and semantic deduplication on validation folds and prespecified equal-match,
+comeback/minute/hero contexts. Low global importance/correlation alone cannot discard
+a useful interaction. Findings chosen on the test set require fresh future validation.
+Merge only semantically equal quantities; GPM/net worth or distinct role/clock inputs
+are not aliases. Track joint absence and sparse support. No selective subgroup claims.
+Use bounded staged HPO (tree depth/leaves, learning rate, regularization, sampling,
+history window/patch policy) with early stopping and a registered overall fit budget;
+expand only for measured validation benefit. Final holdout is never the tuner.
+Compile each accepted per-model feature mask INTO producer dependencies, so unused
+interactions stop computing; slicing a full matrix only saves model input costs.
+Offline and online use the same projection/formula version. Re-measure latency,
+memory and C++ opportunities on the resulting actual path, not isolated kernels.
+Targets of 80–85%/95–99% remain aspirations, not promised acceptance evidence.
+
+R6.9 — MODEL PACKAGES AND APPLICATION ACCEPTANCE
+Create versioned packages binding model, ordered feature projection, source profile,
+cutoff/phase, normalization/missingness, calibration and distribution contract.
+Verify after-draft immediate routing; map/series orientation; prior-map contexts;
+live updates and totals/bookmaker lines; restart/backpressure and unavailable output.
+Separate offline quality, shadow diagnostic inference and public activation. Public
+promotion, collection/task changes and RuStore release require their own gates.
+No silent activation after a fit. Return final models, per-minute tables, cohorts,
+feature contributions, resource results and unresolved limits for Astra/owner review.
+
+6. EVIDENCE, PUBLICATION AND ESCALATION
+
+Maintain work/sol-r6-20261025/STATUS.json with task, source/data hashes, exact receipt,
+state and next action. Concise stage notes replace duplicated long prose. Record
+actual failures and why changes were chosen. Technical tests are not model accuracy.
+Publish one reviewed completed-block source/docs PR, attach and merge the reviewed
+head under standing authorization. Include this plan in the next substantive source
+block; no new PR solely to republish a continuation pointer. Graphify auto-refreshes.
+Escalate to Astra only a concrete causal/math/semantic conflict, inability to meet
+fixed resource/performance bounds after measured fixes, or an authority-dependent
+gate. Sol resolves routine coding errors locally and continues independent tasks.
+No work is dropped to accelerate. If only a native job remains, end the active turn
+with an exact continuation instead of busy polling; use an authorized existing
+monitor if available. Do not invent a scheduled wakeup or restart a paused task.

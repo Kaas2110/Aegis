@@ -171,3 +171,24 @@ Keep one trusted context-store owner per writer root; no competing direct pointe
 Continue via the latest exact local pointer and return architecture/causality and
 remaining ownership/reduction decisions to Astra before any fit. Do not rerun old
 install/assembly guards. Graphify refresh is automatic; current source prevails.
+
+
+## Sol R6 core checkpoint — 2026-10-25
+Read docs/sol-r6-core-review-20261025.txt, its technical evidence and
+docs/sol-r6-next-work-20261025.txt before continuing the complete R6 plan.
+This reviewed source block adds private v2 retained history transport, bounded
+exact scalar primitives, owned compiler/producer/consumer assets, compact v3
+field-aligned persistence (v2 readable), static dependency integrity and emitted/
+dataset metadata contracts. Exact receipts distinguish failures and corrections.
+It is NOT completion of the full feature-first gate or actual compact-host adoption.
+All79families/14legacy groups are retained; unresolved semantics remain explicit.
+Original padded-source >64MiB is not whole normalized archive acceptance. Static
+input byte/pin/support verification is not parsed-target/original-availability
+proof. Cold restart release-to-zero is not concurrent hot-host acceptance.
+Training/providers/runtime tasks/serving/model promotion remain OFF. Preserve
+300-second retention vs180-second qualification, STOPs, fixed caps and owned jobs.
+Continue known R6 implementation with Sol; Astra reviews finite architecture/math
+issues and the consolidated feature/source/runtime gate before model training.
+Use actual installed/publication receipts; never rerun obsolete assembly guards.
+Graphify refreshes automatically after the completed-block merge. Do not create a
+duplicate build or assume indexed source/memory readiness from a queued refresh.

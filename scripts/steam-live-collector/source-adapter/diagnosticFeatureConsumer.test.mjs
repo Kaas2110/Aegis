@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {createDiagnosticFeatureConsumer} from './diagnosticFeatureConsumer.mjs';
 import {createDynamicHistoryProof,readDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
 import {collectDraftHistorySourceExport,verifyHistorySourceExport} from './historySourceExport.mjs';
@@ -9,6 +10,10 @@ import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtur
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {createFeatureProjectionCompiler} from './featureProjectionCompiler.mjs';
 import {digest,validateRegistry} from '../../feature-registry/registry-contract.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
+import {createRetainedReferenceCorpus,materializeRetainedReferenceHistoryV2} from './retainedReferenceCorpus.mjs';
+import {deriveHistoricalFactVersionV2} from './retainedOpenDotaFacts.mjs';
+import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 const AT='2026-10-23T12:40:00Z';
 async function bound({accounts=true,late=false,computedAt='2026-10-23T12:30:00Z',matchId='90001'}={}){
  const a=draftArgs({accounts,matchId});a.matchId=matchId;a.computedAt=computedAt;
@@ -183,4 +188,92 @@ test('R5 available capacity still rejects nested and top-level accessors without
  assert.equal((await c.consume(top)).reason,'host_input_or_history_contract');
  const nested=structuredClone(base.input.sourceExportInput);Object.defineProperty(nested,'utf8',{enumerable:true,get(){entered++;return'{}';}});
  assert.equal((await c.consume({...base.input,sourceExportInput:nested})).reason,'host_input_or_history_contract');assert.equal(entered,0);assert.equal(p.calls.length,0);assert.equal(c.status().preparation.ownedCopies,0);assert.equal(c.status().resourceArena.chargedBytes,0);
+});
+
+function releasingProducer({nativeContinuation=false,afterGenerate=null}={}){
+ const legacy=instrumentedProducer(),bundles=[];
+ const producer={...legacy.producer,generateFeatureBundle(input){
+  const bundle=legacy.producer.generateFeatureBundle(input),entry={bundle,releases:0,active:true};
+  if(nativeContinuation){
+   const nativeContract='aegis.steam-coherent-feature-bundle.v3',observationId='synthetic-native-'+bundles.length;
+   bundle.components.legacyNative={contract:nativeContract,observationId,state:{contract:nativeContract,admissionProfile:null,continuityId:null,roshanState:{},history:[]}};
+   bundle.nextLiveState=Object.freeze({contract:'aegis.observed-draft-steam-feature-bundle.v2.state',matchId:bundle.matchId,lastObservationId:observationId,historyContentHash:bundle.historyContextHash});
+  }
+  Object.defineProperty(bundle,'release',{enumerable:false,value(){entry.releases++;entry.active=false;return entry.releases===1;}});bundles.push(entry);afterGenerate?.(entry);return bundle;
+ }};
+ return{...legacy,producer,bundles};
+}
+test('R6 bundle ownership spans asynchronous callbacks and releases once without changing continuation identity',async()=>{
+ const p=releasingProducer(),s=ports(),c=createDiagnosticFeatureConsumer({...p,...s,now:()=> '2026-10-23T13:00:00Z',writeSchema:async o=>{assert.equal(p.bundles.at(-1).active,true);await tick();assert.equal(p.bundles.at(-1).active,true);return s.writeSchema(o);},appendTrace:async trace=>{assert.equal(p.bundles.at(-1).active,true);await tick();assert.equal(p.bundles.at(-1).active,true);return s.appendTrace(trace);}});
+ const first=await c.consume(base.input);assert.equal(first.status,'recorded_diagnostic');assert.equal(p.bundles[0].releases,1);assert.equal(p.bundles[0].active,false);
+ const second=await c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'});assert.equal(second.status,'recorded_diagnostic');assert.equal(p.calls[1].previousLiveState,p.bundles[0].bundle.nextLiveState);assert.equal(p.bundles[1].releases,1);assert.deepEqual(p.calls[1].previousLiveState,{step:1});
+ assert.equal(c.status().continuationOwnership.unmeasuredMaps,1);assert.equal(c.forgetMap(base.input.matchId).released,true);
+});
+test('R6 generated bundle releases on output, encode, schema, append, STOP and commit-clock failures',async()=>{
+ const cases=[
+  {reason:'generation_or_source_contract_failed',afterGenerate:entry=>{entry.bundle.matchId='wrong';}},
+  {reason:'generation_or_source_contract_failed',limits:{maxTraceBytes:1024}},
+  {reason:'manual_stop_before_schema_write',stopAfterGeneration:true},
+  {reason:'schema_registration_failed',schemaFails:true},
+  {reason:'manual_stop_after_schema_write',stopAfterSchema:true},
+  {reason:'trace_append_failed',appendFails:true},
+  {reason:'manual_stop_after_trace_commit',stopAfterAppend:true},
+  {reason:'journal_commit_clock_contract',clockRollback:true}
+ ];
+ for(const config of cases){
+  let allowed=true;const p=releasingProducer({afterGenerate:entry=>{config.afterGenerate?.(entry);if(config.stopAfterGeneration)allowed=false;}}),s=ports(),times=['2026-10-23T12:40:00Z','2026-10-23T12:40:01Z','2026-10-23T12:39:59Z'];
+  const c=createDiagnosticFeatureConsumer({...p,...s,limits:config.limits??{},shouldContinue:()=>allowed,now:()=>config.clockRollback?times.shift():'2026-10-23T13:00:00Z',writeSchema:async o=>{if(config.schemaFails)throw Error('synthetic schema failure');const r=await s.writeSchema(o);if(config.stopAfterSchema)allowed=false;return r;},appendTrace:async trace=>{if(config.appendFails)throw Error('synthetic append failure');const r=await s.appendTrace(trace);if(config.stopAfterAppend)allowed=false;return r;}});
+  const result=await c.consume(base.input);assert.equal(result.reason,config.reason);assert.equal(result.stateAdvanced,false);assert.equal(p.bundles.length,1);assert.equal(p.bundles[0].releases,1);assert.equal(c.status().resourceArena.chargedBytes,0);
+ }
+});
+test('R6 restore success, mismatch, STOP and source barrier each release their generated bundle',async()=>{
+ const original=releasingProducer(),s=ports(),first=createDiagnosticFeatureConsumer({...original,...s,now:()=> '2026-10-23T13:00:00Z'});const saved=await first.consume(base.input),stored=JSON.parse(s.traces[0].utf8);
+ for(const variant of ['success','mismatch','stop','barrier']){
+  let allowed=true,c;const p=releasingProducer();c=createDiagnosticFeatureConsumer({...p,...ports(),now:()=> '2026-10-23T13:00:00Z',shouldContinue:()=>allowed,loadCommittedTrace:async()=>{assert.equal(p.bundles[0].active,true);await tick();if(variant==='stop')allowed=false;if(variant==='barrier')c.invalidateSourceContinuity(base.input.matchId);const copy=structuredClone(stored);if(variant==='mismatch')copy.sourceSnapshotHash='d'.repeat(64);return copy;}});
+  const restored=await c.consume(base.input,{restoreTraceSha256:saved.traceSha256}),expected={success:null,mismatch:'durable_trace_restore_failed',stop:'manual_stop_during_trace_restore',barrier:'source_continuity_changed_during_restore'}[variant];assert.equal(restored.reason,expected);assert.equal(p.bundles[0].releases,1);assert.equal(restored.stateAdvanced,variant==='success');
+  if(variant==='success'){assert.equal(restored.status,'restored_diagnostic_state');await c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'});assert.equal(p.calls[1].previousLiveState,p.bundles[0].bundle.nextLiveState);assert.equal(p.bundles[1].releases,1);}
+ }
+});
+test('R6 inspectable native continuation estimate transfers to the slot and releases on replacement or source reset',async()=>{
+ const arena=createDiagnosticResourceArena(),p=releasingProducer({nativeContinuation:true}),s=ports(),c=createDiagnosticFeatureConsumer({...p,...s,resourceArena:arena,now:()=> '2026-10-23T13:00:00Z'});
+ assert.equal((await c.consume(base.input)).status,'recorded_diagnostic');let status=c.status();assert.equal(status.continuationOwnership.ownedMaps,1);assert.equal(status.continuationOwnership.unmeasuredMaps,0);assert.ok(status.continuationOwnership.estimatedBytes>=2048*2048);assert.equal(arena.status().chargedBytes,status.continuationOwnership.estimatedBytes);const firstBytes=arena.status().chargedBytes;
+ assert.equal((await c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'})).status,'recorded_diagnostic');assert.equal(p.calls[1].previousLiveState,p.bundles[0].bundle.nextLiveState);assert.equal(arena.status().chargedBytes,firstBytes);assert.equal(p.bundles[0].releases,1);assert.equal(p.bundles[1].releases,1);
+ assert.equal(c.invalidateSourceContinuity(base.input.matchId).cleared,true);assert.equal(arena.status().chargedBytes,0);assert.equal(c.status().maps,1);assert.equal((await c.consume({...base.input,decisionAt:'2026-10-23T12:42:00Z'})).status,'recorded_diagnostic');assert.equal(p.calls[2].previousLiveState,null);assert.equal(c.forgetMap(base.input.matchId).released,true);assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
+});
+test('R6 denied continuation reservation releases the failed bundle and preserves the last committed state',async()=>{
+ const ownedArena=createDiagnosticResourceArena();let deny=false,firstToken=null;const arena={reserve:ownedArena.reserve,retainAsset(asset,bytes){if(deny&&bytes>=2048*2048&&asset!==firstToken)return null;const lease=ownedArena.retainAsset(asset,bytes);if(lease&&firstToken===null)firstToken=asset;return lease;},status:ownedArena.status},p=releasingProducer({nativeContinuation:true}),c=createDiagnosticFeatureConsumer({...p,...ports(),resourceArena:arena,now:()=> '2026-10-23T13:00:00Z'});
+ assert.equal((await c.consume(base.input)).status,'recorded_diagnostic');const priorBytes=ownedArena.status().chargedBytes;deny=true;const failed=await c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'});assert.equal(failed.reason,'generation_or_source_contract_failed');assert.equal(failed.stateAdvanced,false);assert.equal(p.bundles[1].releases,1);assert.equal(ownedArena.status().chargedBytes,priorBytes);
+ deny=false;assert.equal((await c.consume({...base.input,decisionAt:'2026-10-23T12:42:00Z'})).status,'recorded_diagnostic');assert.equal(p.calls[2].previousLiveState,p.bundles[0].bundle.nextLiveState);c.forgetMap(base.input.matchId);assert.equal(ownedArena.status().chargedBytes,0);
+});
+test('R6 actual producer releases compiled routes after v1 consumer persistence',async()=>{
+ const[index,familyDocument,targetDocument]=syntheticRegistry(),sourceInventory=Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.synthetic.mjs',sha256:'a'.repeat(64)}]}])),arena=createDiagnosticResourceArena(),producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory,resourceArena:arena}),c=createDiagnosticFeatureConsumer({producer,...ports(),resourceArena:arena,now:()=> '2026-10-23T13:00:00Z'});
+ const result=await c.consume(base.input);assert.equal(result.status,'recorded_diagnostic');assert.equal(producer.resourceStatus().activeBundles,0);assert.equal(producer.compilerStatus().activeRoutes,0);assert.equal(producer.compilerStatus().activeBlocks,0);c.forgetMap(base.input.matchId);producer.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
+});
+test('R6 source invalidation during IO preserves the active prior-token asset borrow until execution finishes',async()=>{
+ const arena=createDiagnosticResourceArena(),p=releasingProducer({nativeContinuation:true}),s=ports();let release,appends=0;const gate=new Promise(resolve=>{release=resolve;}),c=createDiagnosticFeatureConsumer({...p,...s,resourceArena:arena,now:()=> '2026-10-23T13:00:00Z',appendTrace:async trace=>{if(++appends===2)await gate;return s.appendTrace(trace);}});
+ assert.equal((await c.consume(base.input)).status,'recorded_diagnostic');const firstBytes=c.status().continuationOwnership.estimatedBytes;assert.equal(arena.status().heldAssets,1);
+ const pending=c.consume({...base.input,decisionAt:'2026-10-23T12:41:00Z'});await tick();assert.equal(appends,2);assert.equal(p.calls[1].previousLiveState,p.bundles[0].bundle.nextLiveState);assert.equal(arena.status().heldAssets,2);
+ assert.equal(c.invalidateSourceContinuity(base.input.matchId).cleared,true);assert.equal(c.status().continuationOwnership.ownedMaps,0);assert.equal(arena.status().heldAssets,2);assert.ok(arena.status().chargedBytes>=firstBytes*2);assert.equal(p.bundles[1].active,true);
+ release();const result=await pending;assert.equal(result.reason,'source_continuity_changed_after_trace');assert.equal(result.stateAdvanced,false);assert.equal(result.traceCommitted,true);assert.equal(p.bundles[1].releases,1);assert.equal(arena.status().heldAssets,0);assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);c.forgetMap(base.input.matchId);
+});
+
+test('R6 actual retained v2 private source handle passes consumer preparation and producer binding',async()=>{
+ const objects=new Map(),sha=text=>createHash('sha256').update(text).digest('hex'),writer={contract:'aegis.persistent-artifact-writer.v1',async commit({kind,utf8,expectedSha256}){assert.equal(sha(utf8),expectedSha256);const ref={kind,sha256:expectedSha256,bytes:Buffer.byteLength(utf8)};objects.set(kind+':'+expectedSha256,utf8);return ref;},async read(ref){const utf8=objects.get(ref.kind+':'+ref.sha256);assert.equal(typeof utf8,'string');return utf8;},async inspect(){return{objects:objects.size};}};
+ const payload={match_id:101,start_time:1792494000,duration:1800,radiant_win:true,radiant_team_id:100,dire_team_id:200,radiant_score:25,dire_score:10,players:[{player_slot:0,hero_id:1,account_id:101,gold_per_min:600,kills:10,deaths:2,assists:3,times:[0,60],gold_t:[600,1200]}]},selectedInput=pinned({schemaVersion:1,source:'opendota',endpoint:'https://api.opendota.com/api/matches/101',matchId:101,receivedAt:'2026-10-20T12:00:00Z',availabilityBasis:'collector_response_receipt',payloadKind:'selected_match_detail_v1',payloadSha256:sha(JSON.stringify(payload)),payload}),versionInput=deriveHistoricalFactVersionV2({selectedInput}).versionInput;
+ const clock=()=> '2026-10-23T12:30:00Z',a=draftArgs({accounts:true}),corpus=await createRetainedReferenceCorpus({artifactStore:writer,versionInputs:[versionInput],clock}),view=await materializeRetainedReferenceHistoryV2({corpusHandle:corpus.handle,matchId:a.matchId,draftPrefixInputs:a.draftPrefixInputs});assert.equal(view.status,'bounded_reference_ready');
+ const retainedInputs={...a,factsInput:view.factsInput,nativeInput:view.nativeInput};assert.throws(()=>createDynamicHistoryProof(retainedInputs),/draft_history_retained_source_scope_or_basis/);
+ const h=createDynamicHistoryProof({...retainedInputs,availabilityBasis:'retained_receipt_reconstruction'});assert.equal(h.context.availabilityBasis,'retained_receipt_reconstruction');
+ const[index,familyDocument,targetDocument]=syntheticRegistry(),sourceInventory=Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.synthetic.mjs',sha256:'a'.repeat(64)}]}])),arena=createDiagnosticResourceArena(),producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory,resourceArena:arena}),s=ports(),c=createDiagnosticFeatureConsumer({producer,...s,resourceArena:arena,now:()=> '2026-10-23T13:00:00Z'}),input={matchId:a.matchId,decisionAt:AT,historyProof:h.proof,sourceExportHandle:view.sourceExportHandle,expectedSourceSnapshotHash:view.sourceSnapshotHash,mode:'POST'};
+ const result=await c.consume(input);assert.equal(result.status,'recorded_diagnostic');assert.equal(JSON.parse(s.traces[0].utf8).sourceSnapshotHash,view.sourceSnapshotHash);assert.equal(producer.resourceStatus().activeBundles,0);
+ assert.equal((await c.consume({...input,sourceExportHandle:structuredClone(view.sourceExportHandle)})).reason,'host_input_or_history_contract');let reads=0;const getter=Object.freeze({get contract(){reads++;return 'aegis.verified-retained-reference-source-handle.v2';}});assert.equal((await c.consume({...input,sourceExportHandle:getter})).reason,'host_input_or_history_contract');assert.equal(reads,0);c.forgetMap(input.matchId);producer.close();assert.equal(arena.status().chargedBytes,0);
+});
+function consumerLiveFrame(time,clock){
+ const entry=draftEntry({accounts:true,time,clock,phase:5}),raw=JSON.parse(entry.rawInput.utf8),metadata=JSON.parse(entry.metadataInput.utf8);for(const side of ['radiant','dire'])for(const player of raw.result.games[0].scoreboard[side].players)Object.assign(player,{net_worth:5000+player.hero_id*100+clock,gold_per_min:400+player.hero_id,xp_per_min:500+player.hero_id,level:10,gold:100});
+ const rawInput=pinned(raw),observation=normalizeLocalCapture({...metadata.capture,body:Buffer.from(rawInput.utf8),rawSha256:rawInput.pin.sha256,payloadRef:'journal:'+rawInput.pin.sha256}).observations[0];return{rawInput,metadataInput:pinned({...metadata,observationId:observation.observationId})};
+}
+test('R6 actual LIVE two-frame continuation survives released rich bundles and closes retained token ownership',async()=>{
+ const[index,familyDocument,targetDocument]=syntheticRegistry(),sourceInventory=Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.synthetic.mjs',sha256:'a'.repeat(64)}]}])),arena=createDiagnosticResourceArena(),actual=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory,resourceArena:arena});let firstState=null,secondReceivedPrior=false,generations=0;
+ const producer={contract:actual.contract,getSchema:actual.getSchema,generateFeatureBundle(input){if(generations===1)secondReceivedPrior=input.previousLiveState===firstState;const bundle=actual.generateFeatureBundle(input);if(generations++===0)firstState=bundle.nextLiveState;return bundle;}},s=ports(),c=createDiagnosticFeatureConsumer({producer,...s,resourceArena:arena,now:()=> '2026-10-23T13:00:00Z'});
+ const first=await c.consume({...base.input,mode:'LIVE',livePrefixInputs:[consumerLiveFrame('2026-10-23T12:39:00Z',900)]});assert.equal(first.status,'recorded_diagnostic');assert.equal(first.mode,'LIVE');assert.ok(firstState);assert.equal(actual.resourceStatus().activeBundles,0);assert.equal(c.status().continuationOwnership.ownedMaps,1);assert.equal(arena.status().heldAssets>=1,true);
+ const second=await c.consume({...base.input,mode:'LIVE',decisionAt:'2026-10-23T12:41:00Z',livePrefixInputs:[consumerLiveFrame('2026-10-23T12:40:00Z',960)]});assert.equal(second.status,'recorded_diagnostic');assert.equal(secondReceivedPrior,true);assert.equal(generations,2);assert.equal(actual.resourceStatus().activeBundles,0);assert.equal(actual.compilerStatus().activeRoutes,0);assert.equal(c.status().continuationOwnership.ownedMaps,1);assert.equal(c.status().continuationOwnership.unmeasuredMaps,0);firstState=null;c.forgetMap(base.input.matchId);actual.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
 });

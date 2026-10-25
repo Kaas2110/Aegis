@@ -1,0 +1,72 @@
+SOL R6 REMAINING WORK AFTER FIRST CORE BLOCK — 25 OCTOBER2026
+Read sol-r6-core-review-20261025.txt and exact current private continuation first.
+The full R6 scope is retained. No fits, HPO, calibration, selection, provider probes,
+runtime/task activation or promotion. Old staging/install guards must not be rerun.
+
+1. Finish the actual history bridge (R6.2), not another standalone statistics demo.
+Connect bounded cohort/support/statistics handles to the actual historyCalculationCore
+and historicalRelationalFeatures formula families. Preserve numeric arithmetic order,
+exact quantiles/weights/support, all retained versions/tombstones and target-specific
+as-of selection. The current scalar utility explicitly is NOT this bridge. Reconcile
+the pinned full archive inventory and every disposition without provider refresh.
+Keep the v1<=64MiB dense guard. Original-byte padding acceptance does not demonstrate
+>64MiB normalized complete archive support. Use small v1 goldens before a large case.
+
+2. Finish static parsed-target causality and original-source proof binding.
+The compact store checks actual bytes/pins/support but accepts declared caller horizons.
+For each supported PRE/SERIES_PRE/BETWEEN target, bind parsed actual identity/cutoff/
+transition/revision/formula/source inventory to a producer-owned descriptor. Reject
+changed cutoff or swapped valid target/series despite rehashed storage metadata.
+Do not manufacture original availability from completed-match/backfill timestamps.
+Add structural admission for arbitrary parsed static JSON before calling the store
+a generally bounded whole-archive decoder. Preserve private authority after reload.
+
+3. Complete actual emitted semantics (R6.3).
+Use the actual13mode emission receipts and deferred large-audit reasons. Generate
+declaration policy from the SAME family templates as values; do not fill thousands
+of policies from column spelling. Build a bounded/paged exact audit path if expanded
+ledger ownership cannot fit the existing arena. Keep all79families/14legacy groups;
+resolve actual implementation versus unavailable/label/train-only/inapplicable with
+evidence. Alias legacy occurrences only after exact semantic/formula proof. Source
+unavailable is a valid documented disposition, not implemented feature acceptance.
+
+4. Complete actual compact diagnostic host integration (R6.4).
+retainedDiagnosticBootstrap/retainedFeaturePipeline still use the v1 expanded trace
+writer/consumer. New opt-in compact journal roundtrips do not replace that host.
+Integrate one owned writer/source/series/proof path and bounded paged reader without
+expanding every head before IO. Retain final current-time/source/series fences after
+async IO; coherent current source,300sretention and180squalification stay separate.
+Verify whole-series main card and selected-map detail across BO1/3/5, unknown initial
+map/sides, POST, LIVE, BETWEEN, prior maps, corrections and terminal. Keep listeners,
+public predictions and scheduled tasks OFF. User text remains "Прогноз недоступен".
+
+5. Complete resource and performance acceptance (R6.1/R6.5).
+Own upstream schema pools/private continuations and transient generation/codec state;
+current public-byte proxies are not measured hidden heap. Technically verify an
+aggregate-supervisor contract without attaching/restarting independent tasks.
+Profile the remaining45s cold write before selecting another optimization. C++
+worker linking requires a usable existing/authorized Windows linker; do not claim
+the failed prototype as adopted. Keep its >=30%complete-path parity gate and fixed
+limits. Do not prune features or enlarge caps to pass a technical benchmark.
+Run a short actual repeated-state slice and hot reader/producer overlap first.
+Current cold71s pipeline and overlap failures mean sustained326states is NOT yet
+eligible. Existing <=30scold, warm p95<=2s/p99<=5s/no frame>15s and memory/disk/wall
+targets remain. Preserve failures, repaired scopes and release-to-zero evidence.
+
+6. Source qualification and eventual model stages.
+Retained-source reconstruction is not prospective>=95%joint-source availability.
+Record missing/error/stale slots in the denominator; any new provider capture or
+activation needs its separate authorization. Keep training blocked. After feature/
+causality/runtime gates and Astra review, the owner's separately authorized model
+stage retains full-feature boosting, unified versus time specialists, BO1/3/5series,
+PRE/POST/LIVE map winners and totals, chronological per-minute evaluation, later
+HPO/ablation and bookmaker-line probability integration. No early feature pruning.
+
+Astra's finite review focus
+- Exact descriptor-to-family reduction and weighted/order-stat semantics.
+- Static parsed-target authority versus local reconstruction availability.
+- Bounded emitted-ledger design and declared feature/source dispositions.
+- Actual compact host ownership/fences and remaining hidden/transient memory.
+Sol can implement known corrections and small acceptance fixtures without switching
+back after each helper. Ask Astra only for unresolved architecture/math, then return
+one consolidated source/logic/evidence package before any model training.

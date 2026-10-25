@@ -27,7 +27,15 @@ function* canonical(value,depth=0){
  if(Array.isArray(value)){yield'[';for(let i=0;i<value.length;i++){if(i)yield',';yield*canonical(own(value,String(i)),depth+1);}yield']';}
  else{yield'{';const keys=Object.keys(value).sort();for(let i=0;i<keys.length;i++){if(i)yield',';yield JSON.stringify(keys[i]);yield':';yield*canonical(own(value,keys[i]),depth+1);}yield'}';}
 }
-function hashPieces(pieces){const h=createHash('sha256');for(const part of pieces)h.update(part);return h.digest('hex');}
+function hashPieces(pieces){
+ // Hash the SAME canonical byte stream while amortizing tiny JS/native crossings.
+ // Caller working leases already include canonical scratch; retain <=32K UTF16
+ // units plus one existing token (large tokens pass directly, never accumulate).
+ const h=createHash('sha256');let pending='',high='';
+ const push=part=>{if(pending&&pending.length+part.length>32768){h.update(pending);pending='';}if(part.length>=32768)h.update(part);else pending+=part;};
+ for(const token of pieces){let part=high+token;high='';if(part.length&&part.charCodeAt(part.length-1)>=0xd800&&part.charCodeAt(part.length-1)<=0xdbff){high=part.slice(-1);part=part.slice(0,-1);}push(part);}
+ push(high);if(pending)h.update(pending);return h.digest('hex');
+}
 // DAG reference count is not expanded size. Compute saturated costs once per
 // node before any recursive decode/hash, counting repeated children every time.
 const plus=(a,b,cap)=>a>cap||b>cap-a?cap+1:a+b;
@@ -135,7 +143,7 @@ function recordHandle(record,lease){const handle=Object.freeze({contract:'aegis.
 function install(record){const lease=record.arena.retainAsset(record.anchor,record.chargedBytes);return lease?recordHandle(record,lease):null;}
 export function retainCompactFeatureAsset(handle){const r=entry(handle).record;return install(r);}
 export function releaseCompactFeatureAsset(handle){const held=handles.get(handle);if(!held?.record)return false;const r=held.record;held.record=null;held.lease.release();held.lease=null;if(--r.refs===0){r.data=null;if(r.schemaHold)releaseCompactFeatureAsset(r.schemaHold);r.schemaHold=null;}return true;}
-export function describeCompactFeatureAsset(handle){const r=entry(handle).record;return Object.freeze({...r.descriptor,chargedBytes:r.chargedBytes,activeReferences:r.refs,decodedPageDefinitions:r.decodedPageDefinitions,accounting:'conservative_explicit_estimates_not_measured_heap'});}
+export function describeCompactFeatureAsset(handle){const r=entry(handle).record;return Object.freeze({...r.descriptor,chargedBytes:r.chargedBytes,dependencyChargedBytes:r.schemaHold?entry(r.schemaHold).record.chargedBytes:0,activeReferences:r.refs,decodedPageDefinitions:r.decodedPageDefinitions,accounting:'conservative_explicit_estimates_not_measured_heap'});}
 function makeRecord(data,c,descriptor,wireBytes,{schemaHold=null}={}){
  const chargedBytes=wireBytes*4+descriptor.featureCount*16+65536;if(!Number.isSafeInteger(chargedBytes)||chargedBytes>c.workingBytes)fail('working_reservation_too_small');
  return{data,arena:c.arena,descriptor:freeze(descriptor),chargedBytes,anchor:Object.freeze({contract:descriptor.contract,hash:descriptor.expandedSchemaHash}),refs:0,decodedPageDefinitions:0,schemaHold};

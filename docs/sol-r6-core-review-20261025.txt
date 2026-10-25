@@ -1,0 +1,149 @@
+SOL R6 CORE SOURCE BLOCK — ASTRA REVIEW RECORD
+25 October 2026. Source-only diagnostic implementation; no model training.
+
+1. SCOPE AND AUTHORITY
+The owner authorized R6.0–R6.5 technical implementation on pinned inputs, retaining
+the entire feature/model workload. This first completed R6 source block improves
+history proof transport, common producer ownership, compact persistence and exact
+target/data manifests. It is NOT completion of R6.1–R6.5 or the feature-first gate.
+Baseline: PR9 main9f81621f70ced421f03687eac9cade74ea6656cd.
+The exact installed paths/hashes and publication head are in the block receipts.
+No provider calls, data refresh, schedules, fits, HPO, calibration, ablation, model
+quality evaluation, app deployment or model/public inference activation occurred.
+STRATZ remains deferred to Astra; existing token/transport were not changed.
+
+2. HISTORY AND SOURCE PROOF
+boundedRetainedHistory resolves each target map from retained original versions,
+including null updates, identity conflicts, retractions and actual clock horizons.
+The retainedReferenceCorpus v2 materializer/reader re-reads all required committed
+dependencies and mints private source handles. Producer AND consumer dispatch the
+v2 handle through its private reader; changing/copying JSON is not authority.
+Original generation/version identity remains in the descriptor. Late identity t1
+does not move the original complete-draft t0. Current-map finals remain excluded;
+unrelated historical meta population is retained. V1 dense limits/readers remain.
+
+The new exact scalar statistics utility uses bounded descriptor batches, numeric
+map-ID arithmetic, a separate sample-SD pass and exact Float64 radix order
+statistics. It is a reusable primitive, NOT an integrated replacement for every
+historical relational, weighted, player/hero/role/opponent family calculation.
+The heavy source case crosses64MiB in ORIGINAL retained bytes with fourteen padded
+synthetic versions, actual producer and real writer reopen. It does not cross64MiB
+of normalized history or reconcile a complete-year production archive.
+
+compactHistoricalInputStore stores static PRE/SERIES_PRE/BETWEEN input bytes in
+the same owned writer, commits the manifest last, rechecks each actual dependency
+and binds requested mode/pins/minimumSupport. Journal append/reload requires its
+private proof when historicalInputRef is supplied. Close-after-await fences prevent
+minting new proofs after shutdown. This is byte/pin/support integrity only: caller
+cutoff/validFrom metadata is not independently parsed target causality or proof of
+original provider availability. These limitations stay false in the descriptors.
+
+3. COMMON GENERATOR AND MEMORY OWNERSHIP
+Compiler cache keys now bind actual normalized definitions, formula/policy and
+names, rather than trusting a claimed schema hash or a shallow-frozen wrapper.
+Current values and masks are checked/copied each time. Owned deep-frozen schemas,
+normalized rows and projection plans have private identities and byte arena leases.
+Active routes survive cache eviction/producer close. Compiler-minted schema and
+vector leases let a sink borrow exact immutable data without trusting JSON copies.
+The common producer now exposes bundle.release(), close(), resourceStatus() and
+retainSchema(). Immutable history/draft/metadata caches are owned separately from
+current rows. Partial generation failures release acquired rows/route owners.
+
+Consumer execute retains bundles through awaited schema/trace/restore callbacks,
+then releases in finally. Recognized continuations retain the actual opaque frozen
+token, not a cloned token or unrelated byte reservation. A pending job separately
+borrows the prior token before reentrant host calls, so a source barrier cannot
+release its charge while that job still uses it. Slot replacement, barrier and
+forget release their own owners; candidate/prior borrows survive bundle cleanup.
+Continuation byte accounting is a conservative public-state/private-lead proxy,
+not measured hidden heap. Upstream global definition pools and generation transient
+allocations still need full ownership acceptance. A global16GiB supervisor is NOT
+activated. Canonical cleanup is trusted nonthrowing; arbitrary throwing external
+cleanup ports are not a newly accepted interface.
+
+4. PERSISTENCE AND PERFORMANCE DECISIONS
+Canonical hash output is unchanged; small string pieces are buffered before hash
+updates, including surrogate-boundary handling. Compact wire manifests v3 split
+top-level fields into bounded UTF8 chunks so shared dictionaries/vectors dedupe
+across target headers. V2 manifests remain readable with their original bound.
+The owned writer offers bounded readMany and advertises its configured aggregate
+capacity. Every object/marker/hash is checked, and the root inventory is fenced at
+both batch boundaries. Lower writer limits are negotiated, never silently raised.
+The final review found one additional serial-only-wrapper defect: its fallback
+launched several reads concurrently despite maxPendingOperations=1. It now awaits
+each read in order. Actual multi-chunk owned-writer reload/verification covers this
+case; the17-case corrective scope passed after fixing an awaited inspect assertion.
+Compact schema reuse requires private compiler identity and verifies disk bytes
+again. Prepared private schema/vector leases are captured before the first await;
+each route is factored/persisted/released in turn. Vector cache charges include
+schema dependencies. Encode/decode scratch is admitted from private actual wire
+bounds plus the independent decoder structural preflight, rather than reserving
+the maximum wire allowance for every small object.
+
+Actual full-rich synthetic Windows CAS measurements (one sample per scope):
+                         Generation     Write       Reload      Physical storage
+PR9 pinned baseline      12.423s        135.092s    52.318s     215228916bytes/626objects
+R6 shared cold restart    9.495s         45.126s    15.132s      57036678bytes/86objects
+All ordered names, Float64 bits including negative zero, and missing masks were
+checked. Map routes had141138columns; series-live had141182. The R6 cold restart
+shared one2GiB engineering arena, released the previous host before reopening,
+ended at zero owned charges and peaked at1472307200bytes OS job commit.
+These are persistence/reload timings, NOT prediction accuracy or inference latency.
+Earlier optimized scope45.584s/15.463s is a separate intermediate measurement.
+There are not three paired repetitions, stable p95/p99 or sustained acceptance.
+The <=30s cold goal remains unmet. Three stricter overlapping-host attempts failed
+at bounded reservation; their receipts and original fixture are preserved. Hot
+reader/producer overlap is explicitly NOT accepted by the cold-restart test.
+
+C++ was evaluated against the measured CPU/IO costs. The installed NDK compiler
+produced Windows COFF, but its installed ld.lld is ELF-only and could not link the
+Windows worker. Both failed builds are retained privately. No executable was used,
+no full-path native comparison or speedup was claimed, and no toolchain download
+or install occurred. Unfinished native prototype/build products are excluded from
+this source block. JS sharing/IO improvements do not count as a C++ adoption win.
+
+5. SEMANTIC/DATA PREPARATION
+The definition ledger records actual optional event/availability/game-clock,
+population/support, role/patch, phase and missing-reason declarations; absent
+policies remain explicit gaps. Emitted-target audit accounts for12logical targets,
+13modes,79families and14legacy groups, without inventing aliases or calling missing
+definitions implemented. All465359legacy occurrences remain unresolved semantically.
+The opt-in actual-emission fixture uses complete canonical producer output, including
+independent SERIES_PRE without unknown first-map ID/sides, positive30sLIVE and an
+independent BETWEEN context. Actual emission integrity and full expanded-ledger
+audit admission are reported separately; deferred audits are not zero gaps or passes.
+The final actual-emission run validated all13modes/13schemas,835583definition
+occurrences in total across those schemas. Nine declaration audits completed;
+the four LIVE audits were denied the fixed workspace while retained rich schemas
+were still owned. They are explicitly deferred, not semantic passes. The independent
+BETWEEN fixture has scopeQualified:false and is not admitted as historical proof.
+
+Pinned dataset manifests are metadata only. They keep series/linked components
+together, purge boundary-crossing groups, separate tuning/early-stop/holdout roles,
+disclose inspected holdouts and isolate label artifacts. PRE uses predictionStartAt
+distinct from actual startAt. Historical reconstruction and observed receipts are
+separate. Landmark selection uses only the last eligible observation at/before
+5..80minutes plus80+, respecting source age/epoch, errors/gaps and STOP/terminal
+barriers. No real dataset was loaded/admitted and no predictive scores were computed.
+
+6. CHECKS, FAILURES AND EVIDENCE BOUNDARIES
+All native checks ran serially under the existing verified owned8GiB JobObject,
+four-CPU affinity, finite wall, >=4GiB free polling and shared manual STOP/lock.
+Known project use plus reservation remained below16GiB at admission. This is not
+a claim that every independently running project task has a common supervisor.
+See sol-r6-core-technical-evidence-20261025.json for exact run/log/resource hashes.
+Failed resource fixtures, old manifest-bound failure, V2 availability-basis fixture
+failure, serial-fallback async-assertion failure and later corrections are retained.
+The122-case storage/history/metadata receipt precedes that last narrow fallback
+correction; its affected store/journal scope was rechecked separately17/17.
+Do not sum overlapping scopes, extend
+older hashes to changed source or claim a single all-pass invocation.
+All new source/retained inputs are synthetic technical fixtures. Real temporary
+disk/Windows lease and actual producer execution are real mechanics, not live API
+coverage or model quality. Source/profile/t0/t1, corruption, STOP, accessors, rollback,
+reopen, private-token copies, ownership and both live frames have scoped evidence.
+
+7. NEXT WORK / ASTRA REVIEW QUESTIONS
+See sol-r6-next-work-20261025.txt. Review the finite remaining source/causality and
+ownership decisions rather than re-auditing unchanged repository files. Training
+stays paused until the complete gate is reviewed and separate permission exists.

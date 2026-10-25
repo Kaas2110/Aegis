@@ -208,6 +208,19 @@ export async function createPersistentArtifactWriter({directory,leaseProvider,sh
   },n);
  }
  async function read(ref){checkReference(ref,cfg);return serial(async()=>{await room();const r=committed.get(key(ref));if(!r||r.bytes!==ref.bytes)fail('uncommitted_reference');await verifyMarker(r);return verifyObject(r,{cache:false});});}
+ async function readMany(inputs){
+  // One bounded operation, not unverified cache reuse. Every marker and object
+  // is read/hash-checked; full root inventory fences the batch at BOTH ends.
+  // Amortize repeated whole-directory scans over up to16MiB/64references.
+  if(!Array.isArray(inputs)||inputs.length<1||inputs.length>64)fail('read_batch_bound');
+  let total=0;const refs=[];for(let i=0;i<inputs.length;i++){
+   const slot=Object.getOwnPropertyDescriptor(inputs,String(i));if(!slot||!Object.hasOwn(slot,'value'))fail('read_batch_plain');
+   const input=slot.value;if(!object(input)||![Object.prototype,null].includes(Object.getPrototypeOf(input)))fail('read_batch_plain');
+   const fields=Object.getOwnPropertyDescriptors(input);if(Object.keys(fields).sort().join(',')!=='bytes,kind,sha256'||Object.values(fields).some(d=>!Object.hasOwn(d,'value')))fail('read_batch_plain');
+   const ref=Object.fromEntries(Object.entries(fields).map(([k,d])=>[k,d.value]));checkReference(ref,cfg);total+=ref.bytes;if(total>Math.min(16*1024*1024,cfg.maxPendingBytes))fail('read_batch_bytes');refs.push(ref);
+  }
+  return serial(async()=>{await room();const values=[];for(const ref of refs){await held();const r=committed.get(key(ref));if(!r||r.bytes!==ref.bytes)fail('uncommitted_reference');await verifyMarker(r);values.push(await verifyObject(r,{cache:false}));}await room();return Object.freeze(values);},total);
+ }
  async function inspect(){return serial(async()=>{const s=await inventory();return Object.freeze({contract:PERSISTENT_ARTIFACT_WRITER_CONTRACT,generation,epoch,committedArtifacts:committed.size,reservedArtifacts:byKey.size-committed.size,reservations:reservations.size,physicalBytes:s.physicalBytes,reservedBytes:s.reservedBytes,effectiveBytes:s.physicalBytes+s.reservedBytes,journalBytes,limits:cfg});});}
  async function listCommitted({kind}={}){
   if(!kindOk(kind))fail('discovery_kind');return serial(async()=>{
@@ -217,5 +230,5 @@ export async function createPersistentArtifactWriter({directory,leaseProvider,sh
  }
  async function close(){closing=true;await queue;closed=true;await releaseArtifactWriterLease(lease);}
  try{await load();}catch(error){closed=true;await releaseArtifactWriterLease(lease);throw error;}
- return Object.freeze({contract:PERSISTENT_ARTIFACT_WRITER_CONTRACT,commit,read,inspect,listCommitted,close});
+ return Object.freeze({contract:PERSISTENT_ARTIFACT_WRITER_CONTRACT,commit,read,readMany,readBatchLimits:Object.freeze({maxReferences:64,maxBytes:Math.min(16*1024*1024,cfg.maxPendingBytes)}),inspect,listCommitted,close});
 }

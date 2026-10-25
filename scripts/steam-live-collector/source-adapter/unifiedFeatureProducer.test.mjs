@@ -5,9 +5,11 @@ import {draftArgs,draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {collectDraftHistorySourceExport} from './historySourceExport.mjs';
 import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
+import {digest} from '../../feature-registry/registry-contract.mjs';
 const AT='2026-10-23T12:33:00Z';
 const sources=()=>Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.synthetic.mjs',sha256:'a'.repeat(64)}]}]));
-function factory(){const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:sources()});}
+function factory(options={}){const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:sources(),...options});}
 function live({phase=5}={}){const e=draftEntry({time:'2026-10-23T12:31:00Z',clock:900,accounts:true,phase}),raw=JSON.parse(e.rawInput.utf8),m=JSON.parse(e.metadataInput.utf8);for(const s of ['radiant','dire'])for(const p of raw.result.games[0].scoreboard[s].players)Object.assign(p,{net_worth:5000+p.hero_id*100,gold_per_min:400+p.hero_id,xp_per_min:500+p.hero_id,level:10,gold:100});const rawInput=pinned(raw);const o=normalizeLocalCapture({...m.capture,body:Buffer.from(rawInput.utf8),rawSha256:rawInput.pin.sha256,payloadRef:'journal:'+rawInput.pin.sha256}).observations[0];return{rawInput,metadataInput:pinned({...m,observationId:o.observationId})};}
 function series({maps=0}={}){return pinned({contract:'aegis.series-map-receipts.v1',seriesId:'synthetic-series',bestOf:3,team1Id:'100',team2Id:'200',availableAt:'2026-10-23T11:50:00Z',completeThroughMapNumber:maps,previousMaps:Array.from({length:maps},(_,i)=>({mapId:String(8000+i),mapNumber:i+1,winnerTeamId:'100',availableAt:'2026-10-23T11:00:00Z',finishedAt:'2026-10-23T10:58:00Z',durationSeconds:2400,team1Kills:30,team2Kills:20,team1Heroes:[1,2,3,4,5],team2Heroes:[6,7,8,9,10]}))});}
 test('actual static/live generation shares one verified history and routes targets separately',()=>{
@@ -53,4 +55,25 @@ test('source revision binds actual facts, native collection and exact draft revi
 test('deployment primary source must be represented in its scoped source inventory',()=>{
  const[index,familyDocument,targetDocument]=syntheticRegistry(),s= sources();s.history.primarySha256='b'.repeat(64);
  assert.throws(()=>createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:s}),/source_inventory/);
+});
+
+test('producer reuses owned history/draft metadata while bundles release independent rows',()=>{
+ const arena=createDiagnosticResourceArena(),p=factory({resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true})),base={mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof};
+ const a=p.generateFeatureBundle(base),before=p.resourceStatus(),b=p.generateFeatureBundle(base),after=p.resourceStatus();assert.equal(a.historyContextHash,b.historyContextHash);assert.equal(a.routes[0].schemaRef.sha256,b.routes[0].schemaRef.sha256);assert.equal(after.historyAssets,1);assert.equal(after.draftAssets,1);assert.ok(after.sharedAssetHits>=before.sharedAssetHits+2);assert.ok(p.compilerStatus().metadataIdentityHits>=2);assert.equal(p.compilerStatus().activeBlocks,0);assert.equal(after.activeBundles,2);
+ assert.equal(Object.keys(a).includes('release'),false);assert.equal(JSON.stringify(a).includes('"release"'),false);assert.equal(a.release(),true);assert.equal(a.release(),false);assert.equal(p.resourceStatus().activeBundles,1);assert.equal(digest(b.routes[0].diagnosticSchema),b.routes[0].schemaRef.sha256);b.release();p.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
+});
+test('producer close evicts caches while an active bundle preserves every held schema',()=>{
+ const arena=createDiagnosticResourceArena(),p=factory({resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true})),bundle=p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof});
+ p.close();assert.ok(arena.status().chargedBytes>0);assert.equal(p.resourceStatus().historyAssets,0);assert.equal(p.resourceStatus().draftAssets,0);assert.equal(digest(bundle.routes[0].diagnosticSchema),bundle.routes[0].schemaRef.sha256);assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof}),/producer_closed/);bundle.release();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);assert.equal(p.close(),false);
+});
+test('generation failures release normalized rows and in-flight bundle leases',()=>{
+ const arena=createDiagnosticResourceArena(),p=factory({resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true}));
+ assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof,livePrefixInputs:[live()]}),/explicit_post_on_live_observation/);assert.equal(p.resourceStatus().activeBundles,0);assert.equal(p.compilerStatus().activeBlocks,0);p.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
+});
+test('v2 historical source handle still requires the retained reader private authority',()=>{
+ const p=factory(),h=createDynamicHistoryProof(draftArgs({accounts:true}));assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof,sourceExportHandle:Object.freeze({contract:'aegis.verified-retained-reference-source-handle.v2'}),expectedSourceSnapshotHash:'a'.repeat(64)}),/token|handle/);p.close();assert.equal(p.resourceStatus().resources.chargedBytes,0);
+});
+test('source-handle dispatch rejects accessors and proxies without running them',()=>{
+ const p=factory();let calls=0;const getter=Object.freeze({get contract(){calls++;return 'aegis.verified-retained-reference-source-handle.v2';}}),proxy=new Proxy({contract:'aegis.verified-retained-reference-source-handle.v2'},{get(){calls++;throw Error('must not run');}});
+ for(const sourceExportHandle of [getter,proxy])assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,sourceExportHandle,expectedSourceSnapshotHash:'a'.repeat(64)}),/accessor|plain_record/);assert.equal(calls,0);p.close();assert.equal(p.resourceStatus().resources.chargedBytes,0);
 });
