@@ -1,0 +1,383 @@
+AEGIS SOL R5.6 — FAMILY AND LEGACY DISPOSITION INVENTORY
+2026-10-25. Source-safe documentation. Diagnostic scope; feature-first gate OPEN.
+
+Purpose and evidence boundary
+This report accounts for every one of the 79 canonical families and 14 pinned old
+catalogue groups. It reconciles the published catalogue status with the actual
+current staged producer descriptors. It does not close semantic migration, attest
+joint timely source availability, establish 95% coverage, or authorize training,
+model activation, runtime activation, provider probes or production serving.
+
+Authoritative inputs, relative to the source root:
+- scripts/feature-registry/artifacts/2026-10-24.r1/FAMILY-REGISTRY.json
+- scripts/feature-registry/artifacts/2026-10-24.r1/SEMANTIC-DISPOSITION-LEDGER.json
+- scripts/feature-registry/artifacts/2026-10-24.r1/TWELVE-TARGET-MATRIX.json
+- scripts/feature-registry/generated-definition-ledger.mjs
+- Actual producer/compiler files listed below, including their explicit pending
+  families, descriptor scopes and component-source inventory in unifiedProducerConfig.
+The English family formula explanations remain in the semantic ledger. A catalogue
+family formula is a specification, not an executable definition or an exact alias.
+Current local stage prevails over indexed main for unmerged changes. Root verified
+Graphify ready at PR8 main68ee93f; that snapshot does not contain this staged block.
+No native execution or model/provider operation was performed for this report.
+
+Status interpretation
+Catalogue baseline:59 partially_generated,7 not_generated,7 unavailable_input,
+4 learned_state_pending,1 presentation_only and1 label_only =79. Every catalogue
+fullFamilyComplete flag remains false. This distribution is the registry snapshot,
+not a measured distribution of fully working families. Each row below preserves
+its catalogue status and gives the narrower actual implementation disposition.
+A family can have raw descriptors while its semantic interpretation is unavailable.
+Binding, proof, masks or operands do not imply a direct family-tagged projection.
+
+Profile legend (exact semantic-ledger planning strings)
+H = local_prior_completed_map_facts
+I = known_scheduled_or_observed_identity_revisions
+D = actually_observed_draft_source_revision
+G = one admitted coherent Steam profile; explicit-phase or separately proven progressing admission
+S = retained_series_map_receipts
+A = explicit_model_candidate_axis_not_a_provider_measurement
+P = bookmaker_or_own_line_presentation_not_predictive
+Y = final_label_namespace_never_an_early_predictor
+These are proposed family profile unions, not observed availability. The executable
+compiler binds its component profiles exactly as follows:
+ history -> local_prior_completed_map_facts
+ seriesHistory -> retained_prior_map_facts_oriented_to_series_teams
+ draft -> retained_observed_draft_identity
+ live -> steam.GetLiveLeagueGames.v1.scoreboard
+ series -> retained_series_map_receipts
+Historical player performance separately qualifies opendota.completed-map.parsed-player
+or opendota.completed-map.retained-response-player with its retained-response receipt
+and bounded provided-corpus rules. Neither profile proves global-population coverage.
+G uses explicit phase5 or a distinct private progressing proof; receipt freshness,
+source-state confirmation and game-clock advance remain different facts. The
+300-second retention and separate180-second qualification are not interchangeable.
+
+Producer references (all under scripts/steam-live-collector/source-adapter/)
+U = unifiedFeatureProducer.mjs plus featureProjectionCompiler.mjs and unifiedProducerConfig.mjs.
+HIST = historicalRelationalFeatures.mjs; formula aegis.prior-map-relational-statistics.v3;
+  common pure arithmetic for map PRE, frozen observed draft/live, and independently
+  oriented SERIES_PRE/SERIES_BETWEEN history. Facts/history/identity proofs are
+  upstream contracts, not authentication supplied by a content hash alone.
+DRAFT = draftIdentityFeatures.mjs; aegis.confirmed-draft-identity-features.v1;
+  the existing supported hero coordinate1..250 is nominal, not a current hero list.
+LIVE = observedDraftFeatureBundle.mjs; current raw-backed common dynamic definitions.
+ECON = coherentEconomyContextFeatures.mjs; literal descriptive resource interactions.
+NATIVE = steamFeatureBundle.mjs and playerHeroEconomyFeatures.mjs; preserved separate
+  legacy-native component. U projects explicit reviewed base/interaction definitions
+  rather than blindly concatenating its whole vector.
+ROSHAN = roshanFeatures.mjs; qualified rules and canonical event ledger, with raw
+  timer semantics retained separately; exact component contract is source-pinned.
+SERIES = seriesContextFeatures.mjs; series-causal.v2 definitions with received
+  previous-map facts and explicit current team1/team2 to Radiant/Dire bridge.
+
+Target and routing contract —12 logical targets,13 modes
+PRE_MAP_WIN / PRE -> selected-map Radiant win.
+PRE_KILLS / PRE -> selected-map final total kills distribution.
+PRE_DURATION / PRE -> selected-map final duration distribution in seconds.
+POST_MAP_WIN / POST -> selected-map Radiant win from actually observed draft/history.
+POST_KILLS / POST -> selected-map final total kills distribution.
+POST_DURATION / POST -> selected-map final duration distribution in seconds.
+LIVE_MAP_WIN / LIVE -> selected-map Radiant win from one admitted coherent state.
+LIVE_KILLS / LIVE -> selected-map remaining kills distribution.
+LIVE_DURATION / LIVE -> selected-map remaining duration distribution in seconds.
+SERIES_PRE / SERIES_PRE -> whole-series team1 win with independent scheduled identity.
+SERIES_BETWEEN / SERIES_BETWEEN -> whole-series team1 win after received prior maps.
+SERIES_LIVE / observed_postdraft -> whole-series team1 win with observed current draft.
+SERIES_LIVE / observed_live -> whole-series team1 win with admitted current live state.
+The main card always forecasts the whole match/series. Inside, outcomes and totals
+belong to the selected map; previous-map viewing preserves its own heroes/results.
+LIVE final totals add current observed score or elapsed seconds exactly once to
+remaining outcomes. PRE excludes current selected heroes/live values; BETWEEN does
+not reuse a stale prior current-map state or invent the next map draft/identity.
+Series team1/team2 orientation is explicit; a map Radiant probability is not a
+series team1 probability. These are contracts, not12trained models or13live feeds.
+
+All-family disposition rows
+Columns: ID | English family name | catalogue status | profile union.
+Following text states the inspected actual subset and its limitation. No row claims
+full-family completion, source availability, trained quality or serving admission.
+I01 | Map, side, account, hero and team identity | partially_generated | H,I
+  binding support (U/HIST): map/account/hero/side/team and roster/draft hashes; no direct I01-tagged projected definition.
+I02 | Partial and late roster disclosure | partially_generated | H,I
+  binding support (U/HIST): late disclosure revisions retain t0 cutoff and t1 validFrom; no direct I02-tagged projected definition.
+I03 | Proven roles and distinct economic ranks | partially_generated | H,I,G
+  component support (NATIVE): explicit verified-role inputs and separate native economic rank exist; no role inference or direct I03-tagged projected definition.
+I04 | Format, tournament, region, schedule and rest | partially_generated | H,I
+  limited context (HIST/SERIES): prior-map recency and declared BO format exist; full tournament/region/schedule/rest variants have no direct I04 projection.
+H01 | Historical team strength and uncertainty | learned_state_pending | H,I
+  TRAIN-only deferred: no fitted strength state in U; fixed Beta(10,10) smoothing in H02 is a deterministic statistic, not this learned rating.
+H02 | Team form, streaks and recent trend | partially_generated | H,I
+  implemented subset (HIST): team cohort outcomes/support, 7/30/90-day raw/fixed-prior/decayed win fractions, uncertainty, recent streak and recency.
+H03 | Head-to-head and prior opponent strength | partially_generated | H,I
+  implemented subset (HIST): oriented team head-to-head cohort outcomes/support; causal prior-opponent-strength adjustment remains absent.
+H04 | Roster continuity and shared experience | partially_generated | H,I
+  binding support (HIST): roster/account identity and allied-player selectors exist; no direct H04-tagged continuity/shared-experience definition.
+H05 | Individual player form | partially_generated | H,I
+  implemented subset (HIST): individual player outcome form for qualified accounts and 7/30/90-day windows; no personal latent skill claim.
+H06 | Selected player-hero form and comfort | partially_generated | H,D
+  implemented subset (HIST): selected player-hero outcomes, pick share and comfort summaries; requires actual draft identity for hero-specific variants.
+H07 | Individual result-rating proxy | learned_state_pending | H,I
+  TRAIN-only deferred: no invented personal MMR/result rating; a causal state and separately reviewed TRAIN-only contract remain required.
+H08 | Historical player performance | partially_generated | H,I
+  implemented subset (HIST): native previous-map performance means/sample SD/medians and profile summaries; optional heroPerformances receipt proof required.
+H09 | Player-hero performance relative to self and population | partially_generated | H,D
+  implemented subset (HIST): player-hero minus self/population and population-SD residuals; learned opponent/role-adjusted baselines remain pending.
+H10 | Player by team by hero | partially_generated | H,I
+  implemented subset (HIST): player-team and player-team-hero qualified cohorts; complete disclosure and source selection remain required.
+H11 | Player resource efficiency and pressure | partially_generated | H,I
+  implemented subset (HIST): native prior damage/healing per positive GPM operands; item/event pressure variants remain absent.
+H12 | Roster profile distributions | partially_generated | H,I
+  implemented subset (HIST): roster coverage, mean/min/max/population SD of qualified profiles; identity slots are not roles or strength ranks.
+H13 | Team late-game duration tendency | partially_generated | H,I
+  implemented subset (HIST): team duration quantiles/SD, late thresholds and win/loss duration; final prior-map duration is never a current label input.
+H14 | Player, hero and player-hero late-game tendency | partially_generated | H,I
+  implemented subset (HIST): player/hero/player-hero late fractions and duration profiles; source/support qualifications remain explicit.
+D01 | Observed draft identities and bans | partially_generated | D
+  implemented subset (DRAFT): six nominal selected-hero identity/disclosure axes per supported hero coordinate; bans and partial-draft inference remain absent.
+D02 | Historical hero strength and popularity | partially_generated | H,D
+  implemented subset (HIST): hero cohort outcomes/support from the qualified local population; current popularity/global-meta completeness is not established.
+D03 | Allied hero pairs | partially_generated | H,D
+  implemented subset (HIST): allied selected-hero pair cohorts; sparse support yields missing values, not a learned synergy score.
+D04 | Directed counters and protective bans | partially_generated | H,D
+  implemented subset (HIST): oriented observed-hero counter cohorts; protective-ban meaning is not implemented.
+D05 | Team-hero comfort pool | partially_generated | H,D
+  implemented subset (HIST): team-by-observed-hero cohort outcomes/support; no future or unobserved hero disclosure.
+D06 | Patch and letter revision meta | not_generated | H,D
+  not generated: no current prior-map patch/letter proof; calendar guesses and silent patch pooling are not admitted as meta evidence.
+D07 | Pro, Immortal, regional and role populations | unavailable_input | H,D
+  unavailable beyond limited local parsed professional population: no Immortal/regional/role source substitution or direct D07 definition.
+D08 | Hero mechanics and rules version | not_generated | H,D
+  not generated: separate versioned hero-mechanics/rules input is required; Roshan-specific rules do not implement full hero mechanics.
+P01 | Allied player pairs | partially_generated | H,I
+  implemented subset (HIST): exact allied-player pair cohorts, selected by observed account identity; support is distinct maps.
+P02 | Player-hero with a specific ally | partially_generated | H,D
+  implemented subset (HIST): player-on-hero with specified allied player cohorts; no role or causal synergy interpretation.
+P03 | Player-hero with an allied hero | partially_generated | H,D
+  implemented subset (HIST): player-on-hero with specified allied hero cohorts; current draft is required.
+P04 | Two specified players on two heroes | partially_generated | H,D
+  implemented subset (HIST): two exact players on two observed heroes; sparse combinations retain missingness/support.
+P05 | Individual opposition and hero triples | partially_generated | H,D
+  implemented subset (HIST): allied hero/player-hero triples and directed individual/player-hero opposition cohorts; not every proposed relation is complete.
+S01 | Historical team tempo and aggression | partially_generated | H,I
+  implemented subset (HIST): historical own/opponent/total kills-per-minute summaries from completed maps; no invented event tempo.
+S02 | Historical item, ward and buyback style | partially_generated | H,I
+  component support (HIST): native ward count summaries are emitted under H08; item timing, ward-event timing and buyback style remain absent; no S02-tagged definition.
+S03 | Results against opponent style | not_generated | H,I
+  not generated: opponent style must have been frozen before each historical map; final opponent pace is not that causal style.
+S04 | Draft compatibility with team style | not_generated | H,D
+  not generated: actual supported team/draft mechanics-style descriptors required; outcomes alone do not define style compatibility.
+S05 | Closing speed and late-game style | not_generated | H,I
+  not generated as closing style: win-conditioned final duration exists under H13; lead-conditioned finishing speed requires prior trajectories.
+S06 | Form by current trajectory | partially_generated | H,D,G
+  component support (LIVE): frozen form/style crossed with current resources/trajectories is emitted under L14; no direct S06-tagged definition.
+L01 | Observed clock, score and phase | partially_generated | G
+  implemented subset (LIVE): literal admitted clock, phase and team scores/difference/total; absent phase remains missing under separate progressing proof.
+L02 | Native per-hero net worth | partially_generated | G
+  implemented subset (LIVE): literal native NW/gold and coherent lead; provider net_gold remains separately named unresolved raw semantics.
+L03 | Native per-hero GPM and XPM | partially_generated | G
+  implemented subset (LIVE): literal native GPM/XPM and coherent leads; no NW/minute substitution.
+L04 | Observed levels and XP thresholds | partially_generated | G
+  implemented subset (LIVE): observed levels and coherent level lead; full XP-threshold/power interpretation remains absent.
+L05 | Economic rank and resource distribution | partially_generated | G
+  implemented subset (LIVE/ECON): complete five-player resource concentration, economic ranks, shares and opponent-relative terms; economic rank is not role.
+L06 | Hero-minute economic reference deviations | partially_generated | H,D,G
+  implemented subset (LIVE): native metric minus latest qualified hero-minute mean, optionally divided by positive sample scale; retained reference required.
+L07 | Reconstructed earned-gold and XP prefixes | partially_generated | G
+  no direct unified definition: native net_gold is explicitly raw under L02; reconstructed earned-gold/XP prefix semantics remain separate and unadmitted here.
+L08 | Observed trajectories and actual gaps | partially_generated | G
+  component support (NATIVE/LIVE): bounded retained native prefix and observed spans/gaps exist; unified trajectory definitions are tagged L09, not full L08.
+L09 | Lead retention and recovery | partially_generated | G
+  implemented subset (LIVE): receipt-order 60/180/300/600-second lead summaries/recovery/sign changes with max30-second anchor gap; no unseen event timing.
+L10 | Current per-player combat and farm | partially_generated | G
+  implemented subset (LIVE): literal observed per-player kills/deaths/assists/last hits/denies; unsupported fields stay missing.
+L11 | Alive heroes, health, mana and return times | partially_generated | G
+  raw-only subset (LIVE): observed respawn timer candidate; alive/health/mana/return-state interpretation remains unavailable without source qualification.
+L12 | Ultimates and key abilities | unavailable_input | G
+  unavailable semantic family; raw-only descriptors (LIVE) preserve opaque ultimate enum/cooldown candidates; these do not prove cast readiness or key abilities.
+L13 | Items, backpack, neutral slots and consumables | partially_generated | G
+  raw-only subset (LIVE): provider item0..item5 IDs; no active/backpack/neutral/empty-slot/consumable semantics invented.
+L14 | Hero and draft resource power timings | partially_generated | H,D,G
+  implemented descriptive subset (LIVE/ECON): literal resources times qualified frozen history/minute/rank/trajectory and opponent summaries; no fitted fight-strength coefficient.
+L15 | Buyback and death consequences | unavailable_input | G
+  unavailable semantic family; raw-only descriptors (LIVE) retain has_buyback boolean and cooldown candidate; affordability/cooldown/death-consequence meaning unproven.
+L16 | Positions, zones and prospective engagements | partially_generated | G
+  raw-only subset (LIVE): provider position coordinates preserved with unverified units; no zones or prospective engagement inference.
+L17 | Vision, wards, smoke and map control | unavailable_input | G
+  unavailable: no qualified live vision/ward/smoke/map-control source; historical ward aggregates do not supply current vision.
+L18 | Structures and exposed high ground | partially_generated | G
+  component/raw support only: dynamic source may preserve structure fields, but U has no direct L18-tagged definition or exposed-high-ground interpretation.
+L19 | Other objectives and day/night | unavailable_input | G
+  unavailable: no qualified other-objective/day-night interpretation is projected; source fields or clocks alone do not establish it.
+L20 | Lane pressure and ability to finish | unavailable_input | H,D,G
+  unavailable: lane-pressure/ability-to-finish semantics require supported draft/live mechanics and event context; current resource products do not establish them.
+R01 | Raw Roshan timer semantics | partially_generated | G
+  raw diagnostic subset (LIVE/ROSHAN): timer candidate/positive/decreasing-pair columns; raw timer meaning remains unresolved unless separately qualified.
+R02 | Roshan death, respawn and uncertain intervals | partially_generated | G
+  implemented qualified subset (LIVE/ROSHAN): confirmed death elapsed/respawn bounds/countdown/alive-dead and separately named inferred intervals; rules/events required.
+R03 | Aegis holder, side, lifetime and consumption | partially_generated | G
+  implemented qualified subset (LIVE/ROSHAN): observed slot holder/side/hero/resources, pickup lifetime and consumed/expired/destroyed terminal distinctions; missing evidence stays missing.
+R04 | Aegis steal and separate killer/picker | partially_generated | G
+  implemented qualified subset (LIVE/ROSHAN): confirmed steal from independently admissible killer/pickup evidence; no timer/slot-only steal inference.
+R05 | Roshan ordinal and rewards | partially_generated | G
+  component support (ROSHAN): confirmed death-event count is projected under R02 explicitly not spawn ordinal; reward/spawn-ordinal family has no R05-tagged definition.
+R06 | Roshan by economy, form and closing style | partially_generated | H,D,G
+  implemented subset (LIVE/ECON): existing qualified Roshan/Aegis terms times coherent leads/resource distribution and frozen closing statistics; no new event interpretation.
+R07 | Roshan-taking and contest strength | unavailable_input | H,D,G
+  unavailable: pit position/items/ultimate/alive composition and historical contest/speed/steal evidence are insufficient; current resource magnitude is not contest strength.
+Q01 | Series score and wins required | partially_generated | S
+  implemented subset (SERIES): declared BO1/3/5, score/wins needed/match point/terminal and explicit team1/team2-current-side signs; no inferred orientation.
+Q02 | Completed previous series maps | partially_generated | S
+  implemented subset (SERIES): received completed-map results/duration/kills/rates, five fixed map slots and within-series winner changes/recoveries; no historical recovery skill claim.
+Q03 | Historical recovery and reverse sweeps | not_generated | H,I
+  not generated: historical recovery/reverse-sweep conditional skill requires causal expectation/roster/format history; Q02 counts do not establish it.
+Q04 | Draft adaptation between maps | not_generated | S
+  implemented subset (SERIES) despite catalogue not_generated: eight prior-hero variety/coverage and current repeat/novelty descriptors; bans/adaptation strategy remain incomplete.
+Q05 | Map probability and contextual series branches | learned_state_pending | H,I,D,G
+  TRAIN-only deferred: contextual series branches/direct model and earlier map probability require versioned causal/OOF contracts; no learned output generated.
+Q06 | Earlier model estimate as an extra prior | learned_state_pending | H,I,D,G
+  TRAIN-only deferred: earlier estimate/logit as extra prior needs provenance and future OOF binding; cannot replace the rich historical vector.
+Q07 | Complete shared series context | partially_generated | H,I,S,D,G
+  composition support (U): eligible rich history/draft/live/series blocks join with explicit team-side orientation; no independent Q07-tagged definition or full-context acceptance.
+T01 | Historical kill and duration distributions | partially_generated | H,I
+  component subset (HIST): historical kills/duration summaries are emitted under S01/H13/H14 and relation families; no T01-tagged full conditional distribution definition.
+T02 | Live finishing risk and kill intensity | partially_generated | H,D,G
+  no fitted finishing-risk/intensity output: current clock/score/resource/Roshan/history operands exist, but no direct T02-tagged hazard or remaining-outcome model.
+T03 | Candidate axis and distribution support | partially_generated | A
+  model-axis proposal only in this U scope: no candidate-axis block is emitted; CDF/monotonicity/push/tail semantics remain target-model work, not provider data.
+T04 | Bookmaker markets and own line grid | presentation_only | P
+  presentation only: own line grid/bookmaker settlement/odds context never becomes an early predictive input by inventory inclusion; no U presentation feature block.
+O01 | Completeness, masks, support and uncertainty | partially_generated | H,I
+  cross-cutting support (U/HIST/LIVE): value masks/support/effective counts and explicit absence policies exist; no direct O01 feature; joint coverage denominator unmeasured.
+O02 | Latency, clock gaps and source eligibility | partially_generated | H,I
+  cross-cutting support (U/NATIVE): receipt age, separate clock/progression qualification and prefix-gap diagnostics; no direct O02 feature or proven provider event latency.
+O03 | Patch, causal basis and provenance | partially_generated | H,I
+  cross-cutting binding (U/HIST/LIVE): source/transform/schema hashes, causal/reconstruction and rule/patch pins; no direct O03 definition or universal patch evidence.
+O04 | Current-map labels and final metrics | label_only | Y
+  label only: current winner/final kills/final duration belong to label/evaluator joins and must never enter earlier predictive definitions.
+
+All14legacy catalogue groups
+Each group covers occurrence range[0,count), preserves its ordered-name hash and
+source/name pin, and has the same explicit disposition:
+ unresolved_semantic_migration; not_concatenated_into_unified_projection;
+ legacy_profile_not_admitted_by_name; no cross-schema exact alias authorized.
+Legacy source profile = legacy_catalogue_specific_unresolved; dependency scope =
+unresolved_per_occurrence. Empty targetEligibility applies to legacy migration,
+not to the canonical family target unions. A name/hash pin is provenance for names;
+it cannot prove old formula, units, source profile, phase or as-of equivalence.
+postdraft6668 | 6668 occurrences | range[0,6668)
+  old source: artifacts/ml-service/src/research/assets/postdraft_corrected_c_diagnostic_v1/FEATURE-SCHEMA.json
+  orderedNameHash: c361b3d5a8f33d85acbab8cb3f167bc0fb4ad045a7455888cd5e435c4c77588b
+observed-live268 | 268 occurrences | range[0,268)
+  old source: artifacts/ml-service/src/shadow_live_winner/manifest.json
+  orderedNameHash: adb64f86946a66bda6bd83e8abd781ea6222dad794d0826608e9c628d48ac0b9
+historical-prior7148 | 7148 occurrences | range[0,7148)
+  old source: artifacts/ml-service/src/research/wide_observed/feature-names.json
+  orderedNameHash: 51f9cc2daef9db42acfddeed742d11a316d3b994d3795d47c169969dc8875a0d
+wide-live36114 | 36114 occurrences | range[0,36114)
+  old source: artifacts/ml-service/src/shadow_wide/artifacts/feature-names.json
+  orderedNameHash: a0b8952ade5da01c5e368f21be96c75140fb97d243bf058ceab5f5e1f457d380
+series14255 | 14255 occurrences | range[0,14255)
+  old source: continuation-evidence/work/series-evidence-root-review-20261015/EXPANDED-MATRIX-v1/FEATURE-NAMES.json
+  orderedNameHash: 1bf309042da1a9dba7a7bca4553dd9b47c6387093e45877007145776a9d84fe8
+totals37024 | 37024 occurrences | range[0,37024)
+  old source: continuation-evidence/work/rich-totals-feature-extension-20261016/STATE-FEATURE-NAMES.json
+  orderedNameHash: 4deaf4d8b4d8219aac910678ced559a648a2451c86584be98e540917fedaa267
+totals-state6 | 6 occurrences | range[0,6)
+  old source: artifacts/ml-service/src/research/assets/corrected_live_totals_diagnostic_v1/FEATURE-NAMES.json
+  orderedNameHash: a14b1c51a52f1b48d589966259ab0d28d3c31900d55f6710969928f7e2e93e89
+totals-draft1006 | 1006 occurrences | range[0,1006)
+  old source: artifacts/ml-service/src/research/assets/hazard_totals_diagnostic_v1/FEATURE-NAMES.json
+  orderedNameHash: e8d2e9bf107704abcb66aebd9dfca0ff454d5e233fcd9b09fd7b9ff2637cde43
+individual-live45938 | 45938 occurrences | range[0,45938)
+  old source: continuation-evidence/work/individual-profile-appendix-20261019/FEATURE-NAMES.json
+  orderedNameHash: 7c38167462d6c587ff50edbd332cfa3e309610cf1861cc7bffe55325357c5f69
+corrected-rich-totals46848 | 46848 occurrences | range[0,46848)
+  old source: continuation-evidence/work/corrected-rich-totals-paired-20261020/PROTOCOL-PROPOSAL-v2.json
+  orderedNameHash: 9e326e1c28d767bee052d2bf552edba22872a79922fc07896d93eb33d412fb46
+phase-totals37024 | 37024 occurrences | range[0,37024)
+  old source: continuation-evidence/outputs/Aegis-phase-totals-at-start-20261019/FEATURE-NAMES37024.json
+  orderedNameHash: 4deaf4d8b4d8219aac910678ced559a648a2451c86584be98e540917fedaa267
+c3-networth80142 | 80142 occurrences | range[0,80142)
+  old source: continuation-evidence/work/c3-networth-projector-20261020-r1/C3-NAMES.json
+  orderedNameHash: 44266b8da4fa3a101dc879ac25a16c0d324c7d5b9ce3e38d29fb80a9958c916e
+earned-economy114450 | 114450 occurrences | range[0,114450)
+  old source: continuation-evidence/work/earned-economy-c2-source-20261020-r1/FEATURE-NAMES.json
+  orderedNameHash: 6dfc2b941920739298c28f5dd4b13f60ed841942e476d0c338d5bb8106c0928b
+steam-coherent38468-v2 | 38468 occurrences | range[0,38468)
+  old source: scripts/steam-live-collector/source-adapter/steamFeatureBundle.mjs
+  orderedNameHash: 1cab2a91d241aa12c5b8a88bb35537e90cc36e5e36eb4addd008fa50ef36fc74
+Total465359 old occurrences across14groups. Equal ordered-name hashes, including
+separately retained totals groups, do not authorize deduplication. Every old
+occurrence still needs a reviewed exact-definition binding or explicit unresolved,
+unavailable, label or presentation disposition. Compare formula/version, units,
+source profile, dependency scope/time, support/population, role and patch policy.
+Retain conflicts/alternatives; do not resolve them by spelling or width.
+The legacy_profile_builder source reference is preserved without importing a
+training executable. native_base33 remains independent of rich interactions;
+its presence does not establish full-family integration.
+
+Generated definition ledger and remaining semantic gate
+createGeneratedDefinitionLedger captures the exact supplied actual unified schemas,
+source inventories, every distinct definition/source-inventory variant, ordered
+occurrences, formula/version/units/missingness/scopes and metadata declarations.
+Its hashes bind exact descriptors and helper inventories; a helper-source change
+can create a different variant even when the primary descriptor bytes are equal.
+verifyGeneratedDefinitionLedgerReceipt establishes byte consistency only. It does
+not turn a self-consistent edited ledger into semantic authority. Rebuild from
+exact immutable producer schemas when validating its actual semantic provenance.
+
+summarizeGeneratedDefinitionDispositions is a compact view of that exact ledger:
+all79families,14legacygroups and12targets/13modes remain present even when schemas
+for some modes were not supplied. phaseSchemaObserved describes supplied schema
+presence, not a source success rate. Family source profiles and metadata gaps are
+summarized without expanding the definitions again. generatedVariantCount counts
+source-bound variants, not independent samples, complete semantic migration or
+currently known scalar operands. An empty schema set proves inventory only.
+
+The code deliberately records missing policies instead of silently inventing them:
+- exact_input_fields_not_declared, including an empty inputFields array;
+- separate_event_time_policy_not_declared;
+- separate_availability_time_policy_not_declared;
+- historical_support_unit_not_declared;
+- historical_population_policy_not_declared;
+- role_policy_or_nonapplicability_not_declared;
+- patch_policy_or_nonapplicability_not_declared.
+Actual HIST descriptors declare windows/minimumSupport/formula/units but generally
+lack exact inputFields, separate event/availability policies, supportUnit,
+populationPolicy, rolePolicy and patchPolicy at definition level. DRAFT/SERIES
+also lack several of these explicit declarations. LIVE often declares inputFields
+and historyDefinitions, but some wrappers preserve empty arrays, and explicit
+separate time/role/patch/support/population policies remain missing. A source-level
+comment, supportRef or generic combined timePolicy cannot silently fill these
+per-definition fields. Metadata absence is an OPEN review gate even when arithmetic
+is implemented. Explicit nonapplicability must be declared and reviewed where true.
+No inferred per-family metadata-gap count is asserted by this static report.
+
+Current measured technical evidence and limits
+Root-owned immutable r5-canonical-rich-preflight-1 used SYNTHETIC inputs and the
+actual canonical common producer:1/1technical case passed. It emitted141138columns
+each for LIVE_MAP_WIN/LIVE_KILLS/LIVE_DURATION and141182for SERIES_LIVE. These
+four schema widths are not79-family completion, source95%coverage, a full13-mode
+acceptance run, independent data samples or model-quality evidence. The cold first
+live generation was13615.2923ms in that preflight; it is not sustained latency.
+The owned job peak commit was2906054656bytes under the verified8GiBserial guard;
+it is not whole-project memory acceptance. No fit or prediction quality was tested.
+
+R5.4 exact bounded archive reduction/cohort union and archive-scale actual producer
+acceptance remain incomplete. A global16GiBsupervisor remains an architecture
+contract, not project-wide enforcement. The verified serial8GiBowned technical
+guard, four-CPU/finite-wall/minimum4GiBfree/STOP/foreign-lock protections remain
+required. This report does not replace R5.7 sustained rich runtime, restart/reader,
+all-target, resource-growth or latency acceptance.
+
+Precise continuation
+Root must bind this inventory to its final immutable R5.6 emitted-schema ledger
+and source manifest, retain missing-metadata/unavailable/legacy dispositions, and
+consolidate actual test receipts with their synthetic/real boundary for Astra.
+Complete or explicitly leave open R5.4/R5.7/resource/source-availability gates.
+Astra reviews architecture, causality, source/profile admission and semantic gaps
+before any separately authorized training or activation. Source/documentation
+publication follows the completed-block review policy; it does not grant those
+other permissions. No complete aliases, joint-source95%or all-family acceptance
+are asserted here.

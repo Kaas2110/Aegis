@@ -153,3 +153,21 @@ acceptance remain separate later work. Training/provider probes/runtime activati
 and model promotion stay paused. Existing 300-second state retention and separate
 180-second progression admission are preserved; active legacy serving is separate.
 Use exact new install/publication receipts; do not rerun old guards or full parity.
+
+
+## Sol R5 transactional follow-up checkpoint — 2026-10-25
+Read docs/sol-r5-followup-review-20261025.txt, its technical evidence and
+docs/sol-r5-remaining-plan-20261025.txt. This source block adds version-preserving
+reference corpus/compatibility views, persistent writer/Windows lease, immutable
+series context/recovery and optional diagnostic host routing, lossless compact
+assets/journal and all-family dispositions. The exact technical and publication
+receipts distinguish passing cases, failures and corrective evidence.
+Full exact archive reduction, shared compiler/history asset ownership, source-proof
+bridge, all-definition semantic acceptance, sustained326-state runtime and real
+joint-source95% qualification remain OPEN. A low-level opt-in compact adapter is
+not adoption by the v1 serving path. No training/provider probes/activation or
+promotion is allowed. Preserve300-second retention versus180-second qualification.
+Keep one trusted context-store owner per writer root; no competing direct pointers.
+Continue via the latest exact local pointer and return architecture/causality and
+remaining ownership/reduction decisions to Astra before any fit. Do not rerun old
+install/assembly guards. Graphify refresh is automatic; current source prevails.
