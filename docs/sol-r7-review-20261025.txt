@@ -1,0 +1,175 @@
+Historical25October record. The owner resumed26October; read docs/sol-r7-exact-continuation-20261026.txt and docs/sol-r7-review-20261026.txt FIRST. Old pause, limits and hashes below retain historicalscope.
+
+AEGIS SOL R7 — IMPLEMENTATION AND ASTRA REVIEW RECORD
+25 October 2026. Current source-only diagnostic block; training is paused.
+Canonical app: C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Published baseline: PR11 main073d9d2c5726bbcf2978606c44896bbbbbf433cf.
+Current local R7 sources are ahead of main/Graphify. Do not reset the old localHEAD,
+rerun old install guards or assume a queued index already includes these changes.
+
+Decision and authorization boundaries
+Owner: finish available R7.0-R7.10, preserving all feature families, no training.
+Owner subsequently authorized finite coordinated schema-capacity expansion.
+No fits/HPO/calibration/ablation/compression fitting, quality scoring, provider
+probing/refresh, new tasks/runtime activation, deployment or model promotion.
+24GiB aggregate admission,6GiB owned technical tree,4CPUs,min4GiBfree; richarena4GiB.
+Manual STOPs/foreignlocks are preserved. One root-owned native job at a time.
+
+Source/causality corrections
+- Compact static PRE/SERIES_PRE/BETWEEN now requires historical reference before
+ optional-reference return, verifies actual derivedtarget/source privately, and
+ distinguishes explicit legacy forensic compatibility from default derivedproof.
+- Static writer derives actual identity/series/source/target authority before work
+ and checks it after IO with current clock/STOP/terminal fences. Durable rejected
+ traces remain evidence, not current issued forecasts. Wrongseries rejected early.
+- Retained pipeline distinguishes latest committed admitted sourcehead from queued
+ execution. A newer terminal/corrected source revokes old forecast eligibility.
+- History proof ready times follow awaited work; no ready-at backdating. t0 draft,
+ t1 identity and seriesreceipt horizons remain separate.
+- Prior retained Steam observations now populate native minute baselines through
+ actual causal retainedmap/native view,5distinctmaps per supported quantity,
+ positiveSD, future exclusion and sourcehash binding. No inferred finalNW/GPM swap.
+- Bounded static PRE and independent SERIES_PRE/BETWEEN restore from ownedroot
+ parts and rederive roster/priorreceipt chains without fakeheroes/sides/mapID.
+- All targets stay diagnostic, no probabilities/model outputs or realquality claim.
+
+Features/semantics
+One shared formula route remains offline/online. Current dynamic inputs use one
+coherent admitted Steam prefix; historical inputs come from versioned local causal
+history. No new-live OpenDota HTTP dependency or STRATZ dynamic fallback.
+A shared semantic template preserves actual operators/rawfields/windows/support/
+patch/phase/units/missingness, participating in schemahash. Exactalias comparison
+covers all36fields+unknownextras; omitted/changed fields cannot count as aliases.
+Append-only9409 historicalcolumns: exact7/30/90d form contrasts; distribution
+counts/quartiles;25opposing-player differences; team/player/hero/playerhero duration
+tails25..80by5; K32 result-order team/account-lineup ratings and roster continuity.
+S04 adds6team-conditioned draftstyle fit columns using SAMEteam baseline and
+all5herosupport>=max(5,M). Strictjournal recognizes only reviewed floor templates.
+K32 initial1500/scale400 is a local historical result model, not publicMMR. KnownAt
+closes dependencies across both team prestates/all10accounts plus currentreceipt.
+H03 pre-map residual remains unavailable: result ordering does not prove original
+pre-map availability for overlapping/late-received maps. No invented p_pre.
+All79families/14legacycatalogues preserved.1280oldleafbindings are explicit,
+1277Steam-equivalent CANDIDATES and3raw-providerlead incompatibilities; this is
+not existingweight migration or real-source95 proof.465359catalogueoccurrences
+remain in the legacy reconciliation denominator.182opaqueRoshan expressions
+(364masked columns) retain unverified meaning, not guessed mechanics.
+
+Storage/runtime/resource implementation
+Metadata FIFO max4 includingactive,2sdefault/10smax. Queued descriptors reserve
+64KiB only; IO/decode admitted atdequeue. Hash discovery is IN the queue. Queued
+cancel/deadline/close promptly releases; active cancellation afterIO suppresses
+return and releases handles. No queuedmutations or unbounded Promise.all.
+Append retains actualprivate compiler schema/vector owners beforefirstasync turn.
+Writer commit/read batches are bounded64commands/16MiB and64refs/16MiB;
+source replay further negotiates an8MiB read ceiling. A partial commit prefix
+failure remains explicit, manifestlast and durability/hash/root checks retained.
+Proof-scoped mapcache<=128MiB actualUTF8 uses one private verifiedepoch, deep
+immutable rows and final fullbytes/hash/epoch fence, boundedyield/STOP/release.
+Oversize/unknown-epoch falls back to actualstreaming, nofeature pruning.
+A frozen shared graph's transient charge transfers synchronously to retained
+ownership for the SAME graph withoutclone; mutable source+clone overlap unchanged.
+This is explicit engineering accounting, not a measured heap theorem.
+Cold source/proof work remains expensive; shortmemory checks are not live latency.
+
+Capacity correction
+See docs/sol-r7-capacity-decision-20261025.txt (same output document mirror).
+R7_FULL300K/schema.v2/codec.v3:300Kcolumns,4GiB logicalexpanded,128Mnodes,
+64MiBcompactwire. No4GiBbulkallocation. Legacy schema.v1/codec.v2 bounds unchanged.
+Root compiler/journal/API/router, audit/modelinput/dataset/source95metadata consumers
+bind explicit profile/header/hash/count; unknown markers do not gain larger limits.
+Readers selectprofile beforeparse; cold/cached artifactforgery tests remain negative.
+Standalonecompiler defaultlegacy; newproducer defaultfull. Legacy bootstrap pins
+legacy explicitly and rejects explicitfull withlegacysink BEFOREfilesystemIO.
+Fullvector hex streams in boundedpieces, retaining exactwire/hash/negativezero.
+16MiBphysicalobjects/256MiBroot and fixedmemorycaps remain unchanged.
+
+Actual app diagnostic connection
+Saved reader explicitly dispatches legacy/compact; defaults remain OFF, noGET
+initialization of storage. Actual FeatureDiagnosticAdmin closes retiredowners,
+max4waiters BEFORE initialization,2sinitializationwait, AbortSignal, Retry-After
+and retiredgeneration barrier. HTTP requestabort/responseclose forwards signal.
+Targetrouter main=whole series, detail=selectedmap. Previous-map manualnavigation
+preserves its actual heroes/results. Target/schema/series/side/source/time binding
+is checked, with final synchronous currentstate fence after allawaits.
+Defaultdisabled modelinputdelivery accepts only actualprivate compiler-owned
+schema/vector, exactmanifest/page order/dtype/units/source/missinghash including-0,
+fullunique-position coverage, boundedpages, STOP/close afterawait. Recordingport
+returns input-only receipt; no invented probabilities. SavedJSON alone cannot mint
+new compiler ownership. Originalprivateleases are retained across currentdelivery.
+
+Dataset/harness code (not an experiment)
+Pinned manifests keep connected map/series components chronological; crossings
+purged, repeatedframes never independentmaps.12logicaltasks/13modes, landmarks
+5..80+ retain missing/earlyended/STOPrisksets, lastpaststate only. ObservedSteam
+and reconstructedOpenDota profiles separate; TRAIN-only learnedstates and labels
+isolated. Correction invalidates bindings; no fits/datarefresh/scoring executed.
+The aggregate300Kschema metadata limit may still require a separately designed
+chunked multi-schema manifest for eventual all13-rich datasets; no silent capraise.
+
+Cleanup and C++
+Removed only proven dangling hello alias. Consolidated exact E1pureformulas into
+shared/feature-math with TS compatibilitywrappers; DBloaderbodies preservedexact.
+Kept active oldmodels/readers/CLI/types/manualheuristicexports and raw/weights/data.
+No wholemodule deletion from absence of directcurrent callers. C++prototype remains
+unadopted: boundedWindowslinker lookup found no usablelinker; oldCOFFcompiled/
+ELFlinkfailure preserved. No native speed claim. Need>=30%completeoperation gain,
+exactsemantics and fixedcaps after JS/IO algorithm improvements before adoption.
+
+Verification interpretation
+Exact commands/source snapshots/logs/resource receipts under work/sol-r7-20261025/
+and work/sol-r6b-20261025/r7-*. Initialfailures preserved with corrections.
+No summing overlapping receipts into one alleged allpass invocation. Synthetic
+mechanical tests do not prove realfieldavailability, fullsemantics, prospective95%,
+modelquality or productionreadiness. Read final currentstatus for latest largejobs.
+
+Astra review requested
+Review source/identity/as-of dependencyclosure; privateproof vs parsedJSON authority;
+postIO currentclock/STOP/terminal fencing; nativehistory population; K32knownAt;
+exacthistoricalsupportfloor; coherentSteamvsoldOD feature semantics and aliases;
+finiteprofilepreparse/DAGguards; synchronouscharge transfer; FIFOcancel/leases;
+actualhost/router/admin/modelinputchain and old-reader compatibility. Confirm later
+source95/dataset aggregate schema design/performance gates before model experiments.
+
+Current exact continuation
+Use work/sol-r7-20261025/STATUS.json and CURRENT.txt for latestrunningjob/result.
+Do not rerun completedfits, refresh datasets or revive manualSTOPtasks. Complete
+technicalprofilechecks/actual13/1600 where gates permit; sustained326 only after
+prerequisite throughput and memory are actually met. No training before Astra's
+full feature/source/runtime gate review and separate owner authorization.
+
+LATEST LARGE-CAPACITY AND ROUTING RECEIPTS
+r7-full-profile-source1600-12 PASS: one actual source/proof/POST persistence/restart
+case on1600 SYNTHETIC source versions.362.547s fulljob,peak5293527040B (4.93GiB).
+Normalizedfacts118570920B; sourceview coldrestore116.574s cumulative; causalproof
+260.962s; actual60303-column POST_MAP_WIN/KILLS/DURATION274.898s; fulltrace commit
+332.617s; cold all-target hash-verified readback361.419s; finalarena zero.
+Effective storedroot234214840B, below unchanged256MiB. Peak explicit arena2943166898B.
+This is not source95, independent real data or live-latency/model quality evidence.
+r7-full-routing-13 PASS:30/30,0.593s,peak145842176B,27existing routing cases plus
+3newfull/legacy profile cases with explicit synthetic compactreadport. No socket,
+provider, Windows lease or prospective current-state claim follows.
+Actual13schema declaration audit is running separately; its final receipt is pending.
+
+INITIAL EXHAUSTIVE NEW-PROFILE EMISSION AUDIT
+r7-full-emitted13-13 PASS:13originalschemas,12logicaltargets,921198occurrences,
+zero skipped/deferred.275.813s,peak5286469632B; everyphase releasesarena tozero.
+LIVE heads150553columns; observed_live series150597; POST60303/series60347.
+795823occurrences have complete semantic identity,125375 unresolved. This is
+structural audit completion, NOT semantic acceptance.9409newhistoricalcolumns
+(2059applicablePRE/series) lacked explicit historyDefinitions arrays, although
+formula/input/policy bindings were present. Sol is binding actual upstream column
+IDs in each numeric branch, with[] only for direct rawfact/state calculations.
+No auditor rule is being weakened or exactalias fabricated. Other LIVE gaps include
+9232unverified_native_semantics and720parameter_binding_required occurrences per
+head; those meanings/sourceconditions remain explicit gates. Preserve thisinitial
+receipt; corrections change schema/source hashes and require scoped fresh evidence.
+
+LATEST OWNER PAUSE (supersedes autonomous continuation above)
+Owner requested a temporary pause of approximately2hours and will resume by
+nextmessage. All root-owned native checks completed; the helper was stopped at a
+safe file-write boundary. Six pending historyDefinitions metadata files and focused
+testsource are saved, NOTexecuted/reviewaccepted. Exact pins and firstresume steps:
+outputs/Aegis-Sol-R7-exact-continuation-20261025.txt. No automatic wake created.
+No further source work/tests/fits/providers/tasks until ownerresumes. Publication
+inventory/doc pins are stale for the saved delta; R7 remains local/unpublished.

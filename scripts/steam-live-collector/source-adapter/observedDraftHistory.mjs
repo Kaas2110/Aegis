@@ -148,11 +148,11 @@ function produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,
  * contract has no qualified prior Steam frames; it never fabricates them from
  * post-match trajectories. The unchanged core/formulas consume a proven minimal
  * projection while their pin still binds all complete normalized source rows. */
-export async function produceObservedDraftHistoryFromRetainedMapView({historyView,matchId,computedAt,minimumSupport=5,resourceArena=null}={}){
+export async function produceObservedDraftHistoryFromRetainedMapView({historyView,nativeHistoryView=null,matchId,computedAt,minimumSupport=5,resourceArena=null}={}){
  if(!Number.isSafeInteger(minimumSupport)||minimumSupport<3||minimumSupport>1000)throw Error('minimum_support_3_to_1000');
- const inputs=await readRetainedMapViewCoreInputs({historyView,matchId,computedAt,resourceArena});try{
+ const inputs=await readRetainedMapViewCoreInputs({historyView,nativeHistoryView,matchId,computedAt,resourceArena});try{
   const draft=replayPinnedDraftPrefix({draftPrefixInputs:inputs.draftPrefixInputs,matchId,computedAt});if(!draft.accepted)return blocked(draft.reason);
   const d=inputs.view.descriptor;if(draft.state.historyCutoffAt!==d.historyCutoffAt||draft.state.validFrom!==d.validFrom||draft.state.revision!==d.identity.revision||draft.state.identity.draftHash!==d.identity.draftHash)throw Error('retained_map_view_draft_binding');
-  return produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,nativeEvidenceInputs:[],nativeAlignmentInputs:[],expectedProfileReviewSha256:null,availabilityBasis:'retained_receipt_reconstruction'},draft,inputs.facts,pinned(inputs.nativeInput,NATIVE_CONTRACT,20000));
+  return produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,nativeEvidenceInputs:inputs.nativeEvidenceInputs,nativeAlignmentInputs:inputs.nativeAlignmentInputs,expectedProfileReviewSha256:inputs.expectedProfileReviewSha256,availabilityBasis:'retained_receipt_reconstruction'},draft,inputs.facts,pinned(inputs.nativeInput,NATIVE_CONTRACT,20000));
  }finally{inputs.release();}
 }

@@ -6,13 +6,14 @@ import {instantNs} from './causalTime.mjs';
 import {snapshotPlainRecord,measureBoundedJsonBytes} from './diagnosticResourceArena.mjs';
 import {PERSISTENT_ARTIFACT_WRITER_CONTRACT} from './persistentArtifactWriter.mjs';
 import {retainVerifiedProjectionSchema,retainVerifiedProjectionVector} from './featureProjectionCompiler.mjs';
+import {LEGACY_FEATURE_CAPACITY_PROFILE,resolveFeatureCapacityProfile,featureCapacityProfileForSchema} from './featureCapacityProfiles.mjs';
 import {COMPACT_HISTORICAL_INPUT_STORE_CONTRACT,readCompactHistoricalInputProof} from './compactHistoricalInputStore.mjs';
 import {createCompactFeatureSchema,createCompactFeatureVector,retainCompactFeatureAsset,releaseCompactFeatureAsset,describeCompactFeatureAsset,readCompactSchemaPage,readCompactVectorPage,writeCompactFeatureAssetChunks,loadCompactFeatureAsset} from './compactFeatureAssets.mjs';
 
 export const COMPACT_FEATURE_JOURNAL_CONTRACT='aegis.compact-diagnostic-feature-journal.v2';
 const TRACE='aegis.compact-diagnostic-feature-trace.v2',PRODUCER='aegis.unified-diagnostic-feature-producer.v2';
 const SCHEMA='compact-feature-schema-v2',VECTOR='compact-feature-vector-v2',TRACE_KIND='compact-feature-trace-v2';
-const SHA=/^[a-f0-9]{64}$/,MAX_OBJECT=16*1024*1024,MAX_WIRE=64*1024*1024,CHUNK_BYTES=1024*1024,ASSET_MANIFEST='aegis.compact-feature-wire-manifest.v3',LEGACY_ASSET_MANIFEST='aegis.compact-feature-wire-manifest.v2',CHUNK_KIND='compact-feature-wire-chunk-v2';
+const SHA=/^[a-f0-9]{64}$/,MAX_OBJECT=16*1024*1024,MAX_WIRE=256*1024*1024,CHUNK_BYTES=1024*1024,ASSET_MANIFEST='aegis.compact-feature-wire-manifest.v3',LEGACY_ASSET_MANIFEST='aegis.compact-feature-wire-manifest.v2',CHUNK_KIND='compact-feature-wire-chunk-v2';
 const TARGETS=new Set(['PRE_MAP_WIN','PRE_KILLS','PRE_DURATION','POST_MAP_WIN','POST_KILLS','POST_DURATION','LIVE_MAP_WIN','LIVE_KILLS','LIVE_DURATION','SERIES_PRE','SERIES_BETWEEN','SERIES_LIVE']);
 const FLAGS=Object.freeze({eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false});
 const sha=x=>createHash('sha256').update(x).digest('hex');
@@ -35,7 +36,8 @@ function reference(value,expectedKind,maxBytes){
  const r=record(value,3);if(Object.keys(r).sort().join(',')!=='bytes,kind,sha256'||r.kind!==expectedKind||!SHA.test(r.sha256??'')||!Number.isSafeInteger(r.bytes)||r.bytes<1||r.bytes>maxBytes)fail('artifact_reference');return Object.freeze(r);
 }
 function projectedReference(value){
- const r=record(value,3);if(Object.keys(r).sort().join(',')!=='featureCount,namesSha256,sha256'||!SHA.test(r.sha256??'')||!SHA.test(r.namesSha256??'')||!Number.isSafeInteger(r.featureCount)||r.featureCount<0||r.featureCount>150000)fail('projection_reference');return Object.freeze(r);
+ const r=record(value,4),full=Object.hasOwn(r,'capacityProfile'),profile=resolveFeatureCapacityProfile(full?r.capacityProfile:LEGACY_FEATURE_CAPACITY_PROFILE.id);
+ if(full&&profile.id===LEGACY_FEATURE_CAPACITY_PROFILE.id||Object.keys(r).sort().join(',')!==(full?'capacityProfile,featureCount,namesSha256,sha256':'featureCount,namesSha256,sha256')||!SHA.test(r.sha256??'')||!SHA.test(r.namesSha256??'')||!Number.isSafeInteger(r.featureCount)||r.featureCount<0||r.featureCount>profile.maxFeatures)fail('projection_reference');return Object.freeze(r);
 }
 function flags(value){if(value.eligibleForTraining!==false||value.eligibleForServing!==false||value.recordedPrediction!==false)fail('diagnostic_only');}
 function modeBinding(mode,route){
@@ -63,14 +65,21 @@ function expandedVectorHash(handle){
  }hash.update(']}');return hash.digest('hex');
 }
 
-export function createCompactFeatureJournal({writer,resourceArena,historicalInputStore=null,allowLegacyByteOnlyStaticHistory=false,assetWorkingBytes=512*1024*1024,operationWorkingBytes=128*1024*1024,maxWireBytes=MAX_WIRE,maxMetadataBytes=256*1024,maxCachedAssets=16,maxCachedAssetBytes=256*1024*1024}={}){
+export function createCompactFeatureJournal({writer,resourceArena,historicalInputStore=null,allowLegacyByteOnlyStaticHistory=false,staticHistoryPolicy='derived_v3',assetWorkingBytes=512*1024*1024,operationWorkingBytes=128*1024*1024,maxWireBytes=MAX_WIRE,maxMetadataBytes=256*1024,maxCachedAssets=16,maxCachedAssetBytes=256*1024*1024,maxPendingReads=4,maxQueueWaitMs=2000,shouldContinue=()=>true,resolveTraceReference=null}={}){
  if(writer?.contract!==PERSISTENT_ARTIFACT_WRITER_CONTRACT||typeof writer.commit!=='function'||typeof writer.read!=='function'||typeof resourceArena?.reserve!=='function'||typeof resourceArena?.status!=='function')fail('explicit_writer_and_arena');
  for(const [name,value,min,max]of [['asset_working',assetWorkingBytes,1024,2*1024**3],['operation_working',operationWorkingBytes,1024,2*1024**3],['wire_bound',maxWireBytes,1024,MAX_WIRE],['metadata_bound',maxMetadataBytes,1024,1024*1024],['cached_assets',maxCachedAssets,1,128],['cache_bytes',maxCachedAssetBytes,1024,1024**3]])if(!Number.isSafeInteger(value)||value<min||value>max)fail(name);
  if(maxMetadataBytes*8+65536>operationWorkingBytes)fail('metadata_working_bound');
  if(historicalInputStore!==null&&(historicalInputStore.contract!==COMPACT_HISTORICAL_INPUT_STORE_CONTRACT||typeof historicalInputStore.verifyHistoricalInputs!=='function'))fail('historical_input_store');
  if(typeof allowLegacyByteOnlyStaticHistory!=='boolean')fail('legacy_static_history_option');
- const arena=resourceArena,cache=new Map(),ownedSchemaArtifacts=new WeakMap();let cacheBytes=0,pending=0,closed=false,closing=false,active=Promise.resolve();
+ if(!['derived_v3','parsed_v2'].includes(staticHistoryPolicy))fail('static_history_policy');
+ if(!Number.isSafeInteger(maxPendingReads)||maxPendingReads<1||maxPendingReads>4||!Number.isSafeInteger(maxQueueWaitMs)||maxQueueWaitMs<1||maxQueueWaitMs>10000||typeof shouldContinue!=='function')fail('queue_configuration');
+ if(resolveTraceReference!==null&&typeof resolveTraceReference!=='function')fail('trace_reference_port');
+ const arena=resourceArena,cache=new Map(),ownedSchemaArtifacts=new WeakMap(),waiting=[];let cacheBytes=0,pending=0,closed=false,closing=false,running=false,active=Promise.resolve();
  const counters={appendedTraces:0,loadedTraces:0,assetCacheHits:0,assetLoads:0,assetWrites:0,cacheEvictions:0,verifiedSchemaReuses:0};
+ // The owner-selected finite wire ceiling applies to all supported profiles.
+ // Smaller caller limits still bind; resolving the actual route profile keeps
+ // unknown markers from acquiring admission or semantic authority.
+ const wireLimit=capacityProfile=>Math.min(maxWireBytes,MAX_WIRE,resolveFeatureCapacityProfile(capacityProfile).maxEncodedBytes);
  function evict(cacheKey){const entry=cache.get(cacheKey);if(entry){cache.delete(cacheKey);cacheBytes-=entry.bytes;releaseCompactFeatureAsset(entry.handle);counters.cacheEvictions++;}}
  function clearCache(){for(const k of [...cache.keys()])evict(k);}
  function remember(ref,handle){
@@ -79,27 +88,49 @@ export function createCompactFeatureJournal({writer,resourceArena,historicalInpu
   const own=retainCompactFeatureAsset(handle);if(!own)return;cache.set(k,{ref,handle:own,bytes,schemaHash:descriptor.expandedSchemaHash});cacheBytes+=bytes;
  }
  function cached(ref,schemaHash){const k=key(ref),entry=cache.get(k);if(!entry)return null;if(entry.ref.bytes!==ref.bytes||entry.schemaHash!==schemaHash)fail('cache_identity_conflict');const held=retainCompactFeatureAsset(entry.handle);if(!held)fail('asset_memory_reservation');cache.delete(k);cache.set(k,entry);counters.assetCacheHits++;return held;}
- function operation(action){
-  if(closed||closing)return Promise.reject(Error('compact_feature_journal:closed'));if(pending!==0)return Promise.reject(Error('compact_feature_journal:pending_limit'));
-  const lease=arena.reserve(operationWorkingBytes);if(!lease)return Promise.reject(Error('compact_feature_journal:operation_memory_reservation'));pending++;
-  const result=Promise.resolve().then(action).finally(()=>{pending--;lease.release();});active=result.catch(()=>{});return result;
+ function operation(action,allowQueue=false,controls={}){
+  let signal,waitMs;try{const c=record(controls,2);if(Object.keys(c).some(k=>!['signal','queueWaitMs'].includes(k))||c.signal!==undefined&&c.signal!==null&&!(c.signal instanceof AbortSignal)||c.queueWaitMs!==undefined&&(!Number.isSafeInteger(c.queueWaitMs)||c.queueWaitMs<1||c.queueWaitMs>maxQueueWaitMs))fail('queue_controls');signal=c.signal??null;waitMs=c.queueWaitMs??maxQueueWaitMs;}catch(error){return Promise.reject(error);}
+  if(signal?.aborted)return Promise.reject(Error('compact_feature_journal:request_cancelled'));
+  if(closed||closing)return Promise.reject(Error('compact_feature_journal:closed'));if(pending>=maxPendingReads||!allowQueue&&pending!==0)return Promise.reject(Error('compact_feature_journal:pending_limit'));
+  // Only snapshotted bounded read descriptors may wait. Heavy working memory
+  // is admitted at dequeue; neither vectors nor writes accumulate in this queue.
+  const descriptor=arena.reserve(65536);if(!descriptor)return Promise.reject(Error('compact_feature_journal:queue_memory_reservation'));pending++;
+  return new Promise((resolve,reject)=>{
+   const entry={action,signal,queuedAt:performance.now(),waitMs,started:false,settled:false,timer:null,cancel:null,settle(error,value){if(entry.settled)return;entry.settled=true;clearTimeout(entry.timer);signal?.removeEventListener('abort',entry.cancel);pending--;descriptor.release();if(error)reject(error);else resolve(value);}};
+   entry.cancel=()=>{if(entry.started)return;const at=waiting.indexOf(entry);if(at>=0)waiting.splice(at,1);entry.settle(Error('compact_feature_journal:request_cancelled'));};
+   entry.timer=setTimeout(()=>{if(entry.started)return;const at=waiting.indexOf(entry);if(at>=0)waiting.splice(at,1);entry.settle(Error('compact_feature_journal:queue_expired'));},waitMs);
+   signal?.addEventListener('abort',entry.cancel,{once:true});waiting.push(entry);drain();
+  });
+ }
+ function drain(){
+  if(running||closing||closed)return;const entry=waiting.shift();if(!entry)return;entry.started=true;clearTimeout(entry.timer);running=true;
+  active=Promise.resolve().then(async()=>{
+   if(entry.signal?.aborted)fail('request_cancelled');if(closed||closing||shouldContinue()!==true)fail('closed_or_stopped');if(performance.now()-entry.queuedAt>entry.waitMs)fail('queue_expired');
+   const lease=arena.reserve(operationWorkingBytes);if(!lease)fail('operation_memory_reservation');try{const result=await entry.action();if(entry.signal?.aborted){result?.release?.();fail('request_cancelled');}return result;}finally{lease.release();}
+  }).then(value=>entry.settle(null,value),error=>entry.settle(error)).finally(()=>{running=false;drain();});
  }
  function checkSchema(handle,route){
   const d=describeCompactFeatureAsset(handle),page=readCompactSchemaPage(handle,{limit:1});if(!page)fail('page_memory_reservation');
-  try{if(d.expandedSchemaHash!==route.schemaRef.sha256||d.namesHash!==route.schemaRef.namesSha256||d.featureCount!==route.featureCount||page.header.targetId!==route.targetId||page.header.stateMode!==route.stateMode)fail('schema_route_binding');}finally{page.release();}
+  try{const profile=featureCapacityProfileForSchema(page.header);if((route.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id)!==profile.id||(d.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id)!==profile.id||d.expandedSchemaHash!==route.schemaRef.sha256||d.namesHash!==route.schemaRef.namesSha256||d.featureCount!==route.featureCount||page.header.targetId!==route.targetId||page.header.stateMode!==route.stateMode)fail('schema_route_binding');}finally{page.release();}
  }
  async function verifyHistorical(body){
+  const staticMode=['PRE','SERIES_PRE','BETWEEN'].includes(body.mode),strictStatic=staticMode&&!allowLegacyByteOnlyStaticHistory;
+  // Missing authority is not an explicit compatibility profile. Decide the
+  // static requirement before the optional-reference path on append AND load.
+  if(strictStatic&&(body.historicalInputRef===null||body.historicalInputRef===undefined))fail('historical_input_reference_required');
   if(body.historicalInputRef===null||body.historicalInputRef===undefined)return null;
   if(historicalInputStore===null)fail('historical_input_bridge_required');
-  const staticMode=['PRE','SERIES_PRE','BETWEEN'].includes(body.mode),strictStatic=staticMode&&!allowLegacyByteOnlyStaticHistory;
   if(strictStatic&&body.historicalBindings?.kind!==(body.mode==='PRE'?'map_prematch':'series_history'))fail('historical_target_kind');
-  const options={mode:body.mode,historicalBindings:body.historicalBindings,seriesReceiptPin:body.seriesReceiptPin,decisionAt:body.decisionAt,...(strictStatic?{requireParsedTargetBinding:true,targetBinding:body.targetBinding,matchId:body.matchId,seriesId:body.seriesId}:{})};
+  const options={mode:body.mode,historicalBindings:body.historicalBindings,seriesReceiptPin:body.seriesReceiptPin,decisionAt:body.decisionAt,...(strictStatic?{requireParsedTargetBinding:true,requireTargetDerivation:staticHistoryPolicy==='derived_v3',targetBinding:body.targetBinding,matchId:body.matchId,seriesId:body.seriesId}:{})};
   const held=await historicalInputStore.verifyHistoricalInputs(body.historicalInputRef,options);
   try{const descriptor=readCompactHistoricalInputProof(held.proof,{reference:body.historicalInputRef,...options});return{minimumSupport:descriptor.calculationOptions.minimumSupport,release:()=>held.release()};}catch(error){held?.release?.();throw error;}
  }
  function checkHistoricalSupport(handle,historical){
   if(!historical)return;const size=describeCompactFeatureAsset(handle).featureCount;
-  for(let offset=0;offset<size;offset+=200){const page=readCompactSchemaPage(handle,{offset,limit:200});if(!page)fail('page_memory_reservation');try{for(const d of page.definitions)if(d.minimumSupport!==undefined&&d.minimumSupport!==historical.minimumSupport)fail('historical_support_policy');}finally{page.release();}}
+  for(let offset=0;offset<size;offset+=200){const page=readCompactSchemaPage(handle,{offset,limit:200});if(!page)fail('page_memory_reservation');try{for(const d of page.definitions)if(d.minimumSupport!==undefined&&d.minimumSupport!==null&&d.minimumSupport!==historical.minimumSupport){
+   const p=d.formulaParameters,reviewedFloor=p?.templateId==='aegis.chronological-result-ratings.k32.v1'&&['H01','H03','H07'].includes(d.familyId)||p?.templateId==='aegis.team-conditioned-draft-style-fit.v1'&&d.familyId==='S04';
+   if(!reviewedFloor||p?.contextMinimumSupport!==historical.minimumSupport||p.minimumSupportPolicy!=='max(5,contextMinimumSupport)'||d.minimumSupport!==Math.max(5,historical.minimumSupport))fail('historical_support_policy');
+  }}finally{page.release();}}
  }
  async function commitExact(kind,utf8,maximum){
   const expectedSha256=sha(utf8),bytes=Buffer.byteLength(utf8);if(bytes>maximum)fail('commit_bytes_bound');
@@ -109,23 +140,36 @@ export function createCompactFeatureJournal({writer,resourceArena,historicalInpu
   // The codec emits synchronously, so its bounded complete encoded text stays
   // reserved here. Persist bounded UTF8 chunks and publish their manifest LAST;
   // no individual artifact exceeds the existing writer's unchanged16MiB limit.
-  const wireBound=Math.min(maxWireBytes,describeCompactFeatureAsset(handle).wireBytes);
-  if(!Number.isSafeInteger(wireBound)||wireBound<1)fail('asset_wire_bound');
+  const descriptor=describeCompactFeatureAsset(handle),wireBound=descriptor.wireBytes;
+  if(!Number.isSafeInteger(wireBound)||wireBound<1||wireBound>wireLimit(descriptor.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id))fail('asset_wire_bound');
   const lease=arena.reserve(wireBound*10+65536);if(!lease)fail('sink_memory_reservation');let chunks=[],utf8=null,total=0;
-  try{const receipt=writeCompactFeatureAssetChunks(handle,chunk=>{const n=Buffer.byteLength(chunk);if(n>wireBound-total)fail('compact_object_bound_unsupported');total+=n;chunks.push(chunk);},{workingBytes:16*1024*1024});if(!receipt)fail('encoding_memory_reservation');
+   try{const encoderWorkingBytes=describeCompactFeatureAsset(handle).capacityProfile?32*1024*1024:16*1024*1024;const receipt=writeCompactFeatureAssetChunks(handle,chunk=>{const n=Buffer.byteLength(chunk);if(n>wireBound-total)fail('compact_object_bound_unsupported');total+=n;chunks.push(chunk);},{workingBytes:encoderWorkingBytes});if(!receipt)fail('encoding_memory_reservation');
    utf8=chunks.join('');chunks=null;if(total!==receipt.bytes)fail('encoding_length');const refs=[];
    // Buffer conversion stays inside the existing maxWireBytes*10 scratch lease.
    // Full-size UTF8 chunks and field alignment improve IO/deduplication without
    // changing logical bytes, content hashes or individual object ceilings.
-   const buffer=Buffer.from(utf8,'utf8');for(const text of alignedWireChunks(buffer))refs.push(await commitExact(CHUNK_KIND,text,CHUNK_BYTES));
+   const buffer=Buffer.from(utf8,'utf8'),limits=writer.commitBatchLimits;
+   const batchBytes=Number.isSafeInteger(limits?.maxBytes)?Math.min(16*1024**2,limits.maxBytes):0,batchCount=Number.isSafeInteger(limits?.maxCommands)?Math.min(64,limits.maxCommands):0;
+   let commands=[],commandBytes=0;
+   async function flush(){if(!commands.length)return;const output=await writer.commitMany(commands);if(!Array.isArray(output)||output.length!==commands.length)fail('writer_batch_mismatch');for(let i=0;i<output.length;i++){const ref=reference(output[i],CHUNK_KIND,CHUNK_BYTES);if(ref.sha256!==commands[i].expectedSha256||ref.bytes!==Buffer.byteLength(commands[i].utf8))fail('writer_receipt_mismatch');refs.push(ref);}commands=[];commandBytes=0;}
+   for(const text of alignedWireChunks(buffer)){
+    const bytes=Buffer.byteLength(text);
+    if(typeof writer.commitMany!=='function'||batchCount<1||batchBytes<bytes){await flush();refs.push(await commitExact(CHUNK_KIND,text,CHUNK_BYTES));continue;}
+    if(commands.length>=batchCount||commandBytes+bytes>batchBytes)await flush();commands.push({kind:CHUNK_KIND,utf8:text,expectedSha256:sha(text)});commandBytes+=bytes;
+   }
+   await flush();
    const manifest=JSON.stringify({contract:ASSET_MANIFEST,kind,wireSha256:receipt.sha256,wireBytes:receipt.bytes,chunks:refs});if(Buffer.byteLength(manifest)>maxMetadataBytes)fail('asset_manifest_bound');
    const ref=await commitExact(kind,manifest,maxMetadataBytes);counters.assetWrites++;return ref;
   }finally{chunks=null;utf8=null;lease.release();}
  }
- async function readAssetWire(ref){
+ async function readAssetWire(ref,capacityProfile){
+  const routeWireLimit=wireLimit(capacityProfile);
   const text=await writer.read(ref);if(Buffer.byteLength(text)!==ref.bytes||sha(text)!==ref.sha256)fail('artifact_integrity');const body=JSON.parse(text);
-  const maximumChunks=body.contract===ASSET_MANIFEST?Math.ceil(maxWireBytes/CHUNK_BYTES)+33:Math.ceil(maxWireBytes/Math.floor(CHUNK_BYTES/3))+1;
-  if(Object.keys(body).sort().join(',')!=='chunks,contract,kind,wireBytes,wireSha256'||![ASSET_MANIFEST,LEGACY_ASSET_MANIFEST].includes(body.contract)||body.kind!==ref.kind||!SHA.test(body.wireSha256??'')||!Number.isSafeInteger(body.wireBytes)||body.wireBytes<1||body.wireBytes>maxWireBytes||!Array.isArray(body.chunks)||body.chunks.length<1||body.chunks.length>maximumChunks)fail('asset_manifest');
+  // The trace's typed route selects the bound BEFORE any chunk read/coalescing
+  // or asset JSON parse. A manifest declaration cannot promote itself to FULL.
+  const manifestWireLimit=routeWireLimit;
+  const maximumChunks=body.contract===ASSET_MANIFEST?Math.ceil(manifestWireLimit/CHUNK_BYTES)+33:Math.ceil(manifestWireLimit/Math.floor(CHUNK_BYTES/3))+1;
+  if(Object.keys(body).sort().join(',')!=='chunks,contract,kind,wireBytes,wireSha256'||![ASSET_MANIFEST,LEGACY_ASSET_MANIFEST].includes(body.contract)||body.kind!==ref.kind||!SHA.test(body.wireSha256??'')||!Number.isSafeInteger(body.wireBytes)||body.wireBytes<1||body.wireBytes>manifestWireLimit||!Array.isArray(body.chunks)||body.chunks.length<1||body.chunks.length>maximumChunks)fail('asset_manifest');
   let lease=arena.reserve(body.wireBytes*10+65536);if(!lease)fail('source_wire_memory_reservation');let chunks=[],total=0;
   const declared=writer.readBatchLimits,batchReferences=Number.isSafeInteger(declared?.maxReferences)&&declared.maxReferences>0?Math.min(64,declared.maxReferences):1,batchMaximum=Number.isSafeInteger(declared?.maxBytes)&&declared.maxBytes>0?Math.min(MAX_OBJECT,declared.maxBytes):CHUNK_BYTES;
   try{for(let at=0;at<body.chunks.length;){const batch=[];let batchBytes=0;while(at<body.chunks.length&&batch.length<batchReferences){const chunk=reference(body.chunks[at],CHUNK_KIND,CHUNK_BYTES);if(batch.length&&batchBytes+chunk.bytes>batchMaximum)break;batch.push(chunk);batchBytes+=chunk.bytes;at++;}
@@ -139,15 +183,16 @@ export function createCompactFeatureJournal({writer,resourceArena,historicalInpu
    lease.release();lease=arena.reserve(total*4+65536);if(!lease)fail('retained_wire_memory_reservation');return{utf8,bytes:total,sha256:body.wireSha256,release:()=>lease.release()};
   }catch(error){lease?.release();throw error;}
  }
- async function asset(ref,schemaHash,schemaHandle=null){
+ async function asset(ref,schemaHash,schemaHandle=null,capacityProfile=LEGACY_FEATURE_CAPACITY_PROFILE.id){
   // A cache hit still verifies the current committed immutable bytes through
   // the writer; disk tampering cannot hide behind a parsed-handle cache.
-  const wire=await readAssetWire(ref);try{const held=cached(ref,schemaHash);if(held)return held;
+  const wire=await readAssetWire(ref,capacityProfile);try{const held=cached(ref,schemaHash);if(held){if((describeCompactFeatureAsset(held).capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id)!==capacityProfile){releaseCompactFeatureAsset(held);fail('schema_route_binding');}return held;}
    // The decoder independently checks its exact structural working requirement
    // before expansion. Reserve a measured-wire candidate budget under the same
    // existing ceiling, instead of charging the maximum512MiB for every asset.
    const decodeWorking=Math.min(assetWorkingBytes,Math.max(64*1024*1024,wire.bytes*8+8*1024*1024));
-   const handle=loadCompactFeatureAsset({utf8:wire.utf8,bytes:wire.bytes,sha256:wire.sha256},{arena,expectedSchemaHash:schemaHash,expectedArtifactSha256:wire.sha256,schemaHandle,workingBytes:decodeWorking,maxWireBytes});if(!handle)fail('asset_memory_reservation');
+   const profileOptions=capacityProfile===LEGACY_FEATURE_CAPACITY_PROFILE.id?{}:{capacityProfile};
+   const handle=loadCompactFeatureAsset({utf8:wire.utf8,bytes:wire.bytes,sha256:wire.sha256},{arena,expectedSchemaHash:schemaHash,expectedArtifactSha256:wire.sha256,schemaHandle,workingBytes:decodeWorking,maxWireBytes:wireLimit(capacityProfile),...profileOptions});if(!handle)fail('asset_memory_reservation');
    counters.assetLoads++;try{remember(ref,handle);return handle;}catch(error){releaseCompactFeatureAsset(handle);throw error;}
   }finally{wire.release();}
  }
@@ -156,7 +201,7 @@ export function createCompactFeatureJournal({writer,resourceArena,historicalInpu
   const header=metadata(bundle);headerTimes(header);measureBoundedJsonBytes(header,{maxBytes:maxMetadataBytes,maxNodes:65536});const body=structuredClone(header),prepared=[],seen=new Set();
   try{for(let i=0;i<bundle.routes.length;i++){
    const slot=Object.getOwnPropertyDescriptor(bundle.routes,String(i));if(!slot||!('value'in slot))fail('route_data_property');const r=record(slot.value,24);if(!TARGETS.has(r.targetId)||seen.has(r.targetId)||typeof r.stateMode!=='string'||r.eligibleForTraining!==false||r.eligibleForServing!==false)fail('route_target_or_flags');modeBinding(bundle.mode,r);seen.add(r.targetId);
-   const schemaRef=projectedReference(r.schemaRef);
+   const schemaRef=projectedReference(r.schemaRef),maximumWire=wireLimit(schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id);if(featureCapacityProfileForSchema(r.diagnosticSchema).id!==(schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id))fail('schema_route_binding');
    // Retain actual compiler-owned schemas AND rows before the first await. This
    // permits one-at-a-time compact factoring without trusting mutable caller
    // arrays or losing arena ownership when the caller releases its bundle.
@@ -165,45 +210,50 @@ export function createCompactFeatureJournal({writer,resourceArena,historicalInpu
    schemaOwner?.release();vectorOwner?.release();let schema=null,reusedSchemaArtifact=null;
    const authority=retainVerifiedProjectionSchema(r.diagnosticSchema,{expectedSchemaHash:schemaRef.sha256});
    try{const ref=authority?ownedSchemaArtifacts.get(r.diagnosticSchema):null;if(ref){schema=cached(ref,schemaRef.sha256);if(schema){reusedSchemaArtifact=ref;counters.verifiedSchemaReuses++;}}}finally{authority?.release();}
-   schema??=createCompactFeatureSchema(r.diagnosticSchema,{arena,expectedSchemaHash:schemaRef.sha256,workingBytes:assetWorkingBytes,maxWireBytes});if(!schema)fail('schema_memory_reservation');
+   schema??=createCompactFeatureSchema(r.diagnosticSchema,{arena,expectedSchemaHash:schemaRef.sha256,workingBytes:assetWorkingBytes,maxWireBytes:maximumWire});if(!schema)fail('schema_memory_reservation');
    const route={targetId:r.targetId,stateMode:r.stateMode,schemaRef,featureCount:schemaRef.featureCount,schema,vector:null,reusedSchemaArtifact,originalSchema:r.diagnosticSchema};prepared.push(route);checkSchema(schema,route);
-   const vector=record(r.diagnosticVector,3);route.vector=createCompactFeatureVector({schemaHandle:schema,names:vector.names,values:vector.values,missing:vector.missing},{arena,workingBytes:assetWorkingBytes,maxWireBytes});if(!route.vector)fail('vector_memory_reservation');route.expandedVectorHash=expandedVectorHash(route.vector);
+   const vector=record(r.diagnosticVector,3);route.vector=createCompactFeatureVector({schemaHandle:schema,names:vector.names,values:vector.values,missing:vector.missing},{arena,workingBytes:assetWorkingBytes,maxWireBytes:maximumWire});if(!route.vector)fail('vector_memory_reservation');route.expandedVectorHash=expandedVectorHash(route.vector);
   }return{body,prepared};}catch(error){for(const r of prepared){if(r.vector)releaseCompactFeatureAsset(r.vector);if(r.schema)releaseCompactFeatureAsset(r.schema);r.schemaOwner?.release();r.vectorOwner?.release();}throw error;}
  }
  function materializeRoute(r){
   if(!r.deferred)return;
+  const maximumWire=wireLimit(r.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id);
   const ref=ownedSchemaArtifacts.get(r.originalSchema);if(ref){r.schema=cached(ref,r.schemaRef.sha256);if(r.schema){r.reusedSchemaArtifact=ref;counters.verifiedSchemaReuses++;}}
-  r.schema??=createCompactFeatureSchema(r.originalSchema,{arena,expectedSchemaHash:r.schemaRef.sha256,workingBytes:assetWorkingBytes,maxWireBytes});if(!r.schema)fail('schema_memory_reservation');checkSchema(r.schema,r);
-  r.vector=createCompactFeatureVector({schemaHandle:r.schema,names:r.originalVector.names,values:r.originalVector.values,missing:r.originalVector.missing},{arena,workingBytes:assetWorkingBytes,maxWireBytes});if(!r.vector)fail('vector_memory_reservation');r.expandedVectorHash=expandedVectorHash(r.vector);
+  r.schema??=createCompactFeatureSchema(r.originalSchema,{arena,expectedSchemaHash:r.schemaRef.sha256,workingBytes:assetWorkingBytes,maxWireBytes:maximumWire});if(!r.schema)fail('schema_memory_reservation');checkSchema(r.schema,r);
+  r.vector=createCompactFeatureVector({schemaHandle:r.schema,names:r.originalVector.names,values:r.originalVector.values,missing:r.originalVector.missing},{arena,workingBytes:assetWorkingBytes,maxWireBytes:maximumWire});if(!r.vector)fail('vector_memory_reservation');r.expandedVectorHash=expandedVectorHash(r.vector);
  }
  function parsedTrace(body){
   if(body.contract!==TRACE||body.producerContract!==PRODUCER||!['PRE','POST','LIVE','BETWEEN','SERIES_PRE'].includes(body.mode)||!Array.isArray(body.routes)||body.routes.length>12)fail('trace_contract');flags(body);headerTimes(body);const seen=new Set();
   for(let i=0;i<body.routes.length;i++){const r=body.routes[i];if(!TARGETS.has(r.targetId)||seen.has(r.targetId)||typeof r.stateMode!=='string'||!SHA.test(r.expandedVectorHash??''))fail('trace_route');modeBinding(body.mode,r);seen.add(r.targetId);r.schemaRef=projectedReference(r.schemaRef);if(r.featureCount!==r.schemaRef.featureCount)fail('trace_feature_count');r.schemaArtifact=reference(r.schemaArtifact,SCHEMA,maxMetadataBytes);r.vectorArtifact=reference(r.vectorArtifact,VECTOR,maxMetadataBytes);}return body;
  }
  return Object.freeze({contract:COMPACT_FEATURE_JOURNAL_CONTRACT,
-  appendBundle(bundle){return operation(async()=>{
-   const {body,prepared}=prepare(bundle);let historical=null;try{historical=await verifyHistorical(body);const routes=[];for(const r of prepared){materializeRoute(r);checkHistoricalSupport(r.schema,historical);let schemaArtifact=r.reusedSchemaArtifact;
-    if(schemaArtifact){const wire=await readAssetWire(schemaArtifact);wire.release();}else schemaArtifact=await persistAsset(r.schema,SCHEMA);
+  appendBundle(bundle){
+   if(closed||closing||pending!==0)return Promise.reject(Error('compact_feature_journal:'+ (closed||closing?'closed':'pending_limit')));
+   let body,prepared;try{({body,prepared}=prepare(bundle));}catch(error){return Promise.reject(error);}
+   return operation(async()=>{
+   let historical=null;try{historical=await verifyHistorical(body);const routes=[];for(const r of prepared){materializeRoute(r);checkHistoricalSupport(r.schema,historical);let schemaArtifact=r.reusedSchemaArtifact;
+    if(schemaArtifact){const wire=await readAssetWire(schemaArtifact,r.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id);wire.release();}else schemaArtifact=await persistAsset(r.schema,SCHEMA);
     remember(schemaArtifact,r.schema);const authority=retainVerifiedProjectionSchema(r.originalSchema,{expectedSchemaHash:r.schemaRef.sha256});try{if(authority)ownedSchemaArtifacts.set(r.originalSchema,schemaArtifact);}finally{authority?.release();}
     const vectorArtifact=await persistAsset(r.vector,VECTOR);remember(vectorArtifact,r.vector);routes.push({targetId:r.targetId,stateMode:r.stateMode,schemaRef:r.schemaRef,featureCount:r.featureCount,expandedVectorHash:r.expandedVectorHash,schemaArtifact,vectorArtifact});
     if(r.deferred){releaseCompactFeatureAsset(r.vector);releaseCompactFeatureAsset(r.schema);r.vector=null;r.schema=null;}}
     body.routes=routes;measureBoundedJsonBytes(body,{maxBytes:maxMetadataBytes,maxNodes:65536});const utf8=JSON.stringify(body),ref=await commitExact(TRACE_KIND,utf8,maxMetadataBytes);counters.appendedTraces++;return freeze({contract:COMPACT_FEATURE_JOURNAL_CONTRACT,reference:ref,routes:structuredClone(routes),...FLAGS});
-   }finally{historical?.release();for(const r of prepared){if(r.vector)releaseCompactFeatureAsset(r.vector);if(r.schema)releaseCompactFeatureAsset(r.schema);r.schemaOwner?.release();r.vectorOwner?.release();}}
-  });},
-  loadTrace(input){return operation(async()=>{
-   const ref=reference(input,TRACE_KIND,maxMetadataBytes),utf8=await writer.read(ref);if(Buffer.byteLength(utf8)!==ref.bytes||sha(utf8)!==ref.sha256)fail('trace_integrity');const body=parsedTrace(JSON.parse(utf8));measureBoundedJsonBytes(body,{maxBytes:maxMetadataBytes,maxNodes:65536});
+   }finally{historical?.release();}
+  }).finally(()=>{for(const r of prepared){if(r.vector)releaseCompactFeatureAsset(r.vector);if(r.schema)releaseCompactFeatureAsset(r.schema);r.schemaOwner?.release();r.vectorOwner?.release();}});},
+  loadTrace(input,selection={},controls={}){let ref,selected,lookupHash=null;try{if(typeof input==='string'){if(!SHA.test(input)||resolveTraceReference===null)fail('trace_hash_or_reference_port');lookupHash=input;}else ref=reference(input,TRACE_KIND,maxMetadataBytes);selected=record(selection,2);if(Object.keys(selected).some(k=>!['targetId','metadataOnly'].includes(k))||selected.targetId!==undefined&&!TARGETS.has(selected.targetId)||selected.metadataOnly!==undefined&&typeof selected.metadataOnly!=='boolean'||selected.metadataOnly===true&&selected.targetId!==undefined)fail('trace_selection');}catch(error){return Promise.reject(error);}return operation(async()=>{
+   if(lookupHash!==null){ref=reference(await resolveTraceReference(lookupHash),TRACE_KIND,maxMetadataBytes);if(ref.sha256!==lookupHash)fail('trace_discovery_hash_binding');}
+   const utf8=await writer.read(ref);if(Buffer.byteLength(utf8)!==ref.bytes||sha(utf8)!==ref.sha256)fail('trace_integrity');const body=parsedTrace(JSON.parse(utf8));measureBoundedJsonBytes(body,{maxBytes:maxMetadataBytes,maxNodes:65536});
    const ownership=arena.reserve(ref.bytes*8+65536);if(!ownership)fail('trace_memory_reservation');const held=[],byTarget=new Map();let transferred=false,historical=null;
-   try{historical=await verifyHistorical(body);for(const route of body.routes){const schema=await asset(route.schemaArtifact,route.schemaRef.sha256);held.push(schema);checkSchema(schema,route);checkHistoricalSupport(schema,historical);const vector=await asset(route.vectorArtifact,route.schemaRef.sha256,schema);held.push(vector);const d=describeCompactFeatureAsset(vector);if(d.featureCount!==route.featureCount||d.namesHash!==route.schemaRef.namesSha256||expandedVectorHash(vector)!==route.expandedVectorHash)fail('vector_route_binding');byTarget.set(route.targetId,{schema,vector});}
-    let released=false;freeze(body);const selected=options=>{if(released)fail('released_trace');const q=record(options??{},3),target=byTarget.get(q.targetId);if(!target)fail('trace_target');return{target,offset:q.offset??0,limit:q.limit??200};};
-    const result=Object.freeze({contract:COMPACT_FEATURE_JOURNAL_CONTRACT,reference:ref,body,routes:body.routes,
-     readSchemaPage(options){const q=selected(options);return readCompactSchemaPage(q.target.schema,{offset:q.offset,limit:q.limit});},
-     readVectorPage(options){const q=selected(options);return readCompactVectorPage(q.target.vector,{offset:q.offset,limit:q.limit});},
+   try{historical=await verifyHistorical(body);if(selected.targetId!==undefined&&!body.routes.some(r=>r.targetId===selected.targetId))fail('trace_target');for(const route of body.routes){if(selected.metadataOnly===true||selected.targetId!==undefined&&route.targetId!==selected.targetId)continue;const schema=await asset(route.schemaArtifact,route.schemaRef.sha256,null,route.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id);held.push(schema);checkSchema(schema,route);checkHistoricalSupport(schema,historical);const vector=await asset(route.vectorArtifact,route.schemaRef.sha256,schema,route.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id);held.push(vector);const d=describeCompactFeatureAsset(vector);if(d.featureCount!==route.featureCount||d.namesHash!==route.schemaRef.namesSha256||expandedVectorHash(vector)!==route.expandedVectorHash)fail('vector_route_binding');byTarget.set(route.targetId,{schema,vector});}
+    let released=false;freeze(body);const pageSelection=options=>{if(released)fail('released_trace');const q=record(options??{},3),target=byTarget.get(q.targetId);if(!target)fail('trace_target');return{target,offset:q.offset??0,limit:q.limit??200};};
+    const result=Object.freeze({contract:COMPACT_FEATURE_JOURNAL_CONTRACT,reference:ref,body,routes:body.routes,assetVerification:selected.metadataOnly===true?'metadata_only':selected.targetId?'selected_target':'all_targets',
+     readSchemaPage(options){const q=pageSelection(options);return readCompactSchemaPage(q.target.schema,{offset:q.offset,limit:q.limit});},
+     readVectorPage(options){const q=pageSelection(options);return readCompactVectorPage(q.target.vector,{offset:q.offset,limit:q.limit});},
      release(){if(released)return false;released=true;for(const h of held)releaseCompactFeatureAsset(h);held.length=0;byTarget.clear();ownership.release();return true;}});
     transferred=true;counters.loadedTraces++;return result;
    }finally{historical?.release();if(!transferred){for(const h of held)releaseCompactFeatureAsset(h);ownership.release();}}
-  });},
+  },true,controls);},
   clearCache,
-  cacheStats(){return{...counters,cachedAssets:cache.size,cachedAssetBytes:cacheBytes,maxCachedAssets,maxCachedAssetBytes,pendingOperations:pending,maxPendingOperations:1,closed,resourceArena:arena.status(),accounting:'conservative_explicit_estimates_not_measured_heap'};},
-  async close(){if(closed)return;closing=true;await active;clearCache();closed=true;}
+  cacheStats(){return{...counters,cachedAssets:cache.size,cachedAssetBytes:cacheBytes,maxCachedAssets,maxCachedAssetBytes,pendingOperations:pending,maxPendingOperations:maxPendingReads,maxQueueWaitMs,closed,resourceArena:arena.status(),accounting:'conservative_explicit_estimates_not_measured_heap'};},
+  async close(){if(closed)return;closing=true;for(const entry of waiting.splice(0))entry.settle(Error('compact_feature_journal:closed'));await active;clearCache();closed=true;}
  });
 }

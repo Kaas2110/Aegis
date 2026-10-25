@@ -11,6 +11,7 @@ import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {createDiagnosticResourceArena,measureBoundedJsonBytes,snapshotPlainRecord} from './diagnosticResourceArena.mjs';
 import {readVerifiedHistorySourceHandle} from './historySourceVerifier.mjs';
 import {VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT,readVerifiedRetainedReferenceSourceHandle} from './retainedReferenceCorpus.mjs';
+import {VERIFIED_RETAINED_NATIVE_SOURCE_HANDLE_CONTRACT,readVerifiedRetainedNativeSourceHandle} from './retainedNativeHistoryView.mjs';
 import {compactTraceMatchesBundle} from './compactDiagnosticRestore.mjs';
 export const CONSUMER_CONTRACT='aegis.background-diagnostic-feature-consumer.v2';
 const SHA=/^[a-f0-9]{64}$/,ID=/^[1-9]\d{0,19}$/;
@@ -106,7 +107,7 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   const mode=input.mode??'AUTO';if(!['AUTO','POST','LIVE'].includes(mode))throw Error('host_map_phase_only');
   const h=readDynamicHistoryProof(input.historyProof,{matchId:input.matchId,decisionAt:input.decisionAt});if(!h.accepted)throw Error(h.reason);
   let sourceDescriptor=null;
-  if(input.sourceExportHandle!=null){const handleContract=snapshotPlainRecord(input.sourceExportHandle,{maxKeys:8}).contract,options={expectedSourceSnapshotHash:input.expectedSourceSnapshotHash,matchId:input.matchId,decisionAt:input.decisionAt};sourceDescriptor=handleContract===VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT?readVerifiedRetainedReferenceSourceHandle(input.sourceExportHandle,options):readVerifiedHistorySourceHandle(input.sourceExportHandle,options);}
+  if(input.sourceExportHandle!=null){const handleContract=snapshotPlainRecord(input.sourceExportHandle,{maxKeys:8}).contract,options={expectedSourceSnapshotHash:input.expectedSourceSnapshotHash,matchId:input.matchId,decisionAt:input.decisionAt};sourceDescriptor=handleContract===VERIFIED_RETAINED_NATIVE_SOURCE_HANDLE_CONTRACT?readVerifiedRetainedNativeSourceHandle(input.sourceExportHandle,options):handleContract===VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT?readVerifiedRetainedReferenceSourceHandle(input.sourceExportHandle,options):readVerifiedHistorySourceHandle(input.sourceExportHandle,options);}
   preparation.ownedCopies++;
   const {historyProof,sourceExportHandle=null,progressionProof=null,retainedReplayProof=null,...data}=input,copy=structuredClone(data);copy.mode=mode;
   let progressionBindingHash=null;

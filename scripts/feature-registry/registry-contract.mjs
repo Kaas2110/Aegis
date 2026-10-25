@@ -118,11 +118,38 @@ export function validateProjection({targetId,stateMode,definitions}, registry) {
   return {contract:'aegis.feature-projection-validation.v1',targetId,stateMode,featureCount:definitions.length,definitionHash:digest(definitions),trainingAdmitted:false,servingAdmitted:false};
 }
 
-const semanticKeys=['version','formula','formulaVersion','units','dtype','missingPolicy','timePolicy','sourceProfile','inputScopes','learnedStatePolicy','learnedStateBinding','coordinate'];
+// Projection validation preserves the historical definition contract. Aliasing
+// has a stronger gate: omitted policies cannot silently mean not applicable.
+export const SEMANTIC_IDENTITY_FIELDS=Object.freeze(['version','familyId','formula','formulaVersion','units','dtype','missingPolicy','timePolicy','sourceProfile','inputScopes','allowedTargets','learnedStatePolicy','learnedStateBinding','coordinate','orientation','inputFields','inputBindings','historyDefinitions','supportUnit','minimumSupport','historyWindowDays','supportPolicy','populationPolicy','eventTimePolicy','availabilityTimePolicy','gameClockPolicy','rolePolicy','patchPolicy','phasePolicy','missingReasonPolicy','windowPolicy','weightPolicy','tiePolicy','variancePolicy','quantilePolicy','formulaParameters']);
+const identityOnly=new Set(['contract','id','name','producer','semanticStatus','knownAt']);
+const setFields=new Set(['inputScopes','allowedTargets']);
+const semanticTextFields=new Set(['version','familyId','formula','formulaVersion','units','dtype','missingPolicy','timePolicy','sourceProfile','learnedStatePolicy','coordinate','orientation','supportUnit','supportPolicy','populationPolicy','eventTimePolicy','availabilityTimePolicy','gameClockPolicy','rolePolicy','patchPolicy','phasePolicy','missingReasonPolicy','windowPolicy','weightPolicy','tiePolicy','variancePolicy','quantilePolicy']);
+/** Canonical ALL-field descriptor. Unknown additive metadata is compared too;
+ * only occurrence/source-code identity and observation-specific knownAt are
+ * excluded. A parity proof remains separately bound to both full definitions. */
+export function canonicalSemanticDescriptor(d){
+ const missingFields=[];
+ if(!d||d.semanticStatus!=='specified'||!SHA.test(d.producer?.sourceSha256??''))return{complete:false,missingFields:['semanticStatus_or_producer'],descriptor:null};
+ if(d.semanticVerification!==undefined&&d.semanticVerification!=='authoritative_template')return{complete:false,missingFields:['semanticVerification:'+d.semanticVerification],descriptor:null};
+ for(const key of SEMANTIC_IDENTITY_FIELDS){
+  if(!Object.hasOwn(d,key)){missingFields.push(key);continue;}
+  const v=d[key];
+  if(semanticTextFields.has(key)&&(typeof v!=='string'||!v.trim()))missingFields.push(key);
+  else if(['inputScopes','allowedTargets','inputFields','historyDefinitions'].includes(key)&&(!Array.isArray(v)||v.some(x=>typeof x!=='string'||!x.trim())||new Set(v).size!==v.length||(['inputScopes','allowedTargets','inputFields'].includes(key)&&!v.length)))missingFields.push(key);
+  else if(key==='inputBindings'&&(!Array.isArray(v)||!v.length||v.some(x=>!x||Object.getPrototypeOf(x)!==Object.prototype||['normalizedField','rawField','sourceProfile','sourceKind','units','availabilityPolicy'].some(k=>typeof x[k]!=='string'||!x[k].trim()))))missingFields.push(key);
+  else if(['minimumSupport','historyWindowDays'].includes(key)&&v!==null&&!(typeof v==='number'&&Number.isFinite(v)&&v>=0))missingFields.push(key);
+  else if(['formulaParameters','learnedStateBinding'].includes(key)&&v!==null&&(!v||Object.getPrototypeOf(v)!==Object.prototype))missingFields.push(key);
+ }
+ if(missingFields.length)return{complete:false,missingFields,descriptor:null};
+ const descriptor={};
+ try{for(const key of Object.keys(d).sort()){if(identityOnly.has(key))continue;const v=setFields.has(key)?[...d[key]].sort():d[key];canonical(v);descriptor[key]=structuredClone(v);}}catch{return{complete:false,missingFields:['non_json_semantic_metadata'],descriptor:null};}
+ return{complete:true,missingFields:[],descriptor};
+}
 export function compareSemantics(a,b) {
-  if([a,b].some(d=>d?.semanticStatus!=='specified'||[...semanticKeys.slice(0,8),'learnedStatePolicy'].some(k=>typeof d[k]!=='string'||!d[k])||!Array.isArray(d.inputScopes)||!d.inputScopes.length||!SHA.test(d.producer?.sourceSha256??''))) return {classification:'unresolved',reason:'semantics_not_specified',aliasAllowed:false};
-  const semanticValue=(d,k)=>k==='inputScopes'?[...d.inputScopes].sort():d[k]??null;
-  const differences=semanticKeys.filter(k=>canonical(semanticValue(a,k))!==canonical(semanticValue(b,k)));
+  const left=canonicalSemanticDescriptor(a),right=canonicalSemanticDescriptor(b);
+  if(!left.complete||!right.complete)return{classification:'unresolved',reason:'complete_semantic_descriptor_required',missingFields:{left:left.missingFields,right:right.missingFields},aliasAllowed:false};
+  const keys=[...new Set([...Object.keys(left.descriptor),...Object.keys(right.descriptor)])].sort();
+  const differences=keys.filter(k=>Object.hasOwn(left.descriptor,k)!==Object.hasOwn(right.descriptor,k)||canonical(left.descriptor[k])!==canonical(right.descriptor[k]));
   if(differences.length) return {classification:'confirmed_contract_conflict',differences,aliasAllowed:false};
   return {classification:'matching_semantic_declarations',differences:[],aliasAllowed:false,reason:'requires_pinned_parity_proof_and_explicit_resolution'};
 }

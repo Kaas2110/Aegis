@@ -1,6 +1,7 @@
 /** Owned read-only admin handler. Disabled by default; does not listen, fetch,
  * migrate, fit or invoke a consumer. The host separately owns access control. */
 import {readCurrentLiveEligibilitySnapshot} from './currentLiveEligibilitySnapshot.mjs';
+import {LEGACY_FEATURE_CAPACITY_PROFILE,FULL_FEATURE_CAPACITY_PROFILE,resolveFeatureCapacityProfile} from './featureCapacityProfiles.mjs';
 const SHA=/^[a-f0-9]{64}$/,TARGET=/^[A-Z_]{3,40}$/;
 const flags={diagnosticOnly:true,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
 const answer=(status,body)=>({status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'},body});
@@ -22,8 +23,10 @@ export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='
   const eligible=state?.eligibleForRetainingForecast===true&&state.lastTraceSha256===hash&&state.stateView?.observationId===trace.nativeObservationId;
    return{applicable:true,eligibleForRetainingForecast:eligible,reason:eligible?'qualified_current_source_state':state?.lastTraceSha256&&state.lastTraceSha256!==hash?'trace_is_not_latest_qualified_state':state?.reason??'qualified_live_state_port_unavailable',evaluatedAt:snapshot.evaluatedAt,lastConfirmedAt:state?.stateView?.lastConfirmedAt??null,expiresAt:state?.stateView?.expiresAt??null,continuityGeneration:state?.stateView?.continuityGeneration??null,classification:state?.stateView?.classification??'unknown',ageSeconds:state?.ageSeconds??null,userMessage:eligible?null:'Прогноз недоступен',recordedPrediction:false};
  }
- async function handle({method='GET',url}={}){
+ async function handle({method='GET',url,signal=null}={}){
   if(!enabled)return error(404,'diagnostic_admin_disabled');
+  if(signal!==null&&!(signal instanceof AbortSignal))return error(400,'request_contract');
+  if(signal?.aborted)return error(499,'diagnostic_request_cancelled');
   if(method!=='GET')return error(405,'read_only');
   if(typeof url!=='string'||url.length>2048||!url.startsWith('/')||url.startsWith('//'))return error(400,'request_contract');
   let parsed;try{parsed=new URL(url,'http://127.0.0.1');}catch{return error(400,'request_contract');}
@@ -55,13 +58,15 @@ export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='
   const page=rest.length===3&&rest[1]==='features'&&TARGET.test(rest[2]);if(rest.length!==1&&!page)return error(404,'not_found');
   const allowed=page?['offset','limit']:[];if([...parsed.searchParams.keys()].some(k=>!allowed.includes(k)||parsed.searchParams.getAll(k).length!==1))return error(400,'query_contract');
   const integer=(key,fallback)=>{const raw=parsed.searchParams.get(key);return raw===null?fallback:/^(0|[1-9]\d{0,6})$/.test(raw)?Number(raw):null;};
-  const offset=integer('offset',0),limit=integer('limit',maxFeaturePage);if(page&&(offset===null||limit===null||limit<1||limit>maxFeaturePage||offset>150000))return error(400,'page_bound');
+  const offset=integer('offset',0),limit=integer('limit',maxFeaturePage);if(page&&(offset===null||limit===null||limit<1||limit>maxFeaturePage||offset>(compact?FULL_FEATURE_CAPACITY_PROFILE:LEGACY_FEATURE_CAPACITY_PROFILE).maxFeatures))return error(400,'page_bound');
   if(activeReads>=maxConcurrentReads)return error(429,'diagnostic_reader_busy');activeReads++;
   let held=null;
   try{
-   const loaded=await journal.loadTrace(hash);held=compact&&loaded?.contract==='aegis.compact-diagnostic-feature-journal.v2'&&loaded.body?loaded:null;const trace=held?held.body:loaded;
+   const loaded=await journal.loadTrace(hash,compact?(page?{targetId:rest[2]}:{metadataOnly:true}):{},compact?{signal}:{});held=compact&&loaded?.contract==='aegis.compact-diagnostic-feature-journal.v2'&&loaded.body?loaded:null;const trace=held?held.body:loaded;
+   if(signal?.aborted)return error(499,'diagnostic_request_cancelled');
    if(page){
     const route=trace.routes.find(r=>r.targetId===rest[2]);if(!route)return error(404,'target_not_found');
+    const capacity=resolveFeatureCapacityProfile(held?(route.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id):LEGACY_FEATURE_CAPACITY_PROFILE.id);if(offset>capacity.maxFeatures)return error(400,'page_bound');
     if(held){let schemaPage=null,vectorPage=null;try{
      schemaPage=held.readSchemaPage({targetId:route.targetId,offset,limit});vectorPage=held.readVectorPage({targetId:route.targetId,offset,limit});
      if(!schemaPage||!vectorPage||schemaPage.header.targetId!==route.targetId||schemaPage.header.stateMode!==route.stateMode||schemaPage.expandedSchemaHash!==route.schemaRef.sha256||vectorPage.expandedSchemaHash!==route.schemaRef.sha256||schemaPage.total!==route.featureCount||vectorPage.total!==route.featureCount||schemaPage.definitions.length!==vectorPage.values.length||vectorPage.names.length!==vectorPage.values.length||vectorPage.missing.length!==vectorPage.values.length)return error(503,'diagnostic_evidence_unavailable');
@@ -74,12 +79,12 @@ export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='
      return bounded({contract:'aegis.diagnostic-feature-page.v1',traceSha256:hash,matchId:trace.matchId??null,seriesId:trace.seriesId??null,targetId:route.targetId,stateMode:route.stateMode,schemaRef:route.schemaRef,offset,limit,total,nextOffset:end<total?end:null,features,currentLiveEligibility:currentEligibility(trace,hash),...flags});
    }
    const routes=trace.routes.map(r=>{if(held)return{targetId:r.targetId,stateMode:r.stateMode,schemaRef:r.schemaRef,featureCount:r.featureCount,observedFeatures:null,missingFeatures:null,countsStatus:'not_scanned_use_bounded_feature_pages'};const v=trace.vectors[r.vectorRef];return{targetId:r.targetId,stateMode:r.stateMode,schemaRef:r.schemaRef,featureCount:r.featureCount,observedFeatures:v.missing.reduce((n,m)=>n+Number(!m),0),missingFeatures:v.missing.reduce((n,m)=>n+Number(m),0)};});
-    const body={contract:'aegis.diagnostic-feature-summary.v1',...(held?{traceFormat:'compact_v2'}:{}),traceSha256:hash,routes,currentLiveEligibility:currentEligibility(trace,hash),...flags};
+    const body={contract:'aegis.diagnostic-feature-summary.v1',...(held?{traceFormat:'compact_v2',assetVerification:held.assetVerification??'all_targets'}:{}),traceSha256:hash,routes,currentLiveEligibility:currentEligibility(trace,hash),...flags};
    // Explicit safe scalar provenance only; do not expose raw captures, private
    // filesystem references, full schemas or vectors through the summary route.
    for(const key of ['producerContract','matchId','seriesId','decisionAt','availableAt','mode','historyCutoffAt','historyContextHash','sourceSnapshotHash','nativeObservationId','nativeRawSha256','nativeKnownAt','nativeGameClock'])if(trace[key]!==undefined)body[key]=trace[key];
    return bounded(body);
-  }catch{return error(503,'diagnostic_evidence_unavailable');}finally{held?.release();activeReads--;}
+  }catch(cause){return /compact_feature_journal:request_cancelled/.test(cause?.message??'')?error(499,'diagnostic_request_cancelled'):/compact_feature_journal:(pending_limit|queue_expired|queue_memory_reservation)/.test(cause?.message??'')?{...error(429,'diagnostic_reader_busy'),headers:{...answer(429,{}).headers,'retry-after':'1'}}:error(503,'diagnostic_evidence_unavailable');}finally{held?.release();activeReads--;}
  }
  return Object.freeze({handle,enabled,basePath,readOnly:true});
 }

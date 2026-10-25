@@ -1,0 +1,66 @@
+/** Small actual helper+compiler declaration tests. Primary statistics are explicit
+ * fixture columns; this tests dependency resolution,not archive/source coverage. */
+import test from 'node:test';import assert from 'node:assert/strict';
+import {canonicalSemanticDescriptor,digest,validateRegistry} from '../../feature-registry/registry-contract.mjs';
+import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
+import {createFeatureProjectionCompiler} from './featureProjectionCompiler.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
+import {produceReviewedHistoricalSummaries,collectReviewedDurationTails} from './reviewedHistoricalSummaries.mjs';
+import {produceChronologicalResultRatings} from './chronologicalResultRatings.mjs';
+import {instantNs} from './causalTime.mjs';
+const AT='2026-10-25T10:00:00Z',KNOWN='2026-10-24T10:00:00Z',KEY='formWinFraction7d',OPS=['rawWinFraction','smoothedWinFraction','decayedWinFraction','smoothedDecayedWinFraction'];
+const stat=(value,w)=>({value,units:'fraction',windowDays:w,definition:'fixture.actual-statistic-formula/'+w+'d',supportRef:'fixture.cohort',cohortQualified:true,latestHistoryAvailabilityAt:KNOWN});
+function fixture(){
+ const primary=[],primaryValues=[],statistics={},players=['radiant','dire'].flatMap(side=>Array.from({length:5},(_,i)=>({side,statistics:{[KEY]:stat((i+1)/10,7)}})));
+ for(const side of ['radiant','dire']){for(let i=0;i<5;i++){primary.push(`histrel.${side}.slot_${i}.profile.${KEY}`);primaryValues.push((i+1)/10);}for(const w of [7,30,90]){statistics[side+'.team.'+w+'d']=Object.fromEntries(OPS.map((op,i)=>[op,{...stat(.6+i/100,w),definition:'fixture.actual-'+op+'-formula/'+w+'d'}]));for(const [i,op]of OPS.entries()){primary.push(`histrel.${side}.team.${w}d.${op}`);primaryValues.push(.6+i/100);}}}
+ const selector={key:'radiant.team',kind:'team',selector:{teamId:'100'},qualified:true},rows=[25,40,80].map((m,i)=>({map:{matchId:String(i+1),ended:instantNs(KNOWN),durationSeconds:m*60},availableAt:KNOWN}));
+ return {phase:'POST_OR_LIVE',profiles:{players},statistics,tailCohorts:[collectReviewedDurationTails(rows,{selector,windowDays:7,cutoff:instantNs(AT),minimumSupport:3,supportRef:'radiant.team.7d'})],profileKeys:[KEY],minimumSupport:3,formulaVersion:'test.actual-helper.v1',historyDefinitionNamespace:primary,primaryValues};
+}
+function compiled(result,primaryNames,check,primaryValues=[]){
+ const arena=createDiagnosticResourceArena(),[index,families,targets]=syntheticRegistry(),compiler=createFeatureProjectionCompiler({registry:validateRegistry(index,families,targets),registryHash:digest(index),sourceInventory:{history:{primarySha256:'a'.repeat(64),files:[{path:'synthetic-dependency-fixture-only',sha256:'a'.repeat(64)}]}},sourceProfiles:{history:'synthetic.explicit-prior-statistics'},resourceArena:arena});let block;
+ try{const primary=primaryNames.map(name=>({name,familyId:'H02',formula:'explicit fixture prior-statistic operand',formulaVersion:'fixture.v1',units:'fraction',inputScopes:['prior_completed_maps']}));
+  block=compiler.normalize({names:[...primaryNames,...result.names],values:[...primaryValues,...result.values],masks:[...primary.map(()=>0),...result.masks],definitions:[...primary,...result.definitions]},'history');check(block.definitions.slice(primary.length),new Set(block.names));
+ }finally{block?.release();compiler.close();assert.equal(arena.status().chargedBytes,0);}
+}
+test('derived summary dependencies resolve actual fixture/compiler columns; raw tails have explicit empty dependency list',()=>{
+ const a=fixture(),r=produceReviewedHistoricalSummaries(a);compiled(r,a.historyDefinitionNamespace,(defs,names)=>{
+  for(const d of defs){assert.equal(canonicalSemanticDescriptor(d).complete,true,d.name);for(const ref of d.historyDefinitions){assert.ok(names.has(ref),ref);assert.ok(!ref.startsWith('same_component.'));assert.ok(!ref.startsWith('fixture.actual-'));}}
+  const tail=defs.find(d=>d.name.includes('.tail.')),difference=defs.find(d=>d.name.endsWith('.rawWinFraction.diff_7d_minus_30d')),roster=defs.find(d=>d.name.endsWith('.player_profile.'+KEY+'.p50')),pair=defs.find(d=>d.name.endsWith('.radiant_slot_0.minus_dire_slot_1')),summary=defs.find(d=>d.name.endsWith('.player_matchup.'+KEY+'.mean'));
+  assert.deepEqual(tail.historyDefinitions,[]);assert.deepEqual(difference.historyDefinitions,['histrel.radiant.team.7d.rawWinFraction','histrel.radiant.team.30d.rawWinFraction']);assert.equal(roster.historyDefinitions.length,5);assert.equal(pair.historyDefinitions.length,2);assert.equal(summary.historyDefinitions.length,25);assert.ok(summary.historyDefinitions.every(ref=>ref.startsWith('histrel.r7.player_matchup.')));
+  assert.deepEqual(difference.formulaParameters.sourceDefinitions,['fixture.actual-rawWinFraction-formula/7d','fixture.actual-rawWinFraction-formula/30d']);
+  const value=new Map([...a.historyDefinitionNamespace,...r.names].map((name,i)=>[name,[...a.primaryValues,...r.values][i]])),inputs=d=>d.historyDefinitions.map(ref=>value.get(ref)),mean=xs=>xs.reduce((sum,x)=>sum+x,0)/xs.length;
+  assert.equal(value.get(difference.name),inputs(difference)[0]-inputs(difference)[1]);assert.equal(value.get(roster.name),[...inputs(roster)].sort((a,b)=>a-b)[2]);assert.equal(value.get(pair.name),inputs(pair)[0]-inputs(pair)[1]);assert.equal(value.get(summary.name),mean(inputs(summary)));
+  const count=defs.find(d=>d.name.endsWith('.player_matchup.'+KEY+'.availablePairCount'));assert.ok(count);assert.equal(value.get(count.name),inputs(count).filter(x=>typeof x==='number'&&Number.isFinite(x)).length);
+ },a.primaryValues);
+});
+test('absent or incomplete emitted namespace never promotes a derived declaration; metadata binding preserves all numeric positions',()=>{
+ const a=fixture(),bound=produceReviewedHistoricalSummaries(a);
+ for(const namespace of [null,a.historyDefinitionNamespace.filter(n=>n!=='histrel.radiant.slot_0.profile.'+KEY)]){
+  const r=produceReviewedHistoricalSummaries({...a,historyDefinitionNamespace:namespace});assert.deepEqual(r.names,bound.names);assert.deepEqual(r.values,bound.values);assert.deepEqual(r.masks,bound.masks);
+  compiled(r,a.historyDefinitionNamespace,(defs)=>{const d=defs.find(d=>d.name==='histrel.r7.radiant.player_profile.'+KEY+'.p50'),summary=defs.find(d=>d.name.endsWith('.player_matchup.'+KEY+'.mean'));assert.equal(canonicalSemanticDescriptor(d).complete,false);assert.equal(d.semanticVerification,'parameter_binding_required');assert.equal(canonicalSemanticDescriptor(summary).complete,false);assert.deepEqual(defs.find(x=>x.name.includes('.tail.')).historyDefinitions,[]);assert.equal(canonicalSemanticDescriptor(defs.find(x=>x.name.includes('.tail.'))).complete,true);},a.primaryValues);
+ }
+});
+test('C13 raw replay/roster leaves and exact derived rating dependencies have complete compiler identities and resolve internally',()=>{
+ const roster=Array.from({length:10},(_,i)=>({accountId:String(i+1),heroId:null,side:i<5?'radiant':'dire',teamId:i<5?'100':'200'})),events=Array.from({length:5},(_,i)=>({matchId:String(i+1),endedAt:KNOWN,outcomeKnownAt:KNOWN,playersKnownAt:KNOWN,radiantTeamId:'100',direTeamId:'200',radiantWon:i%2===0,players:roster.map(({accountId,side})=>({accountId,side}))})),r=produceChronologicalResultRatings({events,roster,historyCutoffAt:AT,minimumSupport:3,factsPin:{sha256:'a'.repeat(64),bytes:123},populationBasis:'synthetic.provided-only',formulaVersion:'test.actual-helper.v1'});
+ compiled(r,[],(defs,names)=>{for(const d of defs){assert.equal(canonicalSemanticDescriptor(d).complete,true,d.name);for(const ref of d.historyDefinitions)assert.ok(names.has(ref),ref);}
+  for(const d of defs){const current=d.inputBindings.filter(f=>f.sourceKind==='supplied_normalized_current_identity');assert.deepEqual(current.map(f=>f.normalizedField),['roster[].side','roster[].teamId','roster[].accountId']);assert.equal(current[0].units,'normalized_side_tag');assert.ok(current.every(f=>f.rawField==='produceChronologicalResultRatings.'+f.normalizedField&&f.sourceProfile==='chronological_result_ratings.current_roster_argument'));assert.ok(current.every(f=>f.availabilityPolicy.includes('validFrom')&&f.availabilityPolicy.includes('distinct from prior historyCutoffAt')&&f.availabilityPolicy.includes('does not authenticate')&&f.availabilityPolicy.includes('nominal team1/team2 aliases,not observed map sides')));assert.ok(current.every(f=>!f.normalizedField.includes('hero')));assert.match(d.availabilityTimePolicy,/current normalized selector identity/);assert.match(d.availabilityTimePolicy,/nominal team1\/team2 aliases,not observed map sides/);assert.match(d.formulaParameters.currentIdentityTimePolicy,/definition.knownAt describes prior-state dependencies/);assert.ok(d.formulaParameters.currentSelector);}
+  assert.deepEqual(defs.find(d=>d.name==='histrel.r7.radiant.team.result_rating_k32.rating').formulaParameters.currentSelector,{kind:'current_team_id',side:'radiant',teamId:'100',teamIdPolicy:'first supplied roster entry for the side'});
+  assert.deepEqual(defs.find(d=>d.name==='histrel.r7.dire.slot_2.lineup_result_rating_k32.rating').formulaParameters.currentSelector,{kind:'current_account_slot',side:'dire',slot:2,accountId:'8',slotOrderPolicy:'preserve supplied roster order filtered to the side; normalized upstream slots are not inferred roles'});
+  assert.deepEqual(defs.find(d=>d.name==='histrel.r7.radiant.lineup_result_rating_k32.mean').formulaParameters.currentSelector.accountIds,['1','2','3','4','5']);assert.deepEqual(defs.find(d=>d.name.includes('.roster.lastCompleteRosterJaccard')).formulaParameters.currentSelector.lineup.accountIds,['1','2','3','4','5']);
+  const paired=defs.find(d=>d.name==='histrel.r7.team_result_rating_k32.radiant_expectation').formulaParameters.currentSelector;assert.equal(paired.radiant.teamId,'100');assert.equal(paired.dire.teamId,'200');
+  assert.deepEqual(defs.find(d=>d.name==='histrel.r7.radiant.team.result_rating_k32.rating').historyDefinitions,[]);assert.deepEqual(defs.find(d=>d.name.includes('.roster.lastCompleteRosterJaccard')).historyDefinitions,[]);assert.equal(defs.find(d=>d.name==='histrel.r7.radiant.lineup_result_rating_k32.mean').historyDefinitions.length,5);assert.deepEqual(defs.find(d=>d.name==='histrel.r7.team_result_rating_k32.radiant_expectation').historyDefinitions,['histrel.r7.radiant.team.result_rating_k32.rating','histrel.r7.dire.team.result_rating_k32.rating']);
+  const copy={...defs[0]};delete copy.historyDefinitions;assert.equal(canonicalSemanticDescriptor(copy).complete,false);assert.ok(canonicalSemanticDescriptor(copy).missingFields.includes('historyDefinitions'));
+ });
+});
+
+test('current selector metadata preserves unknown IDs and distinguishes supplied slot order from numeric lineup summation',()=>{
+ const roster=Array.from({length:10},(_,i)=>({accountId:String(i+1),side:i<5?'radiant':'dire',teamId:i<5?'100':'200'})),events=Array.from({length:5},(_,i)=>({matchId:String(i+1),endedAt:KNOWN,outcomeKnownAt:KNOWN,playersKnownAt:KNOWN,radiantTeamId:'100',direTeamId:'200',radiantWon:true,players:roster.map(({accountId,side})=>({accountId,side}))})),args={events,roster,historyCutoffAt:AT,minimumSupport:3,factsPin:{sha256:'a'.repeat(64),bytes:123},populationBasis:'synthetic.provided-only',formulaVersion:'test.actual-helper.v1'},base=produceChronologicalResultRatings(args),reordered=produceChronologicalResultRatings({...args,roster:[...roster].reverse()}),get=(r,name)=>r.definitions[r.names.indexOf(name)];
+ assert.deepEqual(reordered.names,base.names);assert.deepEqual(reordered.values,base.values);assert.deepEqual(reordered.masks,base.masks);assert.equal(get(reordered,'histrel.r7.radiant.slot_0.lineup_result_rating_k32.rating').formulaParameters.currentSelector.accountId,'5');assert.deepEqual(get(reordered,'histrel.r7.radiant.lineup_result_rating_k32.mean').formulaParameters.currentSelector.accountIds,['1','2','3','4','5']);
+ const unknown=produceChronologicalResultRatings({...args,roster:roster.map(p=>({...p,teamId:p.side==='radiant'?null:p.teamId,accountId:p.accountId==='1'?null:p.accountId}))});assert.equal(get(unknown,'histrel.r7.radiant.team.result_rating_k32.rating').formulaParameters.currentSelector.teamId,null);assert.equal(get(unknown,'histrel.r7.radiant.slot_0.lineup_result_rating_k32.rating').formulaParameters.currentSelector.accountId,null);assert.equal(get(unknown,'histrel.r7.radiant.lineup_result_rating_k32.mean').formulaParameters.currentSelector.accountIds,null);
+});
+
+test('an emitted name cannot repair a missing source statistic definition',()=>{
+ const a=fixture(),before=produceReviewedHistoricalSummaries(a);delete a.statistics['radiant.team.7d'].rawWinFraction.definition;
+ const after=produceReviewedHistoricalSummaries(a);assert.deepEqual(after.names,before.names);assert.deepEqual(after.values,before.values);assert.deepEqual(after.masks,before.masks);
+ compiled(after,a.historyDefinitionNamespace,(defs,names)=>{const d=defs.find(d=>d.name.endsWith('.rawWinFraction.diff_7d_minus_30d'));assert.ok(d.historyDefinitions.every(ref=>names.has(ref)));assert.equal(d.formulaParameters.sourceDefinitions[0],null);assert.equal(d.semanticVerification,'parameter_binding_required');assert.equal(canonicalSemanticDescriptor(d).complete,false);},a.primaryValues);
+});

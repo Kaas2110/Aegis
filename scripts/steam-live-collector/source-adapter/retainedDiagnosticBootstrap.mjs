@@ -13,8 +13,11 @@ import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
 import {createDiagnosticTargetRouter} from './diagnosticTargetRouting.mjs';
 import {createCompactDiagnosticHostJournal} from './compactDiagnosticHostJournal.mjs';
 import {createRetainedMapHistoryHost} from './retainedMapHistoryHost.mjs';
+import {LEGACY_FEATURE_CAPACITY_PROFILE,FULL_FEATURE_CAPACITY_PROFILE,resolveFeatureCapacityProfile} from './featureCapacityProfiles.mjs';
 export async function createRetainedDiagnosticHostPorts({config,shouldContinue,signal,now,onTraceIntent,seriesRouting=null,compactStorage=null,producerOptions={},boundedHistory=null}){
  if(boundedHistory!==null&&compactStorage===null)throw Error('retained_diagnostic_bootstrap:bounded_history_requires_explicit_compact_storage');
+ const capacity=resolveFeatureCapacityProfile(producerOptions.projectionOptions?.capacityProfile??(compactStorage===null?LEGACY_FEATURE_CAPACITY_PROFILE.id:FULL_FEATURE_CAPACITY_PROFILE.id));
+ if(compactStorage===null&&capacity!==LEGACY_FEATURE_CAPACITY_PROFILE)throw Error('retained_diagnostic_bootstrap:full_capacity_requires_explicit_compact_storage');
  if(seriesRouting!==null&&(typeof seriesRouting.contextStore?.resolve!=='function'||typeof seriesRouting.contextStore?.isCurrentContext!=='function'||!seriesRouting.targetDocument||!seriesRouting.expectedSchemaHashes))throw Error('retained_diagnostic_bootstrap:owned_series_routing_ports');
  const sources=join(config.stateDirectory,'sources'),revisions=join(config.stateDirectory,'revisions');
  await mkdir(sources,{recursive:true});await mkdir(revisions,{recursive:true});
@@ -41,7 +44,7 @@ export async function createRetainedDiagnosticHostPorts({config,shouldContinue,s
   const computedAt=now();
   return createRetainedHistorySourceExport({draftPrefixInputs:options.draftPrefixInputs,matchId:options.matchId,computedAt,exportedAt:now(),versionInputs});
  };
- const producer=createUnifiedFeatureProducer({...producerOptions,resourceArena});
+ const producer=createUnifiedFeatureProducer({...producerOptions,projectionOptions:{...producerOptions.projectionOptions,capacityProfile:capacity.id},resourceArena});
  const boundedHistoryPort=boundedHistory===null?null:createRetainedMapHistoryHost({...boundedHistory,writer:compactStorage.writer,resourceArena,historyProfileSha256:config.historyProfileSha256,materializationGeneration:config.materializationGeneration,shouldContinue,signal,now});
  const isCurrentSeriesInput=seriesRouting===null?null:({seriesInput,currentMapNumber,matchId,bundle})=>{
   if(seriesInput===null)return bundle.seriesId===null;

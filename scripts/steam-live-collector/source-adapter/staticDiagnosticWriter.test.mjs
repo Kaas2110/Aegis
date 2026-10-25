@@ -22,12 +22,12 @@ test('portable registry and owned writer journal independent series PRE and BETW
  const bad=inputs();bad.seriesHistoryInput.targetInput=structuredClone(bad.seriesHistoryInput.targetInput);bad.seriesHistoryInput.targetInput.utf8+=' ';assert.equal((await writer.consume({mode:'SERIES_PRE',...bad})).status,'failed');assert.equal(saved.length,2);assert.equal(producer.resourceStatus().activeBundles,0);producer.close();assert.equal(producer.resourceStatus().resources.chargedBytes,0);
 });
 
-function ownedFixture({terminal=false,releaseFailure=false}={}){
+function ownedFixture({terminal=false,releaseFailure=false,readCurrentAuthority=null,signal=null}={}){
  const state={generated:0,released:0,active:0,historicalWrites:0,schemaWrites:0,traceWrites:0,allowed:true,releaseFailure},schemaHash='b'.repeat(64),producer={contract:UNIFIED_PRODUCER_CONTRACT,getSchema:()=>({contract:'synthetic-owned-static-schema',definitions:[{name:'synthetic.static'}]}),generateFeatureBundle(input){
   state.generated++;state.active++;let released=false;const bundle={contract:UNIFIED_PRODUCER_CONTRACT,status:terminal?'series_complete_actual_result':'diagnostic_generated',mode:input.mode,matchId:null,seriesId:'synthetic-owned-series',decisionAt:input.decisionAt,availableAt:input.decisionAt,components:{legacyNative:null,series:null},routes:terminal?[]:[{targetId:'SERIES_PRE',stateMode:'SERIES_PRE',schemaRef:{sha256:schemaHash,featureCount:1},diagnosticVector:{names:['synthetic.static'],values:[0],missing:[false]},inferenceVector:null}],eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false};
   Object.defineProperty(bundle,'release',{enumerable:false,value(){state.released++;assert.equal(released,false,'bundle must release exactly once');released=true;state.active--;if(state.releaseFailure){state.releaseFailure=false;throw Error('synthetic_release_failure');}return true;}});return bundle;
  }},journal={async writeHistoricalInputs(){assert.equal(state.active,1);state.historicalWrites++;return{status:'created',reference:{contract:'aegis.static-historical-input-reference.v1',sha256:'a'.repeat(64),bytes:100}};},async writeSchema({schemaHash}){assert.equal(state.active,1);state.schemaWrites++;return{status:'created',schemaHash};},async appendTrace(trace){assert.equal(state.active,1);state.traceWrites++;return{status:'created',sha256:trace.sha256};}};
- const input={mode:'SERIES_PRE',decisionAt:AT,seriesHistoryInput:{factsInput:pinned({synthetic:true}),targetInput:pinned({synthetic:true})}},writer=createStaticDiagnosticWriter({producer,journal,enabled:true,now:()=>AT,shouldContinue:()=>state.allowed});return{state,journal,input,writer};
+ const input={mode:'SERIES_PRE',decisionAt:AT,seriesHistoryInput:{factsInput:pinned({synthetic:true}),targetInput:pinned({synthetic:true})}},writer=createStaticDiagnosticWriter({producer,journal,enabled:true,now:()=>AT,shouldContinue:()=>state.allowed,readCurrentAuthority,signal});return{state,journal,input,writer};
 }
 
 test('static ownership holds the bundle through every awaited v1 storage port and releases once after success',async()=>{
@@ -49,4 +49,20 @@ test('static ownership releases once after each awaited storage failure and STOP
 
 test('static ownership resets busy even when release itself throws and never reports cleanup failure as success',async()=>{
  const f=ownedFixture({releaseFailure:true});await assert.rejects(f.writer.consume(f.input),/synthetic_release_failure/);assert.equal(f.state.released,1);assert.equal(f.state.active,0);const retry=await f.writer.consume(f.input);assert.equal(retry.status,'recorded_diagnostic');assert.equal(f.state.generated,2);assert.equal(f.state.released,2);assert.equal(f.state.active,0);
+});
+
+test('static post-commit fence preserves durable trace but rejects STOP, abort and changed authority',async()=>{
+ for(const boundary of ['stop','abort','sourceGeneration','identityRevision','seriesRevision','targetGeneration','terminal']){
+  const controller=new AbortController(),current={sourceGeneration:'s1',identityRevision:'i1',seriesRevision:'r1',targetGeneration:'t1',terminal:false};
+  const f=ownedFixture({readCurrentAuthority:()=>({...current}),signal:controller.signal}),append=f.journal.appendTrace;
+  f.journal.appendTrace=async trace=>{const saved=await append(trace);if(boundary==='stop')f.state.allowed=false;else if(boundary==='abort')controller.abort();else if(boundary==='terminal')current.terminal=true;else current[boundary]='changed';return saved;};
+  const result=await f.writer.consume(f.input);
+  assert.notEqual(result.status,'recorded_diagnostic',boundary);assert.equal(result.traceCommitted,true,boundary);assert.match(result.traceSha256,/^[a-f0-9]{64}$/);assert.equal(result.recordedPrediction,false);assert.equal(f.state.released,1);assert.equal(f.state.active,0);
+ }
+});
+
+test('static owned authority is rechecked after IO and an unchanged owner is verified',async()=>{
+ let reads=0;const current={sourceGeneration:'s1',identityRevision:'i1',seriesRevision:'r1',targetGeneration:'t1',terminal:false};
+ const f=ownedFixture({readCurrentAuthority:()=>{reads++;return {...current};}}),result=await f.writer.consume(f.input);
+ assert.equal(result.status,'recorded_diagnostic');assert.equal(result.currentAuthorityVerified,true);assert.equal(reads,2);
 });

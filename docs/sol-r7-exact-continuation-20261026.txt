@@ -1,0 +1,115 @@
+AEGIS SOL R7 — EXACT CONTINUATION FOR ASTRA
+26 October 2026. The resumed dependency and functional13 block is complete.
+
+Start here
+1. Read outputs/Aegis-Sol-R7-Astra-review-20261026.txt (APP mirror:
+   docs/sol-r7-review-20261026.txt). It consolidates changes, reasons, alternatives,
+   exact checks, preserved failures, synthetic/real boundaries and remaining gates.
+2. Read work/sol-r7-resume-20261026/STATUS.json and the publication receipt there
+   for exact current source/head/merge state. The source manifest/frozen chunks are
+   under work/sol-r7-20261025/. Do not infer current main from historical PR11 notes.
+3. Next actor is Astra. Review architecture and issue the remaining Sol plan;
+   do not start fits or rerun completed technical checks merely to reload context.
+
+Source and publication
+Canonical APP:C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Final tested snapshot:work/sol-r7-20261025/snapshots/resume-all256-20261026-h8/.
+Prior public baseline:PR11 main073d9d2c5726bbcf2978606c44896bbbbbf433cf,
+base treef6d99614c5e70b7180a11c91ff43985694050fe4. GitHub verified that unchanged
+main during this turn. Local Git HEAD is older than installed source: never reset,
+clean or blindly stage the working tree. One reviewed source-only completed-block
+PR is authorized to merge without another question. Exact head/merge receipt is
+maintained separately; this immutable document does not embed its own future hash.
+Graphify was READY on PR11 at initial lookup. Let automatic refresh follow the
+completed-block merge; no duplicate build or routine full/byte parity audit.
+Use canonical local source while the index is stale. Memory intake is separate
+from accepted recall. Exclude keys/raw data/DB/archives/weights/private evidence.
+
+Current owner limits
+Conservative aggregate admission30GiB; whole owned technical tree9GiB; sharedrich
+arena8GiB; compact-asset working reservation2GiB. Minimum4GiB free, CPU4, finitewall
+<=1200s. Preflight requires the complete requested tree reservation plus4GiB free
+physical RAM (13GiB at9GiB default). No global service supervisor is activated.
+Use work/sol-r7-resume-20261026/run-bounded-tests-30g.py,
+SHA658fdf27b812f186fd3c8090e6038add1d4866d4f5c857bf3cd2c5fa5d3900ca,
+RESOURCE-AUTHORIZATION-30G.json,
+SHA14f0f3c17522de56fd5435202526ce4794da2429bbb4825eede4ef5651273776.
+Old6/24 and intermediate9/36 guards/results are historical; do not modify them.
+Preserve all manual STOP files and foreign/shared locks. Do not revive stopped jobs.
+
+The owner explicitly requested256MiB encoded compact schemas/vectors for ALL
+supported profiles/manifests; journal default is256MiB. Lower caller ceilings and
+actual profile/header/hash validation remain. Unknown profiles get no admission.
+Legacy150K/logical256MiB/16M-node and FULL300K/logical4GiB/128M-node bounds unchanged.
+Objects/batches16MiB, chunks1MiB, cumulative writer root256MiB remain independent.
+A256MiB asset ceiling does not guarantee it fits the root together with metadata.
+Default arena remains2GiB and is not qualified for the full-rich runtime.
+
+Verified final scope (do not add overlapping counts)
+- Focused helper correction c3:14/14PASS; actual static3/3PASS. These predate the
+  later source-cap changes; numeric invariants support reuse, old schema hashes do not.
+- Current all256-small h8:32PASS/1explicitopt-instressskip;2.016s,
+  peak200,863,744B. Small capacity declarations are not giant payload roundtrips.
+- Current actual all256-delivery13 h8:PASS822.547s,peak5,917,442,048B;
+  13modes/14schema variants/14full input-only receipts, extra PRE series preserved.
+  Actual generation/commit/full saved-vector readback/input pages/restart/router/
+  admin source pass. Main=whole series; detail=selected map/totals; previous-map
+  heroes/results and expiredLIVE rejection pass. Root114,809,648B; final arena0.
+  Receipt44199e86cac4e8c8348b183099c0e608568d6187c528f6b1c353b8b17a77ad8e.
+- Current all256-semantics13 h8:PASS323.562s,peak5,732,614,144B;
+  921,198occurrences,881,390complete/39,808unresolved,zero skipped/deferred.
+  Each4LIVE head has9,952unresolved(9,232native meanings+720parameterbindings).
+  New historical dependency-array omissions resolved. All79family/14catalogue
+  dispositions preserved; old catalogue reconciliation denominator465,359.
+  Receipt2836da4f7d2f12169ae425ea3b5a0883d6bc2baab6d1017432c5be783d318889.
+  Sourceinventory1b87b0d2bfa0542e087d7c1e0548039889fe06631d3e1692a75331340c3de16f.
+
+All raw fixtures here are synthetic; code and filesystem persistence are actual.
+No real Steam/OpenDota coverage, native Windows lease acceptance, deployed HTTP /
+emulator test, predictive quality or source95 follows from those results.
+Compact actual summaries:DELIVERY13-RESULT.json and SEMANTICS13-RESULT.json.
+All full logs/resource receipts and failed prior stages are preserved in the resume
+work directory and earlier R6b directory. No native job remains after these checks.
+
+What changed
+H02/H05/H12 depend on actual emitted operands; raw leaves explicitly[]; real
+namespace supplied and series dependency renaming follows that namespace.
+C13 declares actual current roster/team/account selectors and ordering, separates
+current identity validFrom from past-state cutoff, keeps nulls and invents no
+receipt time or physical map sides. Numeric formulas/names/order/masks/time/cohort
+rules unchanged. Source reviews reconstructed operands and checked counterexamples.
+Shared source history/live still uses causal local history plus one coherent
+current Steam profile, with no OpenDota HTTP wait on the newlive decision path.
+The memory/encoded changes are finite capacity adjustments, not semantic authority.
+No factoring algorithm, feature pruning or model promotion was introduced.
+
+Astra's remaining decisions, in order
+A. Review causal source/history/current-identity closure and currentness/final IO
+   fences across the completed R7 implementation. Inspect original25October report
+   as well as the resumed corrections. Passing tests do not replace this review.
+B. Resolve remaining native meanings/parameters/exact catalogue aliases; verify
+   original availability/source95 and H03 pre-map residual availability. Keep
+   unavailable fields unavailable rather than filling plausible values.
+C. Specify stable model feature-function identity separately from per-row diagnostic
+   instance/provenance hashes. Actual team/account/hero selectors currently change
+   full diagnostic schema hashes even with stable names. Names-only compatibility
+   is insufficient. See semantics/schema-identity-architecture-note.txt. Review
+   the dataset aggregate300K-column/64-schema/32MiB envelopes before large factories.
+D. Plan bounded warm/sustained performance, shared ownership and cumulative disk
+   gates. Current cold LIVE diagnostic operation250.016s includes36.938s generation,
+   149.625s commit and62.433s full read/record; this is not serving-latency acceptance.
+   Functional13 explicitly used SKIP_PILOT=1: planned3/executed0, null metrics,
+   sustained326 false. Default unset still performs3; no cold-to-warm inference.
+   Entire1600-source LIVE fit is not proven by the small retained fixture. The old
+   1600-source/proof/POST pass remains its own unchanged scope. C++ adoption still
+   requires usable tooling, exact semantics and measured complete-operation gain.
+E. After review, issue concrete implementation tasks to Sol. Training/HPO/calibration/
+   ablations/learned compression and model-quality scoring require the separate
+   feature/source/runtime gate and owner authorization. They remain OFF now.
+
+Unchanged boundaries
+No provider probes/refresh, STRATZ changes, schedule/runtime activation, deployment,
+model activation/public promotion or purchases. Existing models/readers/raw data
+remain. OpenDota budgets/rate unchanged. No old assembly/install manifest should be
+rerun; no completed fit should be repeated to reconstruct context. Documentation
+and durable review notes stay English; chat with the owner stays Russian.

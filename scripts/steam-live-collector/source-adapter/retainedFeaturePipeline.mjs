@@ -52,9 +52,10 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
  if((boundedHistory===null&&((historySourceFactory===null?typeof db?.query!=='function':typeof historySourceFactory!=='function')||typeof sourceStore?.put!=='function'||typeof sourceStore?.load!=='function'||typeof historyRevisions?.getOrCreate!=='function'))||boundedHistory!==null&&(boundedHistory.contract!=='aegis.retained-map-history-host.v1'||typeof boundedHistory.acquire!=='function'||!compact)||!isHash(historyProfileSha256)||typeof materializationGeneration!=='string'||!/^[-A-Za-z0-9_.]{1,64}$/.test(materializationGeneration)||(!compact&&(typeof featureJournal?.writeSchema!=='function'||typeof featureJournal?.appendTrace!=='function'))||compact&&(typeof featureJournal.appendBundle!=='function'||typeof featureJournal.loadTrace!=='function')||typeof now!=='function'||typeof shouldContinue!=='function'||isCurrentSeriesInput!==null&&typeof isCurrentSeriesInput!=='function')fail('owned_ports_required');
  const defaults={maxMaps:8,maxFramesPerMap:512,maxPrefixBytesPerMap:32*1024*1024,maxHistoryMaps:20000,maxNativeHistoryFrames:10000,maxPendingCaptures:4},caps={maxMaps:16,maxFramesPerMap:2048,maxPrefixBytesPerMap:64*1024*1024,maxHistoryMaps:50000,maxNativeHistoryFrames:20000,maxPendingCaptures:16};
  if(!limits||typeof limits!=='object'||Array.isArray(limits)||Object.keys(limits).some(k=>!Object.hasOwn(defaults,k)))fail('limit_keys');const config={...defaults,...limits};for(const[k,v]of Object.entries(config))if(!Number.isSafeInteger(v)||v<1||v>caps[k])fail('limit_bound');
- const maps=new Map(),completed=new Map();let tail=Promise.resolve(),pending=0,stopObserved=false,closed=false;
+ const maps=new Map(),completed=new Map();let tail=Promise.resolve(),pending=0,stopObserved=false,closed=false,admittedSourceHead=null,executingSourceKey=null;
+ const sourceKey=input=>input.receiptInput.pin.sha256+':'+input.rawInput.pin.sha256;
  const consumer=createDiagnosticFeatureConsumer({producer,...(compact?{compactJournal:featureJournal}:{writeSchema:x=>featureJournal.writeSchema(x),appendTrace:x=>featureJournal.appendTrace(x),loadCommittedTrace:typeof featureJournal.loadTrace==='function'?x=>featureJournal.loadTrace(x):null}),isCurrentInput:({input,bundle})=>{
-  const slot=maps.get(input.matchId);if(!continuing()||!slot||slot.closedSource||slot.blockedReason||slot.proof!==input.historyProof||slot.sourceHandle!==input.sourceExportHandle||slot.source?.sourceSnapshotHash!==bundle.sourceSnapshotHash)return false;
+  const slot=maps.get(input.matchId);if(!continuing()||!slot||slot.closedSource||slot.blockedReason||admittedSourceHead?.key!==executingSourceKey||slot.proof!==input.historyProof||slot.sourceHandle!==input.sourceExportHandle||slot.source?.sourceSnapshotHash!==bundle.sourceSnapshotHash)return false;
   if(isCurrentSeriesInput===null)return true;const current=isCurrentSeriesInput({seriesInput:input.seriesInput??null,currentMapNumber:input.currentMapNumber??null,matchId:input.matchId,bundle});if(current&&typeof current.then==='function'){Promise.resolve(current).catch(()=>{});return false;}return current===true;
  },shouldContinue:()=>continuing(),signal,now,resourceArena,limits:{maxMaps:config.maxMaps}});
  function continuing(){let yes=false;try{yes=!closed&&signal?.aborted!==true&&shouldContinue()===true;}catch{}
@@ -83,6 +84,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
  }
  async function execute(input,{replayOnly=false,restoreTracesByMap={}}){
   if(!continuing())return status('blocked','manual_stop_or_abort');
+  executingSourceKey=sourceKey(input);
   const captureKey=draftHash({input,replayOnly,restoreTracesByMap});if(completed.has(captureKey)){const cached=structuredClone(completed.get(captureKey));cached.reusedReceipt=true;cached.results=cached.results.map(r=>({...r,stateAdvanced:false}));return cached;}
   const decisionAt=now();let decoded;try{decoded=decodeCapture(input,decisionAt);}catch{
    // Invalid/failed committed captures break progression for every tracked map.
@@ -143,6 +145,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    const restoring=restoreTracesByMap[o.matchId]!==undefined;
    const retryQualified=eligibility.eligibleForRetainingForecast===true&&eligibility.stateView?.observationId===o.observationId&&slot.lastLiveObservationId!==o.observationId;
    if(isLiveCandidate&&!eligibility.mayGenerateNewVector&&!retryQualified&&!restoring&&!replayOnly){
+    slot.processedSourceKey=executingSourceKey;
     results.push(status('retained_state_diagnostic',eligibility.reason??'unchanged_unconfirmed_source_state',{matchId:o.matchId,traceSha256:slot.lastLiveTraceSha256??null,sourceState:readSteamEligibleState(slot.eligibleStateToken,{matchId:o.matchId,decisionAt:now()}),recordedPrediction:false}));continue;
    }
    const basePrefix=slot.anchors??slot.prefix,baseBytes=basePrefix.reduce((n,e)=>n+e.rawInput.pin.bytes+e.metadataInput.pin.bytes,0);
@@ -202,6 +205,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
     const series=input.seriesByMatch?.[o.matchId]??{};
     const consumed=await consumer.consume({mode:'AUTO',matchId:o.matchId,decisionAt:now(),historyProof:slot.proof,sourceExportHandle:slot.sourceHandle,expectedSourceSnapshotHash:slot.source.sourceSnapshotHash,livePrefixInputs:[entry],progressionProof:progression.privateProof,retainedReplayProof,...(series.seriesInput?{seriesInput:series.seriesInput,currentMapNumber:series.currentMapNumber}:{})},{restoreTraceSha256});
     if(consumed.traceCommitted&&consumed.stateAdvanced&&consumed.mode==='LIVE'){slot.lastLiveTraceSha256=consumed.traceSha256;slot.lastLiveObservationId=o.observationId;}
+    if(consumed.status==='recorded_diagnostic')slot.processedSourceKey=executingSourceKey;
     results.push(consumed);
    }catch{if(!continuing())return status('blocked',stopPoint,{results});results.push(status('failed','history_materialization_or_generation',{matchId:o.matchId}));}
   }
@@ -213,6 +217,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   breakSourceContinuity(){if(pending)return{cleared:false,reason:'pipeline_work_pending'};for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;interruptEligibility(slot,matchId);resetFeatureContinuity(matchId);}return{cleared:true,reason:'owned_restart_or_stop_barrier; map_watermarks_preserved'};},
   readLiveEligibility({matchId,decisionAt=now()}={}){
    const slot=maps.get(matchId);if(!continuing())return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:'manual_stop_or_abort',userMessage:'Прогноз недоступен'};
+   if(slot&&slot.processedSourceKey!==admittedSourceHead?.key)return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:'newer_committed_source_pending',lastTraceSha256:slot.lastLiveTraceSha256??null,userMessage:'Прогноз недоступен',recordedPrediction:false};
    const view=readSteamEligibleState(slot?.eligibleStateToken,{matchId,decisionAt});
    return{...view,lastTraceSha256:slot?.lastLiveTraceSha256??null,recordedPrediction:false};
   },
@@ -222,6 +227,10 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    // Own bytes/scalars before the first await; do not let host mutation rewrite
    // a queued capture or its series orientation.
    let owned,ownedOptions;try{if(!input||Object.keys(input).some(k=>!['receiptInput','rawInput','seriesByMatch'].includes(k)))fail('capture_keys');verified(input.receiptInput,65536);verified(input.rawInput,4*1024*1024,false);if(input.seriesByMatch!==undefined&&Buffer.byteLength(JSON.stringify(input.seriesByMatch))>4*1024*1024)fail('series_bound');if(!options||Object.keys(options).some(k=>!['replayOnly','restoreTracesByMap'].includes(k))||options.replayOnly!==undefined&&typeof options.replayOnly!=='boolean'||options.restoreTracesByMap!==undefined&&(!options.restoreTracesByMap||Array.isArray(options.restoreTracesByMap)||Object.keys(options.restoreTracesByMap).length>config.maxMaps||Object.entries(options.restoreTracesByMap).some(([id,hash])=>!/^\d{1,20}$/.test(id)||!isHash(hash))))fail('replay_options');owned=structuredClone(input);ownedOptions=structuredClone(options);}catch{return Promise.resolve(status('blocked','capture_input_bound'));}
+   // Admission and processing are separate horizons. A committed newer source
+   // can revoke old authority immediately, without computing it out of order.
+   const receipt=JSON.parse(owned.receiptInput.utf8),received=instantNs(receipt.receivedAt);
+   if(received!==null&&(admittedSourceHead===null||received>=admittedSourceHead.received))admittedSourceHead={key:sourceKey(owned),received};
    pending++;const promise=tail.catch(()=>{}).then(()=>execute(owned,ownedOptions)).catch(()=>status('failed','unexpected_pipeline_failure'));tail=promise;promise.finally(()=>{pending--;});return promise;
   },
   forgetMap(matchId){const slot=maps.get(matchId);if(pending)return{released:false,reason:'pipeline_work_pending'};if(!slot)return{released:false,reason:'map_not_cached'};consumer.forgetMap(matchId);slot.historyOwner?.release();maps.delete(matchId);for(const[key,r]of completed)if(r.results.some(x=>x.matchId===matchId))completed.delete(key);return{released:true,reason:'explicit_host_release_restart_requires_retained_prefix_replay'};},

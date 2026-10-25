@@ -8,14 +8,26 @@ import {createFeatureProjectionCompiler} from '../steam-live-collector/source-ad
 import {createDiagnosticResourceArena} from '../steam-live-collector/source-adapter/diagnosticResourceArena.mjs';
 const A='a'.repeat(64),B='b'.repeat(64),C='c'.repeat(64),MiB=1024**2;
 function documents(){const[index,familyDocument,targetDocument]=syntheticRegistry();return{index,familyDocument,targetDocument};}
-function actual({docs=documents(),arena=createDiagnosticResourceArena(),count=3,fields=true,formula='synthetic prior map count',extra={},targetId='PRE_MAP_WIN',stateMode='PRE'}={}){
- const sourceInventory={history:{primarySha256:A,files:[{path:'synthetic-history.mjs',sha256:A},{path:'synthetic-helper.mjs',sha256:B}]}},compiler=createFeatureProjectionCompiler({registry:validateRegistry(docs.index,docs.familyDocument,docs.targetDocument),registryHash:digest(docs),sourceInventory,sourceProfiles:{history:'synthetic.history.v1'},resourceArena:arena});
+function actual({docs=documents(),arena=createDiagnosticResourceArena(),count=3,fields=true,formula='synthetic prior map count',extra={},targetId='PRE_MAP_WIN',stateMode='PRE',capacityProfile='LEGACY_150K'}={}){
+ const sourceInventory={history:{primarySha256:A,files:[{path:'synthetic-history.mjs',sha256:A},{path:'synthetic-helper.mjs',sha256:B}]}},compiler=createFeatureProjectionCompiler({registry:validateRegistry(docs.index,docs.familyDocument,docs.targetDocument),registryHash:digest(docs),sourceInventory,sourceProfiles:{history:'synthetic.history.v1'},resourceArena:arena,capacityProfile});
  const definitions=Array.from({length:count},(_,i)=>({name:'history.synthetic_'+i,familyId:'H01',formula,formulaVersion:'synthetic.v1',units:'distinct_maps',inputScopes:['prior_maps'],...fields?{inputFields:['priorMap.matchId','priorMap.outcomeKnownAt'],supportUnit:'distinct_maps',eventTimePolicy:'ended before cutoff',availabilityTimePolicy:'provided facts available before cutoff',populationPolicy:'synthetic corpus only',minimumSupport:5,historyWindowDays:30}:{},...extra}));
  const block=compiler.normalize({names:definitions.map(d=>d.name),values:definitions.map(()=>null),masks:definitions.map(()=>true),definitions,schemaHash:C},'history'),route=compiler.project([block],targetId,stateMode);
  const input={schema:route.diagnosticSchema,sha256:route.schemaRef.sha256};let active=true;
  return{docs,arena,compiler,input,definitions,close(){if(!active)return;active=false;route.release();block.release();compiler.close();}};
 }
 function zero(arena){assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().heldAssets,0);assert.equal(arena.status().leases,0);}
+test('new full profile preserves exhaustive original-schema oracle semantics and binds its versioned receipt/page',()=>{
+ for(const capacityProfile of ['LEGACY_150K','R7_FULL300K']){
+  const f=actual({capacityProfile}),audit=createAudit({...f.docs,resourceArena:f.arena});let held,page;
+  try{const bulk=createGeneratedDefinitionLedger({...f.docs,schemas:[f.input]});held=audit.auditSchema(f.input);page=held.readPage({limit:3});const full=capacityProfile==='R7_FULL300K';assert.equal(held.receipt.contract,'aegis.bounded-emitted-definition-audit.v'+(full?'2':'1'));assert.equal(page.contract,'aegis.bounded-emitted-definition-page.v'+(full?'2':'1'));assert.equal(held.receipt.capacityProfile,full?capacityProfile:undefined);assert.equal(page.capacityProfile,full?capacityProfile:undefined);assert.equal(held.receipt.schemaSha256,f.input.sha256);assert.equal(held.receipt.admission.workingBytes,64*MiB);assert.equal(held.receipt.skippedDefinitions,0);for(const row of page.findings){const oracle=bulk.definitions.find(d=>d.definition.id===row.definitionId);assert.deepEqual(row.semantics,oracle.semantics);assert.equal(row.definitionSha256,oracle.definitionSha256);}assert.equal(held.receipt.sourceAvailabilityAttested,false);
+  }finally{page?.release();held?.release();audit.close();f.close();zero(f.arena);}
+ }
+});
+test('verification statuses and bounded first-five family examples count every original definition',()=>{
+ const f=actual({count:8,extra:{semanticVerification:'unverified_legacy_semantics'}}),audit=createAudit({...f.docs,resourceArena:f.arena});let h;
+ try{h=audit.auditSchema(f.input);const r=h.receipt,family=r.families.find(x=>x.familyId==='H01');assert.equal(r.counts.definitionOccurrences,8);assert.equal(r.verificationStatusCounts.unverified_legacy_semantics,8);assert.equal(r.counts.semanticIdentityUnresolved,8);assert.equal(family.verificationStatusCounts.unverified_legacy_semantics,8);assert.equal(family.firstGapExamples.length,5);assert.deepEqual(family.firstGapExamples.map(x=>x.index),[0,1,2,3,4]);assert.equal(family.metadataGapCounts['semantic_identity_unbound:semanticVerification:unverified_legacy_semantics'],8);assert.equal(family.deliveryStatus,'generated_subset');assert.equal(r.families.find(x=>x.familyId==='H14').deliveryStatus,'not_generated');assert.equal(r.fullFeatureGateComplete,false);assert.equal(r.sourceAvailabilityAttested,false);
+ }finally{h?.release();audit.close();f.close();zero(f.arena);}
+});
 
 test('small actual schema has exact per-definition bulk oracle parity, ordered hash and all catalogue dispositions',()=>{
  const f=actual(),audit=createAudit({...f.docs,resourceArena:f.arena});let handle=null,page=null;
