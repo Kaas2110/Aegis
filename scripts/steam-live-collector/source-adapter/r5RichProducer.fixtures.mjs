@@ -5,11 +5,11 @@ import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {createDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
 import {createUnifiedFeatureProducer} from './unifiedFeatureProducer.mjs';
 
-export function syntheticRichProducerFixture({matchId='90001',seriesId='synthetic-r5-series',startAt='2026-10-23T12:30:00Z'}={}){
+export function syntheticRichProducerFixture({matchId='90001',seriesId='synthetic-r5-series',startAt='2026-10-23T12:30:00Z',resourceArena=null}={}){
  const args=draftArgs({matchId,accounts:true,time:startAt,clock:0,phase:2});
  args.matchId=matchId;args.computedAt=startAt;
  const history=createDynamicHistoryProof(args,{includeInspectionCopies:false});
- const producer=createUnifiedFeatureProducer();
+ const producer=createUnifiedFeatureProducer({resourceArena});
  const seriesInput=pinned({contract:'aegis.series-map-receipts.v1',seriesId,bestOf:3,team1Id:'100',team2Id:'200',availableAt:startAt,completeThroughMapNumber:0,previousMaps:[]});
  let previousLiveState=null;
  function frame(clock){

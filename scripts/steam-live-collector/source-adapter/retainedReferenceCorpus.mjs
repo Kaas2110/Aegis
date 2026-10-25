@@ -12,12 +12,15 @@ import {verifyHistoricalFactVersion,pinRetainedHistoryJson,RETAINED_FACT_MAX_BYT
 import {createRetainedHistorySourceExport} from './retainedHistorySourceExport.mjs';
 import {createVerifiedHistorySourceHandle} from './historySourceVerifier.mjs';
 import {snapshotPlainRecord} from './diagnosticResourceArena.mjs';
+import {reduceRetainedMapVersions,projectReducedRetainedMap,retainedReducedFactsScope,retainedVersionSetBinding} from './boundedRetainedHistory.mjs';
 
 export const RETAINED_REFERENCE_CORPUS_CONTRACT='aegis.retained-reference-corpus.v2';
 export const RETAINED_REFERENCE_ENVELOPE_CONTRACT='aegis.retained-reference-history-envelope.v2';
 export const RETAINED_REFERENCE_LIMITS=Object.freeze({maxVersions:20000,maxTotalVersionBytes:128*1024*1024,maxVersionBytes:RETAINED_FACT_MAX_BYTES,maxChunkBytes:1024*1024,maxPartEntries:128,maxParts:512,maxPartBytes:1024*1024,maxManifestBytes:256*1024,maxDenseBytes:64*1024*1024});
 const PART='aegis.retained-reference-corpus-part.v2',BLOB='aegis.utf8-chunk-reference.v2',VIEW_KIND='retained-history-view-v2';
 const handles=new WeakMap(),sha=x=>createHash('sha256').update(x).digest('hex'),byteLength=x=>Buffer.byteLength(x,'utf8');
+const sourceHandlesV2=new WeakMap();
+export const VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT='aegis.verified-retained-reference-source-handle.v2';
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x),hash=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x),id=x=>typeof x==='string'&&/^[1-9]\d{0,19}$/.test(x);
 const fail=x=>{throw Error('retained_reference_corpus:'+x);};
 const freeze=x=>{if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.values(x).forEach(freeze);Object.freeze(x);}return x;};
@@ -179,4 +182,85 @@ export async function readRetainedReferenceHistory({corpusHandle,envelopeReferen
  const sourceExportHandle=createVerifiedHistorySourceHandle(source.envelopeInput,{expectedSourceSnapshotHash:source.sourceSnapshotHash,matchId:source.identity.matchId,decisionAt});
  const availableAt=timestamp(entry.clock);if(instantNs(availableAt)<instantNs(entry.descriptor.verifiedAt)||instantNs(availableAt)<instantNs(body.exportedAt))fail('clock_regressed');
  return Object.freeze({contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,status:'dense_compatibility_ready',envelopeReference:freeze({...envelopeReference}),availableAt,descriptor:freeze(body),compatibility:Object.freeze({sourceExportHandle,envelopeInput:source.envelopeInput,sourceSnapshotHash:source.sourceSnapshotHash}),...flags});
+}
+
+// V2 never passes an oversized original-version array through the v1 exporter.
+// It resolves each map chain exactly, then supplies the SAME v1 normalized facts
+// algebra. The remaining 64 MiB normalized-facts limit is explicit and unchanged.
+const V2_VIEW_KIND='retained-bounded-history-view-v2';
+function referenceIdentity(state){
+ const p=state.identity.players,selectors={sourceUniverse:'locally_retained_opendota_responses',selection:'provided_version_inputs_only',targetTeamIds:sorted(p.map(x=>x.teamId).filter(id)),targetAccountIds:sorted(p.map(x=>x.accountId).filter(x=>id(x)&&BigInt(x)<4294967295n)),targetHeroIds:[...new Set(p.map(x=>Number(x.heroId)))].sort((a,b)=>a-b)};
+ const revisionBody={contract:state.contract,matchId:state.matchId,historyCutoffAt:state.historyCutoffAt,firstCompleteObservationId:state.firstCompleteObservationId,revision:state.revision,validFromObservationId:state.validFromObservationId,validFrom:state.validFrom,identity:state.identity};
+ return {matchId:state.matchId,sourceProfile:state.sourceProfile,cutoffPolicy:state.cutoffPolicy,historyCutoffAt:state.historyCutoffAt,validFrom:state.validFrom,validFromObservationId:state.validFromObservationId,revision:state.revision,draftRevisionHash:draftHash(revisionBody),draftHash:state.identity.draftHash,rosterHash:state.identity.rosterHash,sideIdentityHash:state.identity.sideIdentityHash,selectors,selectorsSha256:draftHash(selectors)};
+}
+async function reduceReferenceTargetV2(entry,selection,target){
+ const groups=new Map();for(const item of selection.selected){const key=item.summary.matchId;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);}
+ const projected=[],dependencies=[],omitted=[],audit={providedVersions:0,uniqueVersions:0,currentMapExcluded:0,futureVersionsExcluded:0,conflictingFields:0};let normalizedBytes=0;
+ // Lexical serialization follows v1. Numeric floating-point reduction order is
+ // left to the existing shared algebra, whose byId comparator is unchanged.
+ for(const matchId of [...groups.keys()].sort((a,b)=>a.localeCompare(b,'en'))){
+  await proceed(entry.shouldContinue);
+  async function* inputs(){for(const item of groups.get(matchId)){const utf8=await readBlob(entry.store,item.blob,entry.limits,entry.shouldContinue);yield {utf8,pin:{path:'reference-corpus/version.json',bytes:byteLength(utf8),sha256:item.summary.versionSha256}};}}
+  const reduced=await reduceRetainedMapVersions({versionInputs:inputs(),matchId,targetMapId:selection.state.matchId,historyCutoffAt:selection.state.historyCutoffAt,shouldContinue:entry.shouldContinue});
+  dependencies.push(...reduced.sourceVersions);for(const key of Object.keys(audit))audit[key]+=reduced.audit[key];
+  const row=projectReducedRetainedMap(reduced,{sourceVersionSetSha256:'0'.repeat(64)});if(row.omitted)omitted.push(row.omitted);
+  if(row.map){const n=byteLength(JSON.stringify(row.map));normalizedBytes+=n+1;if(normalizedBytes>entry.limits.maxDenseBytes)return {status:'normalized_facts_reducer_pending',reason:'normalized_facts_exceed_unchanged_64mib_shared_algebra_guard'};projected.push(row.map);}
+ }
+ const bindings=retainedVersionSetBinding(dependencies),maps=projected.map(map=>({...map,sourceVersionSetSha256:bindings.sourceVersionSetSha256,evidenceRef:'sha256:'+bindings.sourceVersionSetSha256+'#match/'+map.matchId}));
+ const scope=retainedReducedFactsScope({historyCutoffAt:selection.state.historyCutoffAt,rowCount:maps.length,population:target.scope?.population});
+ const factsInput=pinRetainedHistoryJson({contract:'aegis.prior-map-facts.v1',scope,maps},'retained-history/prior-map-facts.json');
+ if(factsInput.pin.bytes>entry.limits.maxDenseBytes)return {status:'normalized_facts_reducer_pending',reason:'normalized_facts_exceed_unchanged_64mib_shared_algebra_guard'};
+ const nativeInput=pinRetainedHistoryJson({contract:'aegis.pinned-native-economy-observations.v1',observations:[]},'retained-history/no-native-observations.json');
+ const population={facts:maps.length?'complete_nonempty_within_provided_retained_corpus':'complete_empty_within_provided_retained_corpus',native:'not_provided',factsUsable:true,nativeCandidatesPinned:false,allCollectionsComplete:false,zeroHistoryStatisticsInvented:false,globalPopulationComplete:false};
+ return {status:'bounded_reference_ready',factsInput,nativeInput,bindings,population,inputAudit:{...audit,exportedMaps:maps.length,omittedMaps:omitted,availabilityBasis:'retained_collector_response_receipt',originalHistoricalAvailabilityProven:false,independentFieldAvailabilityAttested:false,sourceSelectionCompleteOnlyWithinProvidedInputs:true}};
+}
+function sourceDescriptorV2(body,envelopeReference,availableAt){
+ const descriptor={contract:'aegis.verified-history-source-descriptor.v2',sourceContract:body.contract,sourceSnapshotHash:envelopeReference.sha256,reference:{contract:'aegis.history-source-export-reference.v2',sha256:envelopeReference.sha256,bytes:envelopeReference.bytes},identity:body.identity,population:body.population,factsSha256:body.factsSha256,nativeSha256:body.nativeSha256,draftPrefixBindingHash:body.draftPrefixBindingHash,computedAt:body.computedAt,exportedAt:body.exportedAt,availableAt,generationReference:body.generationReference,envelopeReference:freeze({...envelopeReference}),sourceVersionSetSha256:body.sourceVersionSetSha256,...flags};
+ let descriptorBytes=0,next=byteLength(JSON.stringify({...descriptor,descriptorBytes}));while(next!==descriptorBytes){descriptorBytes=next;next=byteLength(JSON.stringify({...descriptor,descriptorBytes}));}
+ if(descriptorBytes>16*1024)fail('v2_descriptor_bound');return freeze({...descriptor,descriptorBytes});
+}
+function mintSourceV2(body,envelopeReference,availableAt){const token=Object.freeze({contract:VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT});sourceHandlesV2.set(token,sourceDescriptorV2(body,envelopeReference,availableAt));return token;}
+/** Opaque authority, available only after actual original-version replay. A
+ * copied/serialized descriptor cannot mint this source handle. Root integrates
+ * this reader with the producer and persisted historicalInputRef validator.
+ */
+export function readVerifiedRetainedReferenceSourceHandle(token,{expectedSourceSnapshotHash,matchId,decisionAt}={}){
+ const descriptor=sourceHandlesV2.get(token);if(!descriptor)fail('owned_v2_source_handle_required');
+ if(!hash(expectedSourceSnapshotHash)||expectedSourceSnapshotHash!==descriptor.sourceSnapshotHash||!id(matchId)||matchId!==descriptor.identity.matchId)fail('v2_source_identity_binding');
+ const decision=instantNs(decisionAt);if(decision===null||decision<instantNs(descriptor.identity.validFrom)||decision<instantNs(descriptor.exportedAt)||decision<instantNs(descriptor.availableAt))fail('v2_source_not_available_at_decision');
+ return descriptor;
+}
+function boundedBody(entry,selection,target,result,refs,{computedAt,exportedAt}){
+ const identity=referenceIdentity(selection.state);
+ return {contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,view:'bounded_exact_map_resolution.v2',generationReference:entry.manifestReference,generationVerifiedAt:entry.descriptor.verifiedAt,identity,identitySha256:draftHash(identity),historyCutoffAt:identity.historyCutoffAt,validFrom:identity.validFrom,computedAt,exportedAt,selection:selection.selection,population:{...result.population,referenceGenerationCompleteWithinDeclaredInputs:true,targetCohortUnionCompleteWithinGeneration:true,globalPopulationComplete:false},evidencePolicy:{generation:'all_original_versions_replayed_on_intake_or_restore',target:'all_selected_map_version_bytes_rederived_one_chain_at_a_time',currentMap:'excluded_from_target_features_but_verified_in_generation',futureVersions:'verified_in_generation_retained_in_selected_map_chains',availability:'local_retained_receipts_not_original_historical_proof',formulas:'unchanged_v1_normalized_facts_and_shared_feature_algebra',originalVersionDenseGuardBypassed:false,normalizedFactsGuardBytes:entry.limits.maxDenseBytes,fullArchiveFeatureReducerImplemented:false},factsSha256:result.factsInput.pin.sha256,nativeSha256:result.nativeInput.pin.sha256,sourceVersionSetSha256:result.bindings.sourceVersionSetSha256,draftPrefixBindingHash:draftHash(target.draftPrefixInputs.map(p=>({raw:p.rawInput.pin.sha256,metadata:p.metadataInput.pin.sha256}))),draftPrefix:refs.draftPrefix,facts:refs.facts,native:refs.native,sourceBindings:refs.sourceBindings,inputAudit:result.inputAudit,...flags};
+}
+
+/** Additive v2 bridge for >64 MiB ORIGINAL version corpora. It preserves every
+ * retained version and uses exact normalized facts with the existing producer.
+ * Full normalized archives larger than 64 MiB remain an explicit separate gate.
+ */
+export async function materializeRetainedReferenceHistoryV2({corpusHandle,draftPrefixInputs,matchId,scope=null}={}){
+ const entry=owned(corpusHandle),target=snapshotTargetInputs(draftPrefixInputs,scope);await proceed(entry.shouldContinue);const computedAt=timestamp(entry.clock);if(instantNs(computedAt)<instantNs(entry.descriptor.verifiedAt))fail('clock_regressed');
+ const selection=await selectTarget(entry,target.draftPrefixInputs,matchId,computedAt),result=await reduceReferenceTargetV2(entry,selection,target);
+ if(result.status!=='bounded_reference_ready')return freeze({contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,...result,generationReference:entry.manifestReference,historyCutoffAt:selection.state.historyCutoffAt,validFrom:selection.state.validFrom,selection:selection.selection,fullArchiveReducerImplemented:false,...flags});
+ const refs={};for(const [key,utf8,kind]of [['draftPrefix',JSON.stringify(target),'retained-target-prefix-chunk-v2'],['facts',result.factsInput.utf8,'retained-target-facts-chunk-v2'],['native',result.nativeInput.utf8,'retained-target-native-chunk-v2'],['sourceBindings',JSON.stringify(result.bindings),'retained-target-bindings-chunk-v2']])refs[key]=await writeBlob(entry.store,utf8,entry.limits,entry.shouldContinue,kind,entry.limits.maxDenseBytes);
+ const exportedAt=timestamp(entry.clock);if(instantNs(exportedAt)<instantNs(computedAt))fail('clock_regressed');const body=boundedBody(entry,selection,target,result,refs,{computedAt,exportedAt}),envelopeReference=await commitArtifact(entry.store,V2_VIEW_KIND,JSON.stringify(body),entry.limits.maxManifestBytes),availableAt=timestamp(entry.clock);if(instantNs(availableAt)<instantNs(exportedAt))fail('clock_regressed');
+ const sourceExportHandle=mintSourceV2(body,envelopeReference,availableAt);
+ return Object.freeze({contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,status:'bounded_reference_ready',envelopeReference,availableAt,descriptor:freeze(body),sourceExportHandle,sourceSnapshotHash:envelopeReference.sha256,factsInput:freeze(result.factsInput),nativeInput:freeze(result.nativeInput),...flags});
+}
+
+/** Restart requires a restored whole-generation token, actual committed view
+ * dependencies and exact rederivation. A rehashed metadata-only view is rejected.
+ * It never commits new artifacts or trusts a previous in-memory source handle.
+ */
+export async function readRetainedReferenceHistoryV2({corpusHandle,envelopeReference,decisionAt}={}){
+ const entry=owned(corpusHandle),text=await readArtifact(entry.store,envelopeReference,entry.limits.maxManifestBytes,V2_VIEW_KIND),body=parse(text,'v2_view'),decision=instantNs(decisionAt);
+ if(!obj(body)||body.contract!==RETAINED_REFERENCE_ENVELOPE_CONTRACT||body.view!=='bounded_exact_map_resolution.v2'||!same(body.generationReference,entry.manifestReference)||decision===null||instantNs(body.exportedAt)===null||decision<instantNs(body.exportedAt)||decision<instantNs(entry.descriptor.verifiedAt)||instantNs(body.computedAt)===null||instantNs(body.computedAt)>instantNs(body.exportedAt)||instantNs(body.generationVerifiedAt)===null||instantNs(body.generationVerifiedAt)<instantNs(entry.manifest.materializedAt)||instantNs(body.generationVerifiedAt)>instantNs(body.computedAt))fail('v2_view_generation_or_availability');
+ const targetText=await readBlob(entry.store,body.draftPrefix,entry.limits,entry.shouldContinue,{maximum:entry.limits.maxDenseBytes,kind:'retained-target-prefix-chunk-v2'}),rawTarget=parse(targetText,'v2_target'),target=snapshotTargetInputs(rawTarget.draftPrefixInputs,rawTarget.scope);
+ if(JSON.stringify(target)!==targetText)fail('v2_target_not_canonical');
+ const selection=await selectTarget(entry,target.draftPrefixInputs,body.identity?.matchId,body.computedAt),result=await reduceReferenceTargetV2(entry,selection,target);if(result.status!=='bounded_reference_ready')fail('v2_view_normalized_facts_bound');
+ for(const [key,expected,kind]of [['facts',result.factsInput.utf8,'retained-target-facts-chunk-v2'],['native',result.nativeInput.utf8,'retained-target-native-chunk-v2'],['sourceBindings',JSON.stringify(result.bindings),'retained-target-bindings-chunk-v2']]){const actual=await readBlob(entry.store,body[key],entry.limits,entry.shouldContinue,{maximum:entry.limits.maxDenseBytes,kind});if(actual!==expected)fail('v2_'+key+'_not_rederived');}
+ const expected=boundedBody(entry,selection,target,result,{draftPrefix:body.draftPrefix,facts:body.facts,native:body.native,sourceBindings:body.sourceBindings},{computedAt:body.computedAt,exportedAt:body.exportedAt});expected.generationVerifiedAt=body.generationVerifiedAt;if(!same(expected,body))fail('v2_view_not_rederived');
+ const availableAt=timestamp(entry.clock);if(instantNs(availableAt)<instantNs(entry.descriptor.verifiedAt)||instantNs(availableAt)<instantNs(body.exportedAt))fail('clock_regressed');const sourceExportHandle=mintSourceV2(body,envelopeReference,availableAt);
+ return Object.freeze({contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,status:'bounded_reference_ready',envelopeReference:freeze({...envelopeReference}),availableAt,descriptor:freeze(body),sourceExportHandle,sourceSnapshotHash:envelopeReference.sha256,factsInput:freeze(result.factsInput),nativeInput:freeze(result.nativeInput),...flags});
 }

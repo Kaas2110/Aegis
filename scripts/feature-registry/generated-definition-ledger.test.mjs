@@ -67,3 +67,14 @@ test('compiler-preserved empty input fields remain visible metadata gaps rather 
  const ledger=build({...input.docs,schemas});assert.deepEqual(ledger.definitions[0].semantics.inputs.fields,[]);assert.ok(ledger.definitions[0].semantics.metadataGaps.includes('exact_input_fields_not_declared'));assert.equal(summarize(ledger).targets.find(t=>t.targetId==='PRE_MAP_WIN').generatedVariantsWithMetadataGaps,2);
  schemas[0].schema.definitions[0].inputFields=[123];schemas[0].sha256=digest(schemas[0].schema);assert.throws(()=>build({...input.docs,schemas}),/semantic_metadata:inputFields/);
 });
+
+test('phase/missing-reason/support declarations are captured exactly as assertions, never semantic acceptance',()=>{
+ const input=actualSchemas(),schemas=structuredClone(input.schemas);for(const s of schemas){for(const d of s.schema.definitions){d.phasePolicy='synthetic exact target-scope declaration';d.missingReasonPolicy='synthetic null reason supplied separately';d.supportPolicy='synthetic count is defined at zero support';delete d.minimumSupport;}s.sha256=digest(s.schema);}
+ const ledger=build({...input.docs,schemas}),d=ledger.definitions[0];assert.equal(d.semantics.phase.explicitPolicy,'synthetic exact target-scope declaration');assert.equal(d.semantics.missingReasonPolicy,'synthetic null reason supplied separately');assert.equal(d.semantics.support.minimumSupport,null);assert.equal(d.semantics.support.supportPolicy,'synthetic count is defined at zero support');assert.ok(!d.semantics.metadataGaps.includes('minimum_support_or_nonapplicability_not_declared'));assert.ok(!d.semantics.metadataGaps.includes('explicit_phase_policy_not_declared'));assert.equal(receipt(ledger).semanticAcceptance,false);
+});
+
+test('current-live game clock semantics stay a distinct declaration gap from event/receipt policies',()=>{
+ const input=actualSchemas({targets:['PRE_MAP_WIN']}),schemas=structuredClone(input.schemas);for(const s of schemas){s.schema.targetId='LIVE_MAP_WIN';s.schema.stateMode='LIVE';for(const d of s.schema.definitions)d.inputScopes=['current_live'];s.sha256=digest(s.schema);}
+ let ledger=build({...input.docs,schemas});assert.equal(ledger.definitions[0].semantics.time.gameClockPolicy,null);assert.ok(ledger.definitions[0].semantics.metadataGaps.includes('current_game_clock_policy_not_declared'));
+ for(const s of schemas){for(const d of s.schema.definitions)d.gameClockPolicy='synthetic qualified source clock; no final-stat replacement';s.sha256=digest(s.schema);}ledger=build({...input.docs,schemas});assert.equal(ledger.definitions[0].semantics.time.gameClockPolicy,'synthetic qualified source clock; no final-stat replacement');assert.ok(!ledger.definitions[0].semantics.metadataGaps.includes('current_game_clock_policy_not_declared'));
+});

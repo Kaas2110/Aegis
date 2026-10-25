@@ -47,7 +47,7 @@ test('rehashing a changed target phase or a future input horizon is rejected',as
  for(const change of [b=>{b.mode='LIVE';},b=>{b.routes[0].stateMode='POST';},b=>{b.historyCutoffAt='2026-10-24T13:00:00Z';}]){const body=structuredClone(original);change(body);const utf8=JSON.stringify(body),ref=await f.writer.commit({kind:'compact-feature-trace-v2',utf8,expectedSha256:sha(utf8)});await assert.rejects(f.journal.loadTrace(ref),/target_phase_binding|input_time_after_decision/);}
 });
 test('missing committed wire chunks fail even after their old parsed handle was cached',async t=>{
- const f=await fixture(t),saved=await f.journal.appendBundle(bundle()),manifest=JSON.parse(await f.writer.read(saved.routes[0].schemaArtifact));assert.equal(manifest.contract,'aegis.compact-feature-wire-manifest.v2');assert.ok(manifest.chunks.length);
+ const f=await fixture(t),saved=await f.journal.appendBundle(bundle()),manifest=JSON.parse(await f.writer.read(saved.routes[0].schemaArtifact));assert.equal(manifest.contract,'aegis.compact-feature-wire-manifest.v3');assert.ok(manifest.chunks.length);
  await writeFile(join(f.directory,'objects',manifest.chunks[0].sha256+'.blob'),'changed');await assert.rejects(f.journal.loadTrace(saved.reference),/object_integrity/);
 });
 test('a valid-looking substituted writer receipt never reports a successful append',async t=>{

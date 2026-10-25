@@ -2,13 +2,15 @@
  * scheduler or HTTP entrypoint. Call only after an owned archive commit.
  * Canonical generation/proofs remain responsible for actual source admission.
  */
-import {readDynamicHistoryProof} from './observedDraftFeatureBundle.mjs';
+import {readDynamicHistoryProof,CONTRACT as OBSERVED_BUNDLE_CONTRACT,PROGRESSING_CONTRACT as PROGRESSING_OBSERVED_BUNDLE_CONTRACT} from './observedDraftFeatureBundle.mjs';
+import {BUNDLE_CONTRACT as NATIVE_BUNDLE_CONTRACT,PROGRESSING_BUNDLE_CONTRACT as PROGRESSING_NATIVE_BUNDLE_CONTRACT} from './steamFeatureBundle.mjs';
 import {encodeDiagnosticFeatureTrace,UNIFIED_PRODUCER_CONTRACT} from './unifiedFeatureProducer.mjs';
 import {instantNs} from './causalTime.mjs';
 import {readCurrentSteamInput} from './currentSteamInput.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {createDiagnosticResourceArena,measureBoundedJsonBytes,snapshotPlainRecord} from './diagnosticResourceArena.mjs';
 import {readVerifiedHistorySourceHandle} from './historySourceVerifier.mjs';
+import {VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT,readVerifiedRetainedReferenceSourceHandle} from './retainedReferenceCorpus.mjs';
 export const CONSUMER_CONTRACT='aegis.background-diagnostic-feature-consumer.v2';
 const SHA=/^[a-f0-9]{64}$/,ID=/^[1-9]\d{0,19}$/;
 const DEFAULTS={maxMaps:8,maxPending:16,maxReceipts:64,maxSchemas:32,maxInputBytes:128*1024*1024,maxPendingBytes:128*1024*1024,maxTraceBytes:16*1024*1024};
@@ -18,6 +20,8 @@ const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const receipt=(status,reason,extra={})=>({contract:CONSUMER_CONTRACT,status,reason,stateAdvanced:false,...extra,...flags});
 const freeze=x=>{if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.values(x).forEach(freeze);Object.freeze(x);}return x;};
 const INPUT_KEYS=['matchId','decisionAt','historyProof','sourceExportInput','sourceExportHandle','expectedSourceSnapshotHash','livePrefixInputs','seriesInput','currentMapNumber','mode','patch','rulesEvidence','expectedRulesSha256','eventsEvidence','expectedEventsSha256','progressionProof','retainedReplayProof'];
+const PRIVATE_STATE_CONTRACTS=new Set([OBSERVED_BUNDLE_CONTRACT+'.state',PROGRESSING_OBSERVED_BUNDLE_CONTRACT+'.state']),NATIVE_STATE_CONTRACTS=new Set([NATIVE_BUNDLE_CONTRACT,PROGRESSING_NATIVE_BUNDLE_CONTRACT]);
+const MAX_CONTINUATION_ROWS=2048,LEAD_ROW_ESTIMATED_BYTES=2048;
 function inputSize(input){
  let bytes=0;
  const {historyProof,progressionProof,retainedReplayProof,sourceExportHandle,...serializable}=input;
@@ -55,6 +59,29 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
  const continuing=()=>{try{return signal?.aborted!==true&&shouldContinue()===true;}catch{return false;}};
  function remember(key,value){completed.set(key,freeze(structuredClone(value)));while(completed.size>config.maxReceipts)completed.delete(completed.keys().next().value);}
  function blockedReceipt(reason,extra={}){blocked++;return receipt('blocked',reason,extra);}
+ /** The opaque token is transferred unchanged. The observed bundle separately
+  * clones legacyNative.state into its private WeakMap; releasing the public
+  * bundle does not release that continuation. Charge its inspectable native
+  * state plus the source's bounded 2048-row lead trace until slot replacement.
+  * This conservative engineering estimate is not measured private heap size. */
+ function prepareContinuation(bundle){
+  const liveState=bundle.nextLiveState??null;
+  if(liveState===null)return{liveState,lease:null,bytes:0,basis:'no_dynamic_continuation'};
+  const token=snapshotPlainRecord(liveState,{maxKeys:8});
+  // Legacy trusted callback fixtures can expose plain inspectable states. They
+  // have no private native payload contract and cannot claim native ownership.
+  if(!PRIVATE_STATE_CONTRACTS.has(token.contract))return{liveState,lease:null,bytes:0,basis:'private_payload_not_inspected'};
+  const native=snapshotPlainRecord(bundle.components?.legacyNative,{maxKeys:64}),state=snapshotPlainRecord(native.state,{maxKeys:8});
+  if(token.matchId!==bundle.matchId||token.historyContentHash!==bundle.historyContextHash||token.lastObservationId!==native.observationId||!NATIVE_STATE_CONTRACTS.has(native.contract)||state.contract!==native.contract||!Array.isArray(state.history)||state.history.length>MAX_CONTINUATION_ROWS)throw Error('continuation_state_binding');
+  const serializedBytes=measureBoundedJsonBytes(state,{maxBytes:config.maxInputBytes}),bytes=serializedBytes*6+MAX_CONTINUATION_ROWS*LEAD_ROW_ESTIMATED_BYTES+65536,lease=typeof arena.retainAsset==='function'?arena.retainAsset(liveState,bytes):null;
+  if(!lease)throw Error('continuation_memory_reservation');
+  return{liveState,lease,bytes,basis:'public_native_state_plus_bounded_private_leads_explicit_estimate'};
+ }
+ function commitContinuation(slot,metadata,continuation){
+  const old=slot.committed?.continuationLease;
+  slot.committed={...metadata,liveState:continuation.liveState,continuationLease:continuation.lease,continuationBytes:continuation.bytes,continuationBasis:continuation.basis};
+  continuation.lease=null;old?.release();
+ }
  async function ensureSchema(hash,immutable){
   if(schemas.has(hash)){const known=schemas.get(hash);schemas.delete(hash);schemas.set(hash,known);return;}
   if(!schemaFlights.has(hash)){
@@ -75,7 +102,8 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   if(!object(input)||Object.keys(input).some(k=>!INPUT_KEYS.includes(k))||!ID.test(input.matchId??'')||instantNs(input.decisionAt)===null||!SHA.test(input.expectedSourceSnapshotHash??'')||Number(input.sourceExportInput!=null)+Number(input.sourceExportHandle!=null)!==1)throw Error('host_input_contract');
   const mode=input.mode??'AUTO';if(!['AUTO','POST','LIVE'].includes(mode))throw Error('host_map_phase_only');
   const h=readDynamicHistoryProof(input.historyProof,{matchId:input.matchId,decisionAt:input.decisionAt});if(!h.accepted)throw Error(h.reason);
-  const sourceDescriptor=input.sourceExportHandle==null?null:readVerifiedHistorySourceHandle(input.sourceExportHandle,{expectedSourceSnapshotHash:input.expectedSourceSnapshotHash,matchId:input.matchId,decisionAt:input.decisionAt});
+  let sourceDescriptor=null;
+  if(input.sourceExportHandle!=null){const handleContract=snapshotPlainRecord(input.sourceExportHandle,{maxKeys:8}).contract,options={expectedSourceSnapshotHash:input.expectedSourceSnapshotHash,matchId:input.matchId,decisionAt:input.decisionAt};sourceDescriptor=handleContract===VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT?readVerifiedRetainedReferenceSourceHandle(input.sourceExportHandle,options):readVerifiedHistorySourceHandle(input.sourceExportHandle,options);}
   preparation.ownedCopies++;
   const {historyProof,sourceExportHandle=null,progressionProof=null,retainedReplayProof=null,...data}=input,copy=structuredClone(data);copy.mode=mode;
   let progressionBindingHash=null;
@@ -101,8 +129,14 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   const reset=prior!==null&&prior.historyKey!==job.historyKey,previousLiveState=prior&&!reset?prior.liveState:null;
   // A new historical export resets feature windows, not the observed progress
   // of this map. Only explicit forgetMap releases this independent watermark.
-  let liveWatermark=prior?.liveWatermark??null,bundle,trace;const generationStartedAt=now(),ownedSchemas=new Map();
+  let liveWatermark=prior?.liveWatermark??null,bundle,trace,continuation=null,priorLease=null,generationStartedAt;const ownedSchemas=new Map();
   try{
+  try{
+   // Retain the actual previous token before any reentrant host clock/generation
+   // port or await. A source barrier can drop the slot while this job still uses
+   // its prior reference; that borrow must remain byte owned until this finally.
+   if(prior?.continuationLease&&prior.liveState!==null){priorLease=typeof arena.retainAsset==='function'?arena.retainAsset(prior.liveState,prior.continuationBytes):null;if(!priorLease)throw Error('continuation_borrow_admission');}
+   generationStartedAt=now();
    if(instantNs(generationStartedAt)===null||instantNs(generationStartedAt)<instantNs(input.decisionAt))throw Error('generation_clock_contract');
    bundle=producer.generateFeatureBundle({...input,historyProof:job.historyProof,sourceExportHandle:job.sourceExportHandle,previousLiveState,progressionProof:job.progressionProof,retainedReplayProof:job.retainedReplayProof});
    if(bundle?.contract!==UNIFIED_PRODUCER_CONTRACT||bundle.matchId!==input.matchId||bundle.decisionAt!==input.decisionAt||bundle.sourceSnapshotHash!==input.expectedSourceSnapshotHash||bundle.historyContextHash!==context.contentHash||instantNs(bundle.historyCutoffAt)!==instantNs(context.historyCutoffAt)||!['POST','LIVE'].includes(bundle.mode)||bundle.eligibleForServing!==false||bundle.eligibleForTraining!==false||bundle.recordedPrediction!==false||!Array.isArray(bundle.routes)||bundle.routes.some(r=>r.eligibleForServing!==false||r.eligibleForTraining!==false||r.inferenceVector!==null))throw Error('producer_output_identity_or_admission');
@@ -116,6 +150,7 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
     if(liveWatermark!==null&&(clock<liveWatermark.clockSeconds||received<instantNs(liveWatermark.receivedAt)))throw Error('map_clock_or_receipt_regression_after_history_reset');
     liveWatermark={clockSeconds:clock,receivedAt:admission.provenance.receivedAt};
    }
+   continuation=prepareContinuation(bundle);
    const featuresReadyAt=now();
    if(instantNs(generationStartedAt)===null||instantNs(featuresReadyAt)===null||instantNs(generationStartedAt)<instantNs(input.decisionAt)||instantNs(featuresReadyAt)<instantNs(generationStartedAt))throw Error('generation_clock_contract');
    bundle.timings={decisionInputCutoff:input.decisionAt,generationStartedAt,featuresReadyAt,originalPredictionTimingClaimed:false};
@@ -132,7 +167,7 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
     if(!stored||evidenceHash(select(stored))!==evidenceHash(select(fresh)))throw Error('durable_trace_reconstruction_mismatch');
     if(!continuing())return blockedReceipt('manual_stop_during_trace_restore',meta);
     if(slot.sourceEpoch!==sourceEpoch)return blockedReceipt('source_continuity_changed_during_restore',meta);
-    slot.committed={historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveState:bundle.nextLiveState??null,liveWatermark};
+    commitContinuation(slot,{historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveWatermark},continuation);
     const result=receipt('restored_diagnostic_state',null,{...meta,mode:bundle.mode,traceSha256:job.restoreTraceSha256,restoredFromTraceSha256:job.restoreTraceSha256,traceCommitted:true,stateAdvanced:true,generationTimings:bundle.timings});remember(job.key,result);return result;
    }catch{failed++;return receipt('failed','durable_trace_restore_failed',meta);}
   }
@@ -149,10 +184,16 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   if(instantNs(journalCommittedAt)===null||instantNs(journalCommittedAt)<instantNs(bundle.timings.featuresReadyAt)){failed++;return receipt('failed','journal_commit_clock_contract',{...meta,traceSha256:trace.sha256,traceCommitted:true});}
   if(slot.sourceEpoch!==sourceEpoch)return blockedReceipt('source_continuity_changed_after_trace',{...meta,traceSha256:trace.sha256,traceCommitted:true});
   // Commit the opaque next state ONLY after durable schema+trace receipts.
-  slot.committed={historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveState:bundle.nextLiveState??null,liveWatermark};
+  commitContinuation(slot,{historyKey:job.historyKey,historyCutoffAt:context.historyCutoffAt,historyComputedAt:context.computedAt,revision:context.draftState.revision,decisionAt:input.decisionAt,liveWatermark},continuation);
   recorded++;
   const result=receipt('recorded_diagnostic',null,{...meta,mode:bundle.mode,seriesId:bundle.seriesId??null,traceSha256:trace.sha256,traceBytes:trace.bytes,vectorPoolSize:trace.vectorPoolSize,schemaRefs:bundle.routes.map(r=>r.schemaRef),traceCommitted:true,journalCommittedAt,generationTimings:bundle.timings,provenanceReset:reset,stateAdvanced:true});
   remember(job.key,result);return result;
+  }finally{
+   // v1 trusted producers have no release port. A current bundle remains owned
+   // through every awaited callback/restore check, then releases exactly once.
+   // Token borrows outlive this potentially reentrant cleanup port as well.
+   try{if(typeof bundle?.release==='function')bundle.release();}finally{continuation?.lease?.release();priorLease?.release();}
+  }
  }
  return Object.freeze({
   contract:CONSUMER_CONTRACT,
@@ -186,11 +227,11 @@ export function createDiagnosticFeatureConsumer({producer,writeSchema,appendTrac
   },
   invalidateSourceContinuity(matchId){
    const slot=maps.get(matchId);if(!slot)return{cleared:false,reason:'map_not_cached'};
-   slot.sourceEpoch++;if(slot.committed)slot.committed={...slot.committed,liveState:null};
+   slot.sourceEpoch++;if(slot.committed){slot.committed.continuationLease?.release();slot.committed={...slot.committed,liveState:null,continuationLease:null,continuationBytes:0,continuationBasis:'source_continuity_reset'};}
    for(const[key,r]of completed)if(r.matchId===matchId)completed.delete(key);
    return{cleared:true,reason:'source_window_reset; history_and_clock_watermarks_preserved'};
   },
-  forgetMap(matchId){const slot=maps.get(matchId);if(!slot)return{released:false,reason:'map_not_cached'};if(slot.pending)return{released:false,reason:'map_work_pending'};maps.delete(matchId);for(const[key,r]of completed)if(r.matchId===matchId)completed.delete(key);return{released:true,reason:'explicit_host_cache_release; durable_trace_unchanged'};},
-  status(){return{contract:CONSUMER_CONTRACT,maps:maps.size,pending,pendingBytes,successfulReceipts:completed.size,registeredSchemas:schemas.size,schemaWritesInFlight:schemaFlights.size,recorded,failed,blocked,preparation:{...preparation},resourceArena:arena.status(),globalRichExecutionConcurrency:1,limits:{...config},...flags};}
+  forgetMap(matchId){const slot=maps.get(matchId);if(!slot)return{released:false,reason:'map_not_cached'};if(slot.pending)return{released:false,reason:'map_work_pending'};slot.committed?.continuationLease?.release();maps.delete(matchId);for(const[key,r]of completed)if(r.matchId===matchId)completed.delete(key);return{released:true,reason:'explicit_host_cache_release; durable_trace_unchanged'};},
+  status(){const retained=[...maps.values()].map(s=>s.committed).filter(Boolean);return{contract:CONSUMER_CONTRACT,maps:maps.size,pending,pendingBytes,successfulReceipts:completed.size,registeredSchemas:schemas.size,schemaWritesInFlight:schemaFlights.size,recorded,failed,blocked,preparation:{...preparation},continuationOwnership:{estimatedBytes:retained.reduce((n,s)=>n+(s.continuationBytes??0),0),ownedMaps:retained.filter(s=>s.continuationLease!==null&&s.continuationLease!==undefined).length,unmeasuredMaps:retained.filter(s=>s.liveState!==null&&!s.continuationLease).length,accounting:'conservative_public_state_proxy_not_measured_private_heap'},resourceArena:arena.status(),globalRichExecutionConcurrency:1,limits:{...config},...flags};}
  });
 }

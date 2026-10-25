@@ -1,0 +1,712 @@
+{
+  "contract": "aegis.sol-r6-core-technical-evidence.v1",
+  "baseMain": "9f81621f70ced421f03687eac9cade74ea6656cd",
+  "allSourceInputsSynthetic": true,
+  "actualProducerMechanics": true,
+  "temporaryRealDiskAndWindowsLease": true,
+  "training": false,
+  "providerCalls": false,
+  "runtimeActivation": false,
+  "fullFeatureGateComplete": false,
+  "modelQualityEvaluated": false,
+  "noOverlappingCountsSummed": true,
+  "runs": [
+    {
+      "name": "r6-baseline-rich-profile-1",
+      "resourcesSha256": "db5b0e53351dce5ce15fc20b93188423baddf137c1895f0838439af415ec3b8e",
+      "logSha256": "abd143547f5a17ac27725e9494ecf856bc8c9d57258fadb201533587f1979270",
+      "status": "passed",
+      "elapsedSeconds": 202.016,
+      "peakJobCommitBytes": 2935443456,
+      "lastFreeBytes": 19024613376,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 600,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-writer-batch-contracts-1",
+      "resourcesSha256": "9624c0dd55af50d8431a2d830de130541dc6ede4af46190373708da973ecd939",
+      "logSha256": "de4fdcac812de09a03d64b2c40c26914cbc4f1b94e0555370d8dde0f837bd514",
+      "status": "passed",
+      "elapsedSeconds": 0.61,
+      "peakJobCommitBytes": 120500224,
+      "lastFreeBytes": 20316770304,
+      "jobCapBytes": 2147483648,
+      "wallSeconds": 180,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 18,
+        "pass": 18,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-compact-shared-codec-small-1",
+      "resourcesSha256": "405e5f376b99306025e94572853e59aa8c960f785d2f0aad2a8cb808857c9ea3",
+      "logSha256": "00e95787619b37c4fa2855b0345e64208b915363826a6c61054b446f80bab6dd",
+      "status": "failed",
+      "elapsedSeconds": 2.203,
+      "peakJobCommitBytes": 302227456,
+      "lastFreeBytes": 20326260736,
+      "jobCapBytes": 2147483648,
+      "wallSeconds": 180,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 28,
+        "pass": 23,
+        "fail": 5,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-compact-shared-codec-corrective-1",
+      "resourcesSha256": "485d2f4290912b03ac362dfa09eb92ce1488dfdab0a90117f6ef8621ecd38791",
+      "logSha256": "2193f15de77f3b42153fb341104eef20c7ed50e4b36edd283ea2ed104df938da",
+      "status": "passed",
+      "elapsedSeconds": 2.203,
+      "peakJobCommitBytes": 303849472,
+      "lastFreeBytes": 20428828672,
+      "jobCapBytes": 2147483648,
+      "wallSeconds": 180,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 28,
+        "pass": 28,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-bounded-history-small-1",
+      "resourcesSha256": "580d190acbf48a3674fdc22d910e4faad5e5e906965ca14d2b91a6a2fda36b02",
+      "logSha256": "90bbbde815aefb7ec58d20a86e45563860482aa404476896adcdb05a44db666b",
+      "status": "passed",
+      "elapsedSeconds": 1.203,
+      "peakJobCommitBytes": 137986048,
+      "lastFreeBytes": 20311433216,
+      "jobCapBytes": 4294967296,
+      "wallSeconds": 240,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 23,
+        "pass": 23,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-projection-ownership-small-1",
+      "resourcesSha256": "1f17aa05f56d37a8585aade8bfb99ac4a087d5f6a61fcaf5854097ac6f0e0a0c",
+      "logSha256": "a12766042cc43a683c406fff61230667b5f7e391a6676e9e9e7679b0750b297f",
+      "status": "failed",
+      "elapsedSeconds": 29.766,
+      "peakJobCommitBytes": 1894551552,
+      "lastFreeBytes": 19732127744,
+      "jobCapBytes": 4294967296,
+      "wallSeconds": 240,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 22,
+        "pass": 21,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-projection-resource-corrective-1",
+      "resourcesSha256": "924e2f2d00c3d657a295f8213f94468569dbefbbe73d641a824a840e8a5c5175",
+      "logSha256": "e61075e2e40a11d4078cf620ead9b3ac6fe6403a1c4681ad21baa2c65b246e52",
+      "status": "passed",
+      "elapsedSeconds": 0.203,
+      "peakJobCommitBytes": 72732672,
+      "lastFreeBytes": 20743180288,
+      "jobCapBytes": 2147483648,
+      "wallSeconds": 120,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-rich-shared-io-profile-1",
+      "resourcesSha256": "eef51094ac082075149ae28268a1e03146108f1847052f14d3e681a447fd8f6a",
+      "logSha256": "5a48004347663736ef2fda0014a3bdcb0fff107dcd7bdeccc62db9cfe2bb95cf",
+      "status": "passed",
+      "elapsedSeconds": 71.5,
+      "peakJobCommitBytes": 1638289408,
+      "lastFreeBytes": 19535474688,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 600,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-large-original-source-bridge-1",
+      "resourcesSha256": "fec8f7358b149b6d891f898760660e87c1445b75e8573b9f0733ef5ae0c337c4",
+      "logSha256": "abd9d834c918668b71eb5fe86a8cbd2f35e03b5b5a82ac6a5b0d687fea0ece4f",
+      "status": "passed",
+      "elapsedSeconds": 12.062,
+      "peakJobCommitBytes": 714493952,
+      "lastFreeBytes": 19838681088,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 600,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-compact-proof-legacy-warm-1",
+      "resourcesSha256": "307964eff46e44a437f3169b63b7ce4a03d9b550ef161a662f47ea651ba1c1a8",
+      "logSha256": "5e7e0ea67d1c04997677e470f5d87f8be2fcdde3498a9dfadc8f4eac637f84e1",
+      "status": "passed",
+      "elapsedSeconds": 2.422,
+      "peakJobCommitBytes": 154304512,
+      "lastFreeBytes": 20358336512,
+      "jobCapBytes": 2147483648,
+      "wallSeconds": 180,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 12,
+        "pass": 12,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-rich-one-arena-1",
+      "resourcesSha256": "cb52f7db718b33a03b060ea0f42c3a9947211d45627ec66c6a3f3973ae2aaf4f",
+      "logSha256": "9e94830f8239dd993e0e16511b6ddba1add8ab76fbbe6529613da2e769b71e9b",
+      "status": "failed",
+      "elapsedSeconds": 33.141,
+      "peakJobCommitBytes": 1588203520,
+      "lastFreeBytes": 20319010816,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 300,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-shared-streaming-contracts-1",
+      "resourcesSha256": "2d446f9d5e8f08723edb7cd475c359a481da884960f282a6f117f25357e0a827",
+      "logSha256": "a807520d1d0b3884ece78ad4e497afddf4345fc685414e5e6b22d6049ddb12d6",
+      "status": "passed",
+      "elapsedSeconds": 2.0,
+      "peakJobCommitBytes": 140886016,
+      "lastFreeBytes": 20514930688,
+      "jobCapBytes": 2147483648,
+      "wallSeconds": 180,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 16,
+        "pass": 16,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-rich-one-arena-corrective-1",
+      "resourcesSha256": "989c58038d37007aef1e204fd54cca84eaaae2912ceddd1fbd3f980de912b361",
+      "logSha256": "e9cd55b58bf14a714c8f2a655ebf4305d2d3371478cedc2154a724f81885be09",
+      "status": "failed",
+      "elapsedSeconds": 29.328,
+      "peakJobCommitBytes": 1469542400,
+      "lastFreeBytes": 20251906048,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 300,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-wire-budget-and-consumer-1",
+      "resourcesSha256": "4089d2cfb6f213756e2b6876e64d3c0cac505547448e94422a5d31b396d3bab8",
+      "logSha256": "2a7133c94fe83bb0e5852dbc924a3b076f70f59d08f65c84fff12747188216e8",
+      "status": "passed",
+      "elapsedSeconds": 12.844,
+      "peakJobCommitBytes": 1241108480,
+      "lastFreeBytes": 19816656896,
+      "jobCapBytes": 4294967296,
+      "wallSeconds": 240,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 78,
+        "pass": 78,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-rich-one-arena-corrective-2",
+      "resourcesSha256": "bcc6794b0eed84fa1a299d0b3ecaea05058572707b0a63a7bc751e31313ec6c9",
+      "logSha256": "42b2ccb846b9e0db2cb5caf8cbb8f0ee59cd00bf7bec66a3e30b9f05b1f7347e",
+      "status": "failed",
+      "elapsedSeconds": 62.953,
+      "peakJobCommitBytes": 1414627328,
+      "lastFreeBytes": 19564793856,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 300,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-shared-cold-restart-1",
+      "resourcesSha256": "acce480828e54a25b69f51d8bf6aca53fee81b06710bba147a56e174b82f0db6",
+      "logSha256": "00eb69e948502d8fba6b5ca0f525fb7dc909e6e39026ab8a6105c3f3c2fca4b5",
+      "status": "passed",
+      "elapsedSeconds": 71.078,
+      "peakJobCommitBytes": 1472307200,
+      "lastFreeBytes": 20379271168,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 300,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-actual-emitted-targets-1",
+      "resourcesSha256": "19a08e61c5eff57aedc49947a99eb96cc70504ea42a9c1c8fd5f1f9b103f46e0",
+      "logSha256": "c7fff61d4c35d45ce04c24bffadc23ddd7050cac672f51ae1b2fa770b2a20b59",
+      "status": "failed",
+      "elapsedSeconds": 42.969,
+      "peakJobCommitBytes": 2527248384,
+      "lastFreeBytes": 19231141888,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 600,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-final-consumer-projection-1",
+      "resourcesSha256": "f97d6fd46744d3921bffc67bdf8b927c142ae07be5b60039a060ea335da3eb95",
+      "logSha256": "bd3be21e8e9c65627a1473b4d7e3aeb5d8308cea2edd6b9ab4397d1e865fded8",
+      "status": "failed",
+      "elapsedSeconds": 55.421,
+      "peakJobCommitBytes": 1763942400,
+      "lastFreeBytes": 19330936832,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 300,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 70,
+        "pass": 69,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-final-storage-history-metadata-1",
+      "resourcesSha256": "16dc0338cb484262a1ebd20e69d2e0d63155d9cfd9580757242a427e32bc0bf5",
+      "logSha256": "0fe106cde45138418f6c2606e7a264c7080328d3196a6ae91969dfdcfa43025c",
+      "status": "passed",
+      "elapsedSeconds": 5.219,
+      "peakJobCommitBytes": 305610752,
+      "lastFreeBytes": 20234272768,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 180,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 122,
+        "pass": 122,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-consumer-v2-basis-corrective-1",
+      "resourcesSha256": "0d6060f2d0bf3fae70291b284e01442cc2437c7ca12029ff933efafb09f267b4",
+      "logSha256": "ddb1413f3a6dd43bfd5e13edff8223d7a35c1e3c2e8a98105b0f6ede61b3ec42",
+      "status": "passed",
+      "elapsedSeconds": 3.812,
+      "peakJobCommitBytes": 764727296,
+      "lastFreeBytes": 19608510464,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 120,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-v1-history-compatibility-1",
+      "resourcesSha256": "05a0486aa6c40f912391eeb2855c19a64ed36d4b79bc1fd5911843cec1b2228f",
+      "logSha256": "5099cf2298aec81ba19ccdba8042a985a0d7c1a9b3de43a62911a7d26b6711c7",
+      "status": "passed",
+      "elapsedSeconds": 7.234,
+      "peakJobCommitBytes": 659365888,
+      "lastFreeBytes": 19871281152,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 120,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 24,
+        "pass": 24,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-actual-emissions-bounded-audit-corrective-1",
+      "resourcesSha256": "beea864cc7c3fecdcb6698e7d6cf09f80941675fb01a0897baec8ebe3daca6a7",
+      "logSha256": "11663a04c3fb6f8762640acee57fcc46da75dbe99ff47bba68748feecea6a9da",
+      "status": "passed",
+      "elapsedSeconds": 45.188,
+      "peakJobCommitBytes": 2531901440,
+      "lastFreeBytes": 18219933696,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 600,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-native-prototype-build-1",
+      "resourcesSha256": "ab583f11ca007e97d4c686358dd58116567d8845076d6ecd73e432a4685b98aa",
+      "logSha256": "8b7c42541851983d68fa0848d3e75650c03f5e5ca2f3cafe7263632b26f5a33a",
+      "status": "failed",
+      "elapsedSeconds": 0.407,
+      "peakJobCommitBytes": 41099264,
+      "lastFreeBytes": 20279660544,
+      "jobCapBytes": 1073741824,
+      "wallSeconds": 90,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": null,
+        "pass": null,
+        "fail": null,
+        "skipped": null
+      }
+    },
+    {
+      "name": "r6-native-prototype-build-2",
+      "resourcesSha256": "ea70f4e49bc28eda56f25422a11e708e08c560abd8088bcc9fa43011c94f33b7",
+      "logSha256": "77a36dfd88dba92f995a502e90807a1dc30aef0a30cc4be958f8641bdf4c95a9",
+      "status": "failed",
+      "elapsedSeconds": 0.203,
+      "peakJobCommitBytes": 41041920,
+      "lastFreeBytes": 20605136896,
+      "jobCapBytes": 1073741824,
+      "wallSeconds": 90,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": null,
+        "pass": null,
+        "fail": null,
+        "skipped": null
+      }
+    },
+    {
+      "name": "r6-static-serial-fallback-corrective-1",
+      "resourcesSha256": "4391b3b0fcd181adf161bd7f3dbea0519c3199efa7407fa9175324e31b46f32d",
+      "logSha256": "c3c8834b754de363c542bccd9592135c4beafb4b696fdbdd733fed9d18df5bd2",
+      "status": "failed",
+      "elapsedSeconds": 1.406,
+      "peakJobCommitBytes": 138801152,
+      "lastFreeBytes": 19612622848,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 90,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 17,
+        "pass": 16,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "r6-static-serial-fallback-corrective-2",
+      "resourcesSha256": "22bcf7a163e8f1e00c0cfe49a7ad5cffb4ef2dd869b32e39570b759c4361ee52",
+      "logSha256": "1506acc079d10babb4ae263da292011b9b861bd7c889a19fe4d1eb4ea8eacf0c",
+      "status": "passed",
+      "elapsedSeconds": 1.406,
+      "peakJobCommitBytes": 139587584,
+      "lastFreeBytes": 19592097792,
+      "jobCapBytes": 8589934592,
+      "wallSeconds": 90,
+      "fourCpuAffinityMaximum": 4,
+      "runnerSha256": "b9a304bb5059d2136a07c2b548c3ef91e09fdaa34b905b8f419787a2e723b31b",
+      "resourceHelperSha256": "105d857e10716f403094e675be1b5f2302376b556269a2437a4940385bcfe5fa",
+      "counts": {
+        "tests": 17,
+        "pass": 17,
+        "fail": 0,
+        "skipped": 0
+      }
+    }
+  ],
+  "changedSourcePins": {
+    "scripts/steam-live-collector/source-adapter/boundedExactHistoryStatistics.mjs": "8c247c0aa7879e6a4083f188c75358b8eaa61c05b6f6f9cb9b7684920c7cd12d",
+    "scripts/steam-live-collector/source-adapter/boundedExactHistoryStatistics.test.mjs": "551fe36b1f27fe7f5164b2fcab48e051d96c7dac1cc860f082a4c26cbf0a38a9",
+    "scripts/steam-live-collector/source-adapter/boundedRetainedHistory.mjs": "17a9dfffb79e83de722633d1d3ffbb39f6df661538e850940a4a40c12fe8181e",
+    "scripts/steam-live-collector/source-adapter/boundedRetainedHistory.test.mjs": "eae58b2806bdd3d83e11aee8ca92b2fd7cc025afca6232e57063e2c1facdfd33",
+    "scripts/steam-live-collector/source-adapter/compactFeatureAssets.mjs": "f58180f423166c434522c34c71796f62800e1e21bb31a2935e88c8e7b3e4ee48",
+    "scripts/steam-live-collector/source-adapter/compactFeatureJournal.mjs": "78a0042a9cf126b35471eb42c7644aeec21960f73bcbfc4f0644a50827b5ccf9",
+    "scripts/steam-live-collector/source-adapter/compactFeatureJournal.r5.test.mjs": "feb907c51a9201ba23dace2bcbab0a8a177e9b84a1949fe5a1212d57e54f8364",
+    "scripts/steam-live-collector/source-adapter/compactFeatureJournal.r6.test.mjs": "004166cec9e1cad3985e56853720700ad95aeaa2d2695573be2e6a0c7e450a43",
+    "scripts/steam-live-collector/source-adapter/compactHistoricalInputStore.mjs": "99c9b33491451a0f5a2f75a7de05a7d06ab35d0a1841808deaf7afb577403b2f",
+    "scripts/steam-live-collector/source-adapter/compactHistoricalInputStore.test.mjs": "0662009b9ccc262b46dbf16e5249b2e61e735bb26f30a0d79fde42b1a9ac7e7b",
+    "scripts/steam-live-collector/source-adapter/diagnosticFeatureConsumer.mjs": "6d2ecb3a7b40e9b646286cf1912b311421d210161b1548faed8500d737e356cb",
+    "scripts/steam-live-collector/source-adapter/diagnosticFeatureConsumer.test.mjs": "b13e6d55d5d4920bf9894c1b3ef695b317ad537dbd712d91b7532c504044d067",
+    "scripts/steam-live-collector/source-adapter/featureProjectionCompiler.mjs": "33b43cc3202e75252ba41b758063f794aab13f969c9eb6ea29ff1cd4da86de65",
+    "scripts/steam-live-collector/source-adapter/featureProjectionCompiler.test.mjs": "5240a5633718a6b910df3d9675c653d449cb2d7d672bb3bc39854928a7364844",
+    "scripts/steam-live-collector/source-adapter/featureProjectionOwnership.mjs": "62a019144a3f92422dbc8127d3726b9a3468dfe73145144d5deb347a4d9071ec",
+    "scripts/steam-live-collector/source-adapter/persistentArtifactWriter.mjs": "c3f7a2f4693b09f627e069b369443388a8c715f6f7ab6d1e494432adec9d7f1e",
+    "scripts/steam-live-collector/source-adapter/persistentArtifactWriter.r6.test.mjs": "f8ca005b8da383e21a1e23fd5c5b81086af5c301872877e08d540339ecdd62d9",
+    "scripts/steam-live-collector/source-adapter/r5RichProducer.fixtures.mjs": "89eb81f718ade64668008069e454a50efb5f86811418d70dad85a7eb4fcb3d58",
+    "scripts/steam-live-collector/source-adapter/r6ActualEmittedTargets.test.mjs": "405b46f6f40b00ae0b9abb6039523c3a60be7a0b559c17142aa1a7c349109f58",
+    "scripts/steam-live-collector/source-adapter/r6RichSharedArena.test.mjs": "ef1fdd12b9f83834f3ee1618234048bd324dcc4cac43572ac0ae9bc16b9b5224",
+    "scripts/steam-live-collector/source-adapter/retainedReferenceCorpus.mjs": "b4e0111b362ed1ecc8da59b7a6f0b8b0d29b17a799f6a22680f29c349cdbb9d0",
+    "scripts/steam-live-collector/source-adapter/retainedReferenceCorpus.r6-large.test.mjs": "777d24f6f8b0f5ff715997bec2fa54bdf07061acbfc49b02e887ed359d6986fc",
+    "scripts/steam-live-collector/source-adapter/retainedReferenceCorpus.r6.test.mjs": "36dd1201a51f85b075ee537f3a12e1059f092805294fa76ef87aee4196328a45",
+    "scripts/steam-live-collector/source-adapter/unifiedFeatureProducer.mjs": "19d7498ca048195eb2652f90d3ea4374c069c3c6159bca17c10d4e197864ae35",
+    "scripts/steam-live-collector/source-adapter/unifiedFeatureProducer.test.mjs": "37ad4badc6f0f2ea55984faee6a3ee1549147e8bad6911c67f756c170ac29a13",
+    "scripts/steam-live-collector/source-adapter/unifiedProducerConfig.mjs": "c28012daf66ea354144513034f8dfda5379492580c81f0bf5aef714c9dbd2eef",
+    "scripts/feature-registry/emitted-target-audit.mjs": "a97073bd57db53d223196269d8ccd6de0c09686ac9873766a91e436026bb24d6",
+    "scripts/feature-registry/emitted-target-audit.test.mjs": "40ffe9192c5df4d4d4377087d9ceca37e57facfe4d67beaf68d509a79a12125e",
+    "scripts/feature-registry/generated-definition-ledger.mjs": "c9a257b9040945b08a7df79a56188527ff7db7fd5ac56a1423bbc0782428cb0f",
+    "scripts/feature-registry/generated-definition-ledger.test.mjs": "93922d2158caaceace1235f61e7e8f8c72502133feaa34833035f2af66f39c19",
+    "scripts/feature-registry/pinned-dataset-manifest.mjs": "780a915eb8138ebcca0983ca5609710100b8339da832361dfd2d805e95bb3326",
+    "scripts/feature-registry/pinned-dataset-manifest.test.mjs": "347cf0fb37dd6d3cfcf39b35d7cc75968def2ec8fc380c3c8a83ced0855c56ca"
+  },
+  "actualEmissionReceiptSha256": "a7a7b85fd6d5d5d392b14e1e4727cf013bd7e9ac6b7f0ddee80e96efece0971b",
+  "actualEmissionCounts": {
+    "logicalTargets": 12,
+    "targetModes": 13,
+    "distinctSchemas": 13,
+    "schemaDefinitionOccurrences": 835583,
+    "acceptedDeclarationAuditTargetModes": 9,
+    "deferredDeclarationAuditTargetModes": 4,
+    "catalogueFamilies": 79,
+    "legacyGroups": 14,
+    "legacyUnresolvedOccurrences": 465359
+  },
+  "actualEmissionCoverageAccepted": true,
+  "fullActualAuditAccepted": false,
+  "actualTargetModes": [
+    {
+      "targetId": "PRE_MAP_WIN",
+      "mode": "PRE",
+      "columns": 13468,
+      "schemaSha256": "7735cc0b42561fdda57fafc8f720fcf021163ca02cd9aae7f0ddf82632f8b207",
+      "vectorSha256": "3fa65daae910813f1757203662e83cdd4ca7835a15978236181f3cde788430db",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "PRE_KILLS",
+      "mode": "PRE",
+      "columns": 13468,
+      "schemaSha256": "5404c069f753eefe97c7cc4f389f705d9d77b20358cfa798c448362c2e65f07d",
+      "vectorSha256": "3fa65daae910813f1757203662e83cdd4ca7835a15978236181f3cde788430db",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "PRE_DURATION",
+      "mode": "PRE",
+      "columns": 13468,
+      "schemaSha256": "cad9041f086c36ecdff90af97227a0eb4e2f234e03edeb528c53dfba642e54a3",
+      "vectorSha256": "3fa65daae910813f1757203662e83cdd4ca7835a15978236181f3cde788430db",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "SERIES_PRE",
+      "mode": "SERIES_PRE",
+      "columns": 13481,
+      "schemaSha256": "de9ac99f520b8b1f587945456e378ad237d8b9273a51bb12151fbabe0d1e4ddd",
+      "vectorSha256": "9d543576d6ffdcec466f344095ddff6ac8df37d631cdd4749f573e05e6b67619",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "POST_MAP_WIN",
+      "mode": "POST",
+      "columns": 50888,
+      "schemaSha256": "58ed198543a92e9d38e2332084ee7a8952f21b59b8b0237c94e8623a49d1bb96",
+      "vectorSha256": "86638f89cdc24b33ccebc6fa60ea5b067aa54aa05404f8d06a4e45b37b133731",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "POST_KILLS",
+      "mode": "POST",
+      "columns": 50888,
+      "schemaSha256": "4e64cd1b8a5e127b1605ff53ba333a3d19b7b86b0513be743962c9116b9df8af",
+      "vectorSha256": "86638f89cdc24b33ccebc6fa60ea5b067aa54aa05404f8d06a4e45b37b133731",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "POST_DURATION",
+      "mode": "POST",
+      "columns": 50888,
+      "schemaSha256": "956cde2556e1be55a954f67a835ae45900bb1126d12b7f21b454fcebc4687576",
+      "vectorSha256": "86638f89cdc24b33ccebc6fa60ea5b067aa54aa05404f8d06a4e45b37b133731",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "SERIES_LIVE",
+      "mode": "observed_postdraft",
+      "columns": 50932,
+      "schemaSha256": "0b6a105a91a0db5482688843cea2cdf19609c25b30bfcbddd74610566bd3b964",
+      "vectorSha256": "185f5447a98ca74c1d10fa2f4f98139900d70e14df9f038ba59425cb047cac1c",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "LIVE_MAP_WIN",
+      "mode": "LIVE",
+      "columns": 141138,
+      "schemaSha256": "f177e1db9bcedd853aef129236207a4fa558aa96889e4f88da1f3d5fe27c5c9c",
+      "vectorSha256": "24b4cd4075835ecfabba37400b49f5407546692ae2e7d3a8033c8ba9722df0d2",
+      "auditStatus": "deferred_memory_admission",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "LIVE_KILLS",
+      "mode": "LIVE",
+      "columns": 141138,
+      "schemaSha256": "56954309bc1c665cef0bbc834114ae1c6f787c1953b83159f716b098bff21d10",
+      "vectorSha256": "24b4cd4075835ecfabba37400b49f5407546692ae2e7d3a8033c8ba9722df0d2",
+      "auditStatus": "deferred_memory_admission",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "LIVE_DURATION",
+      "mode": "LIVE",
+      "columns": 141138,
+      "schemaSha256": "b879e3943cabec01fc33b19ae969311d613e791218c543f72408644b6339e2b2",
+      "vectorSha256": "24b4cd4075835ecfabba37400b49f5407546692ae2e7d3a8033c8ba9722df0d2",
+      "auditStatus": "deferred_memory_admission",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "SERIES_LIVE",
+      "mode": "observed_live",
+      "columns": 141182,
+      "schemaSha256": "c8a5437518bee8302ebc890be3309efd1ea14d7183b7907e7cc8f4ffce837d0d",
+      "vectorSha256": "0c7ee895fd05dfdfae7b7b324c06085ad829d10758a65f9aaae953796369f41b",
+      "auditStatus": "deferred_memory_admission",
+      "scopeQualified": true
+    },
+    {
+      "targetId": "SERIES_BETWEEN",
+      "mode": "SERIES_BETWEEN",
+      "columns": 13506,
+      "schemaSha256": "8ba9edf013138bdb448dbb1c246a3964a5b867cc9afad4c4cc24aaafc515d866",
+      "vectorSha256": "55b17464af3a970b6ef66aa9b3b770a9be9be6bee42b7e906a1ff4076605882f",
+      "auditStatus": "accepted_exact_supplied_schema_declaration_audit",
+      "scopeQualified": false
+    }
+  ],
+  "currentEvidenceMeaning": [
+    "122/122 storage/history/metadata cases passed before the final serial-only fallback correction; affected store/journal scope then passed17/17, including the real lowered-pending-operation regression.",
+    "70-case compiler/producer/consumer/writer scope passed69 and failed one provenance-basis fixture; production source unchanged and focused corrected V2 case passed separately.",
+    "24/24 existing v1 history compatibility cases passed.",
+    "Full-rich shared cold restart passed one exact ordered name/Float64/missing roundtrip. No hot-overlap acceptance.",
+    "All13 actual target/mode emissions passed.9declaration audits admitted;4LIVE audits deferred at unchanged arena/workspace.",
+    "Padded70MiB ORIGINAL retained history crossed source transport/restart, not >64MiB normalized whole archive.",
+    "Cold target<=30s, warm/sustained326state, source95%, complete semantics and actual compact-host adoption remain open.",
+    "Native COFF build compiled but Windows worker link failed; no native speedup/adoption result."
+  ]
+}

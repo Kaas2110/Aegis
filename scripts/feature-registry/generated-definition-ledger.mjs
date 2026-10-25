@@ -24,12 +24,16 @@ function semantics(d){
  const supportUnit=declaration(d,'supportUnit',nonempty),minimumSupport=declaration(d,'minimumSupport',x=>ints(x,0,1000000)),historyWindowDays=declaration(d,'historyWindowDays',x=>typeof x==='number'&&Number.isFinite(x)&&x>0);
  const eventTimePolicy=declaration(d,'eventTimePolicy',nonempty),availabilityTimePolicy=declaration(d,'availabilityTimePolicy',nonempty);
  const rolePolicy=declaration(d,'rolePolicy',nonempty),patchPolicy=declaration(d,'patchPolicy',nonempty),populationPolicy=declaration(d,'populationPolicy',nonempty);
+ const gameClockPolicy=declaration(d,'gameClockPolicy',nonempty),supportPolicy=declaration(d,'supportPolicy',nonempty),phasePolicy=declaration(d,'phasePolicy',nonempty),missingReasonPolicy=declaration(d,'missingReasonPolicy',nonempty);
  const gaps=[];if(inputFields===null||inputFields.length===0)gaps.push('exact_input_fields_not_declared');if(eventTimePolicy===null)gaps.push('separate_event_time_policy_not_declared');if(availabilityTimePolicy===null)gaps.push('separate_availability_time_policy_not_declared');
  if(historical&&supportUnit===null)gaps.push('historical_support_unit_not_declared');if(historical&&populationPolicy===null)gaps.push('historical_population_policy_not_declared');
  // An absent policy must not silently mean "irrelevant". Producers can declare
  // explicit not-applicable policies; the ledger cannot infer them from names.
  if(rolePolicy===null)gaps.push('role_policy_or_nonapplicability_not_declared');if(patchPolicy===null)gaps.push('patch_policy_or_nonapplicability_not_declared');
- return{inputs:{scopes:[...d.inputScopes],fields:inputFields,historyDefinitions:declaration(d,'historyDefinitions',Array.isArray)},formula:d.formula,formulaVersion:d.formulaVersion,units:d.units,dtype:d.dtype,missingPolicy:d.missingPolicy,time:{declaredTimePolicy:d.timePolicy,eventTimePolicy,availabilityTimePolicy},support:{historicalDependency:historical,unit:supportUnit,minimumSupport,historyWindowDays},rolePolicy,patchPolicy,populationPolicy,metadataGaps:gaps};
+ if(d.inputScopes.includes('current_live')&&gameClockPolicy===null)gaps.push('current_game_clock_policy_not_declared');
+ if(historical&&minimumSupport===null&&supportPolicy===null)gaps.push('minimum_support_or_nonapplicability_not_declared');
+ if(phasePolicy===null)gaps.push('explicit_phase_policy_not_declared');if(missingReasonPolicy===null)gaps.push('missing_reason_policy_not_declared');
+ return{inputs:{scopes:[...d.inputScopes],fields:inputFields,historyDefinitions:declaration(d,'historyDefinitions',Array.isArray)},formula:d.formula,formulaVersion:d.formulaVersion,units:d.units,dtype:d.dtype,missingPolicy:d.missingPolicy,missingReasonPolicy,time:{declaredTimePolicy:d.timePolicy,eventTimePolicy,availabilityTimePolicy,gameClockPolicy},support:{historicalDependency:historical,unit:supportUnit,minimumSupport,historyWindowDays,supportPolicy},phase:{allowedTargets:[...d.allowedTargets],explicitPolicy:phasePolicy},rolePolicy,patchPolicy,populationPolicy,metadataGaps:gaps};
 }
 function disposition(f,n){
  if(f.kind==='label_only')return'label_only';if(f.kind==='presentation_context')return'presentation_only';
