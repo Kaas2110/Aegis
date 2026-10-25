@@ -192,3 +192,31 @@ issues and the consolidated feature/source/runtime gate before model training.
 Use actual installed/publication receipts; never rerun obsolete assembly guards.
 Graphify refreshes automatically after the completed-block merge. Do not create a
 duplicate build or assume indexed source/memory readiness from a queued refresh.
+
+
+## Sol R6b source checkpoint — 2026-10-25
+Read docs/sol-r6b-review-20261025.txt, its technical evidence and remaining-work
+record before continuing. The normalized observed map-view/private history bridge,
+opt-in actual compact host/restart and bounded exhaustive declaration audit are
+implemented. Exact receipts distinguish failed fixtures, corrections, synthetic
+mechanics and unresolved gates. All 13 original schema audits execute without
+skips; their findings still include declaration gaps and unresolved legacy meanings.
+This is not a full feature-first, real-source, live-latency or model-quality gate.
+No training, provider probing/refresh, tasks, runtime activation or promotion.
+The owner explicitly changed resource policy: 24 GiB aggregate and 6 GiB per
+technical check INCLUDING descendants. The new private R6b runner verifies its
+owned JobObject, four-CPU affinity, finite wall, 4 GiB free and manual STOPs/lock.
+Known-process admission/observation is not a hard supervisor of independent tasks.
+Historical 8/16 GiB receipts remain historical; do not reuse their old runner.
+Storage queue/concurrent admission/prefetch is explicitly deferred to Astra by
+the owner. Preserve existing bounded batch reads and sequential fallback until
+her instructions. No concurrency redesign is included in this block.
+Keep t0/t1 and current-final exclusion, private ownership, 300-second retention
+versus 180-second qualification and whole-series main / selected-map detail.
+Static parsed target consistency is not original availability or full roster/
+prior-chain proof. Static compact bootstrap, full archive, upstream hidden heap,
+complete semantics and sustained/source95 acceptance remain open as documented.
+Use exact install/publication receipts; never rerun old assembly/install guards.
+Publish one reviewed completed-block PR under standing authorization; no routine
+full-source parity or duplicate Graphify build. Source index readiness and stored
+memory approval are separate. Never upload private data, credentials or weights.

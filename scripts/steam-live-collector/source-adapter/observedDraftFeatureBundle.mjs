@@ -5,10 +5,12 @@
 import {instantNs} from './causalTime.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
-import {produceObservedDraftHistory,validateObservedDraftHistory,replayPinnedDraftPrefix} from './observedDraftHistory.mjs';
+import {produceObservedDraftHistory,produceObservedDraftHistoryFromRetainedMapView,validateObservedDraftHistory,replayPinnedDraftPrefix} from './observedDraftHistory.mjs';
 import {advanceSteamFeatureBundle,BUNDLE_CONTRACT} from './steamFeatureBundle.mjs';
 import {HERO_IDS,evidenceHash} from './playerHeroEconomyFeatures.mjs';
-import {produceHistoricalRelationalFeatures,HISTORICAL_PLAYER_PROFILE_KEYS} from './historicalRelationalFeatures.mjs';
+import {produceHistoricalRelationalFeatures,produceHistoricalRelationalFeaturesFromRetainedMapView,HISTORICAL_PLAYER_PROFILE_KEYS} from './historicalRelationalFeatures.mjs';
+import {readRetainedReferenceHistoryMapView} from './retainedReferenceCorpus.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
 import {readSteamProgressionProof,ADMISSION_PROFILE} from './steamProgressionAdmission.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {readRetainedReplayFrameProof} from './retainedReplayFrame.mjs';
@@ -65,6 +67,20 @@ export function createDynamicHistoryProof(historyProducerInputs,{includeInspecti
  const proof=Object.freeze({contract:HISTORY_PROOF_CONTRACT,historyContentHash:context.contentHash,relationalContentHash:relational.contentHash??evidenceHash(relational)});
  histories.set(proof,{context,relational:deepFreeze(structuredClone(relational))});
  return {contract:HISTORY_PROOF_CONTRACT,proof,...(includeInspectionCopies?{context:structuredClone(context),relational:structuredClone(relational)}:{}),eligibleForServing:false,eligibleForTraining:false};
+}
+
+/** Actual retained-map view -> existing private history proof. The common
+ * producer API stays unchanged: consume proof plus its verified v2 source handle.
+ * Caller releases this owner only after every active user has its own ownership.
+ */
+export async function createDynamicHistoryProofFromRetainedMapView({historyView,matchId,computedAt,minimumSupport=5},{includeInspectionCopies=false,resourceArena=null}={}){
+ if(typeof includeInspectionCopies!=='boolean')throw Error('dynamic_history_inspection_option');const arena=resourceArena??createDiagnosticResourceArena(),contextLease=arena.reserve(128*1024*1024);if(!contextLease)throw Error('dynamic_history_view_context_reservation');let relational=null;
+ try{
+  const source=readRetainedReferenceHistoryMapView(historyView,{matchId,decisionAt:computedAt}),produced=await produceObservedDraftHistoryFromRetainedMapView({historyView,matchId,computedAt,minimumSupport,resourceArena:arena});if(produced.status==='blocked'||!produced.context)throw Error('dynamic_history_producer_blocked:'+produced.reason);
+  const context=deepFreeze(produced.context);relational=await produceHistoricalRelationalFeaturesFromRetainedMapView({historyContext:context,historyView,matchId,decisionAt:computedAt,minimumSupport,resourceArena:arena});if(relational.status!=='diagnostic_produced')throw Error('dynamic_relational_history_blocked:'+relational.reason);deepFreeze(relational);
+  const proof=Object.freeze({contract:HISTORY_PROOF_CONTRACT,historyContentHash:context.contentHash,relationalContentHash:relational.contentHash});histories.set(proof,{context,relational});let active=true;
+  return Object.freeze({contract:HISTORY_PROOF_CONTRACT,proof,sourceExportHandle:source.sourceExportHandle,sourceSnapshotHash:source.sourceSnapshotHash,sourceDescriptor:source.descriptor,...(includeInspectionCopies?{context:structuredClone(context),relational:structuredClone(relational)}:{}),release(){if(!active)return false;active=false;histories.delete(proof);relational.release();contextLease.release();return true;},eligibleForServing:false,eligibleForTraining:false});
+ }catch(error){relational?.release?.();contextLease.release();throw error;}
 }
 
 /** Authoritative read for the shared POST/LIVE entrypoint. Returned originals

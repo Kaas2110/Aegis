@@ -1,6 +1,8 @@
 /** OPT-IN actual canonical producer emissions from retained SYNTHETIC fixtures.
  * No mocked vectors, providers, data refresh, fits, source95 claim or activation.
- * Run only in root's serial owned 8GiB/four-CPU/headroom/finite-wall JobObject. */
+ * Run only in root's serial owned JobObject. R6b's explicit owner override
+ * permits6GiB including owned children / aggregate24GiB; old R6 receipts stay
+ * immutable. Default internal arena remains the historical2GiB. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {performance} from 'node:perf_hooks';
@@ -17,6 +19,8 @@ import {draftArgs,pinned,roster} from './observedDraftHistory.fixtures.mjs';
 const AT='2026-10-23T12:40:00Z',AUDIT_WORK_BYTES=1536*1024**2,MAX_AUDIT_SCHEMA_BYTES=256*1024**2;
 const OPT_IN=process.env.AEGIS_R6_ACTUAL_EMITTED_TARGETS==='1';
 const REQUIRE_FULL_AUDIT=process.env.AEGIS_R6_REQUIRE_FULL_AUDIT==='1';
+const AUDIT_ARENA_GIB=process.env.AEGIS_R6_AUDIT_ARENA_GIB??'2';
+assert.ok(['2','6'].includes(AUDIT_ARENA_GIB),'only historical2GiB or explicitly authorized R6b6GiB arena');
 const modeKey=(id,mode)=>id+':'+mode;
 const expectedModes=()=>TARGET_IDS.flatMap(id=>(id==='SERIES_LIVE'?['observed_postdraft','observed_live']:[id.startsWith('SERIES_')?id:id.split('_')[0]]).map(mode=>modeKey(id,mode))).sort();
 
@@ -73,7 +77,7 @@ test('actual canonical producer covers all13modes with explicit per-target audit
  const config=loadLocalUnifiedProducerConfig(),docs={index:config.index,...applyHistoricalTargetEligibility(config)},registryHash=digest(docs),sourceInventoryHash=digest(config.sourceInventory),receipts=[],phases=[];
  const sourceFiles=[...new Map(Object.values(config.sourceInventory).flatMap(i=>i.files).map(f=>[f.path,f])).values()].sort((a,b)=>a.path.localeCompare(b.path,'en'));
  for(const phase of ['PRE','SERIES_PRE','POST','LIVE','BETWEEN']){
-  const arena=createDiagnosticResourceArena({maxBytes:2*1024**3}),started=performance.now();let held=[];
+  const arena=createDiagnosticResourceArena({maxBytes:Number(AUDIT_ARENA_GIB)*1024**3}),started=performance.now();let held=[];
   try{
    held=capturePhase(phase,arena,config);
    for(const item of held){
@@ -102,7 +106,7 @@ test('actual canonical producer covers all13modes with explicit per-target audit
  assert.deepEqual(receipts.map(r=>modeKey(r.targetId,r.stateMode)).sort(),expectedModes());assert.equal(new Set(receipts.map(r=>r.targetId)).size,12);assert.equal(new Set(receipts.map(r=>r.schemaSha256)).size,13);assert.ok(receipts.find(r=>r.targetId==='SERIES_PRE'&&r.phase==='SERIES_PRE'));assert.equal(receipts.filter(r=>r.targetId==='SERIES_LIVE').length,2);
  const acceptedAudits=receipts.filter(r=>r.auditStatus==='accepted_exact_supplied_schema_declaration_audit').length,deferredAudits=receipts.filter(r=>r.auditStatus==='deferred_memory_admission').length,fullActualAuditAccepted=acceptedAudits===13&&deferredAudits===0;
  assert.equal(acceptedAudits+deferredAudits,13);for(const r of receipts.filter(r=>r.auditStatus==='deferred_memory_admission'))for(const key of ['schemaBytes','ledgerSha256','auditSha256','generatedVariants','variantsWithDeclarationGaps','metadataGapCounts','emittedFamilyIds','missingEligibleFamilyIds','sourceProfiles','mixedCurrentDynamicSchemaSha256s'])assert.equal(r[key],null);
- const body={contract:'aegis.r6-actual-emitted-targets-technical-receipt.v2',canonicalRegistrySha256:config.canonicalRegistrySha256,registryHash,sourceInventoryHash,sourceFiles,counts:{logicalTargets:12,targetModes:13,distinctSchemas:13,schemaDefinitionOccurrences:receipts.reduce((n,r)=>n+r.featureCount,0),acceptedDeclarationAuditTargetModes:acceptedAudits,deferredDeclarationAuditTargetModes:deferredAudits,catalogueFamilies:79,legacyGroups:14,legacyUnresolvedOccurrences:config.index.catalogueOccurrenceCount},auditGrouping:'one_exact_actual_schema_at_a_time_with_private_lease; no_global_definition_dedup_count',auditWorkingBytes:AUDIT_WORK_BYTES,maximumAuditSchemaBytes:MAX_AUDIT_SCHEMA_BYTES,receipts,phases,actualEmissionCoverageAccepted:true,fullActualAuditAccepted,requireFullAudit:REQUIRE_FULL_AUDIT,syntheticInputs:true,actualCanonicalProducer:true,mockedVectors:false,positiveLiveClockSeconds:30,independentSeriesPreWithoutMapOrSides:true,sourceAvailabilityAttested:false,prospectiveCoverageAttested:false,semanticAcceptance:false,fullFeatureGateComplete:false,training:false,serving:false,modelQualityEvaluated:false};
+ const body={contract:'aegis.r6-actual-emitted-targets-technical-receipt.v2',arenaGiB:Number(AUDIT_ARENA_GIB),arenaPolicy:AUDIT_ARENA_GIB==='6'?'explicit_owner_R6b_override_one_check6GiB_aggregate24GiB':'historical_R6_internal2GiB',canonicalRegistrySha256:config.canonicalRegistrySha256,registryHash,sourceInventoryHash,sourceFiles,counts:{logicalTargets:12,targetModes:13,distinctSchemas:13,schemaDefinitionOccurrences:receipts.reduce((n,r)=>n+r.featureCount,0),acceptedDeclarationAuditTargetModes:acceptedAudits,deferredDeclarationAuditTargetModes:deferredAudits,catalogueFamilies:79,legacyGroups:14,legacyUnresolvedOccurrences:config.index.catalogueOccurrenceCount},auditGrouping:'one_exact_actual_schema_at_a_time_with_private_lease; no_global_definition_dedup_count',auditWorkingBytes:AUDIT_WORK_BYTES,maximumAuditSchemaBytes:MAX_AUDIT_SCHEMA_BYTES,receipts,phases,actualEmissionCoverageAccepted:true,fullActualAuditAccepted,requireFullAudit:REQUIRE_FULL_AUDIT,syntheticInputs:true,actualCanonicalProducer:true,mockedVectors:false,positiveLiveClockSeconds:30,independentSeriesPreWithoutMapOrSides:true,sourceAvailabilityAttested:false,prospectiveCoverageAttested:false,semanticAcceptance:false,fullFeatureGateComplete:false,training:false,serving:false,modelQualityEvaluated:false};
  t.diagnostic(JSON.stringify({...body,contentHash:digest(body)}));
  if(REQUIRE_FULL_AUDIT)assert.equal(fullActualAuditAccepted,true,'all13declaration audits required; actual emission success cannot close a deferred bulk-ledger memory gate');
 });

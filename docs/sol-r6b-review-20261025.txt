@@ -1,0 +1,105 @@
+SOL R6B SOURCE BLOCK — REVIEW RECORD
+25 October 2026. Baseline: PR10 main 7d1d2f66a36e758d9082932960d697eb40e0a0c1.
+Read the companion technical evidence and remaining-work record. Installation
+and publication receipts identify the exact subsequent reviewed source revision.
+
+Purpose and result
+The prior implementation could retain original responses larger than the old
+facts envelope but did not supply a bounded normalized map view to the real
+history formulas. Its compact persistence was separately tested while the actual
+bootstrap/consumer still used the expanded v1 path. This block adds an explicit,
+disabled diagnostic route across those seams and bounds exhaustive schema audit.
+This is a source-only diagnostic block, not completion of R6 or a training gate.
+
+History and live causality
+retainedReferenceCorpus.mjs now exposes a private normalized map-view handle and
+bounded parts with streamed exact v1 facts hashes. ALL original versions remain
+retained; only the target-specific as-of view resolves them. The additive
+retainedHistoryViewInputs.mjs and existing historyCalculationCore /
+historicalRelationalFeatures templates feed the real observed-draft proof and
+common producer. Dense and streamed calculations share arithmetic, selectors,
+support, weights, quantiles, ordering and missingness. No alternate simplified
+family formulas, padded source workaround, pruning or raised source caps.
+History stays frozen at first complete draft t0. Later identity t1 changes
+selectors, not the cutoff. Current-map final facts stay excluded. Private view,
+source, proof and generated-bundle owners survive awaited persistence and are
+released at replacement, forget or close. Small golden checks compare every
+emitted historical-family column and context output, and actual producer binding,
+against the dense oracle.
+Repeated selector scans remain a performance limitation. The normalized large
+fixture has its own opt-in, measurements and failure status in the evidence.
+The 1600-version boundary run built 118570920 normalized bytes in 115 parts,
+using 206863304 stored bytes, then reopened the writer. It hit the 1200-second
+wall limit before complete source/view replay and family-proof computation;
+the complete gate FAILED on time, not memory. Peak owned commit was 395440128.
+The exact owned synthetic temp was removed after the process exited; logs and
+phase/resource receipts remain. No second large run or higher cap was used.
+
+Actual disabled host and routing
+retainedDiagnosticBootstrap/retainedFeaturePipeline/diagnosticFeatureConsumer
+accept explicit compactStorage and boundedHistory ports. The typed history CAS
+pointer binds corpus generation, target, t0, identity revision and profile.
+Restart revalidates original corpus/view and remints private proof ownership;
+it does not trust a copied JSON token. Compact journal writes the actual bundle
+without a preliminary full v1 trace, and reader/router pages schema and vector
+handles. Existing v1 readability and whole-series main / selected-map detail
+routing remain. Default entry selects the current map. No public listeners,
+tasks, providers, predictions or models were enabled.
+The actual synthetic host check covers POST, two LIVE states, close/reopen and
+three restored continuations without duplicate trace commits. It is not a
+live-latency or prospective source-availability acceptance. This fixture explicitly
+injects a 4 GiB shared arena inside the 6 GiB owned-tree cap. The default 2 GiB
+arena can fail closed; this is not default-2-GiB rich-host acceptance.
+
+Static historical inputs
+staticHistoryTargetContracts.mjs shares the original PRE/series target validators
+with the dense generator and compact store. boundedJsonSource.mjs checks full
+JSON grammar and structural bounds before parsing; facts need no decoded graph
+merely for syntax/hash verification. Strict journal handling is derived from
+static phase, not caller-controlled kind. Legacy byte-only evidence requires an
+explicit constructor option, default false. Actual target map/sides, nominal
+series teams, transition/revision and retained receipt times are checked.
+A minted parsed proof retains requiredInputAvailableAt and rechecks it even if
+a later reader omits or disables the strict parsing request. A repeated series
+receipt cannot move the frozen cutoff or authorize an earlier decision.
+This does NOT authenticate original provider availability or the complete roster
+and prior-target chain: originalAvailabilityAuthenticated and
+seriesDerivationVerified remain false. Static PRE/series compact bootstrap intake
+is still a separate open integration task. The v1 static writer's bundle ownership
+must be released on all exits; the companion checks identify the corrected scope.
+
+Exhaustive declaration audit
+bounded-emitted-definition-audit.mjs uses compiler-owned original schemas,
+streamed ordered finding roots and bounded detail pages. It reuses the existing
+definition semantics. All 12 targets / 13 modes and 835583 definition occurrences
+across 13 supplied original schemas were inspected with zero skipped definitions.
+All 79 families and 14 legacy
+groups retain explicit dispositions. At least one declaration gap remains in
+every occurrence; 465359 legacy occurrences remain unresolved. These are findings,
+not fabricated metadata or accepted semantics. The actual audit fixture uses
+synthetic retained inputs and actual canonical producer outputs, not mocked
+vectors. Read the evidence for measured time, memory and source identity.
+
+Resources, failures and alternatives
+The owner's latest override is 24 GiB aggregate and 6 GiB per technical check,
+including descendants. The new Windows owned JobObject verifies the hard 6 GiB
+cap and four-CPU affinity. Its guard polls finite wall, at least 4 GiB free and
+STOPs, and owns a shared exclusive lock.
+Known-process aggregate admission/observation is conservative, not a hard global
+supervisor around independent services. Initialization cleanup was corrected so
+a failed first receipt cannot strand this owner's lock; the injected failure and
+subsequent successful run are separate evidence. Foreign locks were not removed.
+Initial map-view and host failures, their causes and corrective runs are preserved.
+Do not sum overlapping runs or claim a single all-pass invocation.
+Rejected shortcuts: giant compatibility JSON, unbounded object copies, trusting
+trace metadata as source causality, using later finals, silently weakening source
+eligibility or replacing all-family checks with a subset. No C++ adoption occurred;
+the earlier unusable Windows linker result remains separate evidence.
+
+Owner-deferred decision and next actor
+Storage concurrency, queue admission and prefetch design are explicitly reserved
+for Astra. Existing bounded batch reads and sequential fallback remain unchanged.
+See sol-r6b-remaining-work-20261025.txt. Astra reviews causality, semantics and the
+finite architectural questions; Sol continues implementation under those decisions.
+Training, HPO, calibration, selection, predictive evaluation, refresh, runtime
+activation and promotion remain OFF until their separate gates.

@@ -11,7 +11,8 @@ import {replayPinnedDraftPrefix} from './observedDraftHistory.mjs';
 import {verifyHistoricalFactVersion,pinRetainedHistoryJson,RETAINED_FACT_MAX_BYTES} from './retainedOpenDotaFacts.mjs';
 import {createRetainedHistorySourceExport} from './retainedHistorySourceExport.mjs';
 import {createVerifiedHistorySourceHandle} from './historySourceVerifier.mjs';
-import {snapshotPlainRecord} from './diagnosticResourceArena.mjs';
+import {snapshotPlainRecord,createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
+import {canonical} from '../../feature-registry/registry-contract.mjs';
 import {reduceRetainedMapVersions,projectReducedRetainedMap,retainedReducedFactsScope,retainedVersionSetBinding} from './boundedRetainedHistory.mjs';
 
 export const RETAINED_REFERENCE_CORPUS_CONTRACT='aegis.retained-reference-corpus.v2';
@@ -20,6 +21,7 @@ export const RETAINED_REFERENCE_LIMITS=Object.freeze({maxVersions:20000,maxTotal
 const PART='aegis.retained-reference-corpus-part.v2',BLOB='aegis.utf8-chunk-reference.v2',VIEW_KIND='retained-history-view-v2';
 const handles=new WeakMap(),sha=x=>createHash('sha256').update(x).digest('hex'),byteLength=x=>Buffer.byteLength(x,'utf8');
 const sourceHandlesV2=new WeakMap();
+const mapViewHandles=new WeakMap();
 export const VERIFIED_RETAINED_REFERENCE_SOURCE_HANDLE_CONTRACT='aegis.verified-retained-reference-source-handle.v2';
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x),hash=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x),id=x=>typeof x==='string'&&/^[1-9]\d{0,19}$/.test(x);
 const fail=x=>{throw Error('retained_reference_corpus:'+x);};
@@ -264,3 +266,59 @@ export async function readRetainedReferenceHistoryV2({corpusHandle,envelopeRefer
  const availableAt=timestamp(entry.clock);if(instantNs(availableAt)<instantNs(entry.descriptor.verifiedAt)||instantNs(availableAt)<instantNs(body.exportedAt))fail('clock_regressed');const sourceExportHandle=mintSourceV2(body,envelopeReference,availableAt);
  return Object.freeze({contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,status:'bounded_reference_ready',envelopeReference:freeze({...envelopeReference}),availableAt,descriptor:freeze(body),sourceExportHandle,sourceSnapshotHash:envelopeReference.sha256,factsInput:freeze(result.factsInput),nativeInput:freeze(result.nativeInput),...flags});
 }
+
+export const RETAINED_HISTORY_MAP_VIEW_CONTRACT='aegis.owned-retained-history-map-view.v3';
+const MAP_VIEW_KIND='retained-history-map-view-v3',MAP_PART_KIND='retained-normalized-map-part-v3',MAP_PART='aegis.retained-normalized-map-part.v3';
+function mapView(handle){const value=mapViewHandles.get(handle);if(!value)fail('owned_map_view_required');return value;}
+const withoutGlobalBinding=map=>{const {sourceVersionSetSha256,evidenceRef,...rest}=map;return rest;};
+const withGlobalBinding=(map,set)=>({...map,sourceVersionSetSha256:set,evidenceRef:'sha256:'+set+'#match/'+map.matchId});
+async function* mapParts(view){
+ let count=0,previous=null;
+ for(let index=0;index<view.body.mapParts.length;index++){
+  await proceed(view.entry.shouldContinue);const text=await readArtifact(view.entry.store,view.body.mapParts[index],view.entry.limits.maxPartBytes,MAP_PART_KIND),part=parse(text,'map_part');
+  if(part?.contract!==MAP_PART||part.index!==index||!Array.isArray(part.maps)||!part.maps.length||part.maps.length>view.entry.limits.maxPartEntries||canonical(part)!==text)fail('map_part_contract');
+  for(const row of part.maps){if(!id(row?.matchId)||previous!==null&&previous.localeCompare(row.matchId,'en')>=0)fail('map_view_order_or_duplicate');previous=row.matchId;if(++count>view.body.rowCount)fail('map_view_count');yield freeze(withGlobalBinding(row,view.body.sourceVersionSetSha256));}
+ }
+ if(count!==view.body.rowCount)fail('map_view_count');
+}
+function streamFactsHash(scope){const digest=createHash('sha256');let n=0,rows=0;const update=text=>{digest.update(text);n+=byteLength(text);};update('{"contract":"aegis.prior-map-facts.v1","maps":[');return {append(map){if(rows++)update(',');update(canonical(map));},finish(){update('],"scope":'+canonical(scope)+'}');return{sha256:digest.digest('hex'),bytes:n};}};}
+async function buildMapView(entry,selection,target,{recorded=null,computedAt}){
+ const groups=new Map();for(const item of selection.selected){const key=item.summary.matchId;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);}
+ const parts=[],dependencies=[],omitted=[];let rows=[],rowCount=0;
+ async function flush(){if(!rows.length)return;if(parts.length>=entry.limits.maxParts)fail('map_view_part_count');const utf8=canonical({contract:MAP_PART,index:parts.length,maps:rows}),ref={kind:MAP_PART_KIND,sha256:sha(utf8),bytes:byteLength(utf8)};if(ref.bytes>entry.limits.maxPartBytes)fail('map_view_part_bound');
+  if(recorded){if(canonical(ref)!==canonical(recorded.mapParts?.[parts.length])||await readArtifact(entry.store,ref,entry.limits.maxPartBytes,MAP_PART_KIND)!==utf8)fail('map_part_not_rederived');parts.push(freeze(ref));}
+  else parts.push(await commitArtifact(entry.store,MAP_PART_KIND,utf8,entry.limits.maxPartBytes));rows=[];}
+ for(const matchId of [...groups.keys()].sort((a,b)=>a.localeCompare(b,'en'))){
+  async function* inputs(){for(const item of groups.get(matchId)){const utf8=await readBlob(entry.store,item.blob,entry.limits,entry.shouldContinue);yield{utf8,pin:{path:'reference-corpus/version.json',bytes:byteLength(utf8),sha256:item.summary.versionSha256}};}}
+  const reduced=await reduceRetainedMapVersions({versionInputs:inputs(),matchId,targetMapId:selection.state.matchId,historyCutoffAt:selection.state.historyCutoffAt,shouldContinue:entry.shouldContinue});dependencies.push(...reduced.sourceVersions);
+  const projected=projectReducedRetainedMap(reduced,{sourceVersionSetSha256:'0'.repeat(64)});if(projected.omitted)omitted.push(projected.omitted);if(!projected.map)continue;
+  const row=withoutGlobalBinding(projected.map);if(rows.length&&(rows.length>=entry.limits.maxPartEntries||byteLength(canonical({contract:MAP_PART,index:parts.length,maps:[...rows,row]}))>entry.limits.maxPartBytes))await flush();rows.push(row);rowCount++;
+ }
+ await flush();if(recorded&&parts.length!==recorded.mapParts.length)fail('map_part_not_rederived');const binding=retainedVersionSetBinding(dependencies),scope=retainedReducedFactsScope({historyCutoffAt:selection.state.historyCutoffAt,rowCount,population:target.scope?.population}),view={entry,body:{mapParts:parts,rowCount,sourceVersionSetSha256:binding.sourceVersionSetSha256}},facts=streamFactsHash(scope);
+ for await(const map of mapParts(view))facts.append(map);const factsPin={path:'retained-history/prior-map-facts.json',...facts.finish()},nativeInput=pinRetainedHistoryJson({contract:'aegis.pinned-native-economy-observations.v1',observations:[]},'retained-history/no-native-observations.json');
+ async function blob(key,utf8,kind){if(recorded){const reference=recorded[key];if(await readBlob(entry.store,reference,entry.limits,entry.shouldContinue,{maximum:entry.limits.maxDenseBytes,kind})!==utf8)fail('map_view_'+key+'_not_rederived');return reference;}return writeBlob(entry.store,utf8,entry.limits,entry.shouldContinue,kind,entry.limits.maxDenseBytes);}
+ const draftPrefix=await blob('draftPrefix',JSON.stringify(target),'retained-map-view-prefix-v3'),sourceBindings=await blob('sourceBindings',JSON.stringify(binding),'retained-map-view-bindings-v3');
+ const identity=referenceIdentity(selection.state),population={facts:rowCount?'complete_nonempty_within_provided_retained_corpus':'complete_empty_within_provided_retained_corpus',native:'not_provided',factsUsable:true,nativeCandidatesPinned:false,allCollectionsComplete:false,zeroHistoryStatisticsInvented:false,globalPopulationComplete:false};
+ return{contract:RETAINED_REFERENCE_ENVELOPE_CONTRACT,view:'bounded_normalized_map_parts.v3',generationReference:entry.manifestReference,generationVerifiedAt:recorded?.generationVerifiedAt??entry.descriptor.verifiedAt,identity,identitySha256:draftHash(identity),historyCutoffAt:identity.historyCutoffAt,validFrom:identity.validFrom,computedAt,selection:selection.selection,population,scope,rowCount,mapParts:parts,factsPin,factsSha256:factsPin.sha256,nativeSha256:nativeInput.pin.sha256,sourceVersionSetSha256:binding.sourceVersionSetSha256,draftPrefixBindingHash:draftHash(target.draftPrefixInputs.map(p=>({raw:p.rawInput.pin.sha256,metadata:p.metadataInput.pin.sha256}))),draftPrefix,sourceBindings,omittedMaps:omitted,originalHistoricalAvailabilityProven:false,fullArchiveComplete:false,...flags};
+}
+function viewReservation(entry,arena){if(!arena||typeof arena.reserve!=='function')fail('map_view_owned_arena');const held=arena.reserve(entry.limits.maxVersionBytes*10+entry.limits.maxPartBytes*8+entry.limits.maxManifestBytes*8);if(!held)fail('map_view_memory_reservation');return held;}
+function mintMapView(entry,body,envelopeReference,availableAt){const handle=Object.freeze({contract:RETAINED_HISTORY_MAP_VIEW_CONTRACT}),sourceExportHandle=mintSourceV2(body,envelopeReference,availableAt),value={entry,body:freeze(body),envelopeReference,availableAt,sourceExportHandle};mapViewHandles.set(handle,value);return Object.freeze({contract:RETAINED_HISTORY_MAP_VIEW_CONTRACT,status:'bounded_map_view_ready',handle,descriptor:freeze(body),envelopeReference,availableAt,sourceExportHandle,sourceSnapshotHash:envelopeReference.sha256,...flags});}
+/** Target-specific map parts; no single complete normalized JSON string exists.
+ * Every original generation version survives. Fixed v1 byte guards are untouched.
+ */
+export async function materializeRetainedReferenceHistoryMapView({corpusHandle,draftPrefixInputs,matchId,scope=null,resourceArena=null}={}){
+ const entry=owned(corpusHandle),target=snapshotTargetInputs(draftPrefixInputs,scope),lease=viewReservation(entry,resourceArena??createDiagnosticResourceArena());
+ try{await proceed(entry.shouldContinue);const computedAt=timestamp(entry.clock);if(instantNs(computedAt)<instantNs(entry.descriptor.verifiedAt))fail('clock_regressed');const selection=await selectTarget(entry,target.draftPrefixInputs,matchId,computedAt),body=await buildMapView(entry,selection,target,{computedAt}),exportedAt=timestamp(entry.clock);if(instantNs(exportedAt)<instantNs(computedAt))fail('clock_regressed');body.exportedAt=exportedAt;const envelopeReference=await commitArtifact(entry.store,MAP_VIEW_KIND,canonical(body),entry.limits.maxManifestBytes),availableAt=timestamp(entry.clock);if(instantNs(availableAt)<instantNs(exportedAt))fail('clock_regressed');return mintMapView(entry,body,envelopeReference,availableAt);}finally{lease.release();}
+}
+export async function restoreRetainedReferenceHistoryMapView({corpusHandle,envelopeReference,decisionAt,resourceArena=null}={}){
+ const entry=owned(corpusHandle),lease=viewReservation(entry,resourceArena??createDiagnosticResourceArena());try{
+  const text=await readArtifact(entry.store,envelopeReference,entry.limits.maxManifestBytes,MAP_VIEW_KIND),body=parse(text,'map_view'),decision=instantNs(decisionAt);
+  if(body?.view!=='bounded_normalized_map_parts.v3'||canonical(body.generationReference)!==canonical(entry.manifestReference)||canonical(body)!==text||decision===null||instantNs(body.exportedAt)===null||instantNs(body.computedAt)===null||instantNs(body.generationVerifiedAt)===null||instantNs(body.generationVerifiedAt)<instantNs(entry.manifest.materializedAt)||instantNs(body.generationVerifiedAt)>instantNs(body.computedAt)||instantNs(body.computedAt)>instantNs(body.exportedAt)||decision<instantNs(body.exportedAt)||decision<instantNs(entry.descriptor.verifiedAt))fail('map_view_generation_or_time');
+  const raw=parse(await readBlob(entry.store,body.draftPrefix,entry.limits,entry.shouldContinue,{maximum:entry.limits.maxDenseBytes,kind:'retained-map-view-prefix-v3'}),'map_view_target'),target=snapshotTargetInputs(raw.draftPrefixInputs,raw.scope),selection=await selectTarget(entry,target.draftPrefixInputs,body.identity?.matchId,body.computedAt),expected=await buildMapView(entry,selection,target,{recorded:body,computedAt:body.computedAt});expected.exportedAt=body.exportedAt;if(canonical(expected)!==text)fail('map_view_not_rederived');const availableAt=timestamp(entry.clock);if(instantNs(availableAt)<instantNs(body.exportedAt)||instantNs(availableAt)<instantNs(entry.descriptor.verifiedAt))fail('clock_regressed');return mintMapView(entry,body,freeze({...envelopeReference}),availableAt);
+ }finally{lease.release();}
+}
+export function readRetainedReferenceHistoryMapView(handle,{matchId,decisionAt,expectedSourceSnapshotHash}={}){
+ const view=mapView(handle);readVerifiedRetainedReferenceSourceHandle(view.sourceExportHandle,{matchId,decisionAt,expectedSourceSnapshotHash:expectedSourceSnapshotHash??view.envelopeReference.sha256});return freeze({descriptor:view.body,envelopeReference:view.envelopeReference,sourceSnapshotHash:view.envelopeReference.sha256,sourceExportHandle:view.sourceExportHandle,availableAt:view.availableAt});
+}
+export async function* iterateRetainedReferenceHistoryMapView(handle,options={}){readRetainedReferenceHistoryMapView(handle,options);yield* mapParts(mapView(handle));}
+export async function readRetainedReferenceHistoryMapViewPrefix(handle,options={}){readRetainedReferenceHistoryMapView(handle,options);const view=mapView(handle),raw=parse(await readBlob(view.entry.store,view.body.draftPrefix,view.entry.limits,view.entry.shouldContinue,{maximum:view.entry.limits.maxDenseBytes,kind:'retained-map-view-prefix-v3'}),'map_view_prefix');return snapshotTargetInputs(raw.draftPrefixInputs,raw.scope).draftPrefixInputs;}

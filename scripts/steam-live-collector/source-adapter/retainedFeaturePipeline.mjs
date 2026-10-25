@@ -47,12 +47,17 @@ function decodeCapture(input,decisionAt){
  if(!['normalized_capture_diagnostic','empty_games_diagnostic'].includes(normalized.status))fail('raw_replay_rejected');
  return{receipt:r,capture,normalized};
 }
-export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRevisions,historyProfileSha256,materializationGeneration='initial',featureJournal,now=()=>new Date().toISOString(),shouldContinue=()=>true,signal=null,limits={},historySourceFactory=null,resourceArena=null}={}){
- if((historySourceFactory===null?typeof db?.query!=='function':typeof historySourceFactory!=='function')||typeof sourceStore?.put!=='function'||typeof sourceStore?.load!=='function'||typeof historyRevisions?.getOrCreate!=='function'||!isHash(historyProfileSha256)||typeof materializationGeneration!=='string'||!/^[-A-Za-z0-9_.]{1,64}$/.test(materializationGeneration)||typeof featureJournal?.writeSchema!=='function'||typeof featureJournal?.appendTrace!=='function'||typeof now!=='function'||typeof shouldContinue!=='function')fail('owned_ports_required');
+export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRevisions,historyProfileSha256,materializationGeneration='initial',featureJournal,now=()=>new Date().toISOString(),shouldContinue=()=>true,signal=null,limits={},historySourceFactory=null,resourceArena=null,isCurrentSeriesInput=null,boundedHistory=null}={}){
+ const compact=featureJournal?.contract==='aegis.compact-diagnostic-feature-journal.v2';
+ if((boundedHistory===null&&((historySourceFactory===null?typeof db?.query!=='function':typeof historySourceFactory!=='function')||typeof sourceStore?.put!=='function'||typeof sourceStore?.load!=='function'||typeof historyRevisions?.getOrCreate!=='function'))||boundedHistory!==null&&(boundedHistory.contract!=='aegis.retained-map-history-host.v1'||typeof boundedHistory.acquire!=='function'||!compact)||!isHash(historyProfileSha256)||typeof materializationGeneration!=='string'||!/^[-A-Za-z0-9_.]{1,64}$/.test(materializationGeneration)||(!compact&&(typeof featureJournal?.writeSchema!=='function'||typeof featureJournal?.appendTrace!=='function'))||compact&&(typeof featureJournal.appendBundle!=='function'||typeof featureJournal.loadTrace!=='function')||typeof now!=='function'||typeof shouldContinue!=='function'||isCurrentSeriesInput!==null&&typeof isCurrentSeriesInput!=='function')fail('owned_ports_required');
  const defaults={maxMaps:8,maxFramesPerMap:512,maxPrefixBytesPerMap:32*1024*1024,maxHistoryMaps:20000,maxNativeHistoryFrames:10000,maxPendingCaptures:4},caps={maxMaps:16,maxFramesPerMap:2048,maxPrefixBytesPerMap:64*1024*1024,maxHistoryMaps:50000,maxNativeHistoryFrames:20000,maxPendingCaptures:16};
  if(!limits||typeof limits!=='object'||Array.isArray(limits)||Object.keys(limits).some(k=>!Object.hasOwn(defaults,k)))fail('limit_keys');const config={...defaults,...limits};for(const[k,v]of Object.entries(config))if(!Number.isSafeInteger(v)||v<1||v>caps[k])fail('limit_bound');
- const consumer=createDiagnosticFeatureConsumer({producer,writeSchema:x=>featureJournal.writeSchema(x),appendTrace:x=>featureJournal.appendTrace(x),loadCommittedTrace:typeof featureJournal.loadTrace==='function'?x=>featureJournal.loadTrace(x):null,shouldContinue:()=>continuing(),signal,now,resourceArena,limits:{maxMaps:config.maxMaps}}),maps=new Map(),completed=new Map();let tail=Promise.resolve(),pending=0,stopObserved=false;
- function continuing(){let yes=false;try{yes=signal?.aborted!==true&&shouldContinue()===true;}catch{}
+ const maps=new Map(),completed=new Map();let tail=Promise.resolve(),pending=0,stopObserved=false,closed=false;
+ const consumer=createDiagnosticFeatureConsumer({producer,...(compact?{compactJournal:featureJournal}:{writeSchema:x=>featureJournal.writeSchema(x),appendTrace:x=>featureJournal.appendTrace(x),loadCommittedTrace:typeof featureJournal.loadTrace==='function'?x=>featureJournal.loadTrace(x):null}),isCurrentInput:({input,bundle})=>{
+  const slot=maps.get(input.matchId);if(!continuing()||!slot||slot.closedSource||slot.blockedReason||slot.proof!==input.historyProof||slot.sourceHandle!==input.sourceExportHandle||slot.source?.sourceSnapshotHash!==bundle.sourceSnapshotHash)return false;
+  if(isCurrentSeriesInput===null)return true;const current=isCurrentSeriesInput({seriesInput:input.seriesInput??null,currentMapNumber:input.currentMapNumber??null,matchId:input.matchId,bundle});if(current&&typeof current.then==='function'){Promise.resolve(current).catch(()=>{});return false;}return current===true;
+ },shouldContinue:()=>continuing(),signal,now,resourceArena,limits:{maxMaps:config.maxMaps}});
+ function continuing(){let yes=false;try{yes=!closed&&signal?.aborted!==true&&shouldContinue()===true;}catch{}
   if(!yes&&!stopObserved){stopObserved=true;for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;interruptEligibility(slot,matchId,'manual_stop');resetFeatureContinuity(matchId);}}
   if(yes)stopObserved=false;return yes;
  }
@@ -164,6 +169,11 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    let stopPoint='manual_stop_during_history_materialization';
    try{
     if(slot.revision!==revision){
+     if(boundedHistory!==null){let owner=await boundedHistory.acquire({matchId:o.matchId,draftPrefixInputs:slot.prefix,revision});try{
+      if(!continuing())return status('blocked','manual_stop_after_source_commit',{results});
+      const old=slot.historyOwner;slot.source={sourceSnapshotHash:owner.sourceSnapshotHash};slot.sourceHandle=owner.sourceExportHandle;slot.proof=owner.proof;slot.revision=revision;slot.historyOwner=owner;owner=null;old?.release();
+     }finally{owner?.release();}}
+     else{
      const key=draftHash({contract:RETAINED_PIPELINE_CONTRACT,revision,historyProfileSha256,materializationGeneration,maxHistoryMaps:config.maxHistoryMaps,maxNativeHistoryFrames:config.maxNativeHistoryFrames,includePlayerPerformance:true});
      const reference=await historyRevisions.getOrCreate(key,async control=>{
       if(!continuing())throw Error('manual_stop_before_history_read');
@@ -186,6 +196,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
      // handle after proof construction; queued consumers retain their own token.
      const sourceHandle=createVerifiedHistorySourceHandle(exported.envelopeInput,{expectedSourceSnapshotHash:exported.sourceSnapshotHash,matchId:o.matchId,decisionAt:materializedAt});
      slot.source={sourceSnapshotHash:exported.sourceSnapshotHash};slot.sourceHandle=sourceHandle;slot.proof=proof.proof;slot.revision=revision;
+     }
     }
     if(!continuing())return status('blocked','manual_stop_before_generation',{results});
     const series=input.seriesByMatch?.[o.matchId]??{};
@@ -194,7 +205,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
     results.push(consumed);
    }catch{if(!continuing())return status('blocked',stopPoint,{results});results.push(status('failed','history_materialization_or_generation',{matchId:o.matchId}));}
   }
-  const result=status('processed_diagnostic',null,{requestId:decoded.receipt.requestId,results,sourceRejections:decoded.normalized.rejections.length,recordedInputReceipts:true,materializationBasis:historySourceFactory?'retained_source_versions_reconstructed_not_original_prediction':'current_local_reconstruction_not_original_prediction',providerCalls:0});
+  const result=status('processed_diagnostic',null,{requestId:decoded.receipt.requestId,results,sourceRejections:decoded.normalized.rejections.length,recordedInputReceipts:true,materializationBasis:boundedHistory!==null?'bounded_retained_map_view_reconstructed_not_original_prediction':historySourceFactory?'retained_source_versions_reconstructed_not_original_prediction':'current_local_reconstruction_not_original_prediction',providerCalls:0});
   if(results.length&&results.every(r=>r.status==='recorded_diagnostic')){completed.set(captureKey,structuredClone(result));while(completed.size>64)completed.delete(completed.keys().next().value);}
   return result;
  }
@@ -213,7 +224,8 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    let owned,ownedOptions;try{if(!input||Object.keys(input).some(k=>!['receiptInput','rawInput','seriesByMatch'].includes(k)))fail('capture_keys');verified(input.receiptInput,65536);verified(input.rawInput,4*1024*1024,false);if(input.seriesByMatch!==undefined&&Buffer.byteLength(JSON.stringify(input.seriesByMatch))>4*1024*1024)fail('series_bound');if(!options||Object.keys(options).some(k=>!['replayOnly','restoreTracesByMap'].includes(k))||options.replayOnly!==undefined&&typeof options.replayOnly!=='boolean'||options.restoreTracesByMap!==undefined&&(!options.restoreTracesByMap||Array.isArray(options.restoreTracesByMap)||Object.keys(options.restoreTracesByMap).length>config.maxMaps||Object.entries(options.restoreTracesByMap).some(([id,hash])=>!/^\d{1,20}$/.test(id)||!isHash(hash))))fail('replay_options');owned=structuredClone(input);ownedOptions=structuredClone(options);}catch{return Promise.resolve(status('blocked','capture_input_bound'));}
    pending++;const promise=tail.catch(()=>{}).then(()=>execute(owned,ownedOptions)).catch(()=>status('failed','unexpected_pipeline_failure'));tail=promise;promise.finally(()=>{pending--;});return promise;
   },
-  forgetMap(matchId){const slot=maps.get(matchId);if(pending)return{released:false,reason:'pipeline_work_pending'};if(!slot)return{released:false,reason:'map_not_cached'};consumer.forgetMap(matchId);maps.delete(matchId);for(const[key,r]of completed)if(r.results.some(x=>x.matchId===matchId))completed.delete(key);return{released:true,reason:'explicit_host_release_restart_requires_retained_prefix_replay'};},
+  forgetMap(matchId){const slot=maps.get(matchId);if(pending)return{released:false,reason:'pipeline_work_pending'};if(!slot)return{released:false,reason:'map_not_cached'};consumer.forgetMap(matchId);slot.historyOwner?.release();maps.delete(matchId);for(const[key,r]of completed)if(r.results.some(x=>x.matchId===matchId))completed.delete(key);return{released:true,reason:'explicit_host_release_restart_requires_retained_prefix_replay'};},
+  close(){if(pending)return{closed:false,reason:'pipeline_work_pending'};closed=true;for(const[matchId,slot]of maps){consumer.forgetMap(matchId);slot.historyOwner?.release();}maps.clear();completed.clear();return{closed:true};},
   status(){return{contract:RETAINED_PIPELINE_CONTRACT,maps:maps.size,pending,limits:{...config},consumer:consumer.status(),tracked:[...maps].map(([matchId,s])=>({matchId,captureCount:s.captureCount,retainedDraftFrames:s.prefix.length,retainedDraftBytes:s.prefixBytes,identityAnchors:s.anchors?.length??0,terminalSourceClosed:s.closedSource!==null})),...flags};}
  });
 }

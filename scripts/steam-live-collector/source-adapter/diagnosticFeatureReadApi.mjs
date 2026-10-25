@@ -6,7 +6,8 @@ const flags={diagnosticOnly:true,eligibleForTraining:false,eligibleForServing:fa
 const answer=(status,body)=>({status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'},body});
 const error=(status,code)=>answer(status,{error:code,...flags});
 export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='/admin/feature-diagnostics',maxFeaturePage=200,maxResponseBytes=1024*1024,maxConcurrentReads=4,readLiveEligibility=null,now=()=>new Date().toISOString(),targetRouter=null,resolveRouteContext=null,isCurrentRouteContext=null}={}){
- if(typeof journal?.loadTrace!=='function'||typeof journal?.loadSchema!=='function'||typeof enabled!=='boolean'||typeof basePath!=='string'||!/^\/[a-zA-Z0-9_/-]+$/.test(basePath)||basePath.endsWith('/')||!Number.isSafeInteger(maxFeaturePage)||maxFeaturePage<1||maxFeaturePage>1000||!Number.isSafeInteger(maxResponseBytes)||maxResponseBytes<1024||maxResponseBytes>4*1024*1024)throw Error('diagnostic_feature_read_api:configuration');
+ const compact=journal?.contract==='aegis.compact-diagnostic-feature-journal.v2';
+ if(typeof journal?.loadTrace!=='function'||!compact&&typeof journal?.loadSchema!=='function'||typeof enabled!=='boolean'||typeof basePath!=='string'||!/^\/[a-zA-Z0-9_/-]+$/.test(basePath)||basePath.endsWith('/')||!Number.isSafeInteger(maxFeaturePage)||maxFeaturePage<1||maxFeaturePage>1000||!Number.isSafeInteger(maxResponseBytes)||maxResponseBytes<1024||maxResponseBytes>4*1024*1024)throw Error('diagnostic_feature_read_api:configuration');
  if(!Number.isSafeInteger(maxConcurrentReads)||maxConcurrentReads<1||maxConcurrentReads>16)throw Error('diagnostic_feature_read_api:read_bound');
  if(typeof now!=='function'||readLiveEligibility!==null&&typeof readLiveEligibility!=='function'||targetRouter!==null&&typeof targetRouter?.read!=='function'||resolveRouteContext!==null&&typeof resolveRouteContext!=='function'||isCurrentRouteContext!==null&&(typeof isCurrentRouteContext!=='function'||resolveRouteContext===null)||(targetRouter===null)!==(resolveRouteContext===null))throw Error('diagnostic_feature_read_api:owned_state_or_route_ports');
  let activeReads=0;
@@ -56,22 +57,29 @@ export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='
   const integer=(key,fallback)=>{const raw=parsed.searchParams.get(key);return raw===null?fallback:/^(0|[1-9]\d{0,6})$/.test(raw)?Number(raw):null;};
   const offset=integer('offset',0),limit=integer('limit',maxFeaturePage);if(page&&(offset===null||limit===null||limit<1||limit>maxFeaturePage||offset>150000))return error(400,'page_bound');
   if(activeReads>=maxConcurrentReads)return error(429,'diagnostic_reader_busy');activeReads++;
+  let held=null;
   try{
-   const trace=await journal.loadTrace(hash);
+   const loaded=await journal.loadTrace(hash);held=compact&&loaded?.contract==='aegis.compact-diagnostic-feature-journal.v2'&&loaded.body?loaded:null;const trace=held?held.body:loaded;
    if(page){
     const route=trace.routes.find(r=>r.targetId===rest[2]);if(!route)return error(404,'target_not_found');
+    if(held){let schemaPage=null,vectorPage=null;try{
+     schemaPage=held.readSchemaPage({targetId:route.targetId,offset,limit});vectorPage=held.readVectorPage({targetId:route.targetId,offset,limit});
+     if(!schemaPage||!vectorPage||schemaPage.header.targetId!==route.targetId||schemaPage.header.stateMode!==route.stateMode||schemaPage.expandedSchemaHash!==route.schemaRef.sha256||vectorPage.expandedSchemaHash!==route.schemaRef.sha256||schemaPage.total!==route.featureCount||vectorPage.total!==route.featureCount||schemaPage.definitions.length!==vectorPage.values.length||vectorPage.names.length!==vectorPage.values.length||vectorPage.missing.length!==vectorPage.values.length)return error(503,'diagnostic_evidence_unavailable');
+     const features=vectorPage.values.map((value,index)=>{if(schemaPage.definitions[index].name!==vectorPage.names[index])throw Error('compact_page_order');return{index:offset+index,name:vectorPage.names[index],value,missing:vectorPage.missing[index]};});
+     return bounded({contract:'aegis.diagnostic-feature-page.v1',traceFormat:'compact_v2',traceSha256:hash,matchId:trace.matchId??null,seriesId:trace.seriesId??null,targetId:route.targetId,stateMode:route.stateMode,schemaRef:route.schemaRef,offset,limit,total:vectorPage.total,nextOffset:vectorPage.nextOffset,features,currentLiveEligibility:currentEligibility(trace,hash),...flags});
+    }finally{schemaPage?.release();vectorPage?.release();}}
     const schema=await journal.loadSchema(route.schemaRef.sha256),vector=trace.vectors[route.vectorRef],total=vector.values.length,end=Math.min(total,offset+limit),features=[];
     if(schema.targetId!==route.targetId||schema.definitions.length!==total)return error(503,'diagnostic_evidence_unavailable');
     for(let index=offset;index<end;index++)features.push({index,name:schema.definitions[index].name,value:vector.values[index],missing:vector.missing[index]});
      return bounded({contract:'aegis.diagnostic-feature-page.v1',traceSha256:hash,matchId:trace.matchId??null,seriesId:trace.seriesId??null,targetId:route.targetId,stateMode:route.stateMode,schemaRef:route.schemaRef,offset,limit,total,nextOffset:end<total?end:null,features,currentLiveEligibility:currentEligibility(trace,hash),...flags});
    }
-   const routes=trace.routes.map(r=>{const v=trace.vectors[r.vectorRef];return{targetId:r.targetId,stateMode:r.stateMode,schemaRef:r.schemaRef,featureCount:r.featureCount,observedFeatures:v.missing.reduce((n,m)=>n+Number(!m),0),missingFeatures:v.missing.reduce((n,m)=>n+Number(m),0)};});
-    const body={contract:'aegis.diagnostic-feature-summary.v1',traceSha256:hash,routes,currentLiveEligibility:currentEligibility(trace,hash),...flags};
+   const routes=trace.routes.map(r=>{if(held)return{targetId:r.targetId,stateMode:r.stateMode,schemaRef:r.schemaRef,featureCount:r.featureCount,observedFeatures:null,missingFeatures:null,countsStatus:'not_scanned_use_bounded_feature_pages'};const v=trace.vectors[r.vectorRef];return{targetId:r.targetId,stateMode:r.stateMode,schemaRef:r.schemaRef,featureCount:r.featureCount,observedFeatures:v.missing.reduce((n,m)=>n+Number(!m),0),missingFeatures:v.missing.reduce((n,m)=>n+Number(m),0)};});
+    const body={contract:'aegis.diagnostic-feature-summary.v1',...(held?{traceFormat:'compact_v2'}:{}),traceSha256:hash,routes,currentLiveEligibility:currentEligibility(trace,hash),...flags};
    // Explicit safe scalar provenance only; do not expose raw captures, private
    // filesystem references, full schemas or vectors through the summary route.
    for(const key of ['producerContract','matchId','seriesId','decisionAt','availableAt','mode','historyCutoffAt','historyContextHash','sourceSnapshotHash','nativeObservationId','nativeRawSha256','nativeKnownAt','nativeGameClock'])if(trace[key]!==undefined)body[key]=trace[key];
    return bounded(body);
-  }catch{return error(503,'diagnostic_evidence_unavailable');}finally{activeReads--;}
+  }catch{return error(503,'diagnostic_evidence_unavailable');}finally{held?.release();activeReads--;}
  }
  return Object.freeze({handle,enabled,basePath,readOnly:true});
 }
