@@ -1,7 +1,7 @@
 /** Pure metadata inventory from exact unified producer schemas. Captures every
  * generated variant and all catalogue families; it neither invents missing
  * semantic rules nor claims source coverage, formula review, training or serving. */
-import {digest,FAMILY_IDS,validateRegistry,validateProjection} from './registry-contract.mjs';
+import {digest,FAMILY_IDS,TARGET_IDS,validateRegistry,validateProjection} from './registry-contract.mjs';
 
 export const GENERATED_DEFINITION_LEDGER_CONTRACT='aegis.generated-definition-ledger.v1';
 const HASH=/^[a-f0-9]{64}$/,MAX_DEFINITIONS=300000,MAX_OCCURRENCES=2000000;
@@ -20,12 +20,15 @@ function inventory(input){
 function declaration(d,key,predicate=()=>true){if(!Object.hasOwn(d,key))return null;if(!predicate(d[key]))fail('semantic_metadata:'+key);return structuredClone(d[key]);}
 function semantics(d){
  const historical=d.inputScopes.some(x=>x==='prior_maps'||x==='previous_series_maps');
- const inputFields=declaration(d,'inputFields',x=>Array.isArray(x)&&x.length>0&&x.every(nonempty));
+ const inputFields=declaration(d,'inputFields',x=>Array.isArray(x)&&x.every(nonempty));
  const supportUnit=declaration(d,'supportUnit',nonempty),minimumSupport=declaration(d,'minimumSupport',x=>ints(x,0,1000000)),historyWindowDays=declaration(d,'historyWindowDays',x=>typeof x==='number'&&Number.isFinite(x)&&x>0);
  const eventTimePolicy=declaration(d,'eventTimePolicy',nonempty),availabilityTimePolicy=declaration(d,'availabilityTimePolicy',nonempty);
  const rolePolicy=declaration(d,'rolePolicy',nonempty),patchPolicy=declaration(d,'patchPolicy',nonempty),populationPolicy=declaration(d,'populationPolicy',nonempty);
- const gaps=[];if(inputFields===null)gaps.push('exact_input_fields_not_declared');if(eventTimePolicy===null)gaps.push('separate_event_time_policy_not_declared');if(availabilityTimePolicy===null)gaps.push('separate_availability_time_policy_not_declared');
+ const gaps=[];if(inputFields===null||inputFields.length===0)gaps.push('exact_input_fields_not_declared');if(eventTimePolicy===null)gaps.push('separate_event_time_policy_not_declared');if(availabilityTimePolicy===null)gaps.push('separate_availability_time_policy_not_declared');
  if(historical&&supportUnit===null)gaps.push('historical_support_unit_not_declared');if(historical&&populationPolicy===null)gaps.push('historical_population_policy_not_declared');
+ // An absent policy must not silently mean "irrelevant". Producers can declare
+ // explicit not-applicable policies; the ledger cannot infer them from names.
+ if(rolePolicy===null)gaps.push('role_policy_or_nonapplicability_not_declared');if(patchPolicy===null)gaps.push('patch_policy_or_nonapplicability_not_declared');
  return{inputs:{scopes:[...d.inputScopes],fields:inputFields,historyDefinitions:declaration(d,'historyDefinitions',Array.isArray)},formula:d.formula,formulaVersion:d.formulaVersion,units:d.units,dtype:d.dtype,missingPolicy:d.missingPolicy,time:{declaredTimePolicy:d.timePolicy,eventTimePolicy,availabilityTimePolicy},support:{historicalDependency:historical,unit:supportUnit,minimumSupport,historyWindowDays},rolePolicy,patchPolicy,populationPolicy,metadataGaps:gaps};
 }
 function disposition(f,n){
@@ -70,4 +73,21 @@ export function verifyGeneratedDefinitionLedgerReceipt(ledger){
  if(ledger.families.length!==79||new Set(ledger.families.map(f=>f.familyId)).size!==79||FAMILY_IDS.some(id=>!ledger.families.some(f=>f.familyId===id))||ledger.families.some(f=>f.fullFamilyComplete!==false||f.sourceAvailabilityAttested!==false))fail('receipt_family_claim');
  if(ledger.definitions.some(d=>digest(d.definition)!==d.definitionSha256||digest({definitionSha256:d.definitionSha256,sourceInventorySha256:d.sourceInventorySha256})!==d.variantSha256||digest(ledger.sourceInventories[d.sourceInventorySha256])!==d.sourceInventorySha256||d.aliasOf!==null))fail('receipt_definition_binding');
  return{accepted:true,reason:'ledger_receipt_bytes_consistent',contentHash,semanticAcceptance:false,sourceAvailabilityAttested:false,...flags};
+}
+
+/** Compact disposition view of an already bounded exact ledger. Each definition
+ * remains in its pinned ledger; this view counts occurrences without copying its
+ * expanded formulas/support again. Missing schemas are explicit, never coverage.
+ * This does not promote the integrity receipt into semantic/source acceptance. */
+export function summarizeGeneratedDefinitionDispositions(ledger){
+ verifyGeneratedDefinitionLedgerReceipt(ledger);
+ const targets=new Map(),families=new Map(ledger.families.map(f=>[f.familyId,{familyId:f.familyId,catalogueKind:f.catalogueKind,catalogueStatus:f.catalogueStatus,disposition:f.disposition,generatedVariants:f.generatedVariantCount,eligibleTargets:[...f.eligibleTargets],catalogueSpecification:structuredClone(f.catalogueSpecification),sourceProfiles:new Set(),metadataGaps:new Set(),fullFamilyComplete:false,sourceAvailabilityAttested:false}]));
+ // All twelve logical targets, including both modes of SERIES_LIVE, are present
+ // even when the supplied immutable schema set does not contain those modes.
+ for(const id of TARGET_IDS)for(const mode of id==='SERIES_LIVE'?['observed_postdraft','observed_live']:[id.startsWith('SERIES_')?id:id.split('_')[0]])targets.set(id+':'+mode,{targetId:id,stateMode:mode,scope:id.startsWith('SERIES_')?'whole_series':'selected_map',outcome:id.startsWith('SERIES_')?'series_team1_win':id.endsWith('_WIN')?'map_radiant_win':id.endsWith('_KILLS')?(id.startsWith('LIVE_')?'remaining_kills_distribution':'map_total_kills_distribution'):(id.startsWith('LIVE_')?'remaining_duration_seconds_distribution':'map_total_duration_seconds_distribution'),schemas:[],familyIds:new Set(),generatedVariants:new Set(),variantsWithMetadataGaps:new Set(),sourceProfiles:new Set(),phaseSchemaObserved:false,sourceAvailabilityAttested:false,modelTrained:false,productionServingWired:false});
+ for(const s of ledger.schemas){const row=targets.get(s.targetId+':'+s.stateMode);if(!row)fail('summary_target_mode');row.schemas.push(s.sha256);row.phaseSchemaObserved=true;}
+ for(const d of ledger.definitions){const family=families.get(d.definition.familyId);if(!family)fail('summary_family');family.sourceProfiles.add(d.definition.sourceProfile);for(const gap of d.semantics.metadataGaps)family.metadataGaps.add(gap);for(const occurrence of d.occurrences){const row=targets.get(occurrence.targetId+':'+occurrence.stateMode);if(!row||!row.schemas.includes(occurrence.schemaSha256))fail('summary_occurrence');row.familyIds.add(d.definition.familyId);row.generatedVariants.add(d.variantSha256);row.sourceProfiles.add(d.definition.sourceProfile);if(d.semantics.metadataGaps.length)row.variantsWithMetadataGaps.add(d.variantSha256);}}
+ const toArray=s=>[...s].sort();
+ const body={contract:'aegis.generated-definition-dispositions.v1',ledgerSha256:ledger.contentHash,registryHash:ledger.registryHash,targets:[...targets.values()].map(r=>({...r,schemas:[...r.schemas].sort(),familyIds:toArray(r.familyIds),generatedVariantCount:r.generatedVariants.size,generatedVariantsWithMetadataGaps:r.variantsWithMetadataGaps.size,generatedVariants:undefined,variantsWithMetadataGaps:undefined,sourceProfiles:toArray(r.sourceProfiles)})).map(({generatedVariants,variantsWithMetadataGaps,...r})=>r),families:[...families.values()].map(f=>({...f,sourceProfiles:toArray(f.sourceProfiles),metadataGaps:toArray(f.metadataGaps)})),legacyGroups:ledger.legacyOccurrences.map(c=>({catalogueId:c.catalogueId,count:c.count,orderedNameHash:c.orderedNameHash,disposition:c.disposition})),counts:{logicalTargets:12,targetModes:13,families:families.size,legacyGroups:ledger.legacyOccurrences.length},evidenceMeaning:'Supplied schema and exact-ledger inventory only; no measured joint source coverage or semantic/model/serving acceptance.',...flags};
+ return freeze({...body,contentHash:digest(body)});
 }

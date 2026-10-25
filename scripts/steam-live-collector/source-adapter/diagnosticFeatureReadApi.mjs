@@ -5,12 +5,16 @@ const SHA=/^[a-f0-9]{64}$/,TARGET=/^[A-Z_]{3,40}$/;
 const flags={diagnosticOnly:true,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
 const answer=(status,body)=>({status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'},body});
 const error=(status,code)=>answer(status,{error:code,...flags});
-export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='/admin/feature-diagnostics',maxFeaturePage=200,maxResponseBytes=1024*1024,maxConcurrentReads=4,readLiveEligibility=null,now=()=>new Date().toISOString(),targetRouter=null,resolveRouteContext=null}={}){
+export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='/admin/feature-diagnostics',maxFeaturePage=200,maxResponseBytes=1024*1024,maxConcurrentReads=4,readLiveEligibility=null,now=()=>new Date().toISOString(),targetRouter=null,resolveRouteContext=null,isCurrentRouteContext=null}={}){
  if(typeof journal?.loadTrace!=='function'||typeof journal?.loadSchema!=='function'||typeof enabled!=='boolean'||typeof basePath!=='string'||!/^\/[a-zA-Z0-9_/-]+$/.test(basePath)||basePath.endsWith('/')||!Number.isSafeInteger(maxFeaturePage)||maxFeaturePage<1||maxFeaturePage>1000||!Number.isSafeInteger(maxResponseBytes)||maxResponseBytes<1024||maxResponseBytes>4*1024*1024)throw Error('diagnostic_feature_read_api:configuration');
  if(!Number.isSafeInteger(maxConcurrentReads)||maxConcurrentReads<1||maxConcurrentReads>16)throw Error('diagnostic_feature_read_api:read_bound');
- if(typeof now!=='function'||readLiveEligibility!==null&&typeof readLiveEligibility!=='function'||targetRouter!==null&&typeof targetRouter?.read!=='function'||resolveRouteContext!==null&&typeof resolveRouteContext!=='function'||(targetRouter===null)!==(resolveRouteContext===null))throw Error('diagnostic_feature_read_api:owned_state_or_route_ports');
+ if(typeof now!=='function'||readLiveEligibility!==null&&typeof readLiveEligibility!=='function'||targetRouter!==null&&typeof targetRouter?.read!=='function'||resolveRouteContext!==null&&typeof resolveRouteContext!=='function'||isCurrentRouteContext!==null&&(typeof isCurrentRouteContext!=='function'||resolveRouteContext===null)||(targetRouter===null)!==(resolveRouteContext===null))throw Error('diagnostic_feature_read_api:owned_state_or_route_ports');
  let activeReads=0;
  const bounded=body=>Buffer.byteLength(JSON.stringify(body))>maxResponseBytes?error(413,'diagnostic_response_bound'):answer(200,body);
+ function currentRouteContext(context){
+  if(isCurrentRouteContext===null)return true; // Existing trusted host resolver compatibility.
+  const current=isCurrentRouteContext(context);if(current&&typeof current.then==='function'){Promise.resolve(current).catch(()=>{});return false;}return current===true;
+ }
   function currentEligibility(trace,hash){
   if(trace.mode!=='LIVE')return{applicable:false,eligibleForRetainingForecast:false,reason:'not_live_trace'};
    const snapshot=readLiveEligibility===null?{state:null,evaluatedAt:null}:readCurrentLiveEligibilitySnapshot({readLiveEligibility,now,matchId:trace.matchId,minimumDecisionAt:trace.decisionAt}),state=snapshot.state;
@@ -26,20 +30,22 @@ export function createDiagnosticFeatureReadApi({journal,enabled=false,basePath='
   if(routeMatch){
    let seriesId;try{seriesId=decodeURIComponent(routeMatch[1]);}catch{return error(400,'series_id');}
    if(!/^[A-Za-z0-9_.:-]{1,128}$/.test(seriesId))return error(400,'series_id');
-   if([...parsed.searchParams].length)return error(400,'query_contract');
+   if([...parsed.searchParams.keys()].some(k=>k!=='mapId'||parsed.searchParams.getAll(k).length!==1))return error(400,'query_contract');
+   const selectedMapId=parsed.searchParams.get('mapId');if(selectedMapId!==null&&!/^[1-9]\d{0,19}$/.test(selectedMapId))return error(400,'query_contract');
+   const selection=selectedMapId===null?{kind:'entry'}:{kind:'manual',mapId:selectedMapId};
    if(!targetRouter)return error(404,'owned_route_context_unavailable');
    if(activeReads>=maxConcurrentReads)return error(429,'diagnostic_reader_busy');activeReads++;
    try{
-    const context=await resolveRouteContext({seriesId});
-    if(!context||context.seriesInput===undefined)return error(503,'diagnostic_evidence_unavailable');
+    const context=await resolveRouteContext({seriesId,selection});
+    if(!context||context.seriesInput===undefined||!currentRouteContext(context))return error(503,'diagnostic_evidence_unavailable');
     // URL inputs never supply source bytes, filesystem paths or a backdated cutoff.
-     let route=await targetRouter.read({...context,decisionAt:now()});
+     let route=await targetRouter.read({...context,selection,decisionAt:now()});
     if(route.seriesId!==seriesId)return error(503,'diagnostic_evidence_unavailable');
      // Awaiting the router itself is an async boundary. Its owned synchronous
      // finalizer closes it after all IO, without client-controlled source/time.
      if(typeof targetRouter.finalizeRead==='function'){route=targetRouter.finalizeRead(route);if(route&&typeof route.then==='function'){Promise.resolve(route).catch(()=>{});return error(503,'diagnostic_evidence_unavailable');}}
      else if(route.main?.currentLiveEligibility?.eligibleForRetainingForecast===true||route.detail?.currentLiveEligibility?.eligibleForRetainingForecast===true)return error(503,'diagnostic_evidence_unavailable');
-     if(!route||route.seriesId!==seriesId)return error(503,'diagnostic_evidence_unavailable');
+     if(!route||route.seriesId!==seriesId||!currentRouteContext(context))return error(503,'diagnostic_evidence_unavailable');
     return bounded(route);
    }catch{return error(503,'diagnostic_evidence_unavailable');}finally{activeReads--;}
   }

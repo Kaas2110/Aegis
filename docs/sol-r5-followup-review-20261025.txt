@@ -1,0 +1,159 @@
+AEGIS SOL R5 FOLLOW-UP — ASTRA REVIEW PACKAGE
+25 October2026. Source-only diagnostic foundation. Feature-first gate remains OPEN.
+
+Scope and publication boundary
+The installed starting point is PR8 main68ee93f4b90f19e9ced3117af03093aaf458d476.
+Its34-path core block is separate immutable evidence; do not reinstall it.
+This follow-up covers transactional reference history, owned series routing,
+lossless compact diagnostic assets and full-inventory dispositions. The exact
+changed paths/hashes and technical receipts accompany the completed source block.
+No training/HPO/calibration/quality evaluation, provider probes, data refresh,
+schedule/task changes, runtime listeners, serving/promotion or release is enabled.
+New diagnostic factories require explicit trusted host ports; imports start none.
+
+Decisions and implemented interfaces
+1. Persistent artifact writer and OS lease
+createPersistentArtifactWriter({directory,leaseProvider,shouldContinue,limits})
+returns commit({kind,utf8,expectedSha256}), read(reference), inspect(),
+listCommitted({kind}) and close(). Exact immutable references are {kind,sha256,bytes}.
+Discovery returns bounded acknowledged journal order with commitSequence and root
+generation. The Windows helper holds an actual OS byte-range lease; it starts only
+through explicit factory configuration and stays in the owned technical job.
+There is one serialized writer, durable reservation/acknowledgement journal,
+root generation/fencing epochs, cumulative physical+reserved disk accounting and
+marker-last visibility. Unknown/partial/corrupt files fail closed. Exact retries
+resume only their own known reservation. No age/PID-based cleanup or lock takeover.
+Object content is rechecked on dedupe/discovery; successful exposure rechecks STOP
+and lease after IO. Same-instance retry now reconciles a published marker whose
+acknowledgement was interrupted, before reporting success/discovery.
+Default root256MiB/object16MiB/artifact10000 limits are unchanged small-scope
+foundation bounds. They are not an archive storage capacity claim. Windows file
+flushes are real; portable directory-fsync/power-loss guarantees remain qualified.
+
+2. Retained reference corpus and target views
+createRetainedReferenceCorpus/restoreRetainedReferenceCorpus mint private generation
+handles after verifying EVERY declared original version, including current/future
+inputs later excluded from target features. All versions, null/invalid blocks,
+tombstones, conflicts and identity evidence remain in bounded immutable parts.
+Generation manifest commits last. Partial committed chunks stay owned/charged but
+cannot mint a completed generation handle. A copied JSON token is not authority.
+materializeRetainedReferenceHistory freezes a bounded copy of draft prefix+scope
+before its first await. The same copy drives selector cutoff and source rebuilding;
+late t1 identity disclosure never extends t0. This fixes a caller-mutation race.
+Target selection conservatively includes all noncurrent local maps with evidence
+by t0, then retains their entire version chains. Team/player/hero selectors are
+audit metadata, not a hardcoded pruning filter that could bias meta populations.
+Small views delegate to unchanged v1 formulas and opaque verified source handles.
+readRetainedReferenceHistory restores/rederives exact dependencies. Larger dense
+targets explicitly return bounded_reducer_pending; v1's64MiB guard is NOT raised.
+The full exact disk-backed reducer/quantiles/cohort algebra is still unimplemented.
+Stored local receipts do not prove original historical availability or global data.
+
+3. Owned series context and disabled application bridge
+seriesRouteContextStore persists immutable revisions followed by pointers; its
+private WeakMap token binds current context. persistedSeriesRouteContext recovers
+from verified writer discovery, validates linked histories/generation/order and
+compares inventories at the end of startup. Missing/corrupt/forked/ambiguous heads
+do not become empty context. One trusted logical context-store owner per writer
+root is required; OS writer exclusion alone does not prevent competing in-process
+logical appenders. No competing direct pointer writes are qualified.
+diagnosticFeatureReadApi accepts only request-scoped numeric map selection, never
+client raw evidence, file paths or decision clocks. It keeps manual previous-map
+viewing independent from the current global head. Owned context freshness and live
+state are checked again after asynchronous routing IO. Bootstrap accepts optional
+trusted seriesRouting ports but opens no listener and enables no forecasts.
+Main remains whole-series; detail remains selected-map winner/totals or prior-map
+actuals. BO1/BO3/BO5, unknown initial map/sides, between maps, corrections and terminal
+actuals stay distinct. No blanket replacement of legacy180000ms constants occurred.
+
+4. Compact assets and opt-in journal
+compactFeatureAssets factors repeated schema metadata, keeps Float64 values and a
+missing bitmap behind private handles, preserves ordered names/definitions/hash,
+and exposes bounded leased pages. Null, zero and negative zero remain distinct.
+Cache ownership and in-flight holds are separate; eviction does not uncharge an
+active reader. Encoding, intake, decoded pages and retained text have their own
+explicit arena estimates. These are engineering accounting, not measured heap.
+Saturating DAG expansion checks precede recursive decode/hash. Encoding rejects
+undersized work before materializing full vector/string tokens. Incremental source
+factoring admission is independently reviewed in this block's final evidence.
+compactFeatureJournal is a separate explicit factory over the owned writer/arena.
+appendBundle uses actual common-producer bundles; loadTrace returns owned per-target
+schema/vector page readers plus release(). It preserves old expanded schema/vector
+hashes and false training/serving/prediction flags. Exact phase/time bindings and
+returned writer receipt equality are checked. Cached assets still reverify stored
+chunks on reload. Manifest commits last after all schema/vector chunks.
+A full rich test exposed the initial16MiB whole-object incompatibility. Persistence
+now uses <=1MiB UTF8 shards and a final manifest, with explicit64MiB logical-wire
+bound; writer's16MiB individual object cap stays unchanged. Synchronous codec output
+is still coalesced inside a reserved finite buffer, not advertised as fully streaming
+end-to-end. Retained wire uses measured-size ownership after coalescing scratch
+ends, avoiding double reservation of maximum work during decode. OS/arena/root and
+individual-object caps stay fixed; the new sharded logical-wire profile is explicit.
+No features are trimmed to make a test pass.
+The v1 default compiler/journal/read path is retained. This new adapter is not yet
+a replacement source-proof validator: historicalInputRef is retained metadata,
+not v1-style historical dependency verification. Complete shared compiler/history
+asset byte ownership, exact archive reduction and serving integration remain gates.
+
+5. Semantic inventory
+generated-definition-ledger captures exact supplied schema declarations, preserves
+empty inputFields as an explicit gap, and records missing role/patch applicability.
+Its compact summary always accounts for12logical targets/13modes/79families/14old
+groups, including ungenerated/unavailable/TRAIN-only/label/presentation entries.
+No same-name aliases or source availability are inferred. See the complete family
+disposition report; catalogue status and actual partial descriptors are separated.
+A family inventory is not an emitted all-definition ledger or semantic acceptance.
+
+Meaningful rejected alternatives
+- Global latest-row history: loses old identities/tombstones and historical truth.
+- Target-team-only history: biases generic hero/meta population.
+- Larger v1 byte guard, feature pruning, float32 or approximate quantiles: changes
+  source/formula semantics or disguises missing bounded-algebra implementation.
+- HTTP receipt as fresh state, mutable latest-series rows, client clocks/source
+  paths: destroys causality or response-time current-state authority.
+- PID/age lock cleanup and uncertain-byte deletion: risks competing ownership/data.
+- Raw schema/vector copies with count-only cache limits: omits byte ownership.
+- Publishing tiny fixtures as full-rich/sustained/source95%/quality evidence: invalid.
+
+Evidence and limitations
+Final changed-scope technical evidence:41/41small codec/journal/ledger/Windows-lock
+cases passed;32/32history/writer/series/API cases passed; one separate full rich
+roundtrip passed. These scopes are listed separately; older overlaps are not summed.
+The full canonical producer used SYNTHETIC inputs,141138columns per map-live route
+and141182series-live. Every ordered name/value/missing flag was checked after real
+temporary CAS persistence, process-local journal restart and paged reload, including
+null/zero/negative-zero. Schemas/semantic hashes were retained; cache eviction left
+in-flight assets charged, and final release returned arena charge/leases to zero.
+Actual full-run timings: generator12046ms,write133733ms,reload51517ms; total199.469s.
+Owned-tree peak commit2984800256bytes; arena peak1772387516bytes under unchanged
+2GiB arena/8GiB owned job. Final physical store215228916bytes/626committed artifacts,
+no uncertain reservations. These are one-fixture measurements, not sustained bounds.
+The cold write/reload path does NOT meet R5.7's30-second cold target.326-state testing
+was not launched: shared projection assets/cache/source-proof and bounded archive
+algebra must be completed first. The initial256MiBroot is already mostly used by
+this fixture; it cannot establish sustained capacity without the planned ownership/
+sharing architecture. No silent limit increase or feature pruning was performed.
+See sol-r5-followup-technical-evidence-20261025.json for actual guarded runs, failures
+and corrective receipts. Native runs are serial,8GiB hard owned job, four CPUs,
+minimum4GiB-free polling and finite wall time. Whole-project16GiB supervision is
+still an inactive architecture decision. No unrelated/game process was terminated.
+Synthetic fixtures exercise actual canonical feature arithmetic and real temporary
+filesystem/Windows locking where specified. They do not establish real provider
+coverage, latency, calibrated probabilities or predictive accuracy.
+An isolated>64MiB version corpus is NOT>64MiB history through actual rich producer.
+One rich roundtrip is NOT326-state sustained runtime or all13phase modes. Original
+failed receipts are preserved; overlapping tests must not be added as independent
+cases. No quality result from older training is re-labelled current.
+
+Astra review priorities / remaining work
+- Verify early ownership/admission, same-instance transactional recovery and exact
+  current state/context fences, especially history t0/t1 and mutable-input isolation.
+- Review conservative corpus population and separate generation/view proofs.
+- Decide/verify exact bounded archive algebra and the remaining shared-asset compiler
+  ownership design before claiming whole-archive/rich runtime readiness.
+- Review compact/v1 source-proof bridge and final emitted definition semantics,
+  population/support/time/role/patch policies, not just registry inventory.
+- Review timing/resource evidence before the326-state R5.7 acceptance. Preserve
+  source-qualified missing pause/Roshan/role fields and prospective source95%gate.
+- Keep training/activation paused until feature-first completion and separate review.
+The next exact local pointer and publication receipt supersede historical paths.

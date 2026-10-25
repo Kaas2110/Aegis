@@ -10,7 +10,9 @@ import {createAppendOnlyHistoryFactStore} from './appendOnlyHistoryFactStore.mjs
 import {createRetainedHistorySourceExport} from './retainedHistorySourceExport.mjs';
 import {createDiagnosticFeatureReadApi} from './diagnosticFeatureReadApi.mjs';
 import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
-export async function createRetainedDiagnosticHostPorts({config,shouldContinue,signal,now,onTraceIntent}){
+import {createDiagnosticTargetRouter} from './diagnosticTargetRouting.mjs';
+export async function createRetainedDiagnosticHostPorts({config,shouldContinue,signal,now,onTraceIntent,seriesRouting=null}){
+ if(seriesRouting!==null&&(typeof seriesRouting.contextStore?.resolve!=='function'||typeof seriesRouting.contextStore?.isCurrentContext!=='function'||!seriesRouting.targetDocument||!seriesRouting.expectedSchemaHashes))throw Error('retained_diagnostic_bootstrap:owned_series_routing_ports');
  const sources=join(config.stateDirectory,'sources'),revisions=join(config.stateDirectory,'revisions');
  await mkdir(sources,{recursive:true});await mkdir(revisions,{recursive:true});
  const sourceStore=await createHistorySourceExportStore(sources),historyRevisions=await createRetainedHistoryRevisionStore(revisions,{shouldContinue,signal});
@@ -35,7 +37,13 @@ export async function createRetainedDiagnosticHostPorts({config,shouldContinue,s
  // An owned handler is returned to the host; no HTTP listener or public serving
  // is activated. Its current-state view expires even without another capture.
  const readLiveEligibility=input=>pipeline.readLiveEligibility(input);
- const readApi=createDiagnosticFeatureReadApi({journal,enabled:true,readLiveEligibility,now});
+ // The optional series port is host-injected, never client configuration. It
+ // performs no discovery, provider calls or writes on a read request. The host
+ // restores its context store before exposing this handler.
+ const targetRouter=seriesRouting===null?null:createDiagnosticTargetRouter({journal,targetDocument:seriesRouting.targetDocument,expectedSchemaHashes:seriesRouting.expectedSchemaHashes,readLiveEligibility,now});
+ const readApi=createDiagnosticFeatureReadApi({journal,enabled:true,readLiveEligibility,now,targetRouter,
+  resolveRouteContext:seriesRouting===null?null:input=>seriesRouting.contextStore.resolve(input),
+  isCurrentRouteContext:seriesRouting===null?null:context=>seriesRouting.contextStore.isCurrentContext(context)});
  return{pipeline,readApi,readLiveEligibility,async hasCommittedTrace(hash){
   if(!/^[a-f0-9]{64}$/.test(hash??''))throw Error('retained_diagnostic_bootstrap:trace_hash');
   // Only an absent trace itself means an uncommitted intent. A present trace

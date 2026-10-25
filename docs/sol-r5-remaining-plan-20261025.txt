@@ -1,0 +1,83 @@
+AEGIS SOL R5 — REMAINING WORK AFTER THE FOLLOW-UP FOUNDATION
+25 October2026. Implementation continuation, not an Astra architecture approval.
+Read the latest exact-continuation and review receipts before executing anything.
+Preserve the original Astra AD1-AD10 and R5 plan; this ledger narrows remaining work.
+
+Completed source foundation is not whole feature-first acceptance.
+R5.0 early input admission / R5.1 clock anchor/final read fence / R5.2 event ledger
+and clock tombstones / R5.3a verified handles were installed in PR8. The next source
+block adds transactional writer, all-version corpus/target view compatibility,
+owned series resolver, compact primitives/opt-in adapter and semantic dispositions.
+Its exact install/merge and final technical results must be read from its receipt.
+
+FIRST: ASTRA REVIEW OF CORRECTNESS AND THE REMAINING DESIGN
+1. Recheck causal joins and source proofs: t0 first complete draft, late t1 identity,
+   frozen caller inputs through IO, all local population union, current-map exclusion,
+   every generation ref verified, no original-availability claim from replay.
+2. Review writer acknowledgement recovery, persistent byte ownership and series
+   current-token fences. One trusted logical writer per context root remains required.
+3. Review compact factoring/encoding/decode/page/transient/cache ownership and the
+   final rich roundtrip failure/correction evidence. Do not infer sustained success.
+4. Confirm or refine the exact bounded archive-reduction implementation contract,
+   arithmetic order/quantiles/support chunks, source-proof bridge and compiler
+   ownership. These are the hard unfinished architecture-dependent tasks.
+
+SOL IMPLEMENTATION AFTER THAT REVIEW, WITHOUT TRAINING
+A. R5.3/R5.4 full archive bridge
+- Migrate independent v2-related appenders to the single owned writer before any v2
+  path can be enabled; no silent activation/migration or deletion of old evidence.
+- Implement descriptor-driven exact batch reductions and external sorted runs where
+  needed, preserving numeric map-ID arithmetic order, sample variance, quantiles,
+  support membership and source availability. Cache frozen t0/revision aggregates.
+- Replace the small dense-v1 compatibility ceiling with an explicitly reviewed v2
+  reducer/proof. Do NOT lift v1's64MiB guard or use a globally collapsed latest row.
+- Demonstrate>64MiB source through actual common producer+journal+restart, rather
+  than only the already tested corpus/index utility. Whole-year scale is unproven.
+
+B. R5.0/R5.4 shared asset ownership and actual host integration
+- Account immutable compiler plans/definitions/history/private proofs and all
+  outstanding readers under the shared arena. Count-only LRUs are insufficient.
+- Reuse verified schemas across heads/frames without copying/re-factoring the full
+  metadata each time. Preserve schema/source/identity/horizon semantics exactly.
+- Complete compact source-proof/static historicalInputRef validation and the owned
+  compatibility adapter to existing diagnostic pipeline/journal/admin reader.
+- Keep v1 readable and all serving/training flags off. An opt-in low-level adapter
+  alone is not adoption by the application or a public prediction path.
+- Prepare/verify an inactive aggregate16GiB supervisor contract; do not attach,
+  restart or kill unknown existing processes. Until separately activated, retain
+  verified serial8GiB technical guard and conservative other-use/headroom checks.
+
+C. R5.5/R5.6 semantic and route completion
+- Bind actual emitted schemas for all12targets/13modes to the complete ledger;
+  family inventory and static source report are not an emitted-definition receipt.
+- Fill and review exact input fields, units, population/support, event/availability,
+  role applicability and patch policies at definition level; retain honest gaps.
+- Resolve all14legacy groups per occurrence, preserving meaningful differences;
+  no spelling-based aliases and no blind concatenation.
+- Preserve rich interactions, historical player/hero/team form in live, qualified
+  Roshan timing/Aegis fields and explicit missingness. Do not train/select features.
+- Extend real owned series acquisition/bridge only under its existing authorization;
+  request-scoped map selection never changes background collection/global context.
+
+D. R5.7 sustained technical acceptance LAST
+- Do not start until full rich dependencies and narrow negative tests pass.
+- Actual common producer+stores+journal+restart+reader, two81-minute map contexts,
+  324advancing states+2explicit zero-time draft states=326, then independent PRE,
+  BETWEEN and terminal phases. No mocked vectors or zero-time live fabrication.
+- Include held commits/backpressure/schema churn/repeats/errors/gaps/identity t1/
+  STOP/cancel/corruption/source changes/previous-map selection.
+- Existing reviewed engineering targets: owned8GiBjob/fourCPU/min4GiBfree/20minwall,
+  service peak<=6GiB,owned output<=4GiB; warm charged growth<=64MiB excluding
+  enumerated schema changes; warm p95<=2s,p99<=5s,no frame>15s,cold<=30s.
+- Fail transparently on these targets. No hidden pruning/approximation/cap raise.
+  If the small dependency check already fails, preserve it and fix that dependency
+  before spending resources on326states. Report current/peak commit and RSS apart.
+- Real joint95%source qualification remains a separately authorized prospective
+  collection study, with all failures in the denominator and map/series clustering.
+
+END STATE
+Return evidence/remaining gates to Astra before any fit/HPO/calibration/ablation,
+provider probe/data refresh/runtime or schedule activation/model promotion/release.
+Use one reviewed source-only PR per completed block, merge under standing owner
+permission, record exact reviewed head/merge, let Graphify update automatically.
+No routine full-source/byte parity and no duplicate Graphify build.
