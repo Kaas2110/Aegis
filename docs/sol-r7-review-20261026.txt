@@ -1,0 +1,199 @@
+AEGIS SOL R7 — CONSOLIDATED REVIEW FOR ASTRA
+26 October 2026. Feature dependencies and diagnostic integration; no training.
+
+Disposition
+The requested dependency correction and functional all13 checks are complete.
+The final exact-source declaration audit is complete too. This does not admit
+training, semantic/source95 acceptance, serving, model activation or deployment.
+Next actor: Astra for the architectural decisions below. No native job remains.
+
+Source authority and evidence
+Canonical app: C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Frozen final source: work/sol-r7-20261025/snapshots/resume-all256-20261026-h8/.
+The last public baseline was PR11 main073d9d2c5726bbcf2978606c44896bbbbbf433cf;
+that unchanged main was checked through GitHub during this turn. Its immutable
+base tree is f6d99614c5e70b7180a11c91ff43985694050fe4. The local Git HEAD is older
+than the installed source: never reset it or blindly stage the entire working tree.
+The completed source-only block uses the standing reviewed-PR merge authorization.
+Its exact publication receipt is maintained outside this immutable document under
+work/sol-r7-resume-20261026/. Determine current main from that receipt/GitHub.
+Graphify was READY on PR11 at the initial bounded lookup. The current local source
+was authoritative during this work. Let the existing integration refresh main;
+a queued update is not a verified ready index. Do not start a duplicate build.
+
+Read this with docs/sol-r7-review-20261025.txt for the earlier full R7 implementation
+and work/sol-r7-resume-20261026/CONSOLIDATED-DECISION-LOG-20261026.txt for the complete
+resumed chronological decision log. Original failed receipts and snapshots remain
+unchanged. Source-only publication excludes those private execution artifacts.
+
+Dependency corrections and reasoning
+H02 form contrasts now reference their actual two emitted team/window operands.
+H05 summaries reference the actual five participating player-profile columns.
+H12 directed comparisons reference their actual two player operands; summaries
+reference all25 emitted comparisons. Generic statistic formula IDs are retained
+as formula parameters rather than masquerading as emitted column references.
+Direct raw fact/state/roster leaves explicitly declare an empty dependency list.
+The shared generator supplies its actual pre-addition name namespace. Series
+orientation renames only references that resolve in that component namespace.
+Missing names or source statistic definitions keep parameter_binding_required.
+
+Independent review found a further omission in C13 chronology declarations:
+current roster/team/account inputs selected the ratings but were not declared.
+Their literal input ports, actual selectors, null IDs and ordering policies are
+now explicit. Input slot order and numeric account summation order are separate.
+Current identity belongs to the enclosing validated component at validFrom; prior
+state stays bounded by historyCutoffAt. No current receipt timestamp is invented.
+Radiant/Dire in nominal series contexts are aliases for team1/team2, not observed
+map-side evidence. No hero operand is invented for formulas that do not use it.
+
+Arithmetic, names/order, values/masks, K32 updates, cohorts, support/window rules,
+knownAt selection and time predicates were preserved. Metadata hashes legitimately
+change. Focused tests reconstruct subtraction, median and pair/aggregate values
+from their declared operands, so a wrong-but-existing reference cannot pass.
+The source review and accepted pins are under {history,semantics}/ in the resume
+work directory. C13 source SHA6640f8d6f8510900041e40cd10c1cea68bb8c9b87f0f0fb38d54ed075eeb7ad1;
+identity test SHA944dfe634bc64b9850e2a5affd7d0244f4aab0fbba2822bcee6e7fadddacf13a.
+
+Shared history and live contract
+Current dynamic inputs come from one coherent admitted Steam profile. Historical
+team/player/hero/form data come from the causal versioned local history store.
+The new live decision path does not wait for an OpenDota HTTP response. Training
+labels/current-map final results are not input features. Retained prior Steam
+states can contribute historical baselines only under the existing causal proof.
+No new provider call, archive refresh or real coverage measurement was performed.
+All technical fixtures here are synthetic, using actual current producer/storage
+code. Synthetic source receipts are not original provider availability evidence.
+
+Owner-authorized capacity changes
+Final memory policy: 30GiB conservative aggregate admission; 9GiB entire owned
+technical child tree; 8GiB shared rich arena; 2GiB compact-asset working reservation.
+Four CPUs, minimum4GiB free RAM and wall<=1200s remain. The new guard requires
+free physical memory >= the full requested tree cap plus4GiB before launch.
+At the9GiB default that means at least13GiB free. It does not supervise independent
+services globally, change schedules or remove manual STOPs/foreign locks.
+
+Current guard: work/sol-r7-resume-20261026/run-bounded-tests-30g.py,
+SHA658fdf27b812f186fd3c8090e6038add1d4866d4f5c857bf3cd2c5fa5d3900ca.
+Policy: RESOURCE-AUTHORIZATION-30G.json,
+SHA14f0f3c17522de56fd5435202526ce4794da2429bbb4825eede4ef5651273776.
+Node oldspace6144MiB is inside that JobObject, not a replacement for its cap.
+Old6/24 and intermediate9/36 policies/results retain their historical scopes.
+
+The owner separately authorized256MiB encoded schemas/vectors for ALL supported
+compact profiles/manifests. Both profile ceilings and the journal default are now
+256MiB. Lower configured limits still bind before chunk IO, reservations,
+coalescing and asset parsing. Actual header/profile/hash checks and unknown-profile
+rejection remain. Legacy150K/logical256MiB/16M-node and FULL300K/logical4GiB/
+128M-node bounds are unchanged. Objects/batches stay16MiB, chunks1MiB and cumulative
+writer root256MiB. Per-asset format admission is not a guarantee of aggregate disk
+or memory fit. The source-default change does not activate any runtime or model.
+
+The former512MiB factoring-work refusal disappeared after the memory override.
+A separate64MiB FULL encoded bound was then proven by the original callback stack
+at compactFeatureAssets.requireDecodeWorking. A finite FULL128 correction passed
+actual LIVE; the owner's later ALL256 instruction explicitly superseded the prior
+legacy-journal64/FULL128 transport limits. No factoring algorithm, feature pruning,
+encoding, hash shortcut or alias relaxation was introduced. Independent reviews
+accepted the final preparse/cold/cached/reused-schema boundaries. See storage/
+ALL-FORMATS-WIRE-256-CORRECTION.txt and history/FULL-WIRE-BOUND-REVIEW.txt.
+
+Preserved failures (not folded into all-pass claims)
+- delivery13 c3:225.828s,peak5,560,487,936B; PRE/SERIES_PRE/POST completed, firstLIVE
+  append failed. Production failed closed and did not advance state.
+- isolated d4:50.563s,peak5,576,466,432B; exact internal512MiB factoring refusal,
+  arena denials0. It was not an OS memory-cap kill.
+- expanded e5:52.188s,peak5,575,430,144B; old refusal gone, diagnostic_size:byte_bound.
+  Its frozen declared36GiB label is historical; actual guard was the stricter30GiB.
+- stack f6:51.985s,peak5,576,060,928B; exact requireDecodeWorking64MiB callsite.
+- FULL128 g7 actual LIVE:PASS255.922s,peak5,575,704,576B; four heads, complete saved
+  vectors and input ports,91,092,345B root, final arena0. Distinct earlier profile.
+
+Final current-source verification
+1. all256-small h8:32passed,1explicit opt-in stress skip;2.016s,
+   peak200,863,744B. Includes all-profile wire/default/lower-limit/unknown-marker
+   bounds, finite manifest declarations, codec diagnostics and arena8GiB tickets.
+   Declaration probes do not allocate or prove a256MiB payload roundtrip.
+2. all256-delivery13 h8:PASS822.547s,peak5,917,442,048B (about5.51GiB).
+   All13 target/mode combinations,14 actual schema variants,14 full input-only
+   recording receipts. The extra PRE series variant is preserved separately.
+   Every saved vector position/name/missing bit and negative zero is hash-verified.
+   Actual saved-reader restart, series/map/side routing, previous-map heroes/results,
+   expiredLIVE rejection and application admin source all pass. These are direct
+   service calls, not a deployed HTTP server or emulator test. The synthetic lease
+   port does not establish native Windows lock behavior. Admin cold-open795.659ms,
+   first summary200 in1088.519ms; no readiness retry occurred in this run.
+   Root114,809,648B; final arena charge/leases/assets/denials all0. Network attempts0.
+   ReceiptSHA44199e86cac4e8c8348b183099c0e608568d6187c528f6b1c353b8b17a77ad8e.
+3. all256-semantics13 h8:PASS323.562s,peak5,732,614,144B.
+   13 original schemas,12 logical targets,921,198 occurrences, zero skips/deferred.
+   881,390 complete semantic identities;39,808 explicitly unresolved occurrences.
+   All nonLIVE fixture descriptors are structurally complete. Each of4LIVE heads
+   retains9,952 unresolved:9,232 native meanings and720 parameter bindings. These
+   are repeated across heads, not39,808 distinct independent factors. The new
+   historical dependency-array gaps are resolved; remaining gates are not waived.
+   All79 family/14 legacy-catalogue dispositions remain; legacy reconciliation
+   denominator465,359 occurrences. Each phase releases the arena to0.
+   AuditSHA2836da4f7d2f12169ae425ea3b5a0883d6bc2baab6d1017432c5be783d318889.
+   Source inventorySHA1b87b0d2bfa0542e087d7c1e0548039889fe06631d3e1692a75331340c3de16f.
+
+Earlier focused dependency14/14 and static PRE/SERIES_PRE/BETWEEN3/3 passes remain
+scoped to c3 before resource-source hash changes. They support unchanged arithmetic,
+not new descriptor hashes. The older1600 SYNTHETIC source/proof/POST/restart pass
+and its362.547s/5,293,527,040B receipt remain unchanged evidence. It is not a new
+whole1600-LIVE or real-source95 result. No refresh/repeated1600 run was needed
+solely to repeat unchanged numeric evidence. Do not sum overlapping test counts.
+
+Functional coverage by event
+Before draft: PRE map winner/kills/duration and standalone SERIES_PRE.
+After full draft: POST map winner/kills/duration and SERIES_LIVE observed_postdraft.
+During game: LIVE map winner/remaining kills/remaining duration and SERIES_LIVE
+observed_live. Between maps: SERIES_BETWEEN. Main card always targets the whole
+series; detail targets the selected map. Manual previous-map results/heroes remain.
+All outputs here are diagnostic features/input receipts, not model probabilities.
+
+Performance and remaining admission
+The functional run explicitly used SKIP_PILOT=1. Only the extra60/90/120-second
+frames were skipped. Initial LIVE four-head delivery, all13 assertions, full read,
+restart/router/admin checks remain. Receipt:planned3/executed0, status
+not_executed_separate_bounded_check; all warm metrics null; full326 false.
+Default unset still executes all3. A cold result is not evidence of warm failure.
+
+Measured cold diagnostic operation boundaries (generation + commit + complete saved
+readback + input recording; excludes later router/admin): PRE36.810s; standalone
+seriesPRE15.177s; POST120.930s; LIVE250.016s; BETWEEN16.287s. LIVE generation36.938s,
+commit149.625s, read/record62.433s. This is not a serving-latency qualification.
+The default2GiB profile is not qualified for full-rich operation. No sustained326
+or production memory supervisor has been accepted. C++ adoption remains unproven;
+old native prototype/linker evidence is preserved, not repeated as a new speed claim.
+
+Astra decisions required before training
+A. Verify causal history/live/current identity closure, retained-source and final
+   currentness barriers against these final changes. Technical passes do not replace
+   architecture or original-availability review.
+B. Resolve remaining native/parameter semantics and exact old-catalogue aliases;
+   preserve unavailable fields rather than inventing observations. Confirm source95
+   and original availability, including H03 pre-map residual limitations.
+C. Specify stable model feature-function contracts separately from per-row diagnostic
+   instance/provenance identity. Current full schema hashes include actual selected
+   team/account/hero IDs although ordered names stay fixed. This is intentional
+   diagnostic binding, not by itself a bug. Names-only compatibility is insufficient.
+   Exact examples: semantics/schema-identity-architecture-note.txt. Review dataset
+   multi-schema300K-column/64-schema/32MiB envelopes before large factories/fits.
+D. Decide bounded warm/sustained checks and storage/runtime optimization. A256MiB
+   per-asset ceiling does not prove the cumulative256MiB root fits a rich1600-source
+   LIVE case. Preserve ownership and proof fences; use measured complete operations.
+
+Precise continuation
+Read docs/sol-r7-exact-continuation-20261026.txt. Review this block under Astra,
+then issue the next detailed Sol implementation plan for remaining decisions.
+No fits/HPO/calibration/ablation/learned compression/quality scoring, providers,
+STRATZ changes, schedule/runtime activation, publication of the application, weights
+or public model promotion occurred or is newly authorized. Existing models/readers,
+raw data and manual task controls remain intact. API budgets remain unchanged.
+
+Private review/evidence index
+work/sol-r7-resume-20261026/{history,semantics,storage}/ contains exact reviews/pins.
+DELIVERY13-RESULT.json,SEMANTICS13-RESULT.json and individual immutable *.log /
+*.resources.json hold compact and full actual results. Publication allowlist117
+and final scoped manifest are under work/sol-r7-20261025/. They exclude credentials,
+raw observations, databases, archives, fitted weights and private evidence.

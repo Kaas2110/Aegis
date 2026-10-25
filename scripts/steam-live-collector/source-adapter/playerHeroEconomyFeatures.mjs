@@ -4,10 +4,19 @@ import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {readSteamProgressionProof} from './steamProgressionAdmission.mjs';
+import {steamPlayerInputBinding} from '../../feature-registry/feature-semantic-template.mjs';
 export const CONTRACT='aegis.player-hero-native-economy-features.v3';
 export const PROGRESSING_ECONOMY_CONTRACT='aegis.player-hero-native-economy-features.v4';
 export const HERO_IDS=Object.freeze(Array.from({length:250},(_,i)=>i+1));
 const METRICS={native_nw:'netWorth',native_gpm:'goldPerMinute',native_xpm:'experiencePerMinute'};
+/** Exact literal operands shared by this algebra and the actual rich emitter.
+ * Raw gold/net_gold remain opaque; neither is renamed native NW/GPM. */
+export function describeNativeEconomyOperand(path){
+ const field=path.split('.').at(-1),known=['netWorth','goldPerMinute','experiencePerMinute','level','heroId','accountId','teamId'];
+ if(known.includes(field))return{inputBinding:steamPlayerInputBinding(path,field),semanticVerification:'authoritative_template'};
+ if(['gold','netGoldRaw'].includes(field))return{inputBinding:{normalizedField:path,rawField:'result.games[*].scoreboard.{radiant,dire}.players[*].'+(field==='gold'?'gold':'net_gold'),sourceProfile:'steam.GetLiveLeagueGames.v1.scoreboard',sourceKind:'literal_unqualified_native_provider_field',units:field==='gold'?'provider_gold_raw':'provider_net_gold_raw',availabilityPolicy:'same coherent capture receipt <= decision; field mechanical meaning not inferred'},semanticVerification:'unverified_native_semantics'};
+ return null;
+}
 const CONTEXTS=['recentForm','heroForm','teamForm','aggression','lateTendency','playerLateTendency','heroLateTendency','playerHeroLateTendency'];
 const LATE_DEFINITIONS={playerLateTendency:'aegis.player_fraction_duration_at_least_40min_90d.v1',heroLateTendency:'aegis.hero_fraction_duration_at_least_40min_90d.v1',playerHeroLateTendency:'aegis.player_hero_fraction_duration_at_least_40min_90d.v1'};
 const TERMS=['value','log1p','team_share','team_centered','minute_product','log_minute_product','late_phase_product',...CONTEXTS.map(x=>'context_'+x),'hero_minute_residual','hero_minute_standardized'];

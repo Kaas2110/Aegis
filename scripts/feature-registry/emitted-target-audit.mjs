@@ -3,9 +3,10 @@
  * Gap groups reference the ledger's exact definitions without expanding formulas
  * again. No provider access, vector generation, model fitting or activation. */
 import {digest,TARGET_IDS,FAMILY_IDS} from './registry-contract.mjs';
-import {createGeneratedDefinitionLedger,verifyGeneratedDefinitionLedgerReceipt} from './generated-definition-ledger.mjs';
+import {createGeneratedDefinitionLedger,verifyGeneratedDefinitionLedgerReceipt,generatedLedgerSchemaCapacity,GENERATED_DEFINITION_LEDGER_FULL_CONTRACT} from './generated-definition-ledger.mjs';
 
 export const EMITTED_TARGET_AUDIT_CONTRACT='aegis.emitted-target-audit.v1';
+export const EMITTED_TARGET_AUDIT_FULL_CONTRACT='aegis.emitted-target-audit.v2';
 const fail=reason=>{throw Error('emitted_target_audit:'+reason);};
 const freeze=x=>{if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.values(x).forEach(freeze);Object.freeze(x);}return x;};
 const modes=id=>id==='SERIES_LIVE'?['observed_postdraft','observed_live']:[id.startsWith('SERIES_')?id:id.split('_')[0]];
@@ -22,7 +23,7 @@ export function auditGeneratedDefinitionEmissions(ledger){
  for(const id of TARGET_IDS)for(const mode of modes(id))targetRows.set(id+':'+mode,{targetId:id,stateMode:mode,scope:id.startsWith('SERIES_')?'whole_series':'selected_map',schemaSha256s:[],definitionOccurrenceCount:0,definitionVariants:new Set(),variantsWithDeclarationGaps:new Set(),emittedFamilies:new Set(),sourceProfiles:new Set(),currentDynamicProfiles:new Set(),mixedCurrentDynamicSchemaSha256s:[],missingEligibleFamilies:[],issues:[]});
  for(const f of ledger.families)familyRows.set(f.familyId,{familyId:f.familyId,catalogueKind:f.catalogueKind,catalogueStatus:f.catalogueStatus,disposition:f.disposition,eligibleTargets:[...f.eligibleTargets],emittedTargetModes:new Set(),generatedVariantCount:0,variantsWithDeclarationGaps:0,metadataGapCodes:new Set(),remainingMeaning:f.generatedVariantCount?'Generated subset only; full family/source semantics require independent review.':'No supplied emitted definition; catalogue disposition does not establish implementation.'});
  for(const schema of ledger.schemas){
-  const t=targetRows.get(schema.targetId+':'+schema.stateMode);if(!t||schemaByHash.has(schema.sha256)||!Number.isSafeInteger(schema.definitionCount)||schema.definitionCount<0||schema.definitionCount>150000)fail('schema_target_or_duplicate');schemaByHash.set(schema.sha256,schema);schemaIndices.set(schema.sha256,new Set());schemaCurrentProfiles.set(schema.sha256,new Set());t.schemaSha256s.push(schema.sha256);
+  const capacity=generatedLedgerSchemaCapacity(schema),t=targetRows.get(schema.targetId+':'+schema.stateMode);if(!t||schemaByHash.has(schema.sha256)||!Number.isSafeInteger(schema.definitionCount)||schema.definitionCount<0||schema.definitionCount>capacity.maxFeatures)fail('schema_target_or_duplicate');schemaByHash.set(schema.sha256,schema);schemaIndices.set(schema.sha256,new Set());schemaCurrentProfiles.set(schema.sha256,new Set());t.schemaSha256s.push(schema.sha256);
  }
  for(const row of ledger.definitions){
   if(variantByHash.has(row.variantSha256))fail('duplicate_variant');variantByHash.set(row.variantSha256,row);const f=familyRows.get(row.definition.familyId);if(!f)fail('unknown_family');
@@ -46,7 +47,7 @@ export function auditGeneratedDefinitionEmissions(ledger){
  const families=[...familyRows.values()].map(f=>({...f,emittedTargetModes:sorted(f.emittedTargetModes),metadataGapCodes:sorted(f.metadataGapCodes)}));
  const legacyGroups=ledger.legacyOccurrences.map(c=>({catalogueId:c.catalogueId,count:c.count,orderedNameHash:c.orderedNameHash,occurrenceRange:structuredClone(c.occurrenceRange),disposition:c.disposition,resolvedOccurrenceCount:0,unresolvedOccurrenceCount:c.count,reason:'Pinned occurrence inventory only; no emitted per-occurrence semantic migration/parity proof supplied.'}));
  const groups=[...gapGroups.values()].map(g=>({...g,variantSha256s:sorted(g.variantSha256s)})).sort((a,b)=>a.gapCodes.join('|').localeCompare(b.gapCodes.join('|'),'en'));
- const body={contract:EMITTED_TARGET_AUDIT_CONTRACT,ledgerSha256:ledger.contentHash,registryHash:ledger.registryHash,targets,families,legacyGroups,declarationGapGroups:groups,counts:{logicalTargets:12,targetModes:targets.length,suppliedTargetModes:targets.filter(t=>t.schemaSha256s.length).length,suppliedSchemas:ledger.schemas.length,families:families.length,generatedVariants:ledger.definitions.length,variantsWithDeclarationGaps:groups.filter(g=>g.gapCodes.length).reduce((n,g)=>n+g.variantSha256s.length,0),legacyGroups:legacyGroups.length,legacyOccurrences:legacyGroups.reduce((n,g)=>n+g.count,0),legacyUnresolvedOccurrences:legacyGroups.reduce((n,g)=>n+g.unresolvedOccurrenceCount,0)},evidenceMeaning:'Actual supplied schema declarations and explicit gaps. A complete inventory or no declaration gaps is not reviewed semantics, measured source coverage, model quality or runtime acceptance.',...disabled};
+ const body={contract:ledger.contract===GENERATED_DEFINITION_LEDGER_FULL_CONTRACT?EMITTED_TARGET_AUDIT_FULL_CONTRACT:EMITTED_TARGET_AUDIT_CONTRACT,ledgerSha256:ledger.contentHash,registryHash:ledger.registryHash,targets,families,legacyGroups,declarationGapGroups:groups,counts:{logicalTargets:12,targetModes:targets.length,suppliedTargetModes:targets.filter(t=>t.schemaSha256s.length).length,suppliedSchemas:ledger.schemas.length,families:families.length,generatedVariants:ledger.definitions.length,variantsWithDeclarationGaps:groups.filter(g=>g.gapCodes.length).reduce((n,g)=>n+g.variantSha256s.length,0),legacyGroups:legacyGroups.length,legacyOccurrences:legacyGroups.reduce((n,g)=>n+g.count,0),legacyUnresolvedOccurrences:legacyGroups.reduce((n,g)=>n+g.unresolvedOccurrenceCount,0)},evidenceMeaning:'Actual supplied schema declarations and explicit gaps. A complete inventory or no declaration gaps is not reviewed semantics, measured source coverage, model quality or runtime acceptance.',...disabled};
  return freeze({...body,contentHash:digest(body)});
 }
 
@@ -56,7 +57,8 @@ export function auditEmittedTargetSchemas(input){return auditGeneratedDefinition
  * cannot be paired with an older audit merely because feature names match. */
 export function pageEmittedDefinitionFindings({ledger,audit,offset=0,limit=128}={}){
  verifyGeneratedDefinitionLedgerReceipt(ledger);const{contentHash,...body}=audit??{};
- if(audit?.contract!==EMITTED_TARGET_AUDIT_CONTRACT||digest(body)!==contentHash||audit.ledgerSha256!==ledger.contentHash||Object.keys(disabled).some(k=>audit[k]!==false))fail('audit_binding');
+ const expectedContract=ledger.contract===GENERATED_DEFINITION_LEDGER_FULL_CONTRACT?EMITTED_TARGET_AUDIT_FULL_CONTRACT:EMITTED_TARGET_AUDIT_CONTRACT;
+ if(audit?.contract!==expectedContract||digest(body)!==contentHash||audit.ledgerSha256!==ledger.contentHash||Object.keys(disabled).some(k=>audit[k]!==false))fail('audit_binding');
  if(!Number.isSafeInteger(offset)||offset<0||offset>ledger.definitions.length||!Number.isSafeInteger(limit)||limit<1||limit>1024)fail('page_bounds');
  return freeze({ledgerSha256:ledger.contentHash,auditSha256:contentHash,offset,total:ledger.definitions.length,nextOffset:Math.min(offset+limit,ledger.definitions.length),definitions:ledger.definitions.slice(offset,offset+limit).map(d=>({variantSha256:d.variantSha256,definitionId:d.definition.id,familyId:d.definition.familyId,metadataGaps:[...d.semantics.metadataGaps],semantics:structuredClone(d.semantics),occurrences:structuredClone(d.occurrences)})),semanticAcceptance:false,sourceAvailabilityAttested:false});
 }

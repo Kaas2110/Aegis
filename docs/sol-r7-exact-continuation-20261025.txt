@@ -1,0 +1,111 @@
+Historical25October record. The owner resumed26October; read docs/sol-r7-exact-continuation-20261026.txt and docs/sol-r7-review-20261026.txt FIRST. Old pause, limits and hashes below retain historicalscope.
+
+AEGIS SOL R7 — EXACT OWNER-REQUESTED PAUSE / CONTINUATION
+25 October 2026. Read this BEFORE older R7 execution orders.
+
+OWNER STATE
+The owner explicitly requested a temporary pause of approximately two hours and
+said they will resume with their next message. Pause NOW, do not finish additional
+stages autonomously, start tests/fits/providers/tasks, or create an automatic wake.
+No two-hour timer or recurring continuation was created. Wait for the owner's
+next message. The previous wording "no big run today" was corrected: the big run
+is deferred until resumption, not cancelled. Training remains separately paused.
+Root has stopped the only remaining helper at a completed file-write boundary.
+All root-owned native checks have completed. Existing independent app ingestion/
+schedules, manual STOPs and foreign locks were not modified by this pause.
+
+CANONICAL SOURCE / PUBLICATION
+APP=C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Published main remains PR11 073d9d2c5726bbcf2978606c44896bbbbbf433cf.
+R7 is local/unpublished. No new PR/tree/commit/merge was created in this closure.
+Graphify was READY on PR11 at the bounded initial check; it does not include R7.
+Use current local source. Old local GitHEAD is not the installed source baseline;
+never reset/clean/blindly stage. Publication is one reviewed source-only block PR
+under standing authorization, after completing/reviewing the pending corrections.
+Inventory revision5 is a read-time candidate list; it is now STALE for the six
+metadata files and latest docs/AGENTS. Refresh only affected pins after review.
+Never upload credentials, databases, observations, archives, weights or private logs.
+
+COMPLETED RECORDED CAPACITY / ROUTING EVIDENCE
+67/67 small profile-consumer cases passed (r7-full-profile-consumers-10).
+48 codec/journal cases passed with one explicitly skipped opt-in stress case
+(r7-full-codec-journal-12,4.734s,peak299360256B). Separate schema stress passed
+(r7-full-logical-stress-11,65.984s,peak279244800B). Bootstrap early-rejection1case
+passed. Full routing30/30 passed (r7-full-routing-13,0.593s,peak145842176B).
+Full1600 SYNTHETIC source versions -> causal history proof ->60303-column
+POST_MAP_WIN/KILLS/DURATION -> durable trace -> restart -> all-target hash-verified
+readback PASSED (r7-full-profile-source1600-12,362.547s,peak5293527040B).
+Normalized facts118570920B; final effective root234214840B under unchanged256MiB;
+final arena zero. Not a real source95, live-latency or model-quality result.
+Initial exhaustive actual producer declaration audit PASSED13schemas/12targets,
+921198definition occurrences,zero skips (r7-full-emitted13-13,275.813s,
+peak5286469632B). LIVE150553columns,series observed_live150597. All phases release
+arena tozero.795823complete semantic identities /125375unresolved, NOT fullsemantic
+acceptance.9409new historicalcolumns (2059PRE/series subset) lacked explicit
+historyDefinitions arrays. Other LIVE gaps9232unverifiednative+720parameterbinding
+perhead remain explicit. Preserve this initial receipt, not an all-pass finalgate.
+Logs/resources immutable under work/sol-r6b-20261025/r7-*; exact source snapshots
+under work/sol-r7-20261025/snapshots/. Never sum overlapping scopes as one run.
+
+IN-PROGRESS METADATA CORRECTION — SAVED, UNTESTED
+Six exact files copied/pinned in work/sol-r7-20261025/pause-20261025/MANIFEST.json:
+reviewedHistoricalSummaries.mjs,chronologicalResultRatings.mjs,
+historicalRelationalFeatures.mjs,reviewedHistoricalSummaries.r7.test.mjs,
+NEWreviewedHistorySemanticIdentity.r7.test.mjs,retainedStaticMapView.r7.test.mjs.
+Source edits intend metadata only, no arithmetic/time/order/values/masks changes.
+H02/H05/H12 dependencies reference actual previously emitted feature names, NOT
+statistics.definition's generic formula ID. H12 summaries reference25actual pair
+outputs. Direct raw replay/state/roster leaves explicitly[]; chronology aggregates
+reference actual own emitted base names. Series orientation renames only references
+that resolve in the base component namespace. Literal formula IDs remain parameters.
+Actual pre-addition names are passed by the shared generator. Missing/unbound source
+statistics must remain unverified, not acquire invented dependencies or aliases.
+These edits and the new3-case focused test source were written but NOT executed or
+independently accepted. Old1600/all13 hashes do NOT certify this changedmetadata.
+
+FIRST STEPS AFTER EXPLICIT RESUME
+1. Read this record, R7 review/capacity documents and pause six-file pins. Inspect
+   current job/STOP/lock state before starting anything; do not duplicate old jobs.
+2. Independently review pending six-file metadata logic. Run focused existing helper
+   cases plus NEWreviewedHistorySemanticIdentity.r7.test.mjs and actual three-mode
+   retainedStaticMapView.r7.test.mjs golden/ref-resolution checks under owned guard.
+   Verify namespace resolution after series orientation and metadata-only numeric
+   parity. Fix failures with exact receipts; do not weaken semantic/audit rules.
+3. Snapshot corrected frozen source; run actual all13 retained delivery/model-input/
+   router/application-admin path using r7ActualRetainedDelivery.test.mjs opt-in
+   AEGIS_R7_ACTUAL_RETAINED_DELIVERY=1. Run final all13 streamed semantic audit on
+   exact corrected source with AEGIS_R7_ACTUAL_EMITTED_SEMANTICS=1. Root serial only.
+   They were NOT started after the pause request. No new predictive-quality tests.
+4. Reuse exact unchanged1600 source/proof/numeric evidence proportionately; if a
+   concrete encoding/storage divergence warrants another1600 run, record why.
+   Do not silently extend old trace/schema hashes to correctedmetadata.
+5. Three-frame pilot measurements decide whether sustained326 is admissible;
+   no pretending slow cycles meet15s, no heavy326 when prerequisites fail.
+6. Finish source-only review/exclusion manifest, PR/standing authorized merge for
+   completed block, automatic Graphify refresh; no duplicate build/fullparity.
+   Save exact commit/receipts and consolidate Astra package before training gate.
+
+RESOURCE / MODEL BOUNDARIES
+24GiB aggregate admission/6GiB owned whole process tree,4CPUs,min4GiBfree,
+finitewall<=1200s,richarena4GiB; default2GiB remains unqualified forrich.
+Use work/sol-r6b-20261025/run-bounded-tests.py SHA943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1.
+One root-owned native job; no global supervisor over independent tasks.
+No training/HPO/calibration/ablation/learned compression, provider refresh/probes,
+schedule/runtime activation, public deployment or model promotion.
+R7_FULL300K/schema.v2/codec.v3:300Kfeatures,4GiB LOGICALexpanded/128Mnodes,
+64MiBwire, boundedpages; no4GiBbulk allocation. Legacy schemas/codecs unchanged.
+Physical16MiBobjects/256MiBroot unchanged. Live current inputs from coherentSteam;
+history from causal local store; no newlive OpenDota HTTP dependency. Main=series,
+detail=selectedmap. Current model quality has NOT been evaluated in this block.
+
+OPEN ASTRA DECISIONS / GATES
+Full source availability/95%, unresolved native/parameter meanings and legacyalias
+reconciliation; H03 pre-map residual originalavailability; eventual multi-schema
+rich dataset metadata beyond aggregate300Kcolumn manifest; sustained performance/
+hidden ownership/default2GiB qualification. C++ unadopted without usableWindows
+linker and measured>=30% complete-operation benefit. Existing models/readers/data
+remain intact; only supported cleanup was performed. No feature families pruned.
+
+Supporting review: outputs/Aegis-Sol-R7-Astra-review-20261025.txt.
+Capacity decision: outputs/Aegis-Sol-R7-capacity-decision-20261025.txt.
+Private per-track evidence: work/sol-r7-20261025/{history,storage,semantics,cleanup,harness,native}/.

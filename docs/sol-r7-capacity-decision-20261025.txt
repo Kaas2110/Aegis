@@ -1,0 +1,109 @@
+CURRENT CAPACITY ADDENDUM — 26 October2026
+The owner explicitly superseded the earlier limits below. Current diagnostic
+profile: 30 GiB aggregate admission / 9 GiB owned test tree / 8 GiB shared arena /
+2 GiB compact working reservation. The minimum4 GiB free guard remains; new tests
+require full tree reservation plus that headroom before starting. The current
+encoded ceiling is256 MiB for all supported compact profiles and manifest versions;
+the journal default is now256 MiB. This source default change is authorized and
+is separate from activating any runtime. Lower configured ceilings still apply.
+Unknown profiles, 150K/300K feature distinctions, logical expansion/node limits,
+1 MiB chunks, 16 MiB objects/batches and256 MiB cumulative root are unchanged.
+Old recorded capacities/results remain historical evidence, not current defaults.
+Latest exact source/results: docs/sol-r7-review-20261026.txt and
+ docs/sol-r7-exact-continuation-20261026.txt. No model training is authorized.
+AEGIS SOL R7 — OWNER-AUTHORIZED FULL CAPACITY CONTRACT
+25 October 2026. English architectural implementation/review record.
+
+Trigger and authorization
+The actual1600-map normalized retained fixture restored, produced its causal
+history proof and generated the entire60303-column POST vector. Encoding then
+hit the historical256MiB expanded-schema bound (not a6GiB OS memory breach).
+The owner explicitly instructed expanding the capacity. This supersedes the
+older storage/ASTRA-CAPACITY-DECISION.txt suggestion to stop for a new decision.
+No training, provider probing, runtime/task activation or promotion is authorized.
+
+Decision
+Keep legacy schema.v1 / compactcodec.v2 bytes and finite bounds unchanged.
+Add explicit R7_FULL300K / schema.v2 / compactcodec.v3 with300000 columns,
+4GiB logical expanded schema bytes,128000000 expanded nodes and64MiB encoded
+wire. The logical ceiling is checked by saturated DAG cost arithmetic BEFORE
+expanded hashing. It is not a4GiB allocation, string, JSON.parse or memory quota.
+Unknown/missing/mismatched profile markers cannot opt into larger limits.
+Shared featureCapacityProfiles.mjs is the sole profile table.
+
+Memory and physical storage
+Keep24GiB conservative project admission,6GiB owned test tree,4CPUs and4GiB
+minimum free; rich engineering arena4GiB and small/default arena2GiB unchanged.
+The new encoder admits its bounded32MiB scratch; legacy16MiB scratch unchanged.
+The existing physical writer16MiB object/256MiB root bounds remain unchanged;
+wire uses bounded immutable chunks and manifest-last commit. A physical bound
+refusal is not permission to silently enlarge a disk root or discard history.
+Paged reads and actual arena accounting remain mandatory.
+
+Coordinated seams
+Compiler profile controls exactschema header/hash, count and private descriptors.
+The unified producer defaults full; standalone compiler remains legacy by default.
+The actual bootstrap selects legacy for a legacy sink and rejects explicitfull
+with that sink before filesystem IO; opt-in compact sink uses full by default.
+Journal route references bind the optional full marker to the actual schema header,
+codec descriptor and hash. Readers select explicitfull BEFORE wire JSON.parse;
+old persisted full-looking references cannot upgrade legacy cached/cold artifacts.
+Admin page offsets follow the verified route's profile. Model-input manifests,
+streaming audit receipts, dataset vocabulary and joint availability are profile-
+aware; capacity alone grants no source/semantic/serving authority.
+The bulk ledger remains only a small oracle: if anyfull schema is present, the
+WHOLE mixed inputset must pass64MiB/2Mnode admission before hashing/cloning.
+Large schemas use the bounded streaming auditor, not a4GiB bulkcanonical string.
+
+Separate transient ownership correction
+Deep inspection can prove a shared graph is immutable; ownShared then borrows that
+same graph without cloning. Its creation charge now transfers synchronously to
+retained ownership, with no await/caller callback; charging both tickets described
+the SAME graph twice. Mutable input retains source+clone overlap accounting.
+Stage/request/actualarena refusal diagnostics were added for remaining denials.
+This is not a claim that differently shaped object graphs or schemas share memory.
+
+Evidence boundaries (receipts are immutable)
+- r7-cached-source1600-8: fullsource/view/proof +60303POST; OLDcodec refusal;
+ 291.953s,peak4387495936B. No feature trace readback in that invocation.
+- r7-capacity-and-support-9:7/8 pass; POST legacy refusal and six support-floor
+ cases passed. LIVE early producer admission preempted the expected count gate;
+ this is NOT evidence that the count gate was reached.
+- r7-full-profile-consumers-10:67/67 passed,1.86s,peak388292608B; synthetic
+ profile, audit, model-input, dataset and availability contracts only.
+- r7-full-codec-journal-11:49tests,47pass/1fail/1optin stress skipped; legacy/full
+ journal restart, cache/cold profile forgery, API bounds and support passed.
+ The300000-column codec boundary exposed a separate4MiB generic string guard
+ on its4.8MiB Float64 hex wire; correction uses a vector-only chunked canonical
+ encoder while retaining arbitrary string limits. A fresh receipt is required.
+- Full logical stress, corrected codec and actual complete large delivery results
+ are appended below after execution. No all13/1600/326 acceptance is implied here.
+
+Astra review
+Review finite profile scale, streaming cost arithmetic and preparse admission;
+legacy sink dispatch; exactprofile/header/hash/descriptor binding; synchronous
+same-graph charge transfer; retained current/source authority and missingness.
+Review real measurements separately from synthetic structural correctness.
+Model quality, source95 and sustained latency remain independent gates.
+
+CORRECTED SCOPED RESULTS
+r7-full-codec-journal-12:49tests,48passed,0failed,1explicitstressskip;
+4.734s whole job,peak299360256B. Includes actual300000 Float64 wire chunk/hash
+boundary, exactnegativezero oracle, legacy/full journal coldrestart, profile
+forgery cache/cold rejection, API offsets and six support-floor checks.
+r7-full-logical-stress-11:one separately opted-in case PASS,65.984s,
+peak279244800B. It crossed legacy logicalbyte/node bounds with a compactDAG;
+it predates the vector-onlycanonical correction, which does not alter that
+schema/stress path. Do not count the skipped fastcase as an additional pass.
+r7-bootstrap-profile-12:one focused earlyconfiguration rejection PASS,0.625s,
+peak175861760B; no claim that the whole bootstrap suite was run.
+The corrected1600 fixture is now running under its finite1000s owned guard.
+
+FULL1600 CAPACITY REGRESSION NOW PASSED
+r7-full-profile-source1600-12:1/1PASS,362.547s fulljob,peak5293527040B.
+Actual60303-column POST_MAP_WIN/POST_KILLS/POST_DURATION schemas and rows were
+persisted, the writer/reader restarted, and all expanded targethashes checked.
+Normalized1600-map facts118570920B; final effective root234214840B under its
+unchanged256MiB ceiling; peakexplicit arena2943166898B, finalchargezero.
+The synthetic fixture did not fit/train a model or certify real upstream coverage.
+Root routing follow-up r7-full-routing-13 also passed30/30 with exactprofilechecks.

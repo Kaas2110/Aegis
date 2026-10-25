@@ -7,14 +7,18 @@ import {createFeatureProjectionCompiler} from '../steam-live-collector/source-ad
 import {createGeneratedDefinitionLedger} from './generated-definition-ledger.mjs';
 import {auditEmittedTargetSchemas,auditGeneratedDefinitionEmissions,pageEmittedDefinitionFindings} from './emitted-target-audit.mjs';
 const A='a'.repeat(64),B='b'.repeat(64);
-function fixture({allModes=false}={}){
+function fixture({allModes=false,capacityProfile='LEGACY_150K'}={}){
  const[index,familyDocument,targetDocument]=syntheticRegistry(),docs={index,familyDocument,targetDocument},registry=validateRegistry(index,familyDocument,targetDocument);
- const compiler=createFeatureProjectionCompiler({registry,registryHash:digest(docs),sourceInventory:{history:{primarySha256:A,files:[{path:'synthetic-history.mjs',sha256:A}]}},sourceProfiles:{history:'synthetic-history-v1'}});
+ const compiler=createFeatureProjectionCompiler({registry,registryHash:digest(docs),sourceInventory:{history:{primarySha256:A,files:[{path:'synthetic-history.mjs',sha256:A}]}},sourceProfiles:{history:'synthetic-history-v1'},capacityProfile});
  const definitions=[{name:'history.maps',familyId:'H01',formula:'count of distinct provided prior maps',formulaVersion:'synthetic-v1',units:'maps',inputScopes:['prior_maps'],minimumSupport:5,inputFields:['map.id','map.outcomeKnownAt'],supportUnit:'distinct_maps',populationPolicy:'provided synthetic cohort',eventTimePolicy:'prior map end',availabilityTimePolicy:'facts available by history cutoff',rolePolicy:'not applicable to map count',patchPolicy:'provided revisions only'}];
  const normalized=compiler.normalize({names:['history.maps'],values:[null],masks:[true],definitions,schemaHash:B},'history');
  const targets=allModes?targetDocument.targets.flatMap(t=>t.stateModes.map(m=>[t.id,m])):[['PRE_MAP_WIN','PRE']];
  const schemas=targets.map(([t,m])=>{const out=compiler.project([normalized],t,m);return{schema:compiler.getSchema(out.schemaRef.sha256),sha256:out.schemaRef.sha256};});return{...docs,schemas};
 }
+test('versioned full ledger capacity reaches emitted audit and exact detail binding without legacy upgrade',()=>{
+ const ledger=createGeneratedDefinitionLedger(fixture({capacityProfile:'R7_FULL300K'})),audit=auditGeneratedDefinitionEmissions(ledger),page=pageEmittedDefinitionFindings({ledger,audit,limit:1});assert.equal(ledger.contract,'aegis.generated-definition-ledger.v2');assert.equal(audit.contract,'aegis.emitted-target-audit.v2');assert.equal(page.definitions.length,1);assert.equal(audit.sourceAvailabilityAttested,false);
+ const bad=structuredClone(audit);bad.contract='aegis.emitted-target-audit.v1';delete bad.contentHash;bad.contentHash=digest(bad);assert.throws(()=>pageEmittedDefinitionFindings({ledger,audit:bad}),/audit_binding/);
+});
 test('all12targets/13modes are audited from actual compiler emissions; no full semantic claim',()=>{
  const input=fixture({allModes:true}),a=auditEmittedTargetSchemas(input);assert.equal(a.counts.logicalTargets,12);assert.equal(a.counts.targetModes,13);assert.equal(a.counts.suppliedTargetModes,13);assert.equal(a.counts.generatedVariants,1);assert.equal(a.counts.families,79);assert.equal(a.counts.legacyGroups,14);assert.equal(a.counts.legacyUnresolvedOccurrences,14);
  assert.equal(a.targets.filter(t=>t.targetId==='SERIES_LIVE').length,2);assert.ok(a.targets.every(t=>t.generatedVariantCount===1));assert.ok(a.targets.find(t=>t.targetId==='SERIES_PRE').scope==='whole_series');assert.equal(a.semanticAcceptance,false);assert.equal(a.fullFeatureGateComplete,false);assert.equal(a.sourceAvailabilityAttested,false);

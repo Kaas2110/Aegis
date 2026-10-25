@@ -10,6 +10,8 @@ import {createDiagnosticResourceArena,snapshotPlainRecord,measureBoundedJsonByte
 import {inspectBoundedJsonSource} from './boundedJsonSource.mjs';
 import {readPrematchHistoryTargetInput,readSeriesHistoryTargetInput} from './staticHistoryTargetContracts.mjs';
 import {produceSeriesContext} from './seriesContextFeatures.mjs';
+import {RETAINED_STATIC_TARGET_STORE_CONTRACT,readRetainedStaticHistoryTargetProof} from './retainedStaticHistoryTarget.mjs';
+import {RETAINED_STATIC_HISTORY_INPUT_PROOF_CONTRACT,readRetainedStaticHistoryInputProof} from './retainedStaticHistoryInputStore.mjs';
 
 export const COMPACT_HISTORICAL_INPUT_STORE_CONTRACT='aegis.compact-historical-input-store.v2';
 export const COMPACT_HISTORICAL_INPUT_REFERENCE_CONTRACT='aegis.static-historical-input-reference.v2';
@@ -29,11 +31,19 @@ function parse(utf8,label){try{inspectBoundedJsonSource(utf8);return JSON.parse(
 function inputOf(raw,cfg){const p=exact(raw,['utf8','pin'],'input'),pin=exact(p.pin,['path','sha256','bytes'],'pin');if(typeof p.utf8!=='string'||p.utf8.length>cfg.maxInputBytes||typeof pin.path!=='string'||pin.path.length<1||pin.path.length>4096||!hash(pin.sha256)||!Number.isSafeInteger(pin.bytes)||pin.bytes<1||pin.bytes>cfg.maxInputBytes||bytes(p.utf8)!==pin.bytes)fail('source_input_bound');return {utf8:p.utf8,pin};}
 function supportOf(minimumSupport,minSupport){const selected=minimumSupport!==undefined?minimumSupport:minSupport!==undefined?minSupport:5;if(minimumSupport!==undefined&&minSupport!==undefined&&minimumSupport!==minSupport||!Number.isSafeInteger(selected)||selected<3||selected>1000)fail('minimum_support');return selected;}
 function bindingOptions(raw={}){
- const o=snapshotPlainRecord(raw,{maxKeys:8});if(Object.keys(o).some(k=>!['mode','historicalBindings','seriesReceiptPin','decisionAt','targetBinding','matchId','seriesId','requireParsedTargetBinding'].includes(k)))fail('verification_options');
+ const o=snapshotPlainRecord(raw,{maxKeys:9});if(Object.keys(o).some(k=>!['mode','historicalBindings','seriesReceiptPin','decisionAt','targetBinding','matchId','seriesId','requireParsedTargetBinding','requireTargetDerivation'].includes(k)))fail('verification_options');
  for(const key of ['historicalBindings','seriesReceiptPin'])if(o[key]!==undefined&&o[key]!==null){const value=snapshotPlainRecord(o[key],{maxKeys:key==='historicalBindings'?16:4});if(Object.values(value).some(v=>v!==null&&v!==undefined&&!['string','number','boolean'].includes(typeof v)))fail('verification_binding_scalars');o[key]=Object.freeze(value);}
  if(o.requireParsedTargetBinding!==undefined&&typeof o.requireParsedTargetBinding!=='boolean')fail('parsed_target_option');
+ if(o.requireTargetDerivation!==undefined&&typeof o.requireTargetDerivation!=='boolean')fail('target_derivation_option');
  if(o.targetBinding!==undefined&&o.targetBinding!==null){measureBoundedJsonBytes(o.targetBinding,{maxBytes:16384,maxNodes:256,maxDepth:8});o.targetBinding=freeze(structuredClone(o.targetBinding));}
  return Object.freeze(o);
+}
+function derivationReference(raw){const r=exact(raw,['kind','sha256','bytes'],'target_derivation_reference');if(r.kind!=='retained-static-target-derivation-v1'||!hash(r.sha256)||!Number.isSafeInteger(r.bytes)||r.bytes<1||r.bytes>8*1024**2)fail('target_derivation_reference');return freeze(r);}
+function validateTargetDerivation(binding,parsed,options){
+ if(!binding){if(options.requireTargetDerivation)fail('target_derivation_required');return;}
+ if(!parsed||binding.targetDerivationVerified!==true||binding.targetSha256!==parsed.sourceTargetSha256||binding.historyCutoffAt!==parsed.historyCutoffAt||binding.validFrom!==parsed.validFrom||binding.matchId!==parsed.matchId||binding.seriesId!==parsed.seriesId)fail('target_derivation_binding');
+ if(parsed.kind==='series_history'&&(binding.transitionId!==parsed.transitionId||binding.identityRevision!==parsed.identityRevision))fail('target_derivation_revision');
+ if(options.decisionAt!==undefined&&options.decisionAt!==null&&instantNs(binding.requiredInputAvailableAt)>instantNs(options.decisionAt))fail('target_derivation_input_after_decision');
 }
 function validateParsedTarget(binding,options){
  // A parsed private proof keeps its causal/identity claims even when a later
@@ -67,13 +77,15 @@ function validateBindings(header,{mode,historicalBindings,seriesReceiptPin,decis
  * lease alive while using this immutable descriptor. A JSON copy is not a token.
  */
 export function readCompactHistoricalInputProof(proof,{reference,...options}={}){
+ if(snapshotPlainRecord(proof,{maxKeys:1}).contract===RETAINED_STATIC_HISTORY_INPUT_PROOF_CONTRACT)return readRetainedStaticHistoryInputProof(proof,{reference,...options});
  const held=proofs.get(proof);if(!held||!held.active)fail('owned_active_proof_required');
  if(reference!==undefined&&(reference.contract!==held.descriptor.reference.contract||reference.kind!==held.descriptor.reference.kind||reference.sha256!==held.descriptor.reference.sha256||reference.bytes!==held.descriptor.reference.bytes))fail('proof_reference_binding');
- const ownedOptions=bindingOptions(options);validateBindings(held.descriptor.header,ownedOptions);validateParsedTarget(held.descriptor.parsedTargetBinding,ownedOptions);return held.descriptor;
+ const ownedOptions=bindingOptions(options);validateBindings(held.descriptor.header,ownedOptions);validateParsedTarget(held.descriptor.parsedTargetBinding,ownedOptions);validateTargetDerivation(held.descriptor.targetDerivationBinding,held.descriptor.parsedTargetBinding,ownedOptions);return held.descriptor;
 }
 
-export function createCompactHistoricalInputStore({writer,shouldContinue=()=>true,clock=()=>new Date().toISOString(),resourceArena=null,limits={}}={}){
+export function createCompactHistoricalInputStore({writer,shouldContinue=()=>true,clock=()=>new Date().toISOString(),resourceArena=null,limits={},targetDerivationStore=null}={}){
  if(writer?.contract!=='aegis.persistent-artifact-writer.v1'||typeof writer.commit!=='function'||typeof writer.read!=='function'||typeof shouldContinue!=='function'||typeof clock!=='function')fail('owned_writer_or_ports');
+ if(targetDerivationStore!==null&&(targetDerivationStore.contract!==RETAINED_STATIC_TARGET_STORE_CONTRACT||typeof targetDerivationStore.verifyTargetDerivation!=='function'))fail('target_derivation_store');
  const cfg=config(limits),arena=resourceArena??createDiagnosticResourceArena(),active=new Set();let closed=false;
  if(typeof arena?.reserve!=='function'||typeof arena.status!=='function')fail('owned_resource_arena');
  async function proceed(){if(closed)fail('closed');const allowed=await shouldContinue();if(closed)fail('closed');if(allowed!==true)fail('stopped');}
@@ -98,10 +110,10 @@ export function createCompactHistoricalInputStore({writer,shouldContinue=()=>tru
   }
   const utf8=chunks.join('');if(total!==blob.bytes||sha(utf8)!==blob.sha256)fail('blob_integrity');inspectBoundedJsonSource(utf8,{maxBytes:cfg.maxInputBytes});return utf8;
  }
- function mint(header,reference,sourceLease=null,inputs=null,parsedTargetBinding=null){
+ function mint(header,reference,sourceLease=null,inputs=null,parsedTargetBinding=null,targetDerivationBinding=null){
   if(closed)fail('closed');
   if(active.size>=cfg.maxActiveProofs){sourceLease?.release();fail('proof_count');}
-  const descriptor=freeze({contract:'aegis.verified-compact-historical-inputs.v2',reference,header,mode:header.mode,inputs:header.inputs,calculationOptions:header.calculationOptions,parsedTargetBinding,parsedTargetVerified:parsedTargetBinding!==null,verifiedAt:verifiedAt(),sourceAvailabilityIndependentlyAttested:false,storageTimeIsNotOriginalAvailability:true,...flags});
+  const descriptor=freeze({contract:'aegis.verified-compact-historical-inputs.v2',reference,header,mode:header.mode,inputs:header.inputs,calculationOptions:header.calculationOptions,parsedTargetBinding,parsedTargetVerified:parsedTargetBinding!==null,targetDerivationBinding,targetDerivationVerified:targetDerivationBinding!==null,verifiedAt:verifiedAt(),sourceAvailabilityIndependentlyAttested:false,storageTimeIsNotOriginalAvailability:true,...flags});
   // The trusted clock/arena ports are synchronous, but may close this store
   // reentrantly. No proof may be registered after close drained active leases.
   if(closed)fail('closed');
@@ -114,7 +126,8 @@ export function createCompactHistoricalInputStore({writer,shouldContinue=()=>tru
   const ref=refOf(reference,cfg),ownedOptions=bindingOptions(options);await proceed();const manifestLease=reserve(cfg.maxManifestBytes*8+65536,'manifest');let sourceLease=null,manifestParseLease=null;
   try{
    const text=await readObject(artifactRef(ref),cfg.maxManifestBytes),shape=inspectBoundedJsonSource(text,{maxBytes:cfg.maxManifestBytes,maxNodes:8192});manifestParseLease=reserve(shape.estimatedParsedBytes,'manifest_parse');const body=parse(text,'manifest');if(canonical(body)!==text||body?.contract!==BODY||body.eligibleForTraining!==false||body.eligibleForServing!==false||body.recordedPrediction!==false)fail('manifest');
-   const top=exact(body,['contract','header','blobs','sourceAvailabilityIndependentlyAttested','eligibleForTraining','eligibleForServing','recordedPrediction'],'manifest_keys'),header=exact(top.header,['contract','mode','inputs','calculationOptions'],'header');
+   const top=exact(body,['contract','header','blobs','sourceAvailabilityIndependentlyAttested','eligibleForTraining','eligibleForServing','recordedPrediction'],'manifest_keys'),hasDerivation=Object.hasOwn(top.header??{},'targetDerivationReference'),header=exact(top.header,['contract','mode','inputs','calculationOptions',...(hasDerivation?['targetDerivationReference']:[])],'header');
+   const targetDerivationReference=hasDerivation?derivationReference(header.targetDerivationReference):null;if(ownedOptions.requireTargetDerivation&&!targetDerivationReference)fail('target_derivation_required');
    if(header.contract!==HEADER||!MODES.includes(header.mode)||top.sourceAvailabilityIndependentlyAttested!==false||Object.keys(exact(header.calculationOptions,['minimumSupport'],'support_options')).length!==1)fail('header');supportOf(header.calculationOptions.minimumSupport);
    const sourcePins=snapshotPlainRecord(header.inputs,{maxKeys:3}),rawBlobs=snapshotPlainRecord(top.blobs,{maxKeys:3}),keys=Object.keys(sourcePins).sort();if(keys.join(',')!==Object.keys(rawBlobs).sort().join(',')||!keys.includes('facts')||!keys.includes('target')||keys.some(k=>!['facts','target','series'].includes(k)))fail('source_set');
    const blobs={};let total=0,chunkCount=0;
@@ -122,9 +135,10 @@ export function createCompactHistoricalInputStore({writer,shouldContinue=()=>tru
     const refs=blob.chunks.map(r=>chunkRef(r,cfg));if(refs.reduce((n,r)=>n+r.bytes,0)!==pin.bytes||(chunkCount+=refs.length)>cfg.maxChunks||(total+=pin.bytes)>cfg.maxSourceBytes)fail('source_bound');blobs[key]={...pin,chunks:refs};
    }
    validateBindings(header,ownedOptions);sourceLease=reserve(total*8+65536,'source');const inputs={},semanticInputs={};
-   for(const key of keys){const utf8=await readBlob(blobs[key]),input={utf8,pin:{path:'compact-feature-journal/source-inputs/'+sourcePins[key].sha256+'.json',...sourcePins[key]}};if(keepInputs)inputs[key]=input;if(ownedOptions.requireParsedTargetBinding&&key!=='facts')semanticInputs[key]=input;}
-   let parsedTargetBinding=null;
-   if(ownedOptions.requireParsedTargetBinding){
+   const mustParseTarget=ownedOptions.requireParsedTargetBinding||targetDerivationReference!==null;
+   for(const key of keys){const utf8=await readBlob(blobs[key]),input={utf8,pin:{path:'compact-feature-journal/source-inputs/'+sourcePins[key].sha256+'.json',...sourcePins[key]}};if(keepInputs)inputs[key]=input;if(mustParseTarget&&key!=='facts')semanticInputs[key]=input;}
+   let parsedTargetBinding=null,targetDerivationBinding=null;
+   if(mustParseTarget){
     if(!ownedOptions.decisionAt)fail('parsed_target_decision_required');
     const inspected=Object.values(semanticInputs).map(x=>inspectBoundedJsonSource(x.utf8,{maxBytes:x===semanticInputs.target?262144:2*1024**2})),parseLease=reserve(inspected.reduce((n,x)=>n+x.estimatedParsedBytes,0)*3+65536,'parsed_target');
     try{
@@ -142,21 +156,26 @@ export function createCompactHistoricalInputStore({writer,shouldContinue=()=>tru
      validateParsedTarget(parsedTargetBinding,ownedOptions);
     }finally{parseLease.release();}
    }
+   if(targetDerivationReference){
+    if(!targetDerivationStore)fail('target_derivation_store_required');let derived;
+    try{derived=await targetDerivationStore.verifyTargetDerivation(targetDerivationReference,{mode:header.mode,targetInput:semanticInputs.target,seriesInput:semanticInputs.series??null,decisionAt:ownedOptions.decisionAt});targetDerivationBinding=readRetainedStaticHistoryTargetProof(derived.proof,{mode:header.mode,targetInput:semanticInputs.target,seriesInput:semanticInputs.series??null,decisionAt:ownedOptions.decisionAt});if(canonical(targetDerivationBinding.reference)!==canonical(targetDerivationReference))fail('target_derivation_reference_binding');validateTargetDerivation(targetDerivationBinding,parsedTargetBinding,ownedOptions);}finally{derived?.release();}
+   }
    await proceed();if(!keepInputs){sourceLease.release();sourceLease=null;}
-   const result=mint(freeze(header),ref,sourceLease,keepInputs?inputs:null,parsedTargetBinding);sourceLease=null;return result;
+   const result=mint(freeze(header),ref,sourceLease,keepInputs?inputs:null,parsedTargetBinding,targetDerivationBinding);sourceLease=null;return result;
   }finally{sourceLease?.release();manifestParseLease?.release();manifestLease.release();}
  }
  return Object.freeze({contract:COMPACT_HISTORICAL_INPUT_STORE_CONTRACT,
   async writeHistoricalInputs(raw={}){
-   const args=snapshotPlainRecord(raw,{maxKeys:7}),minimumSupport=supportOf(args.minimumSupport,args.minSupport);if(!MODES.includes(args.mode)||Object.keys(args).some(k=>!['mode','factsInput','targetInput','seriesInput','minimumSupport','minSupport'].includes(k)))fail('input_mode');
+   const args=snapshotPlainRecord(raw,{maxKeys:8}),minimumSupport=supportOf(args.minimumSupport,args.minSupport);if(!MODES.includes(args.mode)||Object.keys(args).some(k=>!['mode','factsInput','targetInput','seriesInput','minimumSupport','minSupport','targetDerivationReference','decisionAt'].includes(k)))fail('input_mode');
+   const targetDerivationReference=args.targetDerivationReference===undefined?null:derivationReference(args.targetDerivationReference);if(targetDerivationReference&&(!targetDerivationStore||instantNs(args.decisionAt)===null))fail('target_derivation_store_or_decision_required');
    const inputs={facts:inputOf(args.factsInput,cfg),target:inputOf(args.targetInput,cfg),...((args.seriesInput===null||args.seriesInput===undefined)?{}:{series:inputOf(args.seriesInput,cfg)})};
    const total=Object.values(inputs).reduce((n,p)=>n+p.pin.bytes,0);if(total>cfg.maxSourceBytes)fail('source_bound');const lease=reserve(total*8+65536,'write');let reference;
    try{
     const pins={},blobs={};let chunkCount=0;
     for(const [key,input]of Object.entries(inputs)){await proceed();if(sha(input.utf8)!==input.pin.sha256||Buffer.from(input.utf8,'utf8').toString('utf8')!==input.utf8)fail('source_hash_or_utf8');inspectBoundedJsonSource(input.utf8,{maxBytes:cfg.maxInputBytes});pins[key]={sha256:input.pin.sha256,bytes:input.pin.bytes};blobs[key]=await writeBlob(input);chunkCount+=blobs[key].chunks.length;if(chunkCount>cfg.maxChunks)fail('chunk_count');}
-    const header={contract:HEADER,mode:args.mode,inputs:pins,calculationOptions:{minimumSupport}},body={contract:BODY,header,blobs,sourceAvailabilityIndependentlyAttested:false,...flags},utf8=canonical(body),ref=await commit(MANIFEST,utf8,cfg.maxManifestBytes);reference=freeze({contract:COMPACT_HISTORICAL_INPUT_REFERENCE_CONTRACT,...ref});
+    const header={contract:HEADER,mode:args.mode,inputs:pins,calculationOptions:{minimumSupport},...(targetDerivationReference?{targetDerivationReference}:{})},body={contract:BODY,header,blobs,sourceAvailabilityIndependentlyAttested:false,...flags},utf8=canonical(body),ref=await commit(MANIFEST,utf8,cfg.maxManifestBytes);reference=freeze({contract:COMPACT_HISTORICAL_INPUT_REFERENCE_CONTRACT,...ref});
    }finally{lease.release();}
-   const result=await load(reference,{mode:args.mode,historicalBindings:{factsSha256:inputs.facts.pin.sha256,targetSha256:inputs.target.pin.sha256},seriesReceiptPin:inputs.series?.pin??null},false);return Object.freeze({status:'committed_and_dependencies_verified',...result});
+   const result=await load(reference,{mode:args.mode,...(targetDerivationReference?{decisionAt:args.decisionAt,requireTargetDerivation:true}:{historicalBindings:{factsSha256:inputs.facts.pin.sha256,targetSha256:inputs.target.pin.sha256}}),seriesReceiptPin:inputs.series?.pin??null},false);return Object.freeze({status:'committed_and_dependencies_verified',...result});
   },
   verifyHistoricalInputs(reference,options={}){return load(reference,options,false);},
   loadHistoricalInputs(reference,options={}){return load(reference,options,true);},

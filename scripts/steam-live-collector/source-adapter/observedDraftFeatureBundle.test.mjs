@@ -29,6 +29,8 @@ test('actual pinned history and coherent native capture yield wide diagnostic in
  assert.equal(r.nativeBundle.economy.staticContextStatus,'static_context_missing');assert.equal(r.historyReuse.v3DisguisedAsV2,false);
  assert.ok(r.vector.definitions.every((d,i)=>d.name===r.vector.names[i]&&d.formula&&d.units&&d.familyId&&d.inputScopes.includes('current_live')));
  assert.ok(r.vector.masks.every((m,i)=>m===Number(r.vector.values[i]===null)));
+ const nativeMetadata=r.vector.definitions.find(d=>d.name==='draft_live.hero.1.native_gpm.recentForm.history_product');assert.equal(nativeMetadata.formulaParameters.heroId,1);assert.equal(nativeMetadata.formulaParameters.metric,'native_gpm');assert.equal(nativeMetadata.formulaParameters.historyOperands[0].windowDays,30);assert.equal(nativeMetadata.minimumSupport,5);assert.equal(nativeMetadata.semanticVerification,'authoritative_template');assert.ok(nativeMetadata.inputBindings.some(b=>b.rawField.endsWith('.gold_per_min')));
+ const coherentMetadata=r.vector.definitions.find(d=>d.name==='draft_live.coherent_economy.economic_rank.native_gpm.2.radiant.native_value.base');assert.equal(coherentMetadata.formulaParameters.rank,2);assert.equal(coherentMetadata.formulaParameters.metric,'native_gpm');assert.match(coherentMetadata.tiePolicy,/numeric hero ID/);assert.equal(coherentMetadata.semanticVerification,'authoritative_template');
 });
 test('native GPM is literal, not net worth divided by minute',()=>{
  const r=run(history(),liveEntry());assert.equal(value(r,'draft_live.hero.1.native_gpm.recentForm.history_product'),240.6);assert.notEqual(5100/15,401);assert.equal(r.noNetWorthDividedByMinuteGpm,true);

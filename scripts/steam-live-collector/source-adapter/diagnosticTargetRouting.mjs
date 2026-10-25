@@ -4,6 +4,7 @@ import {TARGET_IDS,digest} from '../../feature-registry/registry-contract.mjs';
 import {produceSeriesContext} from './seriesContextFeatures.mjs';
 import {instantNs} from './causalTime.mjs';
 import {readCurrentLiveEligibilitySnapshot} from './currentLiveEligibilitySnapshot.mjs';
+import {LEGACY_FEATURE_CAPACITY_PROFILE,featureCapacityProfileForSchema} from './featureCapacityProfiles.mjs';
 export const DIAGNOSTIC_ROUTING_CONTRACT='aegis.diagnostic-target-routing.v1';
 const flags={diagnosticOnly:true,eligibleForServing:false,eligibleForTraining:false,recordedPrediction:false,publicPromotion:false};
 const ID=/^[1-9]\d{0,19}$/,SHA=/^[a-f0-9]{64}$/;
@@ -96,7 +97,7 @@ export function createDiagnosticTargetRouter({journal,targetDocument,expectedSch
    const seen=new Set();
    for(const route of trace.routes){
     const meta=metadata.get(route.targetId);if(!meta||seen.has(route.targetId)||!PHASES[trace.mode].includes(meta.phase)||meta.phase==='SERIES_PRE'&&series.sourceMapIds.length!==0||!meta.stateModes.includes(route.stateMode)||meta.phase==='SERIES_LIVE'&&route.stateMode!==(trace.mode==='LIVE'?'observed_live':'observed_postdraft')||!allowed[route.targetId].includes(route.schemaRef?.sha256))fail('route_phase_or_schema');seen.add(route.targetId);
-    if(held){const page=held.readSchemaPage({targetId:route.targetId,offset:0,limit:1});if(!page)fail('exact_schema_target_binding');try{const schema=page.header;if(schema.contract!=='aegis.unified-feature-projection-schema.v1'||schema.targetId!==route.targetId||schema.stateMode!==route.stateMode||page.expandedSchemaHash!==route.schemaRef.sha256||page.total!==route.featureCount||route.schemaRef.featureCount!==route.featureCount)fail('exact_schema_target_binding');}finally{page.release();}}
+    if(held){const page=held.readSchemaPage({targetId:route.targetId,offset:0,limit:1});if(!page)fail('exact_schema_target_binding');try{const schema=page.header,capacity=featureCapacityProfileForSchema(schema);if(capacity.id!==(route.schemaRef.capacityProfile??LEGACY_FEATURE_CAPACITY_PROFILE.id)||schema.targetId!==route.targetId||schema.stateMode!==route.stateMode||page.expandedSchemaHash!==route.schemaRef.sha256||page.total!==route.featureCount||route.featureCount>capacity.maxFeatures||route.schemaRef.featureCount!==route.featureCount)fail('exact_schema_target_binding');}finally{page.release();}}
     else{const schema=await journal.loadSchema(route.schemaRef.sha256);if(schema.contract!=='aegis.unified-feature-projection-schema.v1'||schema.targetId!==route.targetId||schema.stateMode!==route.stateMode||!Array.isArray(schema.definitions)||schema.definitions.length!==route.featureCount||route.schemaRef.featureCount!==route.featureCount)fail('exact_schema_target_binding');}
    }
     const currentLiveEligibility=trace.mode==='LIVE'?{status:'unavailable',reason:'owned_live_eligibility_port_not_configured',eligibleForRetainingForecast:false}:{status:'not_applicable',eligibleForRetainingForecast:false};

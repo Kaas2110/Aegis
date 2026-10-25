@@ -8,6 +8,43 @@ import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 export const FEATURE_CONTRACT='aegis.roshan-dynamic-features.v6';
+const ROSHAN_EXPRESSIONS=Object.freeze({
+ roshan_elapsed_since_confirmed_death:'clock - latest qualified death.gameTimeSeconds',
+ roshan_respawn_lower_seconds:'max(0,rules.respawnMinimumSeconds-elapsedSinceQualifiedDeath)',roshan_respawn_upper_seconds:'max(0,rules.respawnMaximumSeconds-elapsedSinceQualifiedDeath)',
+ roshan_confirmed_countdown_seconds:'raw positive timer only with accepted timerSemantics=confirmed_seconds_until_respawn and timer<=respawnMaximumSeconds',
+ roshan_inferred_death_game_clock_lower_seconds:'clock+qualifiedTimer-respawnMaximumSeconds',roshan_inferred_death_game_clock_upper_seconds:'min(clock,clock+qualifiedTimer-respawnMinimumSeconds)',
+ roshan_inferred_elapsed_since_death_lower_seconds:'max(0,respawnMinimumSeconds-qualifiedTimer)',roshan_inferred_elapsed_since_death_upper_seconds:'respawnMaximumSeconds-qualifiedTimer',
+ roshan_dead:'I(qualified life state is dead), null if unknown',roshan_alive:'I(qualified life state is alive), null if unknown; max bound expiry alone never proves alive',
+ roshan_confirmed_death_count:'number of qualified confirmed death episode IDs, null at zero observed; not true full-game kill ordinal',
+ aegis_observed_in_slot:'1 only if exactly one current observed player slot matches versioned rules.aegisItemId; otherwise null, never absence=0',
+ aegis_holder_side:'unique observed holder side Radiant +1 / Dire -1; otherwise null',aegis_holder_hero:'unique observed holder explicit hero ID; otherwise null',aegis_holder_nw:'unique observed holder same-frame literal netWorth; otherwise null',aegis_holder_level:'unique observed holder same-frame literal level; otherwise null',
+ aegis_elapsed_since_confirmed_pickup:'clock - retained qualified active pickup.gameTimeSeconds',aegis_lifetime_upper_seconds:'max(0,rules.aegisLifetimeSeconds-elapsedSinceQualifiedPickup)',
+ aegis_confirmed_steal:'I(linked qualified pickup side != qualified Roshan death side), only with exact death episode link and both sides known',
+ aegis_confirmed_terminal_event_count_for_retained_pickup:'1 iff a qualified consumed/expired/destroyed event is linked to retained pickup; otherwise null; not full-game count'
+});
+/** Source-local operand contract for projections of this exact reducer. */
+export function describeRoshanOperand(name){
+ const profile='steam.GetLiveLeagueGames.v1.scoreboard',bind=(normalizedField,rawField,units,sourceKind='qualified_same_map_event_and_rule')=>({normalizedField,rawField,units,sourceProfile:profile,sourceKind,availabilityPolicy:'same capture receipt; event gameTimeSeconds<=clock and knownAt<=receipt; versioned patch/profile rules knownAt<=receipt'});
+ const inputBindings=[],parameters={operand:name,reducerContract:FEATURE_CONTRACT};let semanticVerification='authoritative_template';
+ if(/^history_(radiant|dire)_(form|finish_speed|late_propensity|push_strength|carry_power|mid_power|offlane_power)$/.test(name)){semanticVerification='unverified_legacy_semantics';inputBindings.push(bind('legacy_frozen_context.features.'+name,'unavailable: no evidenced formula producer for this old generic historical field','unverified_historical_units','unsupported_legacy_definition'));}
+ else if(name==='clock_seconds')inputBindings.push(bind('providerGameClockSeconds.value','result.games[*].scoreboard.duration','seconds','coherent_current_capture'));
+ else if(name==='phase_code')inputBindings.push(bind('dynamic.phase.value','result.games[*].game_state','DOTA_GameState','coherent_current_capture'));
+ else if(/^(radiant|dire)_score$/.test(name)||name==='score_diff'){inputBindings.push(bind('sides.{radiant,dire}.score.value','result.games[*].scoreboard.{radiant,dire}.score','kills','coherent_current_capture'));parameters.expression=name==='score_diff'?'R-D':'literal side score';}
+ else if(/^(nw|gpm|xpm|level)_sum_diff$/.test(name)){const metric=name.split('_')[0],raw={nw:'net_worth',gpm:'gold_per_min',xpm:'xp_per_min',level:'level'}[metric],units={nw:'gold',gpm:'gold_per_minute',xpm:'experience_per_minute',level:'level'}[metric];inputBindings.push(bind('sides.{radiant,dire}.players[].'+{nw:'netWorth',gpm:'goldPerMinute',xpm:'experiencePerMinute',level:'level'}[metric],'result.games[*].scoreboard.{radiant,dire}.players[*].'+raw,units,'coherent_current_capture'));parameters.expression='sum of five finite current Radiant values minus sum of five finite Dire values; complete coherent hero identity required';}
+ else if(name.startsWith('roshan_')){
+  if(!['roshan_timer_raw','roshan_timer_positive','roshan_timer_decreasing_pair','roshan_elapsed_since_confirmed_death','roshan_respawn_lower_seconds','roshan_respawn_upper_seconds','roshan_confirmed_countdown_seconds','roshan_inferred_death_game_clock_lower_seconds','roshan_inferred_death_game_clock_upper_seconds','roshan_inferred_elapsed_since_death_lower_seconds','roshan_inferred_elapsed_since_death_upper_seconds','roshan_dead','roshan_alive','roshan_confirmed_death_count'].includes(name))throw Error('roshan_semantics:unknown_operand');
+  inputBindings.push(bind('dynamic.roshan.respawnTimer.value','result.games[*].scoreboard.roshan_respawn_timer','provider_timer_seconds_candidate','literal_current_timer'),bind('providerGameClockSeconds.value','result.games[*].scoreboard.duration','seconds','coherent_current_capture'));
+  if(!['roshan_timer_raw','roshan_timer_positive','roshan_timer_decreasing_pair'].includes(name))inputBindings.push(bind('qualified Roshan event ledger + accepted rules','host-pinned confirmed death/alive/respawn variants and explicit patch/profile respawnMinimumSeconds/respawnMaximumSeconds/timerSemantics','event_ids_and_seconds'));
+  parameters.expression=name==='roshan_timer_raw'?'literal provider timer; no countdown attribution':name==='roshan_timer_positive'?'I(rawTimer>0), missing when rawTimer missing':name==='roshan_timer_decreasing_pair'?'I(abs((previousTimer-currentTimer)-(clock-previousClock))<=2), advancing clocks and positive timers required':ROSHAN_EXPRESSIONS[name];
+ }
+ else if(name.startsWith('aegis_')){
+  if(!['aegis_observed_in_slot','aegis_holder_side','aegis_holder_hero','aegis_holder_nw','aegis_holder_level','aegis_elapsed_since_confirmed_pickup','aegis_lifetime_upper_seconds','aegis_confirmed_steal','aegis_confirmed_consumed','aegis_confirmed_expired','aegis_confirmed_destroyed','aegis_elapsed_since_confirmed_consumed','aegis_elapsed_since_confirmed_expired','aegis_elapsed_since_confirmed_destroyed','aegis_confirmed_terminal_event_count_for_retained_pickup'].includes(name))throw Error('roshan_semantics:unknown_operand');
+  inputBindings.push(bind('observedItemFields[0..5] + player identity','result.games[*].scoreboard.{radiant,dire}.players[*].item0..item5,account_id,hero_id,net_worth,level','item_identity_and_native_holder_fields'),bind('qualified Aegis episode ledger + accepted rules','linked pickup/consumed/expired/destroyed event IDs, event clocks, killer side and explicit rules.aegisLifetimeSeconds/aegisItemId','linked_episode_ids_and_seconds'),bind('providerGameClockSeconds.value','result.games[*].scoreboard.duration','seconds','coherent_current_capture'));
+  const terminal=name.match(/^aegis_(confirmed|elapsed_since_confirmed)_(consumed|expired|destroyed)$/);parameters.expression=ROSHAN_EXPRESSIONS[name]??(terminal?(terminal[1]==='confirmed'?'1 iff retained pickup status is aegis_'+terminal[2]+' with qualified linked terminal episode; otherwise null':'clock-linked qualified '+terminal[2]+'.gameTimeSeconds; otherwise null'):null);
+ }
+ else throw Error('roshan_semantics:unknown_operand');
+ return{inputBindings,parameters,semanticVerification};
+}
 const finite=x=>typeof x==='number'&&Number.isFinite(x),nn=x=>finite(x)&&x>=0;
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const val=x=>x?.missing===false&&finite(x.value)?x.value:null;

@@ -21,6 +21,11 @@ function history(o){
 const run=(o,options={})=>{const h=history(o);return produce({observation:o,historyContext:h.context,relationalContext:h.relational,decisionAt:o.source.capture.receivedAt,...options});};
 const get=(r,name)=>r.features.find(x=>x.name==='draft_live.coherent_economy.'+name)?.value;
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-12,`${a} != ${b}`);
+test('R7 formula parameters/raw bindings are exact while runtime historical support is not silently pinned',()=>{
+ const r=run(observation()),literal=r.features.find(x=>x.name.endsWith('economic_rank.native_gpm.2.radiant.native_value.base')),historical=r.features.find(x=>x.name.endsWith('hero.1.native_nw.minus_opponent_mean.recentForm'));
+ assert.equal(literal.definition.formulaParameters.rank,2);assert.equal(literal.definition.formulaParameters.metric,'native_gpm');assert.equal(literal.definition.formulaParameters.variant,'base');assert.ok(literal.definition.inputBindings.some(x=>x.rawField.endsWith('.gold_per_min')));assert.equal(literal.definition.semanticVerification,'authoritative_template');
+ assert.equal(historical.definition.formulaParameters.hero,1);assert.equal(historical.definition.semanticVerification,'parameter_binding_required');assert.equal(historical.definition.minimumSupport,null);assert.equal(historical.definition.formulaParameters.historicalOperands[0].definition,'aegis.player_win_fraction_30d.v1');assert.match(historical.definition.formulaParameters.historicalOperands[0].minimumSupportField,/statistics.recentForm.minimumSupport$/);assert.equal(historical.definition.formulaParameters.historicalOperands[0].definitionBindingVerifiedByConsumer,false);assert.equal(historical.value,-1);
+});
 test('five-player distribution matches hand-calculable [1,2,3,4,5]',()=>{
  const xs=[1,2,3,4,5],d=distribution(xs);assert.deepEqual(xs,[1,2,3,4,5]);close(d.top1_share,1/3);close(d.top2_share,.6);close(d.hhi,11/45);close(d.gini,4/15);close(d.shannon_entropy,-xs.reduce((a,x)=>a+(x/15)*Math.log(x/15),0));assert.equal(d.range,4);
 });

@@ -20,3 +20,7 @@ test('cloned proof, wrong map and decision before actual identity validity do no
  const a=draftArgs({accounts:true}),h=createDynamicHistoryProof(a),run=x=>produceDraftIdentityFeatures({historyProof:h.proof,matchId:a.matchId,decisionAt:at,...x});
  assert.throws(()=>run({historyProof:structuredClone(h.proof)}),/token_required/);assert.throws(()=>run({matchId:'99999'}));assert.throws(()=>run({decisionAt:'2026-10-23T11:57:59.999999999Z'}));
 });
+test('R7 draft semantics bind the same hero/axis and raw identity operands as the value loop',()=>{
+ const a=draftArgs({accounts:false}),h=createDynamicHistoryProof(a),b=produceDraftIdentityFeatures({historyProof:h.proof,matchId:a.matchId,decisionAt:at}),i=b.names.indexOf('draft_identity.hero.250.side_sign'),d=b.definitions[i];
+ assert.equal(b.values[i],0);assert.equal(d.formulaParameters.hero,250);assert.equal(d.formulaParameters.axis,'side_sign');assert.equal(d.minimumSupport,0);assert.match(d.rolePolicy,/not farm roles/);assert.equal(d.semanticVerification,'authoritative_template');assert.ok(d.inputBindings.some(x=>x.rawField.endsWith('.hero_id')));assert.ok(d.inputBindings.every(x=>x.availabilityPolicy.includes('receipt')||x.availabilityPolicy.includes('receivedAt')));
+});

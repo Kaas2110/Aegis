@@ -15,3 +15,9 @@ test('unique immutable assets are charged until every cache and in-flight owner 
  assert.throws(()=>arena.retainAsset(asset,801),/asset_charge_changed/);cache.release();assert.equal(arena.status().chargedBytes,800);assert.equal(cache.release(),false);inflight.release();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
  const write=arena.reserve(1024);assert.ok(write);write.release();assert.equal(arena.status().heldAssets,0);
 });
+test('explicit owner8GiB arena retains an exact finite boundary while default remains2GiB',()=>{
+ // Engineering tickets exercise safe integer admission; this allocates no8GiB
+ // buffer and cannot stand in for the external whole-process JobObject check.
+ const maximum=8*1024**3,arena=createDiagnosticResourceArena({maxBytes:maximum});assert.equal(arena.status().maxBytes,maximum);const lease=arena.reserve(maximum);assert.ok(lease);assert.equal(arena.status().chargedBytes,maximum);assert.equal(arena.reserve(1),null);assert.equal(lease.release(),true);assert.equal(lease.release(),false);assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
+ assert.throws(()=>createDiagnosticResourceArena({maxBytes:maximum+1}),/configuration/);assert.equal(createDiagnosticResourceArena().status().maxBytes,2*1024**3);
+});

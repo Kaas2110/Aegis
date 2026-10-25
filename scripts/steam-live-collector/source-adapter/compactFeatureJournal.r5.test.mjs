@@ -1,3 +1,4 @@
+// Explicit historical byte-only codec fixtures; R7 derived authority has separate regressions.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -17,13 +18,13 @@ function bundle(){
 async function fixture(t,{writerWrapper=x=>x}={}){
  const directory=await mkdtemp(join(tmpdir(),'aegis-compact-journal-r5-')),arena=createDiagnosticResourceArena({maxBytes:512*1024*1024});let locked=false;
  const provider=createOwnedArtifactWriterLeaseProvider({acquireExclusive:async()=>{if(locked)throw Error('synthetic_busy');locked=true;return{assertHeld:async()=>{if(!locked)throw Error('synthetic_lost');},release:async()=>{locked=false;}};}});
- const writer=await createPersistentArtifactWriter({directory,leaseProvider:provider}),journal=create({writer:writerWrapper(writer),resourceArena:arena,assetWorkingBytes:32*1024*1024,operationWorkingBytes:8*1024*1024,maxWireBytes:1024*1024});
+ const writer=await createPersistentArtifactWriter({directory,leaseProvider:provider}),journal=create({allowLegacyByteOnlyStaticHistory:true,writer:writerWrapper(writer),resourceArena:arena,assetWorkingBytes:32*1024*1024,operationWorkingBytes:8*1024*1024,maxWireBytes:1024*1024});
  t.after(async()=>{await journal.close();await writer.close();await rm(directory,{recursive:true,force:true});});return{directory,arena,writer,journal};
 }
 test('compact journal preserves exact old semantic hashes and null/zero/negative-zero across restart',async t=>{
  const f=await fixture(t),input=bundle(),saved=await f.journal.appendBundle(input);assert.equal(saved.routes[0].schemaRef.sha256,input.routes[0].schemaRef.sha256);
  assert.equal(saved.routes[0].expandedVectorHash,digest({namesHash:input.routes[0].schemaRef.namesSha256,values:[0,-0,null],missing:[false,false,true]}));
- await f.journal.close();const reloaded=create({writer:f.writer,resourceArena:f.arena,assetWorkingBytes:32*1024*1024,operationWorkingBytes:8*1024*1024,maxWireBytes:1024*1024});
+ await f.journal.close();const reloaded=create({allowLegacyByteOnlyStaticHistory:true,writer:f.writer,resourceArena:f.arena,assetWorkingBytes:32*1024*1024,operationWorkingBytes:8*1024*1024,maxWireBytes:1024*1024});
  try{const held=await reloaded.loadTrace(saved.reference);try{const page=held.readVectorPage({targetId:'PRE_MAP_WIN'});try{assert.deepEqual(page.values,[0,-0,null]);assert.deepEqual(page.missing,[false,false,true]);}finally{page.release();}}finally{held.release();}}finally{await reloaded.close();}
  assert.equal(f.arena.status().chargedBytes,0);
 });

@@ -27,8 +27,8 @@ export const numericHistoryMapIdCompare=(a,b)=>a.length-b.length||a.localeCompar
  * Identity evidence includes null/invalid/conflicting transitions, including
  * A -> B -> A, so an old player metric cannot be resurrected in a new epoch.
  */
-export async function reduceRetainedMapVersions({versionInputs,matchId,targetMapId,historyCutoffAt,shouldContinue=()=>true}={}){
- if(!id(matchId)||!id(targetMapId)||!versionInputs||typeof versionInputs[Symbol.iterator]!=='function'&&typeof versionInputs[Symbol.asyncIterator]!=='function'||typeof shouldContinue!=='function')fail('input');
+export async function reduceRetainedMapVersions({versionInputs,matchId,targetMapId,targetKind='map',historyCutoffAt,shouldContinue=()=>true}={}){
+ if(!id(matchId)||!['map','series'].includes(targetKind)||(targetKind==='map'?!id(targetMapId):targetMapId!==null)||!versionInputs||typeof versionInputs[Symbol.iterator]!=='function'&&typeof versionInputs[Symbol.asyncIterator]!=='function'||typeof shouldContinue!=='function')fail('input');
  const cutoff=time(historyCutoffAt),selected=new Map(),sources=new Map(),seen=new Set(),identityEvidence=new Map(),candidateHashes=new Map();
  const audit={providedVersions:0,uniqueVersions:0,currentMapExcluded:0,futureVersionsExcluded:0,conflictingFields:0};
  let bytes=0,fieldBytes=0,identityEntries=0;

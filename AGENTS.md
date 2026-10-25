@@ -220,3 +220,82 @@ Use exact install/publication receipts; never rerun old assembly/install guards.
 Publish one reviewed completed-block PR under standing authorization; no routine
 full-source parity or duplicate Graphify build. Source index readiness and stored
 memory approval are separate. Never upload private data, credentials or weights.
+
+
+## Sol R7 implementation and capacity checkpoint — 2026-10-25
+Read docs/sol-r7-review-20261025.txt and docs/sol-r7-capacity-decision-20261025.txt
+before older execution notes. R7 implements the Astra-approved bounded metadata
+FIFO, serialized rich IO, verified batches, causal native/static history bridge,
+exact semantic bindings, diagnostic host/admin/model-input integration and narrow
+cleanup. The old R6b statement deferring storage concurrency is superseded by the
+R7 architecture; no second independent rich reader is enabled.
+
+The owner additionally authorized the finite R7_FULL300K logical capacity profile:
+schema.v2 / compact codec.v3,300000 columns,4GiB logical expanded schema,128M nodes,
+64MiB compact wire. Legacy schema.v1/codec.v2 limits and bytes remain unchanged.
+The standalone compiler defaults legacy; the unified producer defaults full. The
+legacy bootstrap explicitly selects legacy and rejects full with a legacy sink
+before IO. Capacity markers are bound to actual header/hash/private ownership;
+capacity classification alone grants no semantic, current-state or model authority.
+No whole4GiB schema is materialized. The same24GiB aggregate/6GiB owned technical
+job,4CPUs,min4GiBfree and explicit rich4GiB arena still apply; default2GiB remains
+unqualified for rich. Physical16MiB objects and256MiB storage roots stay bounded.
+
+Training/HPO/calibration/ablation/learned compression, provider refresh/probing,
+schedule/runtime activation, publication of the app and model promotion remain OFF.
+Synthetic structural tests and diagnostic input-only recordings are not real source
+coverage, sustained runtime acceptance, validated model quality or trained weights.
+Keep all79families/14legacy catalogues and unresolved semantics explicit. H03
+pre-map residuals must not be inferred from result order alone. Main predicts the
+whole series; detail follows the selected map, preserving previous-map results.
+Use exact current snapshots/receipts. Never rerun old installation guards, erase
+failed receipts, revive manual STOP tasks or repeat full-source parity routinely.
+One reviewed source/documentation PR per completed block may merge under standing
+owner authorization; Graphify refresh is automatic and separate from activation.
+
+
+## Latest owner-requested Sol R7 pause — 2026-10-25
+Read `docs/sol-r7-exact-continuation-20261025.txt` FIRST. Owner requested a temporary pause (~2hours), resuming only on their next message. No automatic wake or further tests/training/runtime tasks. Current native jobs completed; remaining helper stopped at safe file boundary. Six in-progress metadata paths are saved but untested/unreviewed; do not extend old1600/all13 schema hashes to them. Source remains local ahead of PR11; no R7 PR/merge yet. Follow the exact resume sequence only after the owner returns.
+
+## Sol R7 resumed checkpoint —2026-10-26 (in progress)
+Read outputs/Aegis-Sol-R7-exact-continuation-20261026.txt and the same-date Astra
+review before the historical25October pause. Owner resumed; no training/provider/
+runtime activation. Currentmemoryoverride:aggregate30GiB,ownedcheck9GiB,sharedarena
+8GiB,compactassetworking2GiB,minfree4GiB/CPU4/wall<=1200s. New9/30guard and exact
+source/results are recorded there. Dependencycorrection accepted; finalnewsource13
+integration/audit stillinprogress. NoR7PR/mergeyet; currentlocalR7 remainsauthority.
+
+## Latest owner resource and encoded-capacity override — 2026-10-26
+This overrides older memory and compact encoded-wire limits, not semantic or
+activation gates. Aggregate admission is30 GiB, the owned technical child tree
+is9 GiB, the shared rich arena is8 GiB and compact-asset working reservation is
+2 GiB. Preserve four CPUs, finite wall<=1200 seconds, manual STOP/foreign locks
+and minimum4 GiB free physical memory. The current runner also requires the
+entire requested tree cap plus that headroom before launch. No global supervisor
+has been attached to independent services. Use the new9/30 guard recorded in
+outputs/Aegis-Sol-R7-exact-continuation-20261026.txt; do not edit old receipts.
+The owner explicitly authorized256 MiB encoded schemas/vectors for ALL supported
+compact profiles/manifests; the journal default is now256 MiB. Respect lower caller
+limits and unknown-profile/header/hash checks. Legacy150K/logical256MiB/16M-node
+and FULL300K/logical4GiB/128M-node limits remain unchanged. Objects and batches
+remain16 MiB; cumulative writer root remains256 MiB and is a separate admission.
+AEGIS_R7_RETAINED_DELIVERY_SKIP_PILOT=1 is an explicit functional13 decomposition:
+it skips only the extra three warm frames and reports their metrics as null.
+It does not waive any initial target/readback/router/admin check or admit326-state
+performance. Default unset still executes three warm frames. No training, model
+promotion, provider probing or runtime/task activation is authorized by these caps.
+
+## Completed Sol R7 technical block — 2026-10-26; next actor Astra
+Read outputs/Aegis-Sol-R7-exact-continuation-20261026.txt and the same-date Astra
+review. Dependency corrections are reviewed; final ALL256 functional13 passed
+822.547s/5,917,442,048B and exact13schema audit passed323.562s/5,732,614,144B.
+All13modes/14actual variants/14input-only receipts; final arena0. New history array
+gaps resolved;39,808 repeated unresolved occurrences remain (9,952 perLIVE head).
+No native job remains. Source publication exact head/merge is recorded separately
+under work/sol-r7-resume-20261026/; do not infer it from old PR11/pause text.
+Astra reviews stable model-function vs diagnostic-instance identity, remaining
+semantics/original availability/source95, dataset bounds and warm/storage/runtime
+gates. Functional run skipped only3extra warmframes explicitly; no warm/326pass.
+No training/provider/runtime activation or model promotion. Do not rerun old guards
+or restart manually stopped tasks. Latest owner limits30/9/8/2GiB and encoded256MiB
+all formats remain; source-only completed-block PR merge follows standingpolicy.

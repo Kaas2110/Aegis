@@ -1,11 +1,22 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,rm,readdir} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';
+import {mkdtemp,mkdir,rm,readdir,lstat} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';
 import {createRetainedDiagnosticHostPorts} from './retainedDiagnosticBootstrap.mjs';
 import {createDiagnosticFeatureJournal} from './diagnosticFeatureJournal.mjs';
 import {digest} from '../../feature-registry/registry-contract.mjs';
 import {draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {createAppendOnlyHistoryFactStore} from './appendOnlyHistoryFactStore.mjs';
 import {pinRetainedHistoryJson} from './retainedOpenDotaFacts.mjs';
+
+test('full capacity requires explicit compact storage before any configured filesystem access',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'aegis-bootstrap-capacity-policy-')),stateDirectory=join(root,'state-not-created'),historyFactDirectory=join(root,'facts-not-created');let configurationReads=0,hostCallbacks=0;
+ try{
+  const config={historyProfileSha256:'a'.repeat(64),materializationGeneration:'synthetic-capacity-policy',pipelineLimits:{}};
+  for(const [name,value]of [['stateDirectory',stateDirectory],['historyFactDirectory',historyFactDirectory]])Object.defineProperty(config,name,{enumerable:true,get(){configurationReads++;return value;}});
+  await assert.rejects(createRetainedDiagnosticHostPorts({config,compactStorage:null,producerOptions:{projectionOptions:{capacityProfile:'R7_FULL300K',maxSchemas:1}},shouldContinue:()=>{hostCallbacks++;return true;},signal:null,now:()=>{hostCallbacks++;return '2026-10-25T12:00:00Z';},onTraceIntent:async()=>{hostCallbacks++;}}),/retained_diagnostic_bootstrap:full_capacity_requires_explicit_compact_storage/);
+  assert.equal(configurationReads,0);assert.equal(hostCallbacks,0);assert.deepEqual(await readdir(root),[]);
+  for(const directory of [stateDirectory,historyFactDirectory])await assert.rejects(lstat(directory),error=>error.code==='ENOENT');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 
 test('pending recovery distinguishes an absent trace from a committed trace with missing schema evidence',async()=>{
  const root=await mkdtemp(join(tmpdir(),'aegis-bootstrap-recovery-'));

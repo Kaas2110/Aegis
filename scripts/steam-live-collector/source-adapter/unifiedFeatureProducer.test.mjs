@@ -9,71 +9,82 @@ import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
 import {digest} from '../../feature-registry/registry-contract.mjs';
 const AT='2026-10-23T12:33:00Z';
 const sources=()=>Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.synthetic.mjs',sha256:'a'.repeat(64)}]}]));
-function factory(options={}){const[index,familyDocument,targetDocument]=syntheticRegistry();return createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:sources(),...options});}
+const bundleOwners=new WeakMap();
+function releaseBundle(bundle){bundleOwners.get(bundle)?.delete(bundle);return bundle.release();}
+function factory(t,options={}){
+ const[index,familyDocument,targetDocument]=syntheticRegistry(),arena=options.resourceArena??createDiagnosticResourceArena({maxBytes:4*1024**3}),active=new Set();
+ const producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:sources(),...options,resourceArena:arena});
+ t.after(()=>{try{for(const bundle of active)bundle.release();}finally{active.clear();producer.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);}});
+ return Object.freeze({...producer,generateFeatureBundle(input){const bundle=producer.generateFeatureBundle(input);active.add(bundle);bundleOwners.set(bundle,active);return bundle;}});
+}
 function live({phase=5}={}){const e=draftEntry({time:'2026-10-23T12:31:00Z',clock:900,accounts:true,phase}),raw=JSON.parse(e.rawInput.utf8),m=JSON.parse(e.metadataInput.utf8);for(const s of ['radiant','dire'])for(const p of raw.result.games[0].scoreboard[s].players)Object.assign(p,{net_worth:5000+p.hero_id*100,gold_per_min:400+p.hero_id,xp_per_min:500+p.hero_id,level:10,gold:100});const rawInput=pinned(raw);const o=normalizeLocalCapture({...m.capture,body:Buffer.from(rawInput.utf8),rawSha256:rawInput.pin.sha256,payloadRef:'journal:'+rawInput.pin.sha256}).observations[0];return{rawInput,metadataInput:pinned({...m,observationId:o.observationId})};}
 function series({maps=0}={}){return pinned({contract:'aegis.series-map-receipts.v1',seriesId:'synthetic-series',bestOf:3,team1Id:'100',team2Id:'200',availableAt:'2026-10-23T11:50:00Z',completeThroughMapNumber:maps,previousMaps:Array.from({length:maps},(_,i)=>({mapId:String(8000+i),mapNumber:i+1,winnerTeamId:'100',availableAt:'2026-10-23T11:00:00Z',finishedAt:'2026-10-23T10:58:00Z',durationSeconds:2400,team1Kills:30,team2Kills:20,team1Heroes:[1,2,3,4,5],team2Heroes:[6,7,8,9,10]}))});}
-test('actual static/live generation shares one verified history and routes targets separately',()=>{
- const p=factory(),h=createDynamicHistoryProof(draftArgs({accounts:true})),base={matchId:'90001',decisionAt:AT,historyProof:h.proof,seriesInput:series(),currentMapNumber:1};
- const post=p.generateFeatureBundle({...base,mode:'POST'});assert.equal(post.mode,'POST');assert.deepEqual(post.routes.map(r=>r.targetId),['POST_MAP_WIN','POST_KILLS','POST_DURATION','SERIES_LIVE']);assert.ok(post.routes.every(r=>r.inferenceVector===null));assert.equal(post.components.liveInteractions,null);
- const frame=live(),out=p.generateFeatureBundle({...base,mode:'AUTO',livePrefixInputs:[frame]});assert.equal(out.mode,'LIVE');assert.equal(out.historyContextHash,post.historyContextHash);assert.ok(out.routes.find(r=>r.targetId==='LIVE_MAP_WIN').diagnosticVector.names.some(n=>n.startsWith('draft_live.')));assert.equal(out.routes.at(-1).targetId,'SERIES_LIVE');assert.equal(out.routes.at(-1).stateMode,'observed_live');assert.equal(out.eligibleForServing,false);
- const trace=encodeDiagnosticFeatureTrace(out),body=JSON.parse(trace.utf8);assert.ok(trace.vectorPoolSize<out.routes.length);assert.equal(body.nativeRawSha256,frame.rawInput.pin.sha256);assert.ok(!trace.utf8.includes('definitions'));assert.equal(body.historyContextHash,post.historyContextHash);assert.throws(()=>encodeDiagnosticFeatureTrace(out,{maxBytes:1024}),/trace_byte_bound/);assert.ok(p.getSchema(out.routes[0].schemaRef.sha256));
+test('actual static/live generation shares one verified history and routes targets separately',t=>{
+ const p=factory(t),h=createDynamicHistoryProof(draftArgs({accounts:true})),base={matchId:'90001',decisionAt:AT,historyProof:h.proof,seriesInput:series(),currentMapNumber:1};
+ let post=p.generateFeatureBundle({...base,mode:'POST'});assert.equal(post.mode,'POST');assert.deepEqual(post.routes.map(r=>r.targetId),['POST_MAP_WIN','POST_KILLS','POST_DURATION','SERIES_LIVE']);assert.ok(post.routes.every(r=>r.inferenceVector===null));assert.equal(post.components.liveInteractions,null);
+ // This is phase dispatch, not simultaneous POST/LIVE ownership. Keep only the
+ // scalar binding; genuine LIVE/replay overlap remains asserted below.
+ const historyContextHash=post.historyContextHash;releaseBundle(post);post=null;
+ const frame=live(),out=p.generateFeatureBundle({...base,mode:'AUTO',livePrefixInputs:[frame]});assert.equal(out.mode,'LIVE');assert.equal(out.historyContextHash,historyContextHash);assert.ok(out.routes.find(r=>r.targetId==='LIVE_MAP_WIN').diagnosticVector.names.some(n=>n.startsWith('draft_live.')));assert.equal(out.routes.at(-1).targetId,'SERIES_LIVE');assert.equal(out.routes.at(-1).stateMode,'observed_live');assert.equal(out.eligibleForServing,false);
+ const trace=encodeDiagnosticFeatureTrace(out),body=JSON.parse(trace.utf8);assert.ok(trace.vectorPoolSize<out.routes.length);assert.equal(body.nativeRawSha256,frame.rawInput.pin.sha256);assert.ok(!trace.utf8.includes('definitions'));assert.equal(body.historyContextHash,historyContextHash);assert.throws(()=>encodeDiagnosticFeatureTrace(out,{maxBytes:1024}),/trace_byte_bound/);assert.ok(p.getSchema(out.routes[0].schemaRef.sha256));
  const replay=p.generateFeatureBundle({...base,mode:'AUTO',livePrefixInputs:[frame]});assert.deepEqual(replay.routes[0].diagnosticVector,out.routes[0].diagnosticVector);assert.equal(replay.routes[0].schemaRef.sha256,out.routes[0].schemaRef.sha256);
 });
-test('missing live phase never becomes LIVE merely from positive clock',()=>{const p=factory(),h=createDynamicHistoryProof(draftArgs({accounts:true}));const a={matchId:'90001',decisionAt:AT,historyProof:h.proof,livePrefixInputs:[live({phase:null})]};const r=p.generateFeatureBundle({...a,mode:'AUTO'});assert.equal(r.mode,'POST');assert.equal(r.components.liveInteractions,null);assert.match(r.liveRejection,/phase/);assert.throws(()=>p.generateFeatureBundle({...a,mode:'LIVE'}),/phase/);});
-test('PRE target rejects current heroes and only projects phase-available history',()=>{
- const p=factory(),a=draftArgs({accounts:true}),facts=JSON.parse(a.factsInput.utf8);facts.scope.targetHeroIds=[];a.factsInput=pinned(facts);
+test('missing live phase never becomes LIVE merely from positive clock',t=>{const p=factory(t),h=createDynamicHistoryProof(draftArgs({accounts:true}));const a={matchId:'90001',decisionAt:AT,historyProof:h.proof,livePrefixInputs:[live({phase:null})]};const r=p.generateFeatureBundle({...a,mode:'AUTO'});assert.equal(r.mode,'POST');assert.equal(r.components.liveInteractions,null);assert.match(r.liveRejection,/phase/);assert.throws(()=>p.generateFeatureBundle({...a,mode:'LIVE'}),/phase/);});
+test('PRE target rejects current heroes and only projects phase-available history',t=>{
+ const p=factory(t),a=draftArgs({accounts:true}),facts=JSON.parse(a.factsInput.utf8);facts.scope.targetHeroIds=[];a.factsInput=pinned(facts);
  const target={contract:'aegis.prematch-history-target.v1',matchId:'90001',knownAt:'2026-10-23T11:58:00Z',historyCutoffAt:'2026-10-23T11:58:00Z',teams:{radiant:'100',dire:'200'},players:Array.from({length:10},(_,i)=>({accountId:String(101+i),heroId:null,side:i<5?'radiant':'dire',teamId:i<5?'100':'200'}))};
  const q={mode:'PRE',matchId:'90001',decisionAt:AT,prematchInput:{targetInput:pinned(target),factsInput:a.factsInput},seriesInput:series(),currentMapNumber:1};const r=p.generateFeatureBundle(q);assert.equal(r.mode,'PRE');assert.equal(r.routes.at(-1).targetId,'SERIES_PRE');assert.ok(r.routes.every(h=>!h.diagnosticVector.names.some(n=>n.startsWith('draft_live.'))));assert.ok(r.routes[0].excludedDefinitions.some(d=>d.reason==='current_draft_unavailable_in_phase'));target.players[0].heroId=1;assert.throws(()=>p.generateFeatureBundle({...q,prematchInput:{...q.prematchInput,targetInput:pinned(target)}}),/prematch/);
 });
-test('between maps consumes prior-map context without stale current-map history',()=>{const p=factory(),r=p.generateFeatureBundle({mode:'BETWEEN',decisionAt:AT,seriesInput:series({maps:1})});assert.equal(r.matchId,null);assert.equal(r.routes.length,1);assert.equal(r.routes[0].targetId,'SERIES_BETWEEN');assert.ok(r.routes[0].diagnosticVector.names.includes('series_context.team1_wins'));assert.ok(!r.routes[0].diagnosticVector.names.includes('series_context.team1_current_hero_repeats'));assert.throws(()=>p.generateFeatureBundle({mode:'BETWEEN',matchId:'90001',decisionAt:AT,seriesInput:series({maps:1})}),/stale_current_map/);});
-test('upcoming map PRE after a completed map never substitutes a SERIES_PRE projection for independent BETWEEN history',()=>{
- const p=factory(),facts=JSON.parse(draftArgs({accounts:true}).factsInput.utf8);facts.scope.targetHeroIds=[];
+test('between maps consumes prior-map context without stale current-map history',t=>{const p=factory(t),r=p.generateFeatureBundle({mode:'BETWEEN',decisionAt:AT,seriesInput:series({maps:1})});assert.equal(r.matchId,null);assert.equal(r.routes.length,1);assert.equal(r.routes[0].targetId,'SERIES_BETWEEN');assert.ok(r.routes[0].diagnosticVector.names.includes('series_context.team1_wins'));assert.ok(!r.routes[0].diagnosticVector.names.includes('series_context.team1_current_hero_repeats'));assert.throws(()=>p.generateFeatureBundle({mode:'BETWEEN',matchId:'90001',decisionAt:AT,seriesInput:series({maps:1})}),/stale_current_map/);});
+test('upcoming map PRE after a completed map never substitutes a SERIES_PRE projection for independent BETWEEN history',t=>{
+ const p=factory(t),facts=JSON.parse(draftArgs({accounts:true}).factsInput.utf8);facts.scope.targetHeroIds=[];
  const target={contract:'aegis.prematch-history-target.v1',matchId:'90001',knownAt:'2026-10-23T11:58:00Z',historyCutoffAt:'2026-10-23T11:58:00Z',teams:{radiant:'100',dire:'200'},players:Array.from({length:10},(_,i)=>({accountId:String(101+i),heroId:null,side:i<5?'radiant':'dire',teamId:i<5?'100':'200'}))};
  const out=p.generateFeatureBundle({mode:'PRE',matchId:'90001',decisionAt:AT,prematchInput:{targetInput:pinned(target),factsInput:pinned(facts)},seriesInput:series({maps:1}),currentMapNumber:2});
  assert.deepEqual(out.routes.map(r=>r.targetId),['PRE_MAP_WIN','PRE_KILLS','PRE_DURATION']);
 });
-test('serialized proof and future availability do not pass common producer',()=>{const p=factory(),h=createDynamicHistoryProof(draftArgs({accounts:true}));assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:structuredClone(h.proof)}),/token_required/);assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:'2026-10-23T12:29:59.999999999Z',historyProof:h.proof}),/times/);});
-test('support-policy changes alter common schema even with the same sources and names',()=>{
- const p=factory(),a=draftArgs({accounts:true}),lo=createDynamicHistoryProof({...a,minimumSupport:3}),hi=createDynamicHistoryProof({...a,minimumSupport:5});
+test('serialized proof and future availability do not pass common producer',t=>{const p=factory(t),h=createDynamicHistoryProof(draftArgs({accounts:true}));assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:structuredClone(h.proof)}),/token_required/);assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:'2026-10-23T12:29:59.999999999Z',historyProof:h.proof}),/times/);});
+test('support-policy changes alter common schema even with the same sources and names',t=>{
+ const p=factory(t),a=draftArgs({accounts:true}),lo=createDynamicHistoryProof({...a,minimumSupport:3}),hi=createDynamicHistoryProof({...a,minimumSupport:5});
  const r=proof=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:proof});
- const x=r(lo.proof),y=r(hi.proof);assert.deepEqual(x.routes[0].diagnosticVector.names,y.routes[0].diagnosticVector.names);assert.notEqual(x.routes[0].schemaRef.sha256,y.routes[0].schemaRef.sha256);
+ let x=r(lo.proof);const lowNames=x.routes[0].diagnosticVector.names.slice(),lowSchemaHash=x.routes[0].schemaRef.sha256;
  assert.ok(p.getSchema(x.routes[0].schemaRef.sha256).definitions.some(d=>d.minimumSupport===3));
  assert.equal(x.availableAt,a.computedAt);
+ releaseBundle(x);x=null;const y=r(hi.proof);assert.deepEqual(lowNames,y.routes[0].diagnosticVector.names);assert.notEqual(lowSchemaHash,y.routes[0].schemaRef.sha256);
 });
-test('source revision binds actual facts, native collection and exact draft revision',async()=>{
+test('source revision binds actual facts, native collection and exact draft revision',async t=>{
  const a=draftArgs({accounts:true}),rows=JSON.parse(a.factsInput.utf8).maps.map(m=>({...m,players:m.players.map((p,i)=>({account_id:Number(p.accountId),hero_id:Number(p.heroId),player_slot:p.side==='radiant'?i%5:128+i%5}))}));
  const e=await collectDraftHistorySourceExport({query:async sql=>({rows:sql.includes('FROM pro_matches')?rows:[]})},{...a,now:()=>a.computedAt});
- const b=JSON.parse(e.envelopeInput.utf8),proofArgs={...a,factsInput:b.factsInput,nativeInput:b.nativeInput},h=createDynamicHistoryProof(proofArgs),p=factory();
+ const b=JSON.parse(e.envelopeInput.utf8),proofArgs={...a,factsInput:b.factsInput,nativeInput:b.nativeInput},h=createDynamicHistoryProof(proofArgs),p=factory(t);
  const base={mode:'POST',matchId:a.matchId,decisionAt:AT,historyProof:h.proof,sourceExportInput:e.envelopeInput,expectedSourceSnapshotHash:e.sourceSnapshotHash};
- assert.equal(p.generateFeatureBundle(base).sourceSnapshotHash,e.sourceSnapshotHash);
+ const sourceBundle=p.generateFeatureBundle(base);assert.equal(sourceBundle.sourceSnapshotHash,e.sourceSnapshotHash);releaseBundle(sourceBundle);
  const f=JSON.parse(b.factsInput.utf8);f.maps[0].radiantWon=!f.maps[0].radiantWon;
  const wrongFacts=createDynamicHistoryProof({...proofArgs,factsInput:pinned(f)});
  assert.throws(()=>p.generateFeatureBundle({...base,historyProof:wrongFacts.proof}),/history_export_facts_binding/);
  const extended=createDynamicHistoryProof({...proofArgs,draftPrefixInputs:[...a.draftPrefixInputs,draftEntry({accounts:true,time:'2026-10-23T12:01:00Z'})]});
  assert.throws(()=>p.generateFeatureBundle({...base,historyProof:extended.proof}),/history_export_context_binding/);
 });
-test('deployment primary source must be represented in its scoped source inventory',()=>{
+test('deployment primary source must be represented in its scoped source inventory',t=>{
  const[index,familyDocument,targetDocument]=syntheticRegistry(),s= sources();s.history.primarySha256='b'.repeat(64);
  assert.throws(()=>createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:s}),/source_inventory/);
 });
 
-test('producer reuses owned history/draft metadata while bundles release independent rows',()=>{
- const arena=createDiagnosticResourceArena(),p=factory({resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true})),base={mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof};
+test('producer reuses owned history/draft metadata while bundles release independent rows',t=>{
+ const arena=createDiagnosticResourceArena({maxBytes:4*1024**3}),p=factory(t,{resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true})),base={mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof};
  const a=p.generateFeatureBundle(base),before=p.resourceStatus(),b=p.generateFeatureBundle(base),after=p.resourceStatus();assert.equal(a.historyContextHash,b.historyContextHash);assert.equal(a.routes[0].schemaRef.sha256,b.routes[0].schemaRef.sha256);assert.equal(after.historyAssets,1);assert.equal(after.draftAssets,1);assert.ok(after.sharedAssetHits>=before.sharedAssetHits+2);assert.ok(p.compilerStatus().metadataIdentityHits>=2);assert.equal(p.compilerStatus().activeBlocks,0);assert.equal(after.activeBundles,2);
  assert.equal(Object.keys(a).includes('release'),false);assert.equal(JSON.stringify(a).includes('"release"'),false);assert.equal(a.release(),true);assert.equal(a.release(),false);assert.equal(p.resourceStatus().activeBundles,1);assert.equal(digest(b.routes[0].diagnosticSchema),b.routes[0].schemaRef.sha256);b.release();p.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
 });
-test('producer close evicts caches while an active bundle preserves every held schema',()=>{
- const arena=createDiagnosticResourceArena(),p=factory({resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true})),bundle=p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof});
+test('producer close evicts caches while an active bundle preserves every held schema',t=>{
+ const arena=createDiagnosticResourceArena({maxBytes:4*1024**3}),p=factory(t,{resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true})),bundle=p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof});
  p.close();assert.ok(arena.status().chargedBytes>0);assert.equal(p.resourceStatus().historyAssets,0);assert.equal(p.resourceStatus().draftAssets,0);assert.equal(digest(bundle.routes[0].diagnosticSchema),bundle.routes[0].schemaRef.sha256);assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof}),/producer_closed/);bundle.release();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);assert.equal(p.close(),false);
 });
-test('generation failures release normalized rows and in-flight bundle leases',()=>{
- const arena=createDiagnosticResourceArena(),p=factory({resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true}));
+test('generation failures release normalized rows and in-flight bundle leases',t=>{
+ const arena=createDiagnosticResourceArena({maxBytes:4*1024**3}),p=factory(t,{resourceArena:arena}),h=createDynamicHistoryProof(draftArgs({accounts:true}));
  assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof,livePrefixInputs:[live()]}),/explicit_post_on_live_observation/);assert.equal(p.resourceStatus().activeBundles,0);assert.equal(p.compilerStatus().activeBlocks,0);p.close();assert.equal(arena.status().chargedBytes,0);assert.equal(arena.status().leases,0);
 });
-test('v2 historical source handle still requires the retained reader private authority',()=>{
- const p=factory(),h=createDynamicHistoryProof(draftArgs({accounts:true}));assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof,sourceExportHandle:Object.freeze({contract:'aegis.verified-retained-reference-source-handle.v2'}),expectedSourceSnapshotHash:'a'.repeat(64)}),/token|handle/);p.close();assert.equal(p.resourceStatus().resources.chargedBytes,0);
+test('v2 historical source handle still requires the retained reader private authority',t=>{
+ const p=factory(t),h=createDynamicHistoryProof(draftArgs({accounts:true}));assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,historyProof:h.proof,sourceExportHandle:Object.freeze({contract:'aegis.verified-retained-reference-source-handle.v2'}),expectedSourceSnapshotHash:'a'.repeat(64)}),/token|handle/);p.close();assert.equal(p.resourceStatus().resources.chargedBytes,0);
 });
-test('source-handle dispatch rejects accessors and proxies without running them',()=>{
- const p=factory();let calls=0;const getter=Object.freeze({get contract(){calls++;return 'aegis.verified-retained-reference-source-handle.v2';}}),proxy=new Proxy({contract:'aegis.verified-retained-reference-source-handle.v2'},{get(){calls++;throw Error('must not run');}});
+test('source-handle dispatch rejects accessors and proxies without running them',t=>{
+ const p=factory(t);let calls=0;const getter=Object.freeze({get contract(){calls++;return 'aegis.verified-retained-reference-source-handle.v2';}}),proxy=new Proxy({contract:'aegis.verified-retained-reference-source-handle.v2'},{get(){calls++;throw Error('must not run');}});
  for(const sourceExportHandle of [getter,proxy])assert.throws(()=>p.generateFeatureBundle({mode:'POST',matchId:'90001',decisionAt:AT,sourceExportHandle,expectedSourceSnapshotHash:'a'.repeat(64)}),/accessor|plain_record/);assert.equal(calls,0);p.close();assert.equal(p.resourceStatus().resources.chargedBytes,0);
 });

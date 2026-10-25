@@ -2,7 +2,7 @@ import {types} from 'node:util';
 /** Owned engineering byte admission. This accounting supplements the OS job cap;
  * serialized-byte estimates are deliberately not presented as measured heap size. */
 export function createDiagnosticResourceArena({maxBytes=2*1024**3,maxLeases=65536}={}){
- if(!Number.isSafeInteger(maxBytes)||maxBytes<1024||maxBytes>6*1024**3||!Number.isSafeInteger(maxLeases)||maxLeases<1||maxLeases>65536)throw Error('diagnostic_arena:configuration');
+ if(!Number.isSafeInteger(maxBytes)||maxBytes<1024||maxBytes>8*1024**3||!Number.isSafeInteger(maxLeases)||maxLeases<1||maxLeases>65536)throw Error('diagnostic_arena:configuration');
  const assets=new WeakMap();let chargedBytes=0,peakChargedBytes=0,leases=0,denied=0,heldAssets=0;
  function ticket(release){let active=true;leases++;return Object.freeze({release(){if(!active)return false;active=false;leases--;release();return true;}});}
  function capacity(bytes){if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('diagnostic_arena:bytes');if(leases>=maxLeases||bytes>maxBytes-chargedBytes){denied++;return false;}return true;}

@@ -22,6 +22,12 @@ function fixture({mutateFacts=null,mutateArgs=null,accounts=true,minimumSupport=
 const value=(x,name)=>{const i=x.names.indexOf(name);assert.notEqual(i,-1,name);return x.values[i];};
 const stat=(x,key)=>x.profiles.players[0].statistics[key];
 
+test('R7 additive S04 block reaches the actual relational generator after the old prefix',()=>{
+ const {component:c}=fixture(),suffix=c.names.slice(-6);assert.ok(suffix.every(n=>n.includes('.draft_style_fit_v1.')));assert.equal(value(c,'histrel.radiant.slot_0.player.90d.meanDurationSeconds'),2520);assert.equal(value(c,'histrel.radiant.slot_0.player.90d.rawWinFraction'),3/5);
+ for(const d of c.definitions.slice(-6)){assert.equal(d.familyId,'S04');assert.equal(d.minimumSupport,5);assert.equal(d.historyWindowDays,90);assert.equal(d.formulaParameters.selectedHeroCount,5);assert.equal(d.formulaParameters.templateId,'aegis.team-conditioned-draft-style-fit.v1');}
+ assert.ok(c.values.slice(-6).every(v=>v===0));assert.equal(c.profiles.draftStyleFits.length,2);assert.equal(c.profiles.draftStyleFits[0].sourceAvailabilityAttested,false);assert.equal(validateHistoricalRelationalFeatures(c,{matchId:c.matchId,decisionAt:c.decisionAt}).accepted,true);
+});
+
 test('hand-checkable raw/smoothed rates, duration, kills, effective count and support',()=>{
  const {component:c}=fixture();
  assert.equal(value(c,'histrel.radiant.slot_0.player.90d.supportMaps'),5);
@@ -37,6 +43,7 @@ test('hand-checkable raw/smoothed rates, duration, kills, effective count and su
  assert.equal(c.profiles.players[0].values.playerHeroVsSelfWinFraction90d,0);
  assert.equal(c.profiles.teams[0].values.winMeanDurationSeconds90d,2520);
  assert.equal(c.profiles.teams[0].values.lossMeanDurationSeconds90d,null); // only two losses, below support=3
+ const metadata=c.definitions.find(d=>d.name==='histrel.radiant.slot_0.player.90d.rawWinFraction');assert.equal(metadata.formulaParameters.operator,'rawWinFraction');assert.equal(metadata.formulaParameters.selector.players[0].accountId,'1');assert.equal(metadata.minimumSupport,3);assert.equal(metadata.semanticVerification,'authoritative_template');assert.ok(metadata.inputFields.includes('priorMaps.radiantWon'));assert.match(metadata.availabilityTimePolicy,/immutable historyCutoffAt/);
 });
 
 test('all ordered descriptors and masked values have stable semantic metadata',()=>{
