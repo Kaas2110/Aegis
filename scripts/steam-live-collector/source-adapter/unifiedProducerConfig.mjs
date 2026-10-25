@@ -5,11 +5,11 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {loadCanonicalRegistry} from '../../feature-registry/canonical-registry.mjs';
 const groups={
- history:['historicalRelationalFeatures.mjs','historicalPerformanceFields.mjs','observedDraftHistory.mjs','historyCalculationCore.mjs','historySourceExport.mjs','historySourceVerifier.mjs','retainedOpenDotaFacts.mjs','retainedHistorySourceExport.mjs','retainedReferenceCorpus.mjs','boundedRetainedHistory.mjs','draftHistoricalFactsDb.mjs','historicalFactsDb.mjs'],
+ history:['historicalRelationalFeatures.mjs','historicalPerformanceFields.mjs','staticHistoryTargetContracts.mjs','retainedHistoryViewInputs.mjs','observedDraftHistory.mjs','historyCalculationCore.mjs','historySourceExport.mjs','historySourceVerifier.mjs','retainedOpenDotaFacts.mjs','retainedHistorySourceExport.mjs','retainedReferenceCorpus.mjs','boundedRetainedHistory.mjs','draftHistoricalFactsDb.mjs','historicalFactsDb.mjs'],
  live:['observedDraftFeatureBundle.mjs','steamFeatureBundle.mjs','playerHeroEconomyFeatures.mjs','roshanFeatures.mjs','steamProgressionAdmission.mjs','steamClockProgress.mjs','steamPhasePolicy.mjs','steamLiveAdapter.mjs','currentSteamInput.mjs','coherentEconomyContextFeatures.mjs','retainedReplayFrame.mjs','dynamicFields.mjs','nativeFieldEvidence.mjs','losslessJson.mjs','steamObservationIdentity.mjs'],
  series:['seriesContextFeatures.mjs'],
  draft:['draftIdentityFeatures.mjs','observedDraftHistory.mjs'],
- seriesHistory:['historicalRelationalFeatures.mjs','seriesHistoryTarget.mjs']
+ seriesHistory:['historicalRelationalFeatures.mjs','seriesHistoryTarget.mjs','historicalPerformanceFields.mjs','staticHistoryTargetContracts.mjs','retainedHistoryViewInputs.mjs','historyCalculationCore.mjs','retainedReferenceCorpus.mjs','boundedRetainedHistory.mjs']
 };
 export function loadLocalUnifiedProducerConfig(){
  const canonical=loadCanonicalRegistry();

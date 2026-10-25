@@ -40,6 +40,10 @@ function disposition(f,n){
  if(f.status==='learned_state_pending')return'TRAIN_only_deferred';if(f.status==='unavailable_input')return'unavailable_pending_source_or_rule_evidence';
  return n?'generated_subset_requires_semantic_review':'not_generated';
 }
+// Additive R6b seam: the exhaustive paged audit uses these exact functions.
+// Keeping one implementation prevents a smaller audit from inferring richer
+// policies than the bulk oracle. Callers must bound/own inputs before cloning.
+export {semantics as captureGeneratedDefinitionSemantics,inventory as validateGeneratedDefinitionSourceInventory,disposition as generatedFamilyDisposition};
 /** schemas contains {schema,sha256} objects from producer.getSchema(ref). Never
  * infer feature formulas or aliases from column names or a family-level label. */
 export function createGeneratedDefinitionLedger({index,familyDocument,targetDocument,schemas=[],limits={}}={}){

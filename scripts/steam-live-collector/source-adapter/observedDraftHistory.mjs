@@ -6,6 +6,7 @@ import {createDraftCaptureProof,advanceObservedDraft,draftHash} from './observed
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
 import {pinned,calculateHistoryCore,qualifyRetainedHistoryCorpus,FACTS_CONTRACT,NATIVE_CONTRACT} from './historyCalculationCore.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
+import {readRetainedMapViewCoreInputs} from './retainedHistoryViewInputs.mjs';
 
 export const PRODUCER_CONTRACT='aegis.observed-draft-history-producer.v3';
 export const CONTEXT_CONTRACT='aegis.frozen-team-style-context.v3';
@@ -92,8 +93,11 @@ export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInput
  if(!['recorded_input_receipts','database_timestamp_reconstruction','retained_receipt_reconstruction'].includes(availabilityBasis))throw Error('draft_history_availability_basis');
  const draft=replayPinnedDraftPrefix({draftPrefixInputs,matchId,computedAt});
  if(!draft.accepted)return blocked(draft.reason,{draftRejections:draft.rejections},{draftPrefix:draft.bindings});
- const state=draft.state,known=instantNs(state.historyCutoffAt);
  const facts=pinned(factsInput,FACTS_CONTRACT,100000),native=pinned(nativeInput,NATIVE_CONTRACT,20000);
+ return produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,nativeEvidenceInputs,nativeAlignmentInputs,expectedProfileReviewSha256,availabilityBasis},draft,facts,native);
+}
+function produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,nativeEvidenceInputs,nativeAlignmentInputs,expectedProfileReviewSha256,availabilityBasis},draft,facts,native){
+ const state=draft.state,known=instantNs(state.historyCutoffAt);
  const retainedScope=qualifyRetainedHistoryCorpus(facts.data,known),retained=retainedScope.verified;
  if(availabilityBasis==='retained_receipt_reconstruction'&&!retained||facts.data.scope?.contract==='aegis.retained-history-selection-scope.v1'&&availabilityBasis!=='retained_receipt_reconstruction')throw Error('draft_history_retained_source_scope_or_basis');
  if(facts.rows.some(m=>m?.matchId===matchId))throw Error('draft_history_current_map_facts_not_allowed');
@@ -138,4 +142,17 @@ export function produceObservedDraftHistory({matchId,computedAt,draftPrefixInput
  audit.knownTargetPlayers=featurePayload.players.length;audit.heroProfiles=heroes.length;audit.teamProfiles=teams.filter(x=>x.teamId!==null).length;audit.nativeAlignmentEvidence=calculated.nativeAlignmentBindings.length;audit.nativeRawEvidence=calculated.nativeEvidenceBindings.length;
  audit.profilesWithAnyValue=players.filter(p=>Object.values(p.values).some(finite)).length;
  return{contract:PRODUCER_CONTRACT,status:'produced_reconstruction',context,audit,bindings,...excluded};
+}
+
+/** Additive actual-byte route over privately verified map parts. The retained
+ * contract has no qualified prior Steam frames; it never fabricates them from
+ * post-match trajectories. The unchanged core/formulas consume a proven minimal
+ * projection while their pin still binds all complete normalized source rows. */
+export async function produceObservedDraftHistoryFromRetainedMapView({historyView,matchId,computedAt,minimumSupport=5,resourceArena=null}={}){
+ if(!Number.isSafeInteger(minimumSupport)||minimumSupport<3||minimumSupport>1000)throw Error('minimum_support_3_to_1000');
+ const inputs=await readRetainedMapViewCoreInputs({historyView,matchId,computedAt,resourceArena});try{
+  const draft=replayPinnedDraftPrefix({draftPrefixInputs:inputs.draftPrefixInputs,matchId,computedAt});if(!draft.accepted)return blocked(draft.reason);
+  const d=inputs.view.descriptor;if(draft.state.historyCutoffAt!==d.historyCutoffAt||draft.state.validFrom!==d.validFrom||draft.state.revision!==d.identity.revision||draft.state.identity.draftHash!==d.identity.draftHash)throw Error('retained_map_view_draft_binding');
+  return produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,nativeEvidenceInputs:[],nativeAlignmentInputs:[],expectedProfileReviewSha256:null,availabilityBasis:'retained_receipt_reconstruction'},draft,inputs.facts,pinned(inputs.nativeInput,NATIVE_CONTRACT,20000));
+ }finally{inputs.release();}
 }

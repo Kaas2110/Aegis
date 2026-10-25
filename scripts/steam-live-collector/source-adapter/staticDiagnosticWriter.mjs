@@ -13,10 +13,10 @@ export function createStaticDiagnosticWriter({producer,journal,enabled=false,now
   if(busy)return blocked('diagnostic_writer_busy');
   if(shouldContinue()!==true)return blocked('manual_stop');
   if(!input||!Object.hasOwn(allowed,input.mode))return blocked('static_phase_required');
-  busy=true;
+  busy=true;let bundle=null;
   try{
    const generationStartedAt=now();if(instantNs(input.decisionAt)===null||instantNs(generationStartedAt)===null||instantNs(input.decisionAt)>instantNs(generationStartedAt))throw Error('static_input_cutoff_after_calculation');
-   const bundle=producer.generateFeatureBundle(input),featuresReadyAt=now();
+   bundle=producer.generateFeatureBundle(input);const featuresReadyAt=now();
    if(bundle.contract!==UNIFIED_PRODUCER_CONTRACT||bundle.mode!==input.mode||bundle.decisionAt!==input.decisionAt||bundle.eligibleForServing!==false||bundle.eligibleForTraining!==false||bundle.recordedPrediction!==false||instantNs(input.decisionAt)===null||instantNs(generationStartedAt)===null||instantNs(featuresReadyAt)===null||instantNs(generationStartedAt)<instantNs(input.decisionAt)||instantNs(featuresReadyAt)<instantNs(generationStartedAt)||bundle.routes.some(r=>!allowed[input.mode].includes(r.targetId)||r.inferenceVector!==null))throw Error('static_producer_contract');
    if(bundle.status==='series_complete_actual_result')return {status:bundle.status,seriesId:bundle.seriesId,...flags};
    bundle.timings={decisionInputCutoff:input.decisionAt,generationStartedAt,featuresReadyAt,originalPredictionTimingClaimed:false};
@@ -34,6 +34,6 @@ export function createStaticDiagnosticWriter({producer,journal,enabled=false,now
    const saved=await journal.appendTrace(trace);if(!['created','existing_verified'].includes(saved?.status)||saved.sha256!==trace.sha256)throw Error('trace_receipt');
    const journalCommittedAt=now();if(instantNs(journalCommittedAt)===null||instantNs(journalCommittedAt)<instantNs(featuresReadyAt))return {status:'failed',reason:'journal_commit_clock_contract',traceSha256:trace.sha256,traceCommitted:true,...flags};
    return {status:'recorded_diagnostic',mode:bundle.mode,matchId:bundle.matchId,seriesId:bundle.seriesId,traceSha256:trace.sha256,targetIds:bundle.routes.map(r=>r.targetId),journalCommittedAt,...flags};
-  }catch{return{status:'failed',reason:'static_diagnostic_contract_or_storage',...flags};}finally{busy=false;}
+  }catch{return{status:'failed',reason:'static_diagnostic_contract_or_storage',...flags};}finally{try{if(typeof bundle?.release==='function')bundle.release();}finally{busy=false;}}
  }});
 }

@@ -1,0 +1,77 @@
+SOL R6B — PRECISE REMAINING WORK AND ASTRA QUESTIONS
+25 October 2026. This supplements the complete R6 plan; no agreed scope is removed.
+Use current installed source and exact block receipts, not obsolete install guards.
+
+1. Finish actual source semantics before models.
+Turn the exhaustive declaration findings into reviewed source-specific metadata:
+input fields, event/availability policy, phase, patch/role policy, historical unit
+and population, missing reasons, clock and minimum-support rules. Preserve honest
+unavailable/inapplicable dispositions and all 79 families / 14 legacy groups.
+Resolve old catalogue meanings; 465359 unresolved legacy occurrences are not an
+accepted rich feature gate. Do not fill templates with unsupported default claims.
+
+2. Complete typed static history integration.
+Observed POST/LIVE normalized map-view intake now exists. PRE, SERIES_PRE and
+BETWEEN still need target-specific retained views plus actual roster/previous-
+target derivation evidence and original-availability qualification. The compact
+store verifies parsed target/header consistency, not all original source facts.
+The v1 static writer remains readable; compact bootstrap needs an explicit static
+producer/intake, v2 historical reference/proof owner and final STOP/time/series
+fence after IO. Merely allowing the v2 reference string is insufficient.
+
+3. Complete bounded full-archive and runtime acceptance.
+Read the normalized-large receipt before deciding the next step. A boundary or
+timeout failure remains open; do not raise caps or relabel padded original bytes.
+The actual 1600-version run crossed the normalized boundary and reopened storage
+but hit the 1200-second wall before full replay/proof. Before repeating it, profile
+one fixed short prefix (64 versions, optionally 64/128) to attribute inventory,
+per-file stat, read/hash, sync and source-derivation cost. Source inspection shows
+repeated full-directory inventories; the estimated amplification is not a measured
+percentage. Give Astra the finite verification-boundary decision after measurement.
+Preserve exact formulas and source eligibility while addressing measured costs.
+Upstream hidden heap/metadata ownership and full corpus inventory remain open.
+Cold restart is separate from old-host overlap, warm latency and sustained 326
+states. Do not launch a long sustained test while its shorter prerequisites fail.
+The observed 185-second synthetic host fixture includes three writes, six real
+generations, seven full loads and replay; it is not one forecast's inference time.
+
+4. Astra decision: storage concurrency / queue policy (owner explicitly deferred).
+Should reads wait in a bounded queue or fail at pending-operation admission?
+Which operations may overlap within one owned source/writer epoch, with what
+byte budget, cancellation, backpressure and final causal fences? Preserve STOP,
+single-writer commit order and no cross-version current state. Existing async
+bounded readMany and sequential compatibility fallback remain until instructions.
+No performance or quality benefit from a new concurrent policy has been measured.
+
+5. Complete genuine application diagnostic coverage and source95 gate.
+All 13 actual producer emissions were audited; that is not all 13 modes through
+the application host. Preserve series main versus selected-map detail, previous
+map actuals and default-current navigation. Collect prospective coverage only
+under separate provider/runtime authorization; missing source proof stays false.
+Keep 300-second retention distinct from 180-second absent-phase qualification.
+
+6. Return one consolidated feature-first package to Astra before any new fit.
+Include exact source/manifest/merge, failures and corrections, synthetic versus
+real-data boundaries, ownership and speed results, unresolved semantics and
+availability. Astra approves architecture/causality/feature readiness; technical
+test passes alone do not authorize models. Later full-set boosting, pooled versus
+time-band live models, HPO, calibration, slice evaluation and pruning retain their
+R6.6–R6.9 scope and remain permission-gated. Reuse pinned datasets.
+
+7. New owner request: one systematic end-to-end audit and code cleanup plan.
+Astra plans a pinned-baseline review of every active path, ownership/error/restart
+contracts, duplicate implementations and unused original application modules.
+Classify proven dead code separately from active old models, retained v1 formats,
+unfinished replacements and unresolved feature semantics. Inspect dynamic imports,
+configuration and launch/task entrypoints before treating a static orphan as dead.
+Provide Sol an exact removal/consolidation/migration list, reasons and scoped
+checks, then one final end-to-end acceptance. Reuse unchanged evidence and avoid
+repeating a broad audit after every fix. No immediate bulk deletion, feature
+pruning or model replacement is part of this request. Do not claim a single audit
+proves absence of all possible bugs. Root's full owner-request record belongs in
+the consolidated Astra handoff; the existing concurrency question remains hers.
+
+Publication: one reviewed source/documentation PR per completed block, merge
+under standing owner authorization and record actual merge commit. Let Graphify
+refresh automatically. No routine full-source byte parity, duplicate graph build,
+secret/raw-data/weights upload or claim that a queued index is already current.

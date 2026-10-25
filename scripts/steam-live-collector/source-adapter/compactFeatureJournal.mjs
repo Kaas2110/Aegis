@@ -63,11 +63,12 @@ function expandedVectorHash(handle){
  }hash.update(']}');return hash.digest('hex');
 }
 
-export function createCompactFeatureJournal({writer,resourceArena,historicalInputStore=null,assetWorkingBytes=512*1024*1024,operationWorkingBytes=128*1024*1024,maxWireBytes=MAX_WIRE,maxMetadataBytes=256*1024,maxCachedAssets=16,maxCachedAssetBytes=256*1024*1024}={}){
+export function createCompactFeatureJournal({writer,resourceArena,historicalInputStore=null,allowLegacyByteOnlyStaticHistory=false,assetWorkingBytes=512*1024*1024,operationWorkingBytes=128*1024*1024,maxWireBytes=MAX_WIRE,maxMetadataBytes=256*1024,maxCachedAssets=16,maxCachedAssetBytes=256*1024*1024}={}){
  if(writer?.contract!==PERSISTENT_ARTIFACT_WRITER_CONTRACT||typeof writer.commit!=='function'||typeof writer.read!=='function'||typeof resourceArena?.reserve!=='function'||typeof resourceArena?.status!=='function')fail('explicit_writer_and_arena');
  for(const [name,value,min,max]of [['asset_working',assetWorkingBytes,1024,2*1024**3],['operation_working',operationWorkingBytes,1024,2*1024**3],['wire_bound',maxWireBytes,1024,MAX_WIRE],['metadata_bound',maxMetadataBytes,1024,1024*1024],['cached_assets',maxCachedAssets,1,128],['cache_bytes',maxCachedAssetBytes,1024,1024**3]])if(!Number.isSafeInteger(value)||value<min||value>max)fail(name);
  if(maxMetadataBytes*8+65536>operationWorkingBytes)fail('metadata_working_bound');
  if(historicalInputStore!==null&&(historicalInputStore.contract!==COMPACT_HISTORICAL_INPUT_STORE_CONTRACT||typeof historicalInputStore.verifyHistoricalInputs!=='function'))fail('historical_input_store');
+ if(typeof allowLegacyByteOnlyStaticHistory!=='boolean')fail('legacy_static_history_option');
  const arena=resourceArena,cache=new Map(),ownedSchemaArtifacts=new WeakMap();let cacheBytes=0,pending=0,closed=false,closing=false,active=Promise.resolve();
  const counters={appendedTraces:0,loadedTraces:0,assetCacheHits:0,assetLoads:0,assetWrites:0,cacheEvictions:0,verifiedSchemaReuses:0};
  function evict(cacheKey){const entry=cache.get(cacheKey);if(entry){cache.delete(cacheKey);cacheBytes-=entry.bytes;releaseCompactFeatureAsset(entry.handle);counters.cacheEvictions++;}}
@@ -90,7 +91,9 @@ export function createCompactFeatureJournal({writer,resourceArena,historicalInpu
  async function verifyHistorical(body){
   if(body.historicalInputRef===null||body.historicalInputRef===undefined)return null;
   if(historicalInputStore===null)fail('historical_input_bridge_required');
-  const options={mode:body.mode,historicalBindings:body.historicalBindings,seriesReceiptPin:body.seriesReceiptPin,decisionAt:body.decisionAt};
+  const staticMode=['PRE','SERIES_PRE','BETWEEN'].includes(body.mode),strictStatic=staticMode&&!allowLegacyByteOnlyStaticHistory;
+  if(strictStatic&&body.historicalBindings?.kind!==(body.mode==='PRE'?'map_prematch':'series_history'))fail('historical_target_kind');
+  const options={mode:body.mode,historicalBindings:body.historicalBindings,seriesReceiptPin:body.seriesReceiptPin,decisionAt:body.decisionAt,...(strictStatic?{requireParsedTargetBinding:true,targetBinding:body.targetBinding,matchId:body.matchId,seriesId:body.seriesId}:{})};
   const held=await historicalInputStore.verifyHistoricalInputs(body.historicalInputRef,options);
   try{const descriptor=readCompactHistoricalInputProof(held.proof,{reference:body.historicalInputRef,...options});return{minimumSupport:descriptor.calculationOptions.minimumSupport,release:()=>held.release()};}catch(error){held?.release?.();throw error;}
  }

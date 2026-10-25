@@ -1,0 +1,219 @@
+{
+  "contract": "aegis.sol-r6b-scoped-technical-evidence.v1",
+  "date": "2026-10-25",
+  "baselineMain": "7d1d2f66a36e758d9082932960d697eb40e0a0c1",
+  "scope": "Synthetic technical mechanics only; overlapping receipts are not a total test count.",
+  "training": false,
+  "providerCalls": false,
+  "runtimeActivation": false,
+  "fullFeatureGateComplete": false,
+  "modelQualityEvaluated": false,
+  "receipts": [
+    {
+      "name": "r6b-authorized-full-emission-audit-1",
+      "status": "passed",
+      "elapsedSeconds": 112.766,
+      "peakJobCommitBytes": 5960384512,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-bounded-emission-small-1",
+      "status": "passed",
+      "elapsedSeconds": 0.797,
+      "peakJobCommitBytes": 148897792,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-retained-map-view-small-1",
+      "status": "failed",
+      "elapsedSeconds": 1.594,
+      "peakJobCommitBytes": 637358080,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 1
+    },
+    {
+      "name": "r6b-retained-map-view-corrective-1",
+      "status": "passed",
+      "elapsedSeconds": 5.782,
+      "peakJobCommitBytes": 712306688,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-static-target-json-small-1",
+      "status": "passed",
+      "elapsedSeconds": 0.594,
+      "peakJobCommitBytes": 134168576,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-static-target-proof-storage-1",
+      "status": "passed",
+      "elapsedSeconds": 1.594,
+      "peakJobCommitBytes": 172544000,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-static-strict-corrective-1",
+      "status": "passed",
+      "elapsedSeconds": 1.578,
+      "peakJobCommitBytes": 172679168,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-static-time-final-1",
+      "status": "passed",
+      "elapsedSeconds": 1.047,
+      "peakJobCommitBytes": 131928064,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-host-small-1",
+      "status": "failed",
+      "elapsedSeconds": 149.687,
+      "peakJobCommitBytes": 4203880448,
+      "runnerSha256": "717e375e378e5d0090aaf3872ebb06adeebaf05b07906bf8664c4d1a5f0da6d3",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 1
+    },
+    {
+      "name": "r6b-host-small-corrective-1",
+      "status": "passed",
+      "elapsedSeconds": 3.594,
+      "peakJobCommitBytes": 230457344,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-host-actual-1",
+      "status": "passed",
+      "elapsedSeconds": 185.125,
+      "peakJobCommitBytes": 1549123584,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-guard-init-failure-proof-1",
+      "status": "failed_closed",
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "reason": "injected_initialization_failure"
+    },
+    {
+      "name": "r6b-guard-after-failure-smoke-1",
+      "status": "passed",
+      "elapsedSeconds": 0.547,
+      "peakJobCommitBytes": 81559552,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-actual-bounded-emission-1",
+      "status": "passed",
+      "elapsedSeconds": 43.844,
+      "peakJobCommitBytes": 1719603200,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    },
+    {
+      "name": "r6b-normalized-large-1",
+      "status": "terminated_owned_job",
+      "elapsedSeconds": 1200.187,
+      "peakJobCommitBytes": 395440128,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "reason": "wall_limit"
+    },
+    {
+      "name": "r6b-static-writer-final-1",
+      "status": "passed",
+      "elapsedSeconds": 3.61,
+      "peakJobCommitBytes": 683626496,
+      "runnerSha256": "943732628d5305f3d09ecfc0b07da5b6e29bb5957f5239399a883332caa782c1",
+      "perCheckPolicyBytes": 6442450944,
+      "maximumPolicyBytes": 25769803776,
+      "returnCode": 0
+    }
+  ],
+  "actualBoundedDeclarationAudit": {
+    "contentHash": "7b44afadaa6b6f867b36226d75ffe80ae87e91f59e41509869fe2dc185b9f20f",
+    "sourceInventoryHash": "1dadc73de7a9ee22fd05f0adc6a47c055a12acd769c40ed0c036653cca9602bb",
+    "counts": {
+      "logicalTargets": 12,
+      "targetModes": 13,
+      "distinctSchemas": 13,
+      "acceptedDeclarationAuditTargetModes": 13,
+      "deferredDeclarationAuditTargetModes": 0,
+      "skippedDefinitions": 0,
+      "schemaDefinitionOccurrences": 835583,
+      "families": 79,
+      "legacyGroups": 14,
+      "legacyUnresolvedOccurrences": 465359
+    },
+    "allOccurrencesHaveAtLeastOneDeclarationGap": true,
+    "sourceAvailabilityAttested": false,
+    "semanticAcceptance": false,
+    "note": "All original ordered schema definitions were inspected; accepted audit execution is not accepted semantics."
+  },
+  "normalizedHistoryBoundary": {
+    "completeGateAccepted": false,
+    "runStatus": "terminated_owned_job",
+    "completedPhases": [
+      {
+        "contract": "aegis.r6b-normalized-history-large-phase.v1",
+        "phase": "corpus_created",
+        "elapsedSeconds": 785.698,
+        "versions": 1600,
+        "originalVersionBytes": 83765056
+      },
+      {
+        "contract": "aegis.r6b-normalized-history-large-phase.v1",
+        "phase": "view_materialized",
+        "elapsedSeconds": 1130.804,
+        "maps": 1600,
+        "normalizedFactsBytes": 118570920,
+        "parts": 115,
+        "effectiveStoredBytes": 206863304
+      },
+      {
+        "contract": "aegis.r6b-normalized-history-large-phase.v1",
+        "phase": "writer_reopened",
+        "elapsedSeconds": 1132.048
+      }
+    ],
+    "scope": "1600 synthetic full-metric versions; actual normalized bytes, no padding. Phase completion does not imply complete restart/family proof."
+  }
+}
