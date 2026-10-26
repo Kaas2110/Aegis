@@ -1,0 +1,165 @@
+ASTRA R7 SEMANTIC FORMULA / BINDING TABLES FOR SOL
+26 October 2026. Architectural instructions, not generated model data.
+Read ASTRA-R7-SEMANTIC-REVIEW.txt and the 25 October 79-family contract together.
+
+Notation
+o is one admitted GLG scoreboard capture with immutable raw hash, receipt and
+profile. t=o.scoreboard.duration seconds, m=t/60; R/D are explicit current sides.
+p is a current player selected by hero identity, not source array position.
+s(p)=+1 for Radiant, -1 for Dire; displayed series orientation is independently
+mapped to nominal team1/team2. H is local immutable map history at t0; later
+identity t1 can change selectors, never enlarge H. P_s is all five side players.
+Previous native frames belong to prior maps and their raw/as-of proofs; same-map
+trajectory frames belong to the current admitted continuity prefix.
+
+01. Native literal field map
+symbol      exact GLG path suffix                  unit / interpretation
+N_p         players[].net_worth                    native gold-value net worth
+G_p         players[].gold_per_min                 native gold/minute rate
+X_p         players[].xp_per_min                   native experience/minute rate
+L_p         players[].level                        level
+Z_p         players[].gold                         opaque provider_gold_raw
+U_p         players[].net_gold                     opaque provider_net_gold_raw
+K_s         scoreboard.{side}.score                literal same-frame team score
+t           scoreboard.duration                    game seconds
+
+No Z/U mechanical equivalence decision exists. Neither Z/U equals N, total_gold,
+gold_spent or G*t by default. N/t is not G. Keep metric identity and dimension
+separate; standardized statistics of an opaque input do not qualify that input.
+
+02. Historical context slots (all source is local causal history)
+key                    exact selected profile             formula/window
+recentForm             current account                    win fraction,30d
+heroForm               current account + selected hero    win fraction,90d
+teamForm               current same-side team             win fraction,30d
+aggression             current same-side team             mean side kills/min,30d
+lateTendency           current same-side team             P(duration>=2400s),90d
+playerLateTendency     current account                    P(duration>=2400s),90d
+heroLateTendency       selected hero in qualified pro pool P(duration>=2400s),90d
+playerHeroLateTendency current account + selected hero    P(duration>=2400s),90d
+
+These are statistical proportions/proxies, not player MMR, latent combat power,
+attacking intent or a guarantee a comeback succeeds. Every slot declares exact
+statistic definition, source profile, window, actual M and supportMaps, cohort,
+support dependencies and max knownAt<=t0. New player/hero/player-hero late slots
+require max(5,M); preserve existing team thresholds. Partial unknown account
+disables only account-conditioned slots, not team/hero literal data.
+
+03. Hero native/history algebra (existing numeric semantics)
+observed_value = s(p)*q_p.
+history_product = s(p)*q_p*h(p,key).
+history_minute_product = s(p)*q_p*h(p,key)*m.
+q is the exact named N/G/X/L/Z metric. Units multiply algebraically.
+Required input ports: q_p; current hero+side identity; current account/team only
+where h selects them; exact h ref; t only for the minute product. Complete draft
+permits structurally unpicked dictionary heroes=0; selected missing operand=null.
+Explicit zero*unknown must stay null, not zero.
+
+04. Team native/history algebra (exact five-player complete roster)
+A_s = sum_{p in P_s}(q_p*h_p).
+B_s = A_s/sum(q_p), only when denominator>0.
+C_s = sum(q_p)*mean_{u in P_opposite}(h_u), all five opposing histories required.
+native_history_sum=A; native_weighted_history_mean=B;
+native_opponent_history_product_sum=C. diff means R term minus D term.
+The numerator is resource weighted descriptive history, not a model coefficient.
+Requires the respective full roster input sets and their selected h dependencies.
+
+05. Economic rank interactions (correct current dependency contract)
+Select p=rank_r(P_s,basis) where basis is literal N or G; descending basis value,
+ties by numeric hero ID. All five basis observations required. Then output
+q_p * h(p,key), for each of the 208 exact historical player-profile keys.
+Both basis and q fields are required, even if only q appears in output arithmetic.
+Current identity joins hero -> account/team/side must be explicit. Do not rename
+this farm position or compare rank1 as a necessarily identified carry.
+
+For coherent rank variants, q defines both basis and value; base terms:
+q_p; q_p/sum(q on own side); q_p-q_opposing_same_rank;
+q_p/q_opposing_same_rank (positive denominator). Optional variant multiplies by
+m, recentForm, teamForm or heroLateTendency of selected p. diff subtracts the two
+side expressions, so diff of minus-opponent-same-rank is 2*(R_rank-D_rank), exactly
+the existing formula. Do not silently collapse that into one difference.
+Minute variant MUST include t input (current omission at coherent line105).
+
+06. Native hero-minute normal and new level implementation
+From prior-map proof-qualified native frames, choose at most one frame for each
+map/hero/reference minute. Latest clock at/before60*m_ref with <=30s gap; stable
+receipt/ID tie policy retained. Cohort is that hero and exact native metric under
+same Steam profile, prior90d, qualifying outcomes/rosters and source receipts by
+immutable cutoff. n distinct maps; mean=sum(q_i)/n; sampleSD divisor(n-1).
+Current lookup: greatest unique integer m_ref<=floor(t/60), age<=5minutes.
+Residual = s(p)*(q_p-mean); z=residual/sampleSD with positive sampleSD.
+Expose chosen m_ref, lag and support in provenance/companion fields.
+
+Existing producer supports only native_nw/native_gpm/native_xpm. Add native_level
+using literal prior players[].level with units level under the SAME proof and
+cohort selection, not prior final level or XPM. Reference definition/source-inventory
+version must change additively. Current emitted level residual/z then acquires
+actual references. No raw gold reference qualification is authorized here.
+Preserve the current requirement for positive SD even for the old residual branch;
+an optional mean-only residual with zeroSD is a separate additive version, not a
+silent alteration of existing values.
+
+07. Same-map lead trajectory exact template
+q in {sum(N_R)-sum(N_D), sum(G_R)-sum(G_D), sum(X_R)-sum(X_D),
+sum(L_R)-sum(L_D), K_R-K_D}. Every aggregate needs five finite players/side.
+For w in {60,180,300,600}s choose latest receipt-order anchor at clock<=t-w and
+within30s of that target, then the valid causal continuity suffix through t.
+Current implementations keep observed rows, not inferred unseen values.
+Stats: observed_span_seconds=t-anchorClock; observations=number retained rows;
+min/max; recovery=q_last-min; retreat=max-q_last;
+observed_sign_changes counts transitions between nonzero signs (zeros do not
+reset last nonzero sign); seconds_since_observed_sign_change=t-last observed
+transition clock; change_per_played_minute=(q_last-q_anchor)/((t-anchorClock)/60).
+At least two finite values for range/recovery/sign/slope. Explicit unavailable
+anchor leaves stats missing, not a future-nearest frame. No future map result.
+
+08. The 720 exact trajectory/history bindings
+Name: draft_live.trajectory.{q}.past_{w}s.{stat}.{s}.{key}.product
+Value: trajectory(q,w,stat) * H.team(s,currentTeamId).statistics[key].value
+The three exact keys and formulas are:
+formWinFraction30d: count(selected-team wins)/n, endedAt window30d;
+late40Fraction90d: count(durationSeconds>=2400)/n, endedAt window90d;
+winMeanDurationSeconds90d: arithmetic mean duration among team wins,90d.
+Win-duration support counts only eligible wins. Each own statistic M applies.
+All history dependencies must have been locally available by t0. Product units
+are trajectory-unit * fraction or * seconds. Histories on both sides are separate
+features; there is no implied team-specific future comeback probability.
+
+The historical formulaTemplate values retain v3/rawWinFraction, v3/late40Fraction
+and v3/winMeanDurationSeconds. Operand address MUST also include component,
+profileKind=team,key,side/currentTeam selector,window,M/cutoff. Generic template
+alone cannot identify a single reference. Two formerly ambiguous keys generate
+2*5*4*9*2=720 per LIVE head; the third is already nonambiguous numerically.
+
+09. Roshan / Aegis objective inputs and products
+Use the existing qualified event/rule reducer. Last proved death d at game clock
+g_d: elapsed=t-g_d; respawn lower=max(0,minRespawn-elapsed),
+upper=max(0,maxRespawn-elapsed), in seconds. Raw timer alone is a diagnostic.
+Exact countdown requires qualified source timerSemantics and patch/profile rule;
+timer0 or elapsed upper bound does not prove current alive. Keep unobserved kills
+and source gaps distinct from a real pause. Aegis slot match proves only qualified
+current possession, not pickup time. Pickup-to-expiry upper bound requires a known
+pickup episode and rule. Steal requires exact death/pickup link and both sides.
+All events/rules known by the current source horizon, no later annotation leakage.
+
+Existing R06 product = qualified objective * coherent current lead/resource
+statistic * exact frozen side duration/closing history. It is descriptive:
+winning-duration mean is not 'remaining time after a current lead', and a raw
+timer being useful statistically does not prove it is Roshan respawn seconds.
+Keep history/source units and references separate; no hand-fitted power scalar.
+
+10. Feature dependency / source eligibility acceptance
+Every input must resolve to one explicit port or emitted definition. Formula IDs
+are metadata, never implicit dependency aliases. Stable function hash binds the
+operator, parameters, units, populations, windows/M, time/phase/missing/selector
+grammar and source contracts. Row hash binds actual IDs, source snapshots, facts,
+receipt clocks/cutoffs, support identities and values. Existing diagnostic hashes
+and model readers must be versioned, not silently accepted by names only.
+
+Eligibility is transitive: unresolved source meaning, unproved actual availability,
+wrong phase or missing mandatory clock/identity cannot be laundered by arithmetic.
+Document declaration-complete separately from source-qualified/implemented/covered.
+Keep positive and negative dependency counterexamples from the companion review.
+
+No fits, score claims, native execution or provider discovery were performed for
+this table. It gives Sol exact meanings and acceptance criteria to implement.

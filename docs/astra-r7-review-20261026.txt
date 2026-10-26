@@ -1,0 +1,154 @@
+AEGIS — ASTRA REVIEW OF THE COMPLETED SOL R7 BLOCK
+26 October 2026. Architecture and static review; no implementation or training.
+
+DECISION
+Accept the R7 receipts for their recorded technical scope. Do not close the full
+feature-first gate or admit training. The reviewed design correctly separates a
+frozen causal history from one coherent current Steam state, but three authority/
+currentness defects and several semantic-contract gaps require the R8 corrections.
+R8 is one substantial Sol implementation block; its detailed six-hour work envelope
+is AEGIS-SOL-PLAN-2026-10-26-R8.txt. Astra has specified the decisions below rather
+than changing application code. No new native tests or model-quality tests ran.
+
+BASELINE AND EVIDENCE
+Canonical application: C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Workspace: C:/Users/Admin/Documents/Codex/2026-10-03/new-chat-2.
+PR12 reviewed head: 4fe709dfc2b54e78a6dbdc8df180a5e71f07dbf4.
+Actual merge: 85c3b056769cf98f2bedfa233036e56b854201e4; 117 reviewed paths.
+Publication receipt: work/sol-r7-resume-20261026/PUBLICATION-RECEIPT.json.
+The local application Git HEAD is an older installation baseline; do not reset it.
+Current files and exact publication/delta manifests govern source scope.
+Graphify was checked during this review and still described PR11 main073d9d2c,
+build0107bf07-551f-4976-a1e1-f8bae03dbe38. It is not current R7 code authority.
+One bounded lookup was used; no duplicate index build or repeated broad scan.
+
+Reused, unchanged technical evidence (not rerun by Astra):
+- Small ALL256 checks: 32 passes, one opt-in stress skip, 2.016 seconds.
+- Functional delivery: 13 modes, 14 actual variants, 14 input-only receipts;
+  822.547 seconds, owned peak5,917,442,048bytes, final arena charge0.
+- Schema declarations: all13 original schemas; 921,198 occurrences, 881,390
+  structurally complete and39,808 explicitly unresolved; 323.562 seconds,
+  owned peak5,732,614,144bytes. Structural completeness is not semantic acceptance.
+- Functional delivery explicitly skipped the three EXTRA warm frames. No warm
+  pilot, sustained326-state pass, original-source95% or model accuracy is inferred.
+- Saved vectors were checked, but input delivery used original in-memory private
+  vectors. Restart LIVE routing tested rejection, not positive current issuance.
+- Admin read tests used explicit larger memory/lease fixtures. They do not prove
+  the shipped default/configured host and real Windows lease path are accepted.
+
+The new findings below are static counterexamples derived from current source.
+They are NOT newly executed failing tests. Sol must reproduce each small case,
+preserve its failure, implement the correction and record the affected passing scope.
+
+F1 / P1 — CLASSIFIED SOURCE GAP IS STILL TREATED AS PENDING
+retainedFeaturePipeline.mjs:89-104,208,218-234.
+An admitted HTTP500/empty-list/missing-map receipt is processed, but does not
+advance the map's processedSourceKey. The reader rejects with
+newer_committed_source_pending before consulting the owned five-minute retention
+state. Thus one ordinary gap immediately hides a previously eligible forecast.
+Separate admitted head, fully classified head and last successful observation.
+A genuinely pending head still fences issuance; a fully classified ordinary gap
+preserves only the original eligible trace/deadline. No receipt-based renewal.
+Terminal, identity conflict, STOP and failed proof remain hard barriers.
+
+F2 / P1 — STATIC CURRENT AUTHORITY IS NOT BOUND TO THE ACTUAL PROOF
+staticDiagnosticWriter.mjs:17-25,35-44,60-63.
+Before/after stamps can be equal while both refer to a newer context than the
+already stale candidate proof for the same map/series. Equality during IO alone
+does not prove the candidate was current on entry. Bind expected authority to the
+private proof, compare at entry and after IO. Keep frozen historical binding,
+active target/series binding and current live source fence distinct. A live poll
+generation is not a historical corpus generation or facts hash.
+
+F3 / P1 — TWO GENUINE BUT UNRELATED SCHEMA/VECTOR OBJECTS CAN BE PAIRED
+featureProjectionCompiler.mjs:13-22,117-132;
+diagnosticModelInputDelivery.mjs:17-28,45-58.
+The private vector authenticates names/count, separately from the schema's exact
+authority. A.schema plus B.vector with identical names/count can produce a
+self-consistent manifest without proving A and B were assembled together.
+Mint a private projection/row capability at verified assembly; bind context,
+semantics, values/masks and authorized head projections. Preserve legitimate
+same-row multihead reuse. A stable model contract alone cannot identify a row.
+
+F4 — STABLE MODEL FUNCTIONS AND DIAGNOSTIC INSTANCES NEED DIFFERENT IDENTITIES
+Actual team/account/current-hero selectors change the exact diagnostic schema
+hash while column functions stay the same. This exact forensic hash is useful,
+but using it as estimator identity fragments datasets and duplicates metadata.
+Two150,553-column LIVE instance schemas already exceed the current300,000
+aggregate-column dataset bound. Do not simply enlarge it or accept names alone.
+Version function contracts, learned-state bindings and row provenance separately;
+retain old forensic hashes/readers. Fixed dictionary hero constants remain in the
+function contract; only runtime-bound selectors belong to row provenance.
+
+F5 — THE39,808 UNRESOLVED OCCURRENCES HAVE TWO DIFFERENT CAUSES
+Each of four LIVE heads repeats9,952 occurrences:
+- 9,232 descend from opaque Steam gold/net_gold field meanings. Their literal
+  algebra is described; the physical measurement is not qualified. Keep inventory
+  and raw diagnostics, propagate source_semantics_unverified to all descendants.
+  Do not claim these fields equal net worth, lifetime earnings or current wallet.
+- 720 trajectory/history products reference generic formula IDs instead of the
+  exact same-side team statistic/key/window. Their current numeric selection is
+  known. Bind formWinFraction30d and late40Fraction90d precisely; no arithmetic
+  redesign or guessed window is needed.
+
+F6 — THE STRUCTURALLY COMPLETE COUNT ALSO CONTAINS DEPENDENCY GAPS
+- Ranked history interactions omit the ranking metric when it differs from the
+  multiplied metric. Ranking requires all five same-side values and tie identity.
+- 180 coherent rank minute-product columns per LIVE head omit the current clock.
+- Exact account/hero/team/side selector consumption needs typed transitive edges,
+  not a requiresExactSelectorBinding flag or a generic formula-name string.
+- 500 emitted level residual/z columns have no native-level historical reference
+  producer. Implement it from proved prior Steam levels; never substitute XPM or
+  final levels. This is a producer gap, not evidence the source lacks level.
+- Literal ultimate, position, timer and buyback fields also need separate formula
+  and physical-meaning statuses. A faithful raw copy is not a verified mechanic.
+The attached formula contract supplies exact operands, units, support and clocks.
+
+F7 — REMAINING FAMILY AND SOURCE DELIVERY WORK
+Thirty-one zero-emission family labels are not automatically missing numeric
+features: some are metadata/composition, labels, duplicate content or future
+learned priors. Record the actual disposition instead of manufacturing columns.
+Real unfinished work includes native-level reference, rich per-hero trajectories,
+structure decoding, historical series recovery and qualified style/closing
+statistics. Other mechanics require patch/event/source evidence. The complete
+79-family/14-catalogue ledger must distinguish implementation gaps from unavailable
+measurements and future learned state. Preserve all agreed feature vocabulary.
+The old opaque Roshan/history branch remains explicitly ineligible; it does not
+invalidate the separately qualified new Roshan event/rule features.
+
+WHAT REMAINS SOUND IN THE REVIEWED SCOPES
+The first complete draft freezes history cutoff t0; later identity disclosure t1
+selects against that same history. Completed current-map facts are excluded.
+The retained corpus keeps version chains before resolving a target-specific view.
+Current dynamic inputs are one Steam GLG scoreboard profile with raw/receipt proof,
+coherent identity, monotone continuity and final currentness fences. No new leak
+of the current map's final outcome was found in these inspected joins.
+The optional prior-Steam modality now exists, but a supplied handle is not proof
+that real retained inputs populate it. An offline raw+receipt intake ledger and
+coverage audit are still required. No new HTTP acquisition is authorized here.
+Series contexts retain nominal-team orientation and completed prior-map prefixes;
+PRE series need not invent an unknown first-map ID or Radiant/Dire assignment.
+These statements concern inspected paths, not a proof that every possible defect
+in the application has been excluded.
+
+SPEED AND RESOURCE DECISION
+One recorded cold LIVE operation took250.016s: generation36.938s,
+commit149.625s and read62.433s. First remove repeated invariant metadata work and
+whole-root IO; preserve proofs/durability. Do not rewrite HTTP/API in C++ blindly.
+Native adoption still requires >=30% complete-operation improvement after the JS/
+storage optimization, exact semantics and bounded resources. No working native
+link/benchmark is established by the older successful compile-only receipt.
+Keep30/9/8/2GiB and256MiB encoded limits,4CPUs,min4GiB free,STOP/locks and finite
+wall bounds. Per-root256MiB physical storage is a DIFFERENT limit; bounded shards
+and deduplicated contracts must account for it without silently increasing it.
+
+NEXT ACTION / REVIEW PACKAGE
+Read outputs/Aegis-Astra-R8-architecture-20261026.txt and
+AEGIS-SOL-PLAN-2026-10-26-R8.txt, then use the exact R8 handoff.
+Supporting independent read-only reports:
+work/astra-r7-review-20261026/causality/ASTRA-R7-CAUSALITY-REVIEW.txt
+work/astra-r7-review-20261026/semantics/ASTRA-R7-SEMANTIC-REVIEW.txt
+work/astra-r7-review-20261026/semantics/FORMULA-CONTRACTS.txt
+work/astra-r7-review-20261026/storage/ASTRA-STORAGE-MODEL-CONTRACT-REVIEW.txt
+New review/plan documents stay local for the next substantive Sol source block.
+PR12 is already merged; do not republish it. Training and deployment remain OFF.

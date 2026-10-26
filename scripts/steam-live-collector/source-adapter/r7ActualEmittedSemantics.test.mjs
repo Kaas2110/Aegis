@@ -16,6 +16,8 @@ import {createUnifiedFeatureProducer} from './unifiedFeatureProducer.mjs';
 import {syntheticRichProducerFixture} from './r5RichProducer.fixtures.mjs';
 import {advanceSeriesHistoryTarget} from './seriesHistoryTarget.mjs';
 import {draftArgs,pinned,roster} from './observedDraftHistory.fixtures.mjs';
+import {auditProjectedRowDataCoverage} from '../../feature-registry/projected-row-data-coverage.mjs';
+import {createDiagnosticResourceConfiguration,RICH_DIAGNOSTIC_RESOURCE_PROFILE} from './diagnosticResourceConfiguration.mjs';
 
 const AT='2026-10-23T12:40:00Z';
 const OPT_IN=process.env.AEGIS_R7_ACTUAL_EMITTED_SEMANTICS==='1';
@@ -45,12 +47,13 @@ function prematchInputs(){
  * building any ledger. Only compact receipts and private schema leases escape.
  * Every numeric value/missing bit below comes from the actual producer output. */
 function capturePhase(phase,arena,config){
+ const resourceConfiguration=createDiagnosticResourceConfiguration({profile:RICH_DIAGNOSTIC_RESOURCE_PROFILE,resourceArena:arena});
  let producer=null,bundle=null,richFixture=null;const held=[];
  try{
   if(phase==='POST'||phase==='LIVE'){
-   richFixture=syntheticRichProducerFixture({resourceArena:arena});producer=richFixture.producer;bundle=richFixture.generate(phase==='LIVE'?30:null);
+   richFixture=syntheticRichProducerFixture({resourceArena:arena,resourceConfiguration});producer=richFixture.producer;bundle=richFixture.generate(phase==='LIVE'?30:null);
   }else{
-   producer=createUnifiedFeatureProducer({...config,resourceArena:arena});bundle=producer.generateFeatureBundle(phase==='PRE'?prematchInputs():{mode:phase,...seriesInputs(phase==='BETWEEN'?1:0)});
+   producer=createUnifiedFeatureProducer({...config,resourceArena:arena,resourceConfiguration});bundle=producer.generateFeatureBundle(phase==='PRE'?prematchInputs():{mode:phase,...seriesInputs(phase==='BETWEEN'?1:0)});
   }
   assert.equal(bundle.mode,phase);assert.equal(bundle.eligibleForTraining,false);assert.equal(bundle.eligibleForServing,false);assert.equal(bundle.recordedPrediction,false);assert.equal(bundle.semanticStatus.sourceInventoryHash,digest(config.sourceInventory));
   if(phase==='SERIES_PRE'||phase==='BETWEEN'){assert.equal(bundle.matchId,null);assert.equal(bundle.targetBinding.mapId,null);assert.equal(bundle.targetBinding.mapSides,null);assert.ok(bundle.components.seriesHistorical?.names.length>0);assert.equal(bundle.components.legacyNative,null);}
@@ -62,12 +65,15 @@ function capturePhase(phase,arena,config){
    const lease=producer.retainSchema(route.schemaRef.sha256);assert.ok(lease,'actual schema must retain its private compiler ownership');
    const historyComponent=bundle.components.seriesHistorical??bundle.components.historical;
    const item={lease,route:{targetId:route.targetId,stateMode:route.stateMode,schemaSha256:route.schemaRef.sha256,namesSha256:route.schemaRef.namesSha256,featureCount:route.schemaRef.featureCount,historicalScopeQualified:historyComponent?.audit?.scopeQualified??null,historicalPopulationBasis:historyComponent?.audit?.populationBasis??null,sourceAdmissionClassification:bundle.sourceAdmission?.classification??null,sourceAdmissionDynamicAllowed:bundle.sourceAdmission?.dynamicDiagnosticAllowed??false},phase};held.push(item);
+   const fn=route.featureFunctionContract;assert.ok(fn);item.route.featureFunction={sha256:fn.sha256,producerCompatibilitySha256:fn.producerCompatibilitySha256,generalized:fn.generalized,unclassifiedDefinitionCount:fn.unclassifiedDefinitionCount,rowParameterBindingsSha256:fn.rowParameterBindingsSha256};
    assert.equal(lease.schema,route.diagnosticSchema);assert.equal(lease.descriptor.sha256,route.schemaRef.sha256);assert.equal(route.inferenceVector,null);assert.ok(item.route.featureCount>0);assert.equal(route.diagnosticVector.names.length,item.route.featureCount);assert.equal(lease.schema.definitions.length,item.route.featureCount);
    const familyIds=new Set(),sourceProfiles=new Set(),inputScopes=new Set();
    for(let i=0;i<item.route.featureCount;i++){const d=lease.schema.definitions[i];assert.equal(d.name,route.diagnosticVector.names[i]);assert.equal(typeof route.diagnosticVector.missing[i],'boolean');assert.equal(route.diagnosticVector.missing[i],route.diagnosticVector.values[i]===null);familyIds.add(d.familyId);sourceProfiles.add(d.sourceProfile);for(const scope of d.inputScopes)inputScopes.add(scope);}
    Object.assign(item.route,{actualDeclaredFamilyIds:[...familyIds].sort(),actualDeclaredSourceProfiles:[...sourceProfiles].sort(),actualDeclaredInputScopes:[...inputScopes].sort()});
    if(['PRE','SERIES_PRE','BETWEEN'].includes(phase))assert.ok(lease.schema.definitions.every(d=>!d.inputScopes.includes('current_draft')&&!d.inputScopes.includes('current_live')));
    item.route.expandedVectorSha256=digest({namesHash:item.route.namesSha256,values:route.diagnosticVector.values,missing:route.diagnosticVector.missing});
+   const coverage=auditProjectedRowDataCoverage({projection:{schema:route.diagnosticSchema,vector:route.diagnosticVector,expectedSchemaHash:route.schemaRef.sha256,projectedRowAuthority:route.projectedRowAuthority},resourceArena:arena});
+   try{item.route.featureDataCoverage=coverage.summary;assert.equal(coverage.summary.featureCount,item.route.featureCount);assert.equal(coverage.summary.realRows,0);}finally{coverage.close();}
   }
   return held;
  }catch(error){for(const item of held)item.lease.release();throw error;}
@@ -85,6 +91,7 @@ test('R7 actual current all13 schema semantics are captured exhaustively with bo
     let handle=null;const arenaBeforeAudit=arena.status();
     try{
      handle=auditor.auditSchema({schema:item.lease.schema,sha256:item.route.schemaSha256});const r=handle.receipt;
+     item.route.typedDependencyClosure=r.typedDependencyClosure;
      assert.equal(r.schemaSha256,item.route.schemaSha256);assert.equal(r.namesSha256,item.route.namesSha256);assert.equal(r.registryHash,registryHash);assert.equal(r.targetId,item.route.targetId);assert.equal(r.stateMode,item.route.stateMode);assert.equal(r.counts.definitionOccurrences,item.route.featureCount);assert.equal(r.counts.families,79);assert.equal(r.counts.legacyGroups,14);assert.equal(r.counts.legacyUnresolvedOccurrences,config.index.catalogueOccurrenceCount);assert.equal(r.exhaustiveDeclarationAudit,true);assert.equal(r.skippedDefinitions,0);assert.equal(r.counts.semanticIdentityComplete+r.counts.semanticIdentityUnresolved,item.route.featureCount);assert.equal(Object.values(r.verificationStatusCounts).reduce((a,b)=>a+b,0),item.route.featureCount);
      for(const key of ['semanticAcceptance','fullFeatureGateComplete','sourceAvailabilityAttested','observedAvailabilityMeasured','trainingAdmitted','servingAdmitted','legacyAliasesResolved'])assert.equal(r[key],false);
      // Exhaustive first pass is above; detail samples do not stand in for it.

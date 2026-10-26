@@ -93,18 +93,19 @@ function decodeNode(wire,ref,depth=0){
  if(n[0]===4)return n[1].map(child=>decodeNode(wire,child,depth+1));
  return Object.fromEntries(wire.shapes[n[1]].map((key,i)=>[wire.strings[key],decodeNode(wire,n[2][i],depth+1)]));
 }
-function factorSchema(schema,expectedSchemaHash,workingBytes,profile){
+function factorSchema(schema,expectedSchemaHash,workingBytes,profile,maxDistinctFactoringNodes){
  if(!object(schema)||own(schema,'contract')!==profile.schemaContract)fail('schema_contract');
  const definitions=own(schema,'definitions');if(!Array.isArray(definitions)||definitions.length>profile.maxFeatures)fail('definition_bound');
  // Bound the encoded construction itself, before allocating its containers or
  // serialization keys. A later logical-expansion check cannot fund these copies.
  let heldBytes=0,peakHeldBytes=0,maximumStringLength=0,stage='setup',definitionIndex=-1;
  const counts={strings:0,stringCodeUnits:0,shapes:0,shapeMapKeyCodeUnits:0,nodes:0,nodeMapKeyCodeUnits:0,nodeMapKeyEstimatedBytes:0,sourceMemoEntries:0,sourceObjectAllocations:0},nodesByTag={null:0,boolean:0,number:0,string:0,array:0,object:0};
+ const structureFailure=(reason,allocation,limit)=>{const error=Error('compact_feature_asset:'+reason);error.diagnostics=Object.freeze({contract:'aegis.compact-factoring-structure-refusal.v1',capacityProfile:profile.id,stage,allocation,featureCount:definitions.length,definitionIndex,heldBytes,peakHeldBytes,workingBytes,limit,counts:Object.freeze({...counts}),nodesByTag:Object.freeze({...nodesByTag}),maxDistinctFactoringNodes,maxDictionaryEntries:MAX_NODES,maxEncodedJsonTraversalNodes:MAX_ENCODED_NODES,maxLogicalExpandedNodes:profile.maxExpandedNodes,callerLowerLimitApplied:maxDistinctFactoringNodes<MAX_NODES,countsAreObservedPrefix:true,accounting:'explicit_estimates_not_measured_heap',limitsUnchanged:true});throw error;};
  const room=(bytes,allocation='factoring_graph')=>{if(!Number.isSafeInteger(bytes)||bytes<0||bytes>workingBytes-heldBytes){const error=Error('compact_feature_asset:factoring_working_reservation_too_small');error.diagnostics=Object.freeze({contract:'aegis.compact-factoring-working-refusal.v1',capacityProfile:profile.id,stage,allocation,definitionIndex,heldBytes,peakHeldBytes,requestedBytes:bytes,workingBytes,counts:Object.freeze({...counts}),nodesByTag:Object.freeze({...nodesByTag}),accounting:'explicit_estimates_not_measured_heap',limitsUnchanged:true});throw error;}};
  const hold=(bytes,allocation)=>{room(bytes,allocation);heldBytes+=bytes;peakHeldBytes=Math.max(peakHeldBytes,heldBytes);},drop=bytes=>{heldBytes-=bytes;};
  hold(65536,'base');
  const strings=[],shapes=[],nodes=[],stringMap=new Map(),shapeMap=new Map(),nodeMap=new Map(),memo=new WeakMap(),active=new WeakSet();
- const text=s=>{if(typeof s!=='string'||s.length>1024*1024)fail('string_bound');if(!stringMap.has(s)){if(strings.length>=MAX_NODES)fail('dictionary_bound');hold(s.length*2+128,'string_dictionary');maximumStringLength=Math.max(maximumStringLength,s.length);stringMap.set(s,strings.length);strings.push(s);counts.strings++;counts.stringCodeUnits+=s.length;}return stringMap.get(s);};
+ const text=s=>{if(typeof s!=='string'||s.length>1024*1024)fail('string_bound');if(!stringMap.has(s)){if(strings.length>=MAX_NODES)structureFailure('dictionary_bound','distinct_string_dictionary_entries',MAX_NODES);hold(s.length*2+128,'string_dictionary');maximumStringLength=Math.max(maximumStringLength,s.length);stringMap.set(s,strings.length);strings.push(s);counts.strings++;counts.stringCodeUnits+=s.length;}return stringMap.get(s);};
  function keysOf(value,maximum){
   hold(64);const keys=[];for(const key in value)if(Object.hasOwn(value,key)){if(keys.length>=maximum)fail('definition_shape_bound');hold(16);keys.push(key);}keys.sort();return{keys,charge:64+keys.length*16};
  }
@@ -131,7 +132,7 @@ function factorSchema(schema,expectedSchemaHash,workingBytes,profile){
    if(shape===undefined){hold(128,'shape_map_entry');shape=shapes.length;shapes.push(keyRefs);shapeMap.set(shapeKey,shape);counts.shapes++;counts.shapeMapKeyCodeUnits+=shapeKey.length;}else temporary+=keyRefsCharge+shapeKeyCharge;
    hold(keys.length*16);nodeCharge+=keys.length*16;node=[5,shape,keys.map(key=>encode(own(v,key),depth+1))];
   }else fail('plain_definition');
-  const keyCharge=node[0]===4?64+node[1].length*14:node[0]===5?64+node[2].length*14:128;hold(keyCharge,'node_map_key');const key=JSON.stringify(node);if(!nodeMap.has(key)){if(nodes.length>=MAX_NODES)fail('node_bound');hold(128,'node_map_entry');nodeMap.set(key,nodes.length);nodes.push(node);counts.nodes++;counts.nodeMapKeyCodeUnits+=key.length;counts.nodeMapKeyEstimatedBytes+=keyCharge;nodesByTag[['null','boolean','number','string','array','object'][node[0]]]++;}else drop(nodeCharge+keyCharge);const ref=nodeMap.get(key);if(v&&typeof v==='object'){active.delete(v);memo.set(v,ref);counts.sourceMemoEntries++;}drop(temporary);return ref;
+  const keyCharge=node[0]===4?64+node[1].length*14:node[0]===5?64+node[2].length*14:128;hold(keyCharge,'node_map_key');const key=JSON.stringify(node);if(!nodeMap.has(key)){if(nodes.length>=maxDistinctFactoringNodes)structureFailure('node_bound','distinct_encoded_dag_nodes',maxDistinctFactoringNodes);hold(128,'node_map_entry');nodeMap.set(key,nodes.length);nodes.push(node);counts.nodes++;counts.nodeMapKeyCodeUnits+=key.length;counts.nodeMapKeyEstimatedBytes+=keyCharge;nodesByTag[['null','boolean','number','string','array','object'][node[0]]]++;}else drop(nodeCharge+keyCharge);const ref=nodeMap.get(key);if(v&&typeof v==='object'){active.delete(v);memo.set(v,ref);counts.sourceMemoEntries++;}drop(temporary);return ref;
  }
  hold(64+definitions.length*16,'definition_refs');const refs=[];stage='encode_definitions';for(let i=0;i<definitions.length;i++){definitionIndex=i;const d=own(definitions,String(i));if(!object(d)||typeof own(d,'name')!=='string')fail('definition_name');refs.push(encode(d));}
  stage='header';const listed=keysOf(schema,200000);hold(128+listed.keys.length*96);const header={};for(const key of listed.keys)if(key!=='definitions')Object.defineProperty(header,key,{value:own(schema,key),enumerable:true});drop(listed.charge);
@@ -167,9 +168,12 @@ function makeRecord(data,c,descriptor,wireBytes,{schemaHold=null}={}){
  return{data,arena:c.arena,profile:c.profile,descriptor:freeze(descriptor),chargedBytes,anchor:Object.freeze({contract:descriptor.contract,hash:descriptor.expandedSchemaHash}),refs:0,decodedPageDefinitions:0,schemaHold};
 }
 /** Reserve before walking/copying/hashing. null means denied; validation throws. */
-export function createCompactFeatureSchema(schema,{expectedSchemaHash,...options}={}){
+export function createCompactFeatureSchema(schema,{expectedSchemaHash,maxDistinctFactoringNodes=MAX_NODES,...options}={}){
+ // Optional LOWER construction bound only. It does not enlarge any codec/profile
+ // limit, alter stored bytes or grant wire/read admission to a larger graph.
+ if(!Number.isSafeInteger(maxDistinctFactoringNodes)||maxDistinctFactoringNodes<1||maxDistinctFactoringNodes>MAX_NODES)fail('factoring_node_limit');
  const initial=config(options),work=initial.arena.reserve(initial.workingBytes);if(!work)return null;
- try{if(!SHA.test(expectedSchemaHash??''))fail('expected_schema_hash');const profile=sourceProfile(schema,options.capacityProfile),c=config({...options,capacityProfile:profile.id}),{wire,expansion}=factorSchema(schema,expectedSchemaHash,c.workingBytes,profile),wireBytes=measureBoundedJsonBytes(wire,{maxBytes:c.maxWireBytes,maxNodes:MAX_ENCODED_NODES});
+ try{if(!SHA.test(expectedSchemaHash??''))fail('expected_schema_hash');const profile=sourceProfile(schema,options.capacityProfile),c=config({...options,capacityProfile:profile.id}),{wire,expansion}=factorSchema(schema,expectedSchemaHash,c.workingBytes,profile,maxDistinctFactoringNodes),wireBytes=measureBoundedJsonBytes(wire,{maxBytes:c.maxWireBytes,maxNodes:MAX_ENCODED_NODES});
   const record=makeRecord(freeze(wire),c,{contract:schemaContract(profile),...marker(profile),...logicalCosts(profile,expansion),expandedSchemaHash:expectedSchemaHash,namesHash:wire.namesHash,featureCount:wire.featureCount,wireBytes},wireBytes);record.expansion=expansion;return install(record);
  }finally{work.release();}
 }

@@ -1,0 +1,1731 @@
+{
+  "contract": "aegis.r8.static-family-catalogue-disposition.v1",
+  "date": "2026-10-26",
+  "basis": "Current staged factory source and exact Astra79-family meanings; static review, not a new emission or real-data audit",
+  "familyCount": 79,
+  "catalogueCount": 14,
+  "sourcePathsReviewed": "B/CHANGED-PATHS.json plus existing baseline family factories",
+  "allFeaturesHaveData": false,
+  "allFamiliesComplete": false,
+  "trainingAdmitted": false,
+  "servingAdmitted": false,
+  "families": [
+    {
+      "familyId": "I01",
+      "title": "Map, side, account, hero and team identity",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Bind account, hero, side and team; hash roster and draft. Array order never proves role.",
+      "detail": "Current identity and row capability metadata; not continuous nominal strength.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "I02",
+      "title": "Partial and late roster disclosure",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Known flags and coverage; account disclosure at t1 creates a validFrom revision while retaining history cutoff t0.",
+      "detail": "Disclosure/support metadata and masks; no invented account IDs.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "I03",
+      "title": "Proven roles and distinct economic ranks",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Farm roles 1-5 require evidence; NW/GPM ranks 1-5 and historical lane categories 1-4 are separate.",
+      "detail": "Economic ranks implemented separately; farm roles require retained role evidence.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "I04",
+      "title": "Format, tournament, region, schedule and rest",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Known BO format, wins required and map number; rest days, recent match counts and versioned league/tier/region.",
+      "detail": "Series format and target identity supported; tournament/tier/region/rest completeness remains source-dependent.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H01",
+      "title": "Historical team strength and uncertainty",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Chronological result rating and expected win, with support and uncertainty; preserve side differences.",
+      "detail": "Causal chronological team result reference K32 implemented; no learned uncertainty or intrinsic-skill claim.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H02",
+      "title": "Team form, streaks and recent trend",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Raw and explicitly smoothed win fractions over 7/30/90 days, streaks, weighted recent-minus-long trends and support.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H03",
+      "title": "Head-to-head and prior opponent strength",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Weighted head-to-head win fractions and support; result/performance residual against a historically available expectation.",
+      "detail": "Directional team-pair cohorts present; prior-opponent pre-map expectation residual still requires its causal state.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H04",
+      "title": "Roster continuity and shared experience",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Overlap with previous N rosters, stability and days together; distribution of shared distinct-map counts.",
+      "detail": "Last complete-roster overlap/Jaccard, shared maps and change age implemented by chronological reference.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H05",
+      "title": "Individual player form",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Raw and explicitly smoothed win fractions over 7/30/90 days, trends and roster min/max/SD/quantiles.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H06",
+      "title": "Selected player-hero form and comfort",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Win fractions over 30/90 days and lifetime, effective support, pick share, days since last pick and hero-minus-player form.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H07",
+      "title": "Individual result-rating proxy",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Chronological player result Elo/Glicko, uncertainty and support; these do not measure personal MMR or mechanical skill.",
+      "detail": "Causal five-account-lineup result reference K32 implemented; not personal MMR.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H08",
+      "title": "Historical player performance",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Past observed GPM/XPM, hero/tower damage per minute, deaths/minute, KDA, last hits/minute and wards/minute over 30/90 days.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H09",
+      "title": "Player-hero performance relative to self and population",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Player-hero minus hero-population mean, divided by available population SD; player-hero minus player and 7/30 versus 90-day trends.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H10",
+      "title": "Player by team by hero",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Player-team lift, selected-hero-in-team lift and (player-team-hero minus player-team) minus (player-hero minus player).",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H11",
+      "title": "Player resource efficiency and pressure",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Historical hero/tower damage, GPM and deaths ratios; damage/GPM and opponent-pressure cross-products with explicit units.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H12",
+      "title": "Roster profile distributions",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Quartiles, min/max/SD, coverage, all 25 opposing player comparisons, dominance and overlap; role pairing requires proof.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H13",
+      "title": "Team late-game duration tendency",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Historical fraction with duration at least 40 minutes over 90 days with support at least 5; retain proposed threshold curves 25-80 and quantiles.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "H14",
+      "title": "Player, hero and player-hero late-game tendency",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Three separate 90-day fractions with duration at least 40 minutes; hero population includes known heroes with anonymous accounts.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D01",
+      "title": "Observed draft identities and bans",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Signed hero one-hot; picks, bans, slots and order only when actually observed. Known unpicked zero differs from unknown draft.",
+      "detail": "Selected side/hero identities implemented; bans/order require explicit retained fields.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D02",
+      "title": "Historical hero strength and popularity",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Hero win fraction, pick share and ban rate with 30/90-day decay and effective counts; raw and smoothed estimates remain distinct.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D03",
+      "title": "Allied hero pairs",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Pair identities plus historical pair win fraction, support, decay and lift relative to hero marginal rates.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D04",
+      "title": "Directed counters and protective bans",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Directed hero A against hero B historical win fractions; weighted mean/min counter and removal of an adverse matchup by a known ban.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D05",
+      "title": "Team-hero comfort pool",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Team-hero win fraction, support and pick share; selected-draft comfort and undrafted pool summaries use distinct definitions.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D06",
+      "title": "Patch and letter revision meta",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Patch-conditioned pick/ban/win rates and 7/30/90-day trends; old-to-new patch change, uncertainty, side and proven-role strata.",
+      "detail": "Letter-patch-specific meta needs proved patch identity plus as-of population; calendar inference separate.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D07",
+      "title": "Pro, Immortal, regional and role populations",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Separate meta rates and residuals by declared population/rank/region/role; transfer priors only with an explicit namespace.",
+      "detail": "Retained pro cohort cannot be relabeled Immortal/region/role population.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "D08",
+      "title": "Hero mechanics and rules version",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Versioned hero attributes, ability types, scaling, push/save/control descriptors and patch-valid facets/innates.",
+      "detail": "Qualified patch-specific mechanics rules absent for the full intended inventory.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "P01",
+      "title": "Allied player pairs",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Conditional result/performance for account A and B; raw/smoothed rates, lift versus individuals and 30/90-day distinct-map support.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "P02",
+      "title": "Player-hero with a specific ally",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Result/performance for account A on hero A given ally account B, minus the account-hero baseline.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "P03",
+      "title": "Player-hero with an allied hero",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Conditional account A, hero A and ally hero B, compared with own-hero and hero-pair baselines.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "P04",
+      "title": "Two specified players on two heroes",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Conditional account A/hero A/account B/hero B with a symmetric teammate key; opposing variants stay separate.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "P05",
+      "title": "Individual opposition and hero triples",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs",
+      "meaning": "Player-hero versus opponent player-hero, team triples/archetypes and separate additive versus conditional residuals.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "S01",
+      "title": "Historical team tempo and aggression",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs; causalDraftStyleFit.mjs; observedDraftFeatureBundle.mjs",
+      "meaning": "Kills/deaths per played minute, early engagements, farm-versus-fight and tempo distributions; name proxies explicitly.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "S02",
+      "title": "Historical item, ward and buyback style",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs; causalDraftStyleFit.mjs; observedDraftFeatureBundle.mjs",
+      "meaning": "Past observed Blink/BKB/Midas/Battlefury/Radiance purchase timing and shares, ward and buyback rates.",
+      "detail": "Historical ward/native performance exists; full item/buyback event timing distributions need event histories.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "S03",
+      "title": "Results against opponent style",
+      "disposition": "required_historical_prematch_context_not_supplied",
+      "producerReferences": "historicalRelationalFeatures.mjs; causalDraftStyleFit.mjs; observedDraftFeatureBundle.mjs",
+      "meaning": "Similarity-weighted result/style residual against historically available opponent style, expectation and supported response cohorts.",
+      "detail": "Approved scalar opponent-pace kernel has target pace and final historical maps, but no bound per-prior-map prematch pace/expectation closure at that prior horizon. See B/REQUIRED-FAMILY-INPUTS.json; final rates and post-result states cannot substitute.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "S04",
+      "title": "Draft compatibility with team style",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs; causalDraftStyleFit.mjs; observedDraftFeatureBundle.mjs",
+      "meaning": "Team style minus hero-draft profile, player-hero comfort style and draft against the known opponent context.",
+      "detail": "Exact same-team marginal versus all-five team-hero conditional style contrasts implemented.",
+      "allowedTargets": [
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "S05",
+      "title": "Closing speed and late-game style",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs; causalDraftStyleFit.mjs; observedDraftFeatureBundle.mjs",
+      "meaning": "Historical time to close conditional on earlier advantage/minute/draft/Roshan, high-ground conversion and median/upper quartile.",
+      "detail": "Approved prior90d raw-native landmark10/20/30min NWlead>=1000/deficit<=-1000 producer and96historical columns added. Requires explicit durationKnownAt and qualified prior raw frames; remainingduration=finalduration-landmark; anchorlag separate. PRE/BETWEEN static histories without prior-native modality remain missing, not equivalent snapshots.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "S06",
+      "title": "Form by current trajectory",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "historicalRelationalFeatures.mjs; causalDraftStyleFit.mjs; observedDraftFeatureBundle.mjs",
+      "meaning": "Form by current score leader/recovery/hero/minute and style by momentum; preserve independent main effects.",
+      "detail": "Current lead trajectory times exact frozen team form/late/closing products;720 ambiguous bindings corrected.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L01",
+      "title": "Observed clock, score and phase",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Elapsed seconds/minutes/log/minute-80 clip, side kills, difference, total and rate; phase flags require valid admission.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L02",
+      "title": "Native per-hero net worth",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed NW, log1p, team share, centered values, team/side summaries and hero by NW by minute.",
+      "detail": "Literal net_worth supported;9,232 gold/net_gold descendants per LIVE head remain opaque diagnostic vocabulary.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L03",
+      "title": "Native per-hero GPM and XPM",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed native GPM/XPM, shares, centered values and minute/context products; NW divided by time is not GPM.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L04",
+      "title": "Observed levels and XP thresholds",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed level/team differences; XP-to-next and ability thresholds require raw XP plus versioned rules.",
+      "detail": "Literal level supported; XP thresholds still need actual XP plus patch-specific rules.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L05",
+      "title": "Economic rank and resource distribution",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "NW/GPM ranks 1-5, rank-pair gaps, HHI, top share, spread and median; rank never implies farm role.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L06",
+      "title": "Hero-minute economic reference deviations",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed native metric minus past hero-minute mean, with SD-based z score, support and explicit windows.",
+      "detail": "Prior native_level producer added to populate existing500 level residual/z outputs; no duplicate outputs.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L07",
+      "title": "Reconstructed earned-gold and XP prefixes",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Cumulative earned gold/XP prefix slopes, shares and hero/context interactions; keep this source profile distinct from net worth.",
+      "detail": "OpenDota earned-resource prefixes remain distinct from native Steam NW/GPM and not Steam-only live equivalent.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L08",
+      "title": "Observed trajectories and actual gaps",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Deltas over actual time gaps for 60/120/180/300/600-second windows; report true span/count and remain missing without prefix support.",
+      "detail": "Appended3000 canonical per-hero NW/GPM/XPM window-rate columns; no second temporal calculation.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L09",
+      "title": "Lead retention and recovery",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Min/max lead, sign changes, recovery from minimum, retreat from maximum, time since lead change and short-long momentum.",
+      "detail": "Observed lead suffix summaries preserve exact anchors, receipt order and missingness.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L10",
+      "title": "Current per-player combat and farm",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed kills/deaths/assists, death rate, last hits/denies, participation and hero/context residuals.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L11",
+      "title": "Alive heroes, health, mana and return times",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed alive counts, respawn timers, weighted absence, health/mana ratios and staggered returns.",
+      "detail": "Raw respawn timer remains opaque; health/mana/proved life-state source qualification incomplete.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L12",
+      "title": "Ultimates and key abilities",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed readiness/cooldown windows and teamfight ability availability with patch-valid hero-ability mapping.",
+      "detail": "Observed raw ultimate enum/cooldown diagnostic only until mechanical semantics qualified.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L13",
+      "title": "Items, backpack, neutral slots and consumables",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed per-hero item identities and semantic groups, BKB/Blink/save/dispel/break/counter items with distinct slots.",
+      "detail": "Literal GLG six slots only; not full inventory/backpack/neutral slots.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L14",
+      "title": "Hero and draft resource power timings",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Hero by level/items/NW/minute, distance to historical thresholds and five-player power distributions/matchups.",
+      "detail": "Historical/rank/hero/current-resource interactions; exact sorting clock and selector inputs added.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L15",
+      "title": "Buyback and death consequences",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed buyback availability/cost/cooldown, dead hero by buyback by high-ground risk and native unreliable gold if present.",
+      "detail": "Literal has_buyback/raw timer retained but semantic availability/cost/rules unqualified.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L16",
+      "title": "Positions, zones and prospective engagements",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Same-frame positions to team spread, objective distance and heroes near Roshan/high-ground using versioned geometry.",
+      "detail": "Raw coordinates retained; no qualified coordinate transform or geometric interpretation.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L17",
+      "title": "Vision, wards, smoke and map control",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed ward/smoke states, coverage/expiry and objective vision, using only prefix event logs.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L18",
+      "title": "Structures and exposed high ground",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Verified native decoder for lane structures alive/destroyed, exposed tiers/base, lane asymmetry and lead by conversion.",
+      "detail": "Raw structures are not a qualified lane/tier/alive decoder; source/rule contract still required.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L19",
+      "title": "Other objectives and day/night",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Patch-valid Tormentor/rune/Wisdom/Lotus availability, windows, control, day/night and known objective history.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "L20",
+      "title": "Lane pressure and ability to finish",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "observedDraftFeatureBundle.mjs; playerHeroEconomyFeatures.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed creep/wave positions if available; alive push heroes by items, structures, Aegis and historical team closing style.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R01",
+      "title": "Raw Roshan timer semantics",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Retain the raw timer and separate semantic proof; zero never proves alive and a countdown is not an absolute event time.",
+      "detail": "Raw timer diagnostics do not certify respawn seconds or alive.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R02",
+      "title": "Roshan death, respawn and uncertain intervals",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Confirmed events to elapsed time; patch min/max rules to earliest/latest respawn; inferred intervals stay separately named.",
+      "detail": "Qualified event/rule death and respawn intervals supported when supplied.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R03",
+      "title": "Aegis holder, side, lifetime and consumption",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed pickup to holder/side; known lifetime to expiry; consumed, lost and expired remain distinct.",
+      "detail": "Qualified current holder/episode terminal context supported; prior Aegis conversion histories not implemented.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R04",
+      "title": "Aegis steal and separate killer/picker",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Compare proven Roshan killer side with Aegis picker side or a direct snatch event; retain contested-fight context.",
+      "detail": "Steal requires exact death/pickup side linkage; no inferred theft from mere possession.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R05",
+      "title": "Roshan ordinal and rewards",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Known completed Roshan count and patch-valid reward availability and beneficiary context.",
+      "detail": "Confirmed objective event counts exist via R02; ordinal/reward semantics need qualified event/rule history.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R06",
+      "title": "Roshan by economy, form and closing style",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Respawn window/Aegis time by NW/GPM/score/level difference by frozen form/style, preserving side asymmetry.",
+      "detail": "Qualified current objective x coherent economy x frozen finishing-style context shared by all four LIVE heads.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "R07",
+      "title": "Roshan-taking and contest strength",
+      "disposition": "partial_or_unavailable_qualified_source_or_rules",
+      "producerReferences": "roshanFeatures.mjs; observedDraftFeatureBundle.mjs; coherentEconomyContextFeatures.mjs",
+      "meaning": "Observed hero/items/ultimate/alive composition near the pit and historical Roshan speed, contest and steal tendencies.",
+      "detail": "No qualified Roshan-taking/contest power metric; retain explicit source gap.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q01",
+      "title": "Series score and wins required",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Known BO format, team1/team2 score and wins required, map position and terminal state; current sides bind separately.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q02",
+      "title": "Completed previous series maps",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Previously received winner/duration/kills/lead trajectory/draft/items/style/strength residuals and latest available summaries.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q03",
+      "title": "Historical recovery and reverse sweeps",
+      "disposition": "implementation_gap_preserved_inventory",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Past probability of next win given previous loss, expectation, format and roster; recovery pace and comeback counts.",
+      "detail": "Historical series recovery/reverse-sweep cohorts not implemented by this track.",
+      "allowedTargets": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q04",
+      "title": "Draft adaptation between maps",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Prior draft exposures to changes in observed bans/picks, repeat heroes and roster disclosures; future draft stays unknown.",
+      "detail": "Eight current-series pick-based adaptation outputs already exist in seriesContextFeatures.mjs: own-team prior hero variety/draft coverage/current repeats/novelty. Bans lack qualified input; exact additional opponent-change variants need reviewed definitions. Partial prior drafts do not prove globally never-used heroes.",
+      "allowedTargets": [
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q05",
+      "title": "Map probability and contextual series branches",
+      "disposition": "future_learned_state",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Additional versioned map probability; conditional series branches or a direct series model retain the full admissible rich shared context.",
+      "detail": "Future causal out-of-fold map probability/series branches; no model run or fitted prior generated.",
+      "allowedTargets": [
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q06",
+      "title": "Earlier model estimate as an extra prior",
+      "disposition": "future_learned_state",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "Versioned earlier probability/logit with support and uncertainty, separate from the complete historical vector; future OOF binding required.",
+      "detail": "Future out-of-fold predecessor-model prior; training remains paused.",
+      "allowedTargets": [
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "Q07",
+      "title": "Complete shared series context",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "seriesContextFeatures.mjs; seriesPrematchTargets.mjs; historicalRelationalFeatures.mjs",
+      "meaning": "All admissible player/hero/team history, form/style, current observed draft/live state, previous maps, format/score, recovery and adaptation; phase/source/time masks preserve scope.",
+      "detail": "Composition of series score/format/history/current-map context, not filler numeric columns.",
+      "allowedTargets": [
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "T01",
+      "title": "Historical kill and duration distributions",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Team/player/hero/style means, SD, quantiles and tail fractions, conditional on admissible context; previous maps only after receipt.",
+      "detail": "Historical duration/kill summaries composed from H13/H14/outcome statistics; no new model quality claim.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "T02",
+      "title": "Live finishing risk and kill intensity",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Remaining hazard conditioned on current clock/score/economy/Roshan/structures/style, recent kill tempo and lulls.",
+      "detail": "Current score/clock/resources/objects are covariates for future fitted risk/intensity models; no current fit.",
+      "allowedTargets": [
+        "LIVE_KILLS",
+        "LIVE_DURATION"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "T03",
+      "title": "Candidate axis and distribution support",
+      "disposition": "implemented_partial_diagnostic_pending_coverage",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Final or remaining count/time candidate crossed with state, monotone CDF, observed lower bound, push mass and right tail.",
+      "detail": "Candidate-axis deterministic distribution constraints kept; not probability quality.",
+      "allowedTargets": [
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_KILLS",
+        "LIVE_DURATION"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "T04",
+      "title": "Bookmaker markets and own line grid",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Own grid derived from the coherent model CDF; chosen bookmaker lines evaluated with our CDF, with separate odds/push/settlement metadata.",
+      "detail": "Own versus bookmaker grids are presentation/market routing; no synthetic bookmaker odds.",
+      "allowedTargets": [
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_KILLS",
+        "LIVE_DURATION"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "O01",
+      "title": "Completeness, masks, support and uncertainty",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Value, missingness, exact support and effective sample size; distinguish structural zero and unknown; joint availability includes failed attempts.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "O02",
+      "title": "Latency, clock gaps and source eligibility",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Receipt age, measured event delay where proven, actual prefix gaps and profile/phase admission; cross-stream gaps do not prove event latency.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "O03",
+      "title": "Patch, causal basis and provenance",
+      "disposition": "composition_or_metadata_with_content_references",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Recorded/reconstructed status, exact availability, source/hash/transform/fold binding and patch-assignment provenance.",
+      "detail": "Existing canonical partial source factories remain; this static ledger does not assert full-family numeric coverage or source95 acceptance.",
+      "allowedTargets": [
+        "PRE_MAP_WIN",
+        "PRE_KILLS",
+        "PRE_DURATION",
+        "POST_MAP_WIN",
+        "POST_KILLS",
+        "POST_DURATION",
+        "LIVE_MAP_WIN",
+        "LIVE_KILLS",
+        "LIVE_DURATION",
+        "SERIES_PRE",
+        "SERIES_BETWEEN",
+        "SERIES_LIVE"
+      ],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    },
+    {
+      "familyId": "O04",
+      "title": "Current-map labels and final metrics",
+      "disposition": "label_only_for_current_map",
+      "producerReferences": "unifiedFeatureProducer.mjs; featureProjectionCompiler.mjs; feature registry",
+      "meaning": "Current winner/final kills/final duration belong only to label/evaluator joins; changing a label must not change earlier features.",
+      "detail": "Current final outcomes/statistics are labels only, never early-current-map features.",
+      "allowedTargets": [],
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "fullFamilyComplete": false,
+      "modelAdmission": false
+    }
+  ],
+  "catalogues": [
+    {
+      "catalogueId": "postdraft6668",
+      "count": 6668,
+      "orderedNameHash": "c361b3d5a8f33d85acbab8cb3f167bc0fb4ad045a7455888cd5e435c4c77588b",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "observed-live268",
+      "count": 268,
+      "orderedNameHash": "adb64f86946a66bda6bd83e8abd781ea6222dad794d0826608e9c628d48ac0b9",
+      "disposition": "mechanical_bridge_candidates_exist_no_equivalence_or_old_weight_compatibility_claim",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "historical-prior7148",
+      "count": 7148,
+      "orderedNameHash": "51f9cc2daef9db42acfddeed742d11a316d3b994d3795d47c169969dc8875a0d",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "wide-live36114",
+      "count": 36114,
+      "orderedNameHash": "a0b8952ade5da01c5e368f21be96c75140fb97d243bf058ceab5f5e1f457d380",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "series14255",
+      "count": 14255,
+      "orderedNameHash": "1bf309042da1a9dba7a7bca4553dd9b47c6387093e45877007145776a9d84fe8",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "totals37024",
+      "count": 37024,
+      "orderedNameHash": "4deaf4d8b4d8219aac910678ced559a648a2451c86584be98e540917fedaa267",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "totals-state6",
+      "count": 6,
+      "orderedNameHash": "a14b1c51a52f1b48d589966259ab0d28d3c31900d55f6710969928f7e2e93e89",
+      "disposition": "mechanical_bridge_candidates_exist_no_equivalence_or_old_weight_compatibility_claim",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "totals-draft1006",
+      "count": 1006,
+      "orderedNameHash": "e8d2e9bf107704abcb66aebd9dfca0ff454d5e233fcd9b09fd7b9ff2637cde43",
+      "disposition": "mechanical_bridge_candidates_exist_no_equivalence_or_old_weight_compatibility_claim",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "individual-live45938",
+      "count": 45938,
+      "orderedNameHash": "7c38167462d6c587ff50edbd332cfa3e309610cf1861cc7bffe55325357c5f69",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "corrected-rich-totals46848",
+      "count": 46848,
+      "orderedNameHash": "9e326e1c28d767bee052d2bf552edba22872a79922fc07896d93eb33d412fb46",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "phase-totals37024",
+      "count": 37024,
+      "orderedNameHash": "4deaf4d8b4d8219aac910678ced559a648a2451c86584be98e540917fedaa267",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "c3-networth80142",
+      "count": 80142,
+      "orderedNameHash": "44266b8da4fa3a101dc879ac25a16c0d324c7d5b9ce3e38d29fb80a9958c916e",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "earned-economy114450",
+      "count": 114450,
+      "orderedNameHash": "6dfc2b941920739298c28f5dd4b13f60ed841942e476d0c338d5bb8106c0928b",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    },
+    {
+      "catalogueId": "steam-coherent38468-v2",
+      "count": 38468,
+      "orderedNameHash": "1cab2a91d241aa12c5b8a88bb35537e90cc36e5e36eb4addd008fa50ef36fc74",
+      "disposition": "preserved_old_schema_requires_exact_per_occurrence_bridge",
+      "evidence": "feature-registry canonical index and legacy-steam-matrix; current R8 source changes do not certify old aliases",
+      "allOccurrencesMigrated": false,
+      "sourceCoverage": "unmeasured_by_this_static_track",
+      "trainingAdmitted": false
+    }
+  ]
+}

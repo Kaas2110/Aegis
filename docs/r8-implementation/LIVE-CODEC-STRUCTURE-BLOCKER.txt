@@ -1,0 +1,92 @@
+Current R8 LIVE compact structure blocker, 26 October 2026
+
+Observed failure and preserved evidence
+Root actual-final-29 failed in617.078seconds, peak owned process-tree commit
+3949719552bytes. Exact log/resource receipts remain under
+work/sol-r7-resume-20261026/r8-actual13-delivery-coverage-29.*.
+PRE89.607s, independent SERIES_PRE21.456s and POST303.397s completed actual owned
+native persistence, decoded private restored-vector delivery and per-feature
+coverage exports before the LIVE failure. These partial successes do not establish
+all13 success, positive LIVE routing, BETWEEN, final restart/admin or warm acceptance.
+POST alone took54.349s generation,165.047s commit and73.568s saved reload/input
+recording, plus10.017s coverage export. No model-quality experiment was performed.
+
+LIVE failed BEFORE the first compact asset/trace was committed, in factorSchema's
+encode() check compact_feature_asset:node_bound. The actual arena ledger at refusal
+was6206657054bytes charged and8488423966bytes peak under8589934592bytes, denied0.
+This is explicit conservative accounting, distinct from the measured owned peak.
+The guard was structural, not an OS memory termination or an arena denial.
+
+Four different node/byte dimensions
+1. MAX_NODES1000000 bounds DISTINCT encoded DAG nodes and dictionary entries for
+   both compact profiles. It bounds retained Maps/arrays and the serialized graph.
+2. MAX_ENCODED_NODES16000000 bounds JSON traversal of the encoded wire structure.
+3. Logical expansion is a DIFFERENT count: repeated child refs count every time.
+   LEGACY allows16000000 expanded nodes; FULL allows128000000 expanded nodes.
+4. Factoring's explicit working allowance is2GiB in the rich configuration and
+   remains independently accounted before allocations. Shared arena is8GiB and
+   encoded schema/vector ceiling256MiB; writer root/object limits are separate.
+Binding the first count to FULL128M would enlarge a distinct guard by128x and is
+not a harmless profile fix. A larger process cap would not remove this guard.
+
+Safe correction in this block
+Preserve every default/profile/wire/read limit and every metadata field. Add a
+bounded refusal diagnostic with exact profile, stage, feature/definition position,
+held/peak estimated work, fixed count/tag tables and separately named caps. Counts
+are the actually observed PREFIX at refusal; required total capacity is still
+unknown. No raw schema, feature values or source identities are logged.
+
+An optional maxDistinctFactoringNodes argument on createCompactFeatureSchema only
+tightens construction, from1 up to the unchanged1000000 default. It cannot raise
+codec capacity, issue profile authority, change wire bytes or relax read admission.
+It permits tiny real codec guard/cleanup regressions without a million-node stress
+allocation. New focused file compactFeatureStructureRefusal.r8.test.mjs covers both
+profiles, invalid-cap refusal before traversal and default versus explicit unchanged
+maximum exact encoded-byte equivalence. Root executes it; the helper launches none.
+
+Source hashes for the exact diagnostic correction
+compactFeatureAssets.mjs
+a3607ebc3c2a42f5319cfef1e08b1d98f5074ac48558c350898bf085b0c54823
+compactFeatureStructureRefusal.r8.test.mjs
+0ef640d4097dd37b30ed78528a757db8ee534abd493bc475903c3a87426b9409
+
+Next bounded evidence
+Root's focused codec check covers the tiny cases plus affected existing
+compatibility tests. A single isolated LIVE diagnostic is justified to collect exact current
+1M refusal counters/definition index, not to repeat unchanged successful static
+phases. It is expected to retain the guard; it does not remove this blocker.
+Do not retry full13 or the warm pilot until the structural architecture is reviewed.
+The separate warm test is prepared but currently UNADMITTED for the same full-head
+encoding failure. No LIVE total latency or warm percentile is inferred from a
+prefix that never completed encoding/read/delivery.
+
+B independently reviewed the exact frozen29 codec versus the staged diagnostic
+delta and found no blocker; see B/C-CODEC-REFUSAL-REVIEW.txt and its exact hash
+receipt. The deployed source inventory and producer-compatibility hash nevertheless
+change when codec code changes; unchanged formulas/default wire do not entitle a
+new row to reuse an old deployment-binding receipt.
+
+Architecture decision for Astra
+OptionA: review a distinct FULL encoded-structure capacity with measured whole-path
+work/node/dictionary/wire costs and proven encode/decode/hash/read bounds, keeping
+2GiB working/8GiB arena/256MiB encoded/root/object limits. This is an explicit new
+capacity decision, not automatic128M reuse. Prefix counters alone cannot certify
+the required bound or successful whole operation. A valid caller lower limit must
+remain respected. Existing codec readers and frozen receipts remain compatible.
+
+OptionB: a reviewed versioned schema storage layout that pages factoring or stores
+the stable feature-function definitions once and separates instance provenance.
+Per-page DAG/node/decode work, ordered pages, full logical expansion, aggregate
+wire/root retention, exact canonical schema/feature order/hash, private row pairing,
+crash visibility, old-reader compatibility and currentness must all be specified.
+Small per-page encoded graphs can preserve the full feature set without a huge
+single Map, but repeated dictionaries may increase retained bytes. This needs actual
+measurements; it is not already implemented by the stable function hash alone.
+
+Do not strip typed dependencies, parameter classifications, policies or feature
+families to get below the cap. Do not invent compact aliases or mint source authority
+from a new manifest. Existing restored delivery still requires the exact private
+source witness. The architectural choice precedes a new codec version, cap change
+or broad native rewrite. C++ cannot by itself fix a valid1M format/structure guard;
+only measured complete-path benefit after the representation decision is relevant.
+Training, provider calls, runtime tasks and public model activation remain OFF.

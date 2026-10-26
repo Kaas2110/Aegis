@@ -1,0 +1,495 @@
+AEGIS — ASTRA FEATURE MEANING AND SOURCE CONTRACT, REVISION R7
+25 October 2026. Architecture and semantic decisions; no implementation or fit.
+
+AUTHORITY AND SCOPE
+The owner explicitly assigned semantic interpretation to Astra in this turn.
+Sol implements these meanings, supplies exact field bindings and checks parity;
+Sol must not invent a replacement meaning to fill a metadata gap. This document
+defines all 79 families, shared arithmetic and unresolved-source dispositions.
+It does not falsely certify all 835583 emitted occurrences as implemented or all
+465359 old catalogue occurrences as aliases. The companion legacy semantic map
+and history review pin actual old formulas and distinguish desired additions.
+Unknown provider facts are explicitly unavailable, not unresolved programming
+choices. New formula variants need new IDs; never rewrite existing weight inputs.
+
+Baseline: installed PR11, main073d9d2c5726bbcf2978606c44896bbbbbf433cf.
+Companion evidence: work/astra-r6b-review-20261025/history-review.txt and
+legacy-semantic-map.txt (when present), current source hashes in the review pack.
+Earlier reports are evidence, not permission to train or activate a service.
+
+A. DEFINITIVE SOURCE ARCHITECTURE
+A1. Historical facts: local retained OpenDota completed-map records, plus separately
+retained Steam observations from PRIOR maps where needed. Read the local versioned
+store. No OpenDota HTTP call in the decision-critical live feature path.
+A2. Current dynamic state: one admitted Steam.GetLiveLeagueGames.v1.scoreboard
+observation and its causal same-map/source/identity prefix. Current selected hero
+IDs may be known when accounts are anonymous. No mandatory STRATZ dependency.
+A3. GetRealtimeStats is a separate optional profile, not a bag of extra columns to
+merge into GLG. It needs an independent field/equivalence/coverage contract. Do not
+borrow its newer clock and combine it with an older GLG player's GPM/items.
+A4. Retrospective OpenDota curves remain their own profiles. earned gold gold_t,
+final gold_per_min, net worth and current native GPM are different quantities.
+Past final statistics CAN describe an old player's form; current-map finals CANNOT
+replace live measurements. A match-detail endpoint is not arbitrary-time replay.
+A5. Existing production OpenDota serving, with dormant optional STRATZ detail
+enrichment in the inspected worker, remains a separate old route until
+a qualified replacement is explicitly activated. This is the target architecture,
+not a claim that source installation already switched production to Steam.
+
+B. CANONICAL INPUT MEANINGS AND AVAILABILITY
+B1. H = prior-map facts: matchId, endedAt, outcomeKnownAt, durationSeconds,
+radiantWon, radiantTeamId/direTeamId, heroes/players with per-field knownAt,
+side kill totals, heroPerformances.metrics and their field receipt lineage.
+Normalize side by explicit roster, never array position. End time determines form
+recency; actual local field receipt determines whether it can be used.
+B2. V = current normalized Steam observation: matchId, observationId,
+providerGameClockSeconds.value, source.capture.receivedAt/rawSha256,
+dynamic.sourceProfile/phase, sides.{radiant,dire}.teamId/score,
+players.identity.{accountId,heroId,teamId,side}, players.netWorth,
+goldPerMinute, experiencePerMinute, level and observedItemFields.
+Raw GLG paths are result.games[i].scoreboard.{radiant,dire}.players[j].
+net_worth/gold_per_min/xp_per_min/level/item0..item5. Identity matching is mandatory.
+Game clock binds to result.games[i].scoreboard.duration; team IDs bind to
+result.games[i].{radiant_team,dire_team}.team_id -> sides.{side}.teamId.
+Preserve raw paths and validation receipts, not a name-only alias.
+Steam side.players[j].death maps to sides.{side}.players[j].dynamic.deaths;
+historical OpenDota deaths is
+a different source field. Both represent observed counts, not missing-as-zero.
+B3. Dynamic extra fields have separate semantic evidence: kills/death/assists,
+last_hits/denies, position_x/y, respawn_timer, ultimate_state/cooldown,
+has_buyback/buyback_cooldown, scoreboard.roshan_respawn_timer. Retaining a raw field
+is not proof of units, sentinel meaning, availability or mechanical interpretation.
+B4. D = observed draft/identity revision and its original receipts. Ten selected
+heroes may suffice for postdraft; ten disclosed account IDs are not required.
+Unknown account suppresses account-conditioned terms, not hero identity terms.
+B5. S = versioned series receipts: seriesId, nominal team1/team2, BO format,
+complete prior-map prefix, per-field availableAt, current map/side mapping when
+known. PRE series needs neither an invented map ID nor Radiant/Dire assignment.
+B6. E = qualified same-map event ledger with event ID/type, gameTimeSeconds,
+knownAt, source and episode links. RULES = versioned patch/source rule table with
+evidence and knownAt. Neither can be minted from a postgame label for early live.
+B7. A = prior native frames/trajectories: raw+normalized+alignment receipts,
+match identity, source profile and actual time. Bounded history currently sends
+this modality empty; plugging it in is required, not a new API assumption.
+B8. New logical inputs proposed below (role evidence, patch-specific mechanics,
+event histories, native geometry) are input CONTRACT requirements, not claims
+that a current Steam endpoint supplies them. If unavailable, return typed missing.
+
+Time policies, shared by every family:
+- PRE map: current target identity available at its decision, historical cutoff
+  explicitly bound to that target; no selected current heroes or dynamic values.
+- POST/LIVE: history cutoff t0 is first complete retained draft receipt. Later
+  account/side identity t1 changes selectors and validFrom, never expands t0.
+- SERIES_PRE: first known series/roster context and its own cutoff; BETWEEN:
+  versioned completed-prefix transition and its own cutoff. For a live series,
+  independent series history retains its series-transition cutoff; reused map
+  history retains map t0. Prior-series fields must be available by sourceDecision.
+  These are three distinct horizons, not one unqualified shared timestamp.
+- Old completed match first received today may enter tomorrow's history. It may
+  not be backdated into yesterday's recorded forecast. Original provider publication
+  time, locally witnessed receipt, later reconstruction and field equivalence are
+  separate evidence classes; missing original publication is not a blanket ban
+  on future use after a real local receipt.
+- Reconstructed offline rows carry source/event cutoffs and actual materialization
+  time separately. No assertion that the application issued a past forecast.
+- Current frame must pass identity, phase/progression, terminal, clock/STOP and
+  currentness checks; 300s retention is distinct from 180s qualification.
+- Recheck authority after awaited work. Computation start is not computation-ready
+  time. Receipt freshness is not demonstrated event-to-app latency.
+
+C. EXACT SHARED STATISTICAL TEMPLATES
+C0. C1-C13 specify current v3/new canonical variants, NOT replacement definitions
+for pinned legacy inputs. The companion legacy map takes precedence for old
+weights: preserve K24 versus K32, different priors, 180-day/lifetime/deque scopes,
+availability-aged versus endedAt-aged decay, population versus sample SD, and
+source-specific trajectory windows. Different meanings require separate IDs.
+C1. Historical cohorts are distinct maps, selected by team/account/hero/opponent
+identity known at cutoff. Windows W in {7,30,90} days use endedAt in [cutoff-W,cutoff].
+Do not label this 90-day implementation lifetime. Lifetime is a separate full-history
+variant only after a bounded implementation and support evidence exist.
+C2. n=count distinct qualifying maps; y=own-side win. rawWR=sum(y)/n;
+betaWR=(sum(y)+10)/(n+20). w_i=2^(-ageEndedDays_i/W);
+decayWR=sum(w*y)/sum(w); betaDecayWR=(sum(w*y)+10)/(sum(w)+20);
+nEff=sum(w)^2/sum(w^2). These four probabilities are distinct features.
+Beta(10,10) is a fixed reference prior, not a learned estimate of current meta.
+C3. Means are arithmetic mean over the exact supported subset; sample SD uses
+n-1; empirical quantile interpolates index (n-1)*q. Roster/profile population SD
+uses the number k of actual finite members (five only for a complete team).
+Some legacy historical/style SDs also use population divisor n. Preserve their
+pinned definitions; do not relabel them sample SD or restrict ddof0 to live teams.
+Wilson95 uses z=1.959963984540054. A Wilson interval is descriptive uncertainty,
+not proof of independent matches/series or a deployment probability interval.
+C4. Conditional win/loss-duration and available-kills means have their own support
+denominators. Mean of per-map kills/minute != sum(kills)/sum(minutes). The current
+aggression proxy is the former; preserve its name and never call it attack intent.
+C5. Counts/support return observed zero for an empty qualified cohort. Statistical
+values require the exact pinned minimumSupport; variance needs >=2 and positive
+scale for z. Freeze existing minimumSupport parameters in schema. New conditional
+variants use minimumSupport5 initially, with count/nEff exposed. Current history
+uses context minimumSupport M, default5. Only playerLateTendency, heroLateTendency
+and playerHeroLateTendency require max(5,M); current team lateTendency and relational
+late40/late50 fractions retain their pinned M. Preserve each existing parameter.
+Literal identity, known roster and fixed initialization
+do not need five historical maps. Do not silently raise existing thresholds or
+expose a prior-only0.5 as measured form at n=0.
+C6. Structural unpicked-hero zero is allowed only after a complete draft. Unknown
+selected-hero measurement is null+mask. Product involving a missing operand is
+missing even if another operand is zero; ratios need positive denominators.
+Maintain explicit missing reasons: unavailable_field, unverified_semantics,
+no_history, below_support, zero_variance, incomplete_roster, stale, wrong_phase,
+missing_rules, identity_conflict, unavailable_at_cutoff, outside_profile.
+C7. Side orientation: map scalars Radiant minus Dire; hero one-hots signed+1/-1;
+series scalars team1 minus team2 using explicit current side mapping. Do not
+copy map probability into series probability. IDs are nominal, never strength.
+C8. Historical current-minute normal: one preceding qualified frame per prior
+map/hero/minute, clock<=60*m and within30s; same source metric, raw proof and
+cutoff. Current implementation bins by ceil(clock/60); live selects greatest
+m<=floor(currentClock/60) within5min. Expose referenceMinute/referenceAge, support,
+mean and sample SD; raw residual=x-mean, raw z=(x-mean)/SD. Emitted signed hero
+columns multiply these raw values by that hero's side sign. This is a lagged-minute reference,
+not necessarily exact-minute strength. Preserve current version; new tighter
+reference variants get separate IDs. Never use a future-nearest frame or gold_t
+as native NW. Patch/role stratification is separate and requires evidence.
+C9. Native v3 two-point trajectory: latest earlier frame at/before currentClock-window with
+max30s anchor gap; divide changes by ACTUAL elapsed minutes. Use same identity/
+source prefix, respect resets/corrections/gaps. Current windows60/180/300/600s
+remain exact; new120s version is additive. Repeated clock is not extra progress.
+Old observed268 uses 120s anchor slack, not this 30s policy. Full-prefix window
+aggregates are a separate template, not two-point slopes. Preserve each legacy pin.
+C10. Learned transforms, target encodings and model priors need TRAIN/fold/series
+split/state pins. Build within each forward fold; no future label contamination.
+Raw deterministic history also obeys event/receipt cutoffs. Tune only later.
+C11. Units compose algebraically: x*minute has x-unit*minute, x*probability keeps
+x-unit but preserves fraction provenance; x*y has both units. Difference requires
+same metric/unit/population definition; z/rank and same-unit ratios are dimensionless.
+A general ratio has numerator-unit/denominator-unit. No mystery
+unresolved_historical_units in an admitted projection.
+C12. New synergy variants use betaWR(A,B)-[betaWR(A)+betaWR(B)]/2 as marginal excess,
+not causal synergy. Directed counter variant is betaWR(A vs B)-betaWR(A).
+An optional balanced counter subtracts [betaWR(A)+1-betaWR(B)]/2 instead;
+it needs a different ID and all operand supports/windows/populations pinned.
+Difference-in-differences variants keep each four cohort IDs/supports. Current
+rawWR differences remain separate, not silently renamed smoothed variants.
+C13. New chronological result-rating reference: R0=1500,K=32,scale400,
+p=1/(1+10^((Ropp-Rown)/400)), update own+=32*(y-p), opponent symmetric. No automatic
+patch reset. Team ID rating and player-lineup result rating are separate. Player
+variant compares mean of five KNOWN account ratings and updates all five by the
+same residual; missing full roster skips that update. This measures lineup results,
+not personal MMR/mechanical skill. No fabricated rating uncertainty; expose support,
+recency/roster coverage. This deterministic state is prepared/replayed causally,
+with no state generation or fitting executed by this review.
+Pin source population, generation, history origin and genesis/prior rating state.
+Replay by endedAt then numeric map ID ascending; both sides update from the same
+pre-result state. Corrections trigger causal replay. Unknown team/full-roster
+identity skips the affected update. Expose a measured rating only at own support
+>=5, and paired expectation only when both qualify; the internal fixed prior is
+not observed strength. Existing K24 variants remain unchanged legacy definitions.
+
+D. ALL 79 FAMILY DECISIONS
+Each entry gives meaning and necessary inputs. The time/support/missing/source
+rules above apply; exact emitted templates must name the concrete operand paths,
+not just the family ID. Existing values are preserved unless an explicitly named
+bug or versioned new variant below changes their contract.
+
+I01 Identity: H/D/S/V account,hero,team,side and roster identity; hashes are binding
+metadata, not continuous model inputs. Nominal hero/player/team encodings explicit.
+I02 Disclosure: known-account/team flags, disclosed counts and fractions over the
+ten observed slots, identity validFrom and coverage. No invented account ID.
+I03 Role: evidence-backed farm role1..5 separate from economic ranks1..5 and
+historical lane categories1..4. Unknown roles stay missing; never infer carry from NW.
+I04 Context: BO1/3/5,winsNeeded,mapNumber,rest days since last completed map,
+prior7/30d map counts, versioned league/tier/region. Unknown map/sides allowed PRE.
+
+H01 Team strength: C13 team result rating, support, recency and paired expectation.
+Historical record may span patches; patch identity separate; no claim of intrinsic skill.
+H02 Team form: C1/C2 team win rates, signed streak ordered endedAt then numeric mapId,
+7d-minus30d and30d-minus90d raw/weighted differences, each operand separately named.
+H03 Head-to-head: directional team-pair win rates/support, and mean(y-p_pre)
+using a provably pre-map rating expectation. No p reconstructed using that game's result.
+H04 Roster: intersection/5 and Jaccard with last known roster; distinct shared-map
+count and days since observed roster change. Missing roster is not a new lineup.
+H05 Player form: account win rates7/30/90d, paired roster summaries with known-count.
+Mean/min/max/populationSD(k finite players)/quantiles describe historical result
+rates, not MMR. A sample-SD alternative needs its own ID.
+H06 Player-hero comfort: account+hero raw/smoothed rates30/90d, pick share=count
+account maps on hero/count account maps with observed hero, days since last pick.
+Lifetime scope reserved until available; account+hero != hero population.
+H07 Player result rating: C13 known five-player lineup update, player support and
+recency. Do not use per-map final GPM as a rating target or call result rating MMR.
+H08 Performance: past native GPM/XPM,totalGold,totalXp,NW,goldSpent,K/D/A,LH/denies,
+damage/healing/wards and per-duration rates. Native source-field mapping is in
+historicalPerformanceFields.mjs. KDA=(K+A)/max(1,D); damagePerGpm=(damage/min)/GPM.
+H09 Hero-adjusted form: account-hero mean minus own-account mean or hero-population
+mean; divide only by that population sampleSD for z. Preserve population/window/
+native metric. Current formulas use rawWR/unweighted means; C12 variants additive.
+H10 Team-player-hero fit: conditional team/account/hero means and differences;
+(account-team-hero minus account-team) minus (account-hero minus account).
+H11 Resource/output style: old damage/min,GPM,deaths/min ratios, each exact metric;
+damagePerGpm is output per earned-gold rate, not fighting strength. Ward counts may
+describe vision activity, not actual map control; no invented latent-style label.
+H12 Matchup summaries: all25 opposing player comparisons of the SAME supported
+metric: xAi-xBj, available-pair count, population SD over available comparisons
+and quantiles; role pairs require I03. These are not 25 independent historical maps.
+H13 Team duration tendency: duration mean/sampleSD/q25/q50/q75; raw tail fractions
+>=40 and>=50min; additive threshold curve25..80min in5min increments. Winning
+duration is conditional on wins, not conditional on a live gold lead.
+H14 Player/hero/player-hero duration: three distinct C1 cohorts and tail fractions;
+hero population includes anonymously played known heroes, not only target accounts.
+
+D01 Draft identity: explicit selected heroes per side, signed one-hot, known flags;
+ban/order/slot features only from explicit received evidence. Supported1..250 range
+is an adapter dictionary, not a claim of250 currently available heroes.
+D02 Hero meta: pro-population win/pick rates7/30/90d, side and support; bans need
+complete observed ban denominators. Pick share = maps containing hero / maps with
+complete ten-hero drafts, not ten times that denominator. Ban share uses maps with
+complete explicit ban lists and the hero eligible under known patch rules; maps
+without that evidence are outside this denominator. Report eligible coverage.
+No account-filtered sample labelled global meta.
+D03 Ally heroes: unordered pair identities and raw conditional means, C12 marginal
+excess as an additional version. Pair symmetric, opposing pair directional.
+D04 Hero counters: A-vs-B directional rates, directed support and separate C12
+counter excess. Known ban removes only that opponent option; no invented pick intent.
+D05 Team hero pool: team+hero rates/selection share, roster comfort distribution;
+team share = team maps selecting hero / team maps with complete five-hero draft,
+not five times that denominator. Undrafted PRE summaries never select future heroes.
+D06 Patch meta: D02 computed within a proved letter-patch ID plus base-patch ID;
+knownAt-aware7/30/90d trends. Calendar-inferred patch is a separately named confidence
+profile; never overwrite explicit patch or assume same mechanics across letters.
+D07 Population meta: Immortal/rank/region/role rates only for that retained population
+with defined denominator. Current pro data cannot masquerade as Immortal data.
+D08 Mechanics descriptors: patch-valid hero/ability/item descriptors (push, control,
+save, mobility, scaling) from evidenced versioned rules. No numeric power weights
+invented from hero names. Unknown/unversioned mechanics are unavailable, not zeros.
+
+P01 Player allies: accountA+accountB on same side conditional result/performance,
+unordered key and each individual's marginal baseline; C12 excess distinct.
+Pair performance means the mean of both players' SAME metric, both required.
+P02 Player-hero plus ally player: accountA/heroA/accountB conditional means;
+performance is focal accountA's metric; subtract accountA/heroA baseline; do not
+condition on the ally's future hero in PRE.
+P03 Player-hero plus ally hero: accountA/heroA/allyHeroB means minus accountA/heroA
+and separately minus heroA+heroB baseline. Performance is focal accountA's metric;
+those baselines and their populations are different columns.
+P04 Two player-hero pairs: symmetric allied (accountA,heroA),(accountB,heroB) key;
+allied performance averages both same-metric values, both required. The directional
+opponent variant uses A-minus-B. Support distinct maps, not pair rows. Outcome
+cohorts require identities and outcome; performance cohorts additionally require
+their exact metric operands, with separate support counts.
+P05 Opponent/compound matchup: account-hero versus opposite account-hero, explicit
+triples and mechanically evidenced archetypes. Retain individual main effects.
+
+S01 Pace proxy: mean per-map kills/deaths per played minute; early kills/engagements
+only with timestamped prior prefixes. Final rate is not known early current-game rate.
+Team deaths require the sum of all five native player death counts; do not substitute
+opponent team kills. A partial roster sum must have a separately named contract.
+S02 Item/vision habit: prior purchase-time distributions for evidenced item IDs,
+ward counts/rates, buyback counts when observed. Missing purchase is censored/not
+observed, never zero-second timing; absent event log is not no purchase.
+S03 Style matchup (new): at each prior match freeze opponent's pre-match30d pace;
+compare to target opponent pre-match pace. Weight prior result by recency times
+exp(-abs(pace_i-pace_target)/0.25), pace in team kills/minute; emit sumweight,nEff,
+weighted result and weighted(y-p_pre). This is an explicit reference kernel, not
+learned ground truth. A richer style vector is a separate TRAIN-scaled variant.
+The old 20-stat Gaussian style kernel is a distinct preserved legacy formula.
+S04 Draft/style fit (new): fit_z(T,D)=sum_h[mu(T,h,z)-mu(T,z)]/5 over selected
+heroes. z is explicitly total-map kills/minute, duration minutes or late40 flag;
+team-hero and team populations use the same frozen window. All five terms and
+their marginal baseline require support>=5; expose supports and raw operands.
+Comparing global hero means to team mean would be a separate variant, not this fit.
+Mechanics-based archetype fit requires D08.
+S05 Closing (new): at prior10/20/30-minute landmarks select preceding frame<=minute,
+max30s gap. For lead>=1000 native team NW emit eventual win fraction and remaining
+duration distribution; for deficit<=-1000 emit recovery/win fraction. Use prior maps
+known by cutoff. Thresholds reference variants, not a universal Dota rule; include
+landmark/lead support. Early-ended maps not in that landmark risk set.
+S06 Form x current trajectory: supported player/team/hero form times current lead,
+recovery, retreat and actual-minute momentum. A recovery is a measured prefix
+movement, not a label that the future comeback will succeed.
+
+L01 Clock/score: same-frame elapsed seconds,minute=seconds/60,log1p(minute),
+min(minute,80),80plus flag,side kills,total/difference and kills/minute when minute>0.
+Phase explicit or separately proved; zero/minute sign does not prove live.
+L02 Wealth: literal native netWorth, log1p,team sum/share/center and side difference.
+Provider gold/net_gold remain distinct opaque source metrics until qualified;
+never NW=GPM*time. No duplicated earned-gold/current-inventory meaning.
+L03 Rates: literal native GPM and XPM, side/player distributions and interactions.
+NW/time is NOT a source-equivalent GPM. Derivative of GPM is change of a rate.
+L04 Level: literal player level and team distributions; XP-to-next/skill threshold
+requires nativeXP plus patch rule. Never infer XPM or remainingXP from level alone.
+L05 Economic concentration/ranks: complete five-player sum,mean,median,min,max,
+range,top1/top2share,HHI=sum(p^2),entropy=-sum(p ln p),Gini=sum_i sum_j|xi-xj|/(10*sum x).
+The Gini formula is for five nonnegative values with positive sum (2*n*sum x).
+Opposing rank comparisons and hero vs opponent mean/max/z/midrank explicit.
+Existing modules tie ranks differently (hero ID vs account+hero); preserve versions
+until a canonical tie-by-hero migration has golden parity/explicit changed outputs.
+L06 Hero-minute deviation: C8 native hero/metric baseline, residual and sample-z;
+keep reference minute/age/support. Patch/role-matched normal only with those facts.
+L07 Earned-resource prefix: separate historical-reconstruction gold_t/xp_t slope,
+not native NW/GPM. Not eligible for Steam-only live unless an equivalent running
+earned-resource input is actually proved. Preserve the family as unavailable there.
+L08 Local trends: C9 metric deltas/rates/windows; retain actualspan,nFrames,gaps.
+Raw cumulative metrics, their first differences and GPM-rate changes distinct.
+L09 Lead trajectories: prefix min/max, lead sign changes, recovered-from-min,
+retreated-from-max and elapsed since observed sign change. Do not infer unseen
+transition time between packets; future win is an evaluation label only.
+L10 Player activity: literal current K/D/A,LH,denies; KDA and participation require
+same-frame denominators; participation=(kills+assists)/teamKills only if>0.
+L11 Life state: proven alive/dead and respawn seconds, alive counts/weighted absence;
+raw respawn_timer alone is not alive truth. Health/mana require actual fields and
+maxima; sum only complete supported roster or name partial sums with coverage.
+L12 Ability readiness: raw ultimate enum is diagnostic-only until enum/source
+meaning proved. Ready/cooldown and teamfight ability availability need ability ID,
+hero mapping, source semantics and patch rule; absent means unavailable.
+L13 Items: slot-qualified observed item identities and patch-valid category flags;
+GLG six slots are not automatically full inventory/backpack/neutral slots. Handle
+empty/special IDs separately. Never merge nine RT positions as six GLG slots.
+L14 Contextual power covariates: native wealth/rates/level/items x hero x minute x
+player-hero/team history and their opponent differences. These are DESCRIPTIVE
+covariates, not a hand-weighted scalar fighting-power certificate. Native feature
+interactions retain C6/C11. Any learned power score follows C10 and later evaluation.
+L15 Buyback: literal has_buyback with verified meaning; cooldown/cost/availability
+from evidenced fields/rules. Never infer readiness from high NW or timer0.
+L16 Geometry: same-frame positions and patch-valid coordinate transform to spread,
+objective distance/countnear. Raw coordinates without transform remain diagnostic.
+L17 Vision/smoke: observed ward/smoke events/states and expiry, coverage by explicit
+geometry; no use of final ward totals as current map vision.
+L18 Structures: versioned tower/barracks bitmask decoder, explicit lane/tier/alive
+counts and exposed high-ground flags. Raw masks are not counts or distances.
+L19 Other objectives/day: patch-valid timers/location/control for runes,Tormentor,
+Lotus,Wisdom and day/night; require objective event/rule input. Not guessed constants.
+L20 Push/waves: actual creep/wave positions, live push heroes/items/structures;
+without wave feed retain only distinct supported push-capability subfeatures,
+never call them observed lane pressure.
+
+R01 Raw timer: literal roshan_respawn_timer, observed positive flag/decreasing-pair
+diagnostics. No semantic countdown/alive attribution by name. Current small pilot
+supports, but does not fully qualify, exact-respawn countdown; rule remains gated.
+R02 Roshan state: qualified last death d, current gameclock t, elapsed=t-d;
+earliest=max(0,minRespawn-elapsed), latest=max(0,maxRespawn-elapsed) from patch rule.
+Do not turn an interval into its midpoint/true timer. timer0 does not imply alive;
+after latest a new unobserved kill is possible. Confirmed alive observation and
+validated positive countdown are separate evidence. Source gaps retain unknown.
+R03 Aegis: pickup episode, observed holder/side, elapsed since pickup and rule-based
+remaining lifetime upper bound. Consumption/destruction/expiry distinct; holder's
+NW/level via same-frame identity, not assume carry. Inventory presence may prove
+current possession without proving pickup time or survival until expiry.
+R04 Steal: proved linked Roshan killer side different from pickup side, or explicit
+qualified snatch event. Winner of ensuing fight and inventory disappearance alone
+do not prove steal. Missing linked side/episode means unknown, not false.
+R05 Objective history: count QUALIFIED known deaths, with observation-start coverage;
+zero observed events is not zero total Roshan kills without complete prefix proof.
+Patch-specific reward types/beneficiaries require rule and pickup evidence.
+R06 Objective interactions: qualified R02/R03/R04 value x current coherent lead/
+economy/hero x frozen team/hero duration/closing stats. Exact units multiply; do
+not assign global timer to a holder or claim Roshan causes the measured MAE.
+R07 Contest capacity: live positions/alive/items/ultimates plus known objective
+episodes and prior kill-to-pickup/contest rates. Missing any required modality
+excludes that variant, not other verified objective covariates.
+
+Q01 Series state: nominal team scores,bestOf,winsNeeded,mapsPlayed,remainingmax,
+matchpoint and current Radiant/Dire mapping. Unknown upcoming map/sides stay null.
+Q02 Prior maps: known prior-map outcomes,duration,kills,drafts and qualified
+summaries of already completed trajectories/items. Each field's receipt<=decision;
+five universal slots, out-of-format/unplayed slots missing, never borrow next map.
+Five slots are a new version; the old series catalogue's four lags remain pinned.
+Q03 Recovery: historical next-map win fraction after loss/win with explicit
+denominators, BO/roster/expectation strata. BO3 reverse sweep is0:1->2:1; BO5 is
+0:2->3:2. Denominator is completed eligible series reaching that exact deficit;
+the unit is distinct series, not maps/frames. Not current-series win count.
+Q04 Adaptation: observed prior hero exposures vs received current picks/bans,
+repeat/novelty and opponent-change indicators. Missing bans are not zero adaptations.
+Q05 Map-probability context: optional earlier versioned map probability/logit with
+OOF/causal binding. Series model also receives full eligible context, not only p.
+Q06 Earlier prior: compatible prematch/postdraft probability and uncertainty,
+model/version/fold bound. OOF generation later; no fitted prior from own labels.
+Q07 Rich series: shared historical/player/hero/style,draft/live and prior-map
+blocks plus Q01; phase masks and side orientation. Reuse blocks, no duplicated
+giant metadata/vector perhead. Terminal actual series winner is not a prediction.
+
+T01 Historical totals: duration and kill distributions by supported team/player/
+hero/style, optional proved prior-series summary. Total versus own-team kills
+separate; conditional population/support explicitly named.
+T02 Remaining outcome: live finalKills-currentKills and finalSeconds-elapsedSeconds
+are supervised labels only after game ends. Feature inputs clock/score/economy/
+Roshan/structures/form/tempo from current prefix; historical hazard statistics
+need prior-map support, risk-set/censoring definitions and C10 if learned.
+T03 Candidate axis: prediction-line value is query input, NOT realized label.
+PRE/POST use final units; LIVE candidateRemaining=line-current observed lower
+bound. Enforce monotone CDF, support, tail and integer kill push mass. Probability
+over(line)=1-F(line), under(line)=F(line-) and push=F(line)-F(line-), when market
+settlement uses strict over/under. Time settlement precision follows market.
+T04 Presentation: own grid without bookmaker; exact chosen bookmaker's supplied
+lines and odds otherwise. Odds/grid are not substitute model probabilities and
+do not enter shared forecasting features by default. Preserve line/map/units.
+
+O01 Missing/support: explicit field masks,known counts,distinct support/nEff;
+eligible masks reflect the same runtime collection protocol, not retrospective
+postgame parse success. Do not use failure caused by final label as early signal.
+O02 Time/coverage: receipt/state age,prefix gaps,reference lag and proven source
+delay separate. Operation latency and audit timestamps are diagnostic by default,
+not outcome predictors; no fabricated event-to-app delay from inter-stream skew.
+O03 Provenance: source/profile/raw/schema/formula/fold/patch/identity hashes and
+receipt classes are binding metadata. Do not learn numeric hashes or a future
+reconstruction marker. Recorded/reconstructed cohorts evaluated separately.
+O04 Labels: current-map final winner/kills/seconds and final series winner live
+only in supervised label store/evaluator; label mutation cannot change features.
+
+E. SEMANTIC COMPILATION AND OLD-TO-NEW MAPPING, NOT MANUAL GUESSWORK
+Emit metadata from the SAME computation template and bound parameter object as
+the values. Required per-definition fields: exact inputFields with profile and
+raw-normalized binding; formula/formulaVersion; units/dtype/orientation; population
+and support unit/threshold/window/weights; event/availability/gameClock policy;
+role/patch/phase applicability; missing reasons; learned-state binding when used.
+Explicit not_applicable is acceptable only with a reason grounded in this contract.
+Do not paint all definitions with generic current_live or a generic90d label.
+
+Semantic equality must compare ALL these fields, including thresholds, tie order,
+quantile/SD algorithm, source kind, exact role/population, causal cutoffs and allowed
+phase. Existing compareSemantics omits newly audited fields; extend the comparator
+before resolving ANY alias. Finite output parity alone cannot prove equal meaning.
+When only spelling matches, preserve separate IDs. Semantic deduplication can share
+calculation without pruning occurrence provenance or silently modifying old weights.
+
+Required source-migration matrix, one row per template and exhaustive column expansion:
+oldCatalogue/sourceSchema/columnIndex/name -> oldFormula -> currentDynamicSource ->
+newSteamFieldOrDerivation -> unit/time/population comparison -> status -> newID ->
+actual producer route/vector index -> missing/source95 evidence. Allowed statuses:
+exact_equivalent; versioned_changed_meaning; historical_only_local;
+new_Steam_feature; unavailable_Steam_input; unverified_legacy_semantics;
+label_only; presentation_only.
+No unresolved column is accepted into a model projection. New full-set model may
+use every eligible feature; a legacy weight package needs exact input semantics.
+Never feed an unchanged old model with relabelled different Steam measurements.
+Online equivalence means same statistic/source meaning, not equal numeric values
+from separately delayed providers. Gold_t/NW and lane_role/farm_position are failures.
+
+Explicit legacy exception: radiant/dire x form,finish_speed,late_propensity,
+push_strength,carry_power,mid_power,offlane_power have no located producer formula.
+Those 14 opaque historical values affect 182 expressions/364 columns including
+masks in Steam v2. Preserve frozen old parity evidence; use typed missing and
+unverified_legacy_semantics in new admitted projections. Newly specified S/R
+families do not retroactively define these old slots. This is not an API absence.
+Likewise old nw_lead_norm binds to opaque OpenDota radiant_lead, not verified
+ten-player net worth. Steam native NW difference requires a new feature ID;
+the old label cannot authorize substitution into existing model weights.
+
+F. FEATURE REDUCTION AND REPRESENTATIONS — LATER EXPERIMENT, NOT CURRENT GATE
+The owner's proposed compact representation has NO requested dimensionality.
+Do not pin100 or any other example. Preserve the full eligible baseline first.
+Later compare interpretable composite features, fold-trained compression/embeddings
+or supervised representations, and hybrid full-critical-input+compact blocks on
+identical causal cohorts. Choose dimension from a bounded validation-only search,
+retaining full baseline if no benefit. Include transformation latency, rare-game/
+comeback losses and missingness behavior. No arbitrary integer tuple encoding as
+an ordered scalar. Lossless dictionaries/sparse vectors/block reuse may proceed
+now because they preserve every feature; learned compression/HPO remains paused.
+
+G. ACCEPTANCE AND LIMITS
+The architectural meaning of each family is assigned here; proof of source
+availability, code implementation and delivered vector remains separate. Sol
+fills exact descriptor bindings and compares them to these templates, reports
+any actual contradiction to Astra, and does not reinterpret missing APIs.
+Mechanical expansion must account for every schema occurrence and old catalogue
+occurrence; unknown/source-blocked cases retain typed dispositions. No fabricated
+semantics, per-column hand-written prose, silent deletion or premature full-gate flag.
+Training remains paused. This document does not authorize provider calls or tasks.

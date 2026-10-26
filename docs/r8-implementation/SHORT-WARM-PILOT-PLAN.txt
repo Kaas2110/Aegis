@@ -1,0 +1,76 @@
+Separate R8 warm technical pilot, 26 October 2026
+
+CURRENT ADMISSION: BLOCKED. Actual29 failed LIVE compact factoring at the DISTINCT
+encoded-DAG1M guard, before a full LIVE commit/read/delivery cycle. This pilot uses
+the same full heads and is not an alternative acceptance route around that failure.
+Do not launch it until Astra reviews the structure/representation decision and
+the corresponding LIVE encoding path is corrected and independently verified.
+See LIVE-CODEC-STRUCTURE-BLOCKER.txt. No warm result or percentile exists.
+
+New test only
+scripts/steam-live-collector/source-adapter/r8ActualLiveWarmDelivery.test.mjs
+No final actual29 harness or production module was changed for this pilot.
+
+Purpose
+Measure the complete generate/commit/read/model-input boundary on one base LIVE
+frame and two advancing frames in the same owned host. This avoids repeating the
+all13/static/restart/admin/coverage census merely to obtain a warm measurement.
+Three frames do not establish326-state acceptance, real source95, production
+latency or a meaningful latency percentile. warmPercentiles is deliberately null.
+
+Fixture and boundary
+The test reuses existing raw draft/pin fixtures and the actual synthetic query
+source-export setup. It supplies64 explicitly synthetic distinct prior-map events
+with unique80001..80064 IDs, varied outcomes/durations/kills and causal past
+outcome/roster receipts. It checks the ACTUAL immutable source export contains64
+distinct maps and zero prior native observations. No repeated-frame or relabelled
+real-match support is claimed. Existing source-export/proof implementations and
+the final29 source remain unchanged.
+
+One actual private in-memory history proof, immutable cutoff and source snapshot
+are reused for clocks30/60/90seconds. Current Steam synthetic raw bytes use literal
+death, then the real adapter normalizes them. The actual consumer and current
+unified producer create all four LIVE heads. An actual native Windows owned writer
+and compact host journal commit each frame. Each target is loaded from actual saved
+bytes, restored through its private original witness into a DISTINCT decoded vector,
+and fully consumed by the real diagnostic input port in bounded200-column pages.
+Values/masks/negative-zero hashes, exact manifests and unchanged function coordinates
+are checked. No model output or prediction is returned. Optional per-feature coverage
+export, router, admin and separate restart are outside this narrow boundary.
+
+Ownership, resource and stopping policy
+Use the private named rich8GiB arena/2GiB compact configuration throughout, preserve
+all smaller object/disk/logical bounds, and run under root's serial9GiB owned tree,
+30GiB admission, fourCPU/min4GiB/manualSTOP guard. The pilot has a900000ms internal
+elapsed/STOP permission; root's finite<=1200s job is the hard bound on synchronous
+generation or any nonreturning awaited host operation. No helper launches it.
+Existing legacy private in-memory history proof preparation has no explicit arena
+release port; it is a disclosed fixture scope, not full retained-pipeline intake or
+all-project byte-ownership acceptance. Root's actual owned process guard still binds
+the entire test tree. Per-frame arena ledger and root peak commit are separate facts.
+All explicit producer/journal/writer/vector loans close; final arena accounting is0.
+
+Execution admission
+Require AEGIS_R8_ACTUAL_LIVE_WARM=1 and an approved absolute AEGIS_TEST_PYTHON.
+The native lease provider is real; root27's independent contention receipt is separate.
+Payload inside root's bounded runner only:
+node --test --test-concurrency=1 scripts/steam-live-collector/source-adapter/r8ActualLiveWarmDelivery.test.mjs
+No provider, fit, task or serving activation is implied by these test-local flags.
+
+Do not launch the old full13 plus three additional warm frames under a known
+insufficient wall. First use actual29's LIVE generation/commit/read durations and
+stored bytes to decide whether this isolated three-frame pilot plausibly fits900s
+internal/1200s external with disk and memory headroom. R7's older approximately250s
+complete LIVE cycle suggests750s for three, but it is not an estimate validated
+against R8 metadata and native-lease IO. A current receipt is required. If admission
+is implausible, save the concrete timing/cap blocker instead of silently raising
+limits, shortening the boundary, fabricating percentiles or claiming warm acceptance.
+
+Performance interpretation
+Retain per-frame generation, commit, actual reload/input recording and full boundary
+times, writer IO/cache counters, encoded retained bytes and charged arena statistics.
+The same history context and producer caches remain; compact journal caching is the
+actual bounded warm cache, not bypassed or replaced with mock vectors. A15second
+target miss is reported honestly; it does not by itself turn a technically complete
+pilot into a model-quality failure. Code/native optimization still needs measured
+paired complete-operation gain and exact semantics. No training is authorized.

@@ -1,0 +1,310 @@
+ASTRA R7 CAUSAL HISTORY / LIVE / SOURCE AUTHORITY REVIEW
+26 October 2026. Documentation-only architectural review of PR12.
+
+Authority and limits
+Canonical source: C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Published merge: 85c3b056769cf98f2bedfa233036e56b854201e4, PR12.
+Read the final Sol review, publication closeout, historical25October review and
+focused canonical producer/caller/reader/test sources. Root owns Graphify lookup.
+No application/test code changed. No native checks, fits, provider calls, tasks,
+runtime activation, publication or deletion performed by this reviewer. Findings
+below are static counterexamples, NOT newly executed failing-test results.
+
+All relative source references below start at
+scripts/steam-live-collector/source-adapter/ in canonical APP.
+
+Disposition
+The causal design is substantially improved and its core separation is sound:
+one coherent current Steam packet/profile plus independently frozen, versioned
+historical facts. Two currentness/retention contracts still need correction before
+runtime admission. Feature-first acceptance and source95 remain open. Synthetic
+all13 delivery does not close original-availability or live-performance gates.
+
+FINDING C1 — P1: a completed source-gap poll permanently looks pending
+Files: retainedFeaturePipeline.mjs:89-104,218-234;
+steamEligibleState.mjs:61-75 (source_gap retains original deadline).
+
+consumeCapture first updates admittedSourceHead for a pinned newer receipt. The
+failed-capture branch and the missing-map branch then classify the gap, invalidate
+dynamic continuity and preserve the last eligible-state deadline. Neither branch
+sets that map's processedSourceKey. readLiveEligibility rejects the old key before
+consulting readSteamEligibleState, with newer_committed_source_pending, even after
+the execution promise finished and pending==0.
+
+Concrete counterexample:
+1. Map M has a committed LIVE trace A and a qualified state with a300-second lease.
+2. Thirty seconds later a valid committed HTTP500 receipt, or successful empty GLG
+   list, is admitted and fully processed.
+3. The eligible-state machine deliberately retains A without renewing its deadline,
+   but the pipeline still rejects it as a newer pending source indefinitely, until
+   another successful present-map capture marks its key processed.
+
+Impact: one transient missing/failed poll causes immediate forecast unavailability
+despite the explicit five-minute retention policy. The rejection reason incorrectly
+claims work is pending. This is an availability/state-machine bug, not future-label
+leakage or proof that any public serving path was activated.
+
+Decision for Sol:
+- Track latest admitted source head and per-map fully classified source head
+  separately. The latter must advance after EVERY successfully classified outcome:
+  changed eligible state, repeated state, confirmed terminal, integrity rejection,
+  ordinary source gap, and a valid committed failed response.
+- While a newer head is genuinely unclassified/queued, keep fail-closed fencing.
+- After classifying an ordinary gap, read the owned eligibility state and original
+  trace/observation/deadline. Do not renew time or generate a new vector.
+- Terminal, changed-known identity, STOP, clock rewind and invalid proof remain
+  barriers. Never blindly advance a head for unverified bytes or failed classification.
+- A queued head C cannot be accidentally acknowledged by older executing head B.
+  Final head and epoch comparison remains synchronous after asynchronous IO.
+
+Required acceptance cases (small synthetic state-machine tests, then affected
+integration scope; no model fitting):
+- Actual pipeline A -> HTTP500 B, A -> absent-map B, A -> empty-list B; after B
+  settles, retain A at299s and reject at301s; lastConfirmedAt never changes.
+- A -> repeated identical-clock B: same retained trace/observation and deadline.
+- Block B during IO, admit terminal C, finish B: A/B cannot become eligible.
+- C fully classified terminal/known-identity conflict: rejection persists.
+- Two maps in one source response: missing M keeps only M's original retention;
+  present N uses its correctly classified state. No cross-map head substitution.
+- Restart replay and manual STOP preserve existing barriers and never renew time.
+
+FINDING C2 — P1: static current-authority stamp is not bound to the input
+Files: staticDiagnosticWriter.mjs:17-25,35-44,60-63;
+retainedStaticHistoryView.mjs:14-24;
+staticDiagnosticWriter.test.mjs:54-67.
+
+The writer reads a current stamp using only mode/decisionAt/mapId/seriesId, then
+compares that stamp before and after IO. It never compares the stamp's
+identityRevision, seriesRevision, sourceGeneration or targetGeneration with the
+actual private static proof/component. An already stale proof for the SAME map or
+series can therefore be calculated while a stable newer authority stamp is returned
+both times, and the receipt reports currentAuthorityVerified:true.
+
+Current tests cover a stamp changing DURING IO. They do not cover a stale candidate
+at ENTRY while the current stamp remains unchanged. The rich integration fixture
+closes its authority callback over the expected proof values, so it cannot expose
+this mismatch either. This does not show wrong public predictions: the path remains
+diagnostic and no inference output is created.
+
+Decision for Sol:
+- Derive a typed expected authority identity from the actual private proof:
+  mode, map/series ID, transition ID, identity revision, target derivation reference,
+  exact series receipt, source view/facts bindings and immutable history cutoff.
+- Obtain the current host authority for that entity, validate its shape, and require
+  expected==current BEFORE expensive generation. Repeat after each required IO
+  boundary and immediately before issuing a current receipt.
+- Use typed fields, not arbitrary strings where sourceGeneration sometimes means
+  corpus manifest and elsewhere facts hash. Define both explicitly if required.
+- The active effective as-of source view is the correct historical identity. A
+  global source generation advance consisting only of post-cutoff/unrelated facts
+  should not automatically invalidate an otherwise identical frozen view; preserve
+  exact facts/view identity and explicit correction epochs.
+- Forensic stale inputs may be persisted only via a separately named mode whose
+  currentAuthorityVerified is false. Stable-but-unbound stamps are not verification.
+- Never weaken private proof ownership or substitute names-only schema identity.
+
+Expected authority fields must keep THREE meanings distinct:
+1. FrozenHistoricalBinding: the actual proof's generationReference, target-specific
+   sourceSnapshotHash/envelopeReference, factsSha256, targetSha256, seriesSha256,
+   targetDerivationReference, cutoff/validFrom and any native generation/view binding.
+   These identify what was used. They are NOT the current capture receipt generation.
+2. ActiveTargetBinding: the host's currently selected map/series/transition and
+   authoritative identity revision, exact target/series receipt and approved frozen
+   historical binding for this decision. Match the candidate against this binding
+   at entry and after IO. A stable host stamp for a DIFFERENT frozen binding fails.
+3. CurrentSourceFence: the current observation/classification/progression/terminal
+   epoch, evaluated at owned now for LIVE. It can advance while the historical
+   cutoff and its approved frozen inputs stay fixed. PRE/BETWEEN use their own
+   target/series event authority; they need no fabricated live capture generation.
+
+Do not equate generationReference, sourceSnapshotHash, factsSha256 or a live receipt
+key merely because all are hash-like strings. Initially the host can select an
+explicit existing immutable historical proof: match its exact bound references.
+If later allowing reuse across corpus generations, require an explicit verified
+equivalence result over effective facts, identity and cutoff, including corrected
+versions; a newly exported descriptor with different timestamps is not byte-equal
+and must not be waved through by matching only factsSha256. Record the actually
+used generation even when such equivalence is independently established.
+
+Required acceptance cases:
+- Stale target derivation, roster revision, series receipt/transition and source
+  view, one at a time, already stale before consume; unchanged current stamp must
+  reject before generation/storage as appropriate.
+- Matching proof and stamp passes; mutation/terminal/STOP during IO still fails
+  closed while preserving any already committed forensic artifact.
+- Wrong same-ID series score or draft correction does not pass stable authority.
+- Irrelevant source append after frozen cutoff with identical effective view is
+  explicitly either reusable under the defined contract or rebuilt, never guessed.
+- Test native/private retained proof path rather than only a fake producer whose
+  authority callback uses the same fixture variables.
+
+CONFIRMED SOUND DESIGN / NO NEW LEAK FOUND IN THESE SCOPES
+
+1. Historical t0 / identity t1 / computation readiness are separate.
+   observedDraftHistory.mjs:63-86,100-138 retains first_complete_draft_receipt as
+   immutable cutoff. Later account disclosure selects historical records at that
+   SAME cutoff; it does not add newer outcomes. Current identity at validFrom can
+   be later. observedDraftFeatureBundle.mjs:78-102 captures proof readyAt AFTER
+   awaited context and relational work; recorded reads cannot precede readyAt.
+
+2. The retained corpus keeps full version chains, then reduces per target cutoff.
+   retainedReferenceCorpus.mjs:175-190 selects all provided noncurrent prior maps,
+   including global/meta population, without target-team-only filtering; all
+   versions of selected maps are retained. :343-357 rederives actual map parts
+   from versions, verifies their bytes and binds the source/facts/prefix identity.
+   Current-map facts are explicitly excluded. This is completeness within the
+   supplied local corpus, not worldwide or original historical availability.
+
+3. History and live identity/source proof are cross-bound.
+   unifiedFeatureProducer.mjs:87-104 compares private source/facts/native hashes,
+   draft/roster/side hashes, revision, original cutoff, validFrom and prefix hash.
+   currentSteamInput.mjs:12-37 replays current raw data, compares current draft
+   identity and selects the actual admission profile. observedDraftFeatureBundle
+   .mjs:166-190 checks receipt horizon, current identity, clock monotonicity and
+   one progression proof per relevant frame. No current-map final result becomes
+   a feature through these joins.
+
+4. Retrospective source horizon is distinguished from current observation time.
+   retainedReplayFrame and currentSteamInput explicitly mark reconstruction.
+   Current read eligibility is evaluated at actual owned now, not a backdated
+   snapshot time. diagnosticTargetRouting.mjs checks exact saved trace/current
+   observation identity and invokes the final synchronous current-state fence.
+   Root/storage review separately owns deeper schema/vector and writer contracts.
+
+5. Prior Steam economy baseline now exists through a real optional private route.
+   retainedNativeHistoryView.mjs:29-36 verifies the original raw packet against
+   recorded normalization; :53-69 requires the same selected completed prior map,
+   its identity/fact values and qualified raw native evidence. It excludes current
+   target map and duplicate/conflicting observations, and binds the combined native
+   source into history proof. retainedMapHistoryHost.mjs:28-35 uses the combined
+   source when nativeSourceHandle is explicitly supplied.
+   historicalAlignment.mjs:23-61 verifies duration/outcome/draft/roster availability
+   at the history cutoff and raw interior clock; absent-phase annotations remain
+   validation-only, explicitly reviewed, not invented raw phase.
+   historyCalculationCore.mjs:183-193 selects at most one state per prior map,
+   hero and preceding minute; checks support and positive sample standard deviation.
+   No net-worth/GPM substitution or final-economy proxy was found in that route.
+
+6. The apparent duration-availability metadata omission is NOT a demonstrated
+   future-value leak in the retained route. retainedOpenDotaFacts.mjs:197-201
+   deliberately makes outcomeKnownAt the maximum of completion inputs (including
+   duration) and relevant team/score dependencies. The core's combined dependency
+   timestamp is conservative. Preserve this fact rather than filing a false leak.
+
+7. Series context is causal and oriented to nominal teams.
+   seriesContextFeatures.mjs validates exact complete prior-map prefix, time order,
+   map identity, BO1/3/5, result availability and explicit current draft/side binding.
+   Current map is excluded from previousMaps; five universal prior slots are masked
+   when unplayed. ProduceSeriesContext is called at sourceDecisionAt during retained
+   replay (unifiedFeatureProducer.mjs:155). Main series/detail selected-map routing
+   is preserved. PRE series does not invent current heroes or map side assignment.
+
+EVIDENCE / ARCHITECTURE GATES THAT ARE NOT IMPLEMENTATION BUG CLAIMS
+
+G1. Native-history availability is not automatically populated by existing raw files.
+createRetainedMapHistoryHost requires an explicit nativeSourceHandle; bootstrap
+merely forwards boundedHistory arguments (retainedDiagnosticBootstrap.mjs:48).
+create/restoreRetainedNativeHistorySource callers found in focused source are the
+library and tests, not a deployed background orchestration path. The final all13
+fixture does not establish real populated economy baselines. Sol must build an
+offline intake manifest from retained raw+receipt pairs, bind matching as-of prior
+facts, record every rejection and quantify coverage. No new provider requests or
+task activation are needed to audit existing retained evidence.
+
+G2. The only admitted current rich profile here is
+steam.GetLiveLeagueGames.v1.scoreboard. Other Steam endpoints/shortened realtime
+packets do not become equivalent merely because both are Steam. Keep separate
+profile contracts; add an endpoint only after field/clock/identity equivalence and
+availability evidence. Retain absent values, literal opaque native fields and
+separate rules/event evidence. Source95 means present and timely JOINT input
+coverage for a declared required profile, not masked structural hero zeros.
+
+G3. A source gap policy needs separate short fast observation classification and
+heavy feature generation. All13 cold LIVE operation was about250s. With continuous
+new polls and the global admitted head fence, every long in-flight bundle may become
+superseded before commit. Do not remove fencing to make it pass. Sol should retain
+all source receipts, classify in bounded arrival order, coalesce only pending heavy
+generation to latest eligible state, precompute unchanged historical blocks and
+specify an observable maximum lag. Root/storage review designs the actual bounded
+scheduler and fast path. Offline replay can remain exhaustive and slower.
+
+G4. Fully known account identities are currently required in PRIOR native snapshots
+for a hero-only economy baseline (historicalAlignment.mjs:42-48 and
+historyCalculationCore.mjs:79-87). The CURRENT target may be anonymous, as the
+existing test covers. Missing prior accounts therefore reduce usable history even
+when map/side/hero/metric is known. This is conservative missingness, not leakage.
+For later coverage work, allow hero-only baselines without public accounts only
+under a separately defined map+side+hero coherence proof; player/role baselines
+must keep account identity requirements. Measure retained coverage first, preserve
+distinct semantics and do not silently relax the existing source contract.
+
+G5. No current source proves a true pause or event-to-app latency. Current policy
+allows300s retention, distinct180s absent-phase progression qualification, and
+forbids renewed freshness from a repeated HTTP response. That distinction is sound.
+A fresh confirmed pause capability requires actual source evidence; do not invent
+it from stationary game clocks or imply a five-minute provider transmission lag.
+
+G6. Same known source values at different receipts, corrected values, NULLs and
+identity transitions must remain in the version ledger. A later validation rule can
+validate old facts retrospectively, but it must not change their original knownAt
+or turn retrospective computedAt into a recorded prediction. Each output should
+keep availabilityBasis and separate fact input cutoff / identity validity /
+materialization ready / source receipt / current read time.
+
+PRIOR-NATIVE PROVENANCE DECISION AND ACCEPTANCE MATRIX
+The first offline intake uses only actual retained raw bytes plus their recorded
+normalized observations and capture receipt metadata. Source manifests preserve
+every supplied version; target-specific views choose qualified prior observations.
+Raw capture hashes, re-normalization, same-map identity, completion fact versions,
+availability cutoffs and rule-policy pins all remain explicit. Existing directory
+mtime or the intake run's time cannot manufacture historical availability.
+
+Case | Required disposition
+Raw/normalized mismatch or false observation ID | Reject; preserve exact reason.
+Target map offered as historical map | Reject, regardless of earlier game clock.
+Prior final outcome/duration/heroes/accounts learned after cutoff | Reject for that cutoff.
+Recorded raw state received after cutoff | Reject for that cutoff; can serve a later cutoff.
+Final parsed statistics with no original live state bytes | Never use as live native state.
+Explicit valid raw in-progress phase and all temporal bindings | Admit diagnostic prior reference.
+Absent raw phase, reviewed profile and pinned independent interior-clock alignment |
+  Admit only reconstructed reference according to explicit policy; raw phase stays absent.
+Absent phase with no externally selected profile review hash | Reject; candidate cannot self-approve.
+Alignment/profile review created after receipt | Record later validation/computation time;
+  do not rewrite source receipt or imply a recorded historical prediction.
+Duplicate same observation and same bytes | Deduplicate per stated identity, retain audit count.
+Same observation identity with different bytes | Hard conflict, not last-write-wins.
+Anonymous prior accounts | Current contract rejects; keep this baseline separate from
+  optional future hero-only contract. Never fabricate account IDs.
+Current source disappears while prior corpus remains available | Prior context alone
+  cannot satisfy current LIVE eligibility; follow C1 lease and terminal rules.
+
+The intake report must state supplied/selected/rejected counts, distinct maps,
+original receipt date span, valid profile/phase basis, account coverage, per-minute
+support and why missing baseline values remain missing. It must demonstrate at
+least one actual retained prior-state-to-target-proof binding or explicitly report
+zero eligible rows. No fixture count substitutes for this real retained evidence.
+
+SUGGESTED SOL DEPENDENCY ORDER FOR THE NIGHT BLOCK
+1. Freeze current PR12 source pointers and counterexample specs. Implement C1 and
+   C2 independently with focused small technical checks; no heavy all13 repeat yet.
+2. Complete remaining semantic bindings with the root's reviewed mapping; keep raw
+   unresolved meanings explicit. Implement exact rule/event/profile evidence ports.
+3. Complete offline native-history intake and inspect existing retained records;
+   report source/phase/account/support rejection counts without provider refresh.
+4. Integrate root's stable model contract and ownership fixes, then a bounded fast
+   path that reuses frozen history without weakening source/currentness barriers.
+5. Run one changed-scope integrated causal check including C1/C2, native-history
+   proof and13 target routing. Only then the explicitly bounded warm pilot / other
+   root-authorized technical tests. Allfits remainpaused; preserve current limits.
+6. Save exact source/results, failures and remaining gates for Astra. A passed
+   technical check is not automatic source95, semantics or model-quality admission.
+
+Pinned reviewed source files (SHA256, no full-repository parity implied)
+retainedFeaturePipeline.mjs
+74081581f2791a48ddefbb3a73d4400a934c69cfb295ca4c67d9a1e5f6f2ead2
+staticDiagnosticWriter.mjs
+83a48d1640cf7322c848e860c606a4bfd9777e73521eedf752567738963c43b6
+retainedNativeHistoryView.mjs
+689671346a05975d14e708d07e54e319a14ebd58764e577b7da490b9c3a4dddb
+observedDraftFeatureBundle.mjs
+ef074b7f73109f964470a753ddc60e15f50f5262144633b77c89222ec56df211

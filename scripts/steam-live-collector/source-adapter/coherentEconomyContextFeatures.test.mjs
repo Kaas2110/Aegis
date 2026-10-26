@@ -80,3 +80,19 @@ test('fixed semantic width, explicit formula version, unique names and no helper
 test('helper definition pool shares immutable formulas while recomputing current values',()=>{
  const a=run(observation()),b=run(observation({offset:100}));assert.equal(a.features[0].definition,b.features[0].definition);assert.equal(Object.isFrozen(a.features[0].definition.inputFields),true);assert.throws(()=>{b.features[0].definition.formula='forged';});assert.notEqual(get(a,'team.radiant.native_nw.top1_share.base'),get(b,'team.radiant.native_nw.top1_share.base'));assert.equal(readCoherentEconomyDefinitionPoolStatus().semanticsCount,1);assert.equal(readCoherentEconomyDefinitionPoolStatus().maximumSemantics,1);
 });
+test('rank selection changes when only another candidate basis value changes, even with unchanged selected scalar',()=>{
+ const a=observation(),h=history(a),b=structuredClone(a);
+ for(const [hero,form]of [[1,.1],[5,.9]]){const p=h.context.featurePayload.players.find(p=>p.heroId===hero);p.values.recentForm=form;p.statistics.recentForm.value=form;}
+ // Hero5 remains5; hero1 rises1->5, so the exact numeric-hero tie chooses hero1.
+ // Both selected native values are5 and ALL form/GPM/XPM operands are unchanged.
+ b.sides.radiant.players.find(p=>Number(p.identity.heroId)===1).netWorth.value=5;
+ const args=o=>({observation:o,historyContext:h.context,relationalContext:h.relational,decisionAt:AT}),before=produce(args(a)),after=produce(args(b)),name='economic_rank.native_nw.1.radiant.native_value.recentForm';
+ assert.equal(get(before,'economic_rank.native_nw.1.radiant.native_value.base'),5);assert.equal(get(after,'economic_rank.native_nw.1.radiant.native_value.base'),5);close(get(before,name),4.5);close(get(after,name),.5);
+ assert.deepEqual(a.sides.radiant.players.map(p=>p.goldPerMinute),b.sides.radiant.players.map(p=>p.goldPerMinute));assert.deepEqual(a.sides.radiant.players.map(p=>p.experiencePerMinute),b.sides.radiant.players.map(p=>p.experiencePerMinute));
+ const d=after.features.find(f=>f.name==='draft_live.coherent_economy.'+name).definition;assert.ok(d.inputFields.includes('sides.players.netWorth'));assert.ok(d.inputFields.includes('sides.players.identity.heroId'));assert.ok(d.inputFields.includes('sides.players.identity.accountId'));
+});
+test('only a changed clock changes rank minute products while base resources and history stay fixed',()=>{
+ const a=observation({clock:600}),b=structuredClone(a);b.providerGameClockSeconds.value=1200;const h=history(a),args=o=>({observation:o,historyContext:h.context,relationalContext:h.relational,decisionAt:AT}),before=produce(args(a)),after=produce(args(b)),name='economic_rank.native_nw.1.radiant.native_value.minute_product';
+ assert.deepEqual(a.sides,b.sides);assert.equal(get(before,'economic_rank.native_nw.1.radiant.native_value.base'),5);assert.equal(get(after,'economic_rank.native_nw.1.radiant.native_value.base'),5);assert.equal(get(before,name),50);assert.equal(get(after,name),100);
+ const d=after.features.find(f=>f.name==='draft_live.coherent_economy.'+name).definition;assert.ok(d.inputFields.includes('providerGameClockSeconds'));assert.ok(d.inputBindings.some(port=>port.rawField==='result.games[*].scoreboard.duration'));
+});

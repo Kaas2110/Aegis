@@ -2,12 +2,58 @@
  * Declared hashes and shallow Object.freeze wrappers never mint ownership. */
 import {digest,FAMILY_IDS,validateDefinition,projectionScopeRejection} from '../../feature-registry/registry-contract.mjs';
 import {types} from 'node:util';
+import {createHash} from 'node:crypto';
 import {createDiagnosticResourceArena,snapshotPlainRecord} from './diagnosticResourceArena.mjs';
 import {FEATURE_ASSET_WORKING_BYTES,inspectFeatureAsset,freezeFeatureAsset as freeze,hashFeatureAsset as hash,featureAssetRecord,retainFeatureAsset,withFeatureRelease} from './featureProjectionOwnership.mjs';
 import {LEGACY_FEATURE_CAPACITY_PROFILE,resolveFeatureCapacityProfile} from './featureCapacityProfiles.mjs';
+import {compileFeatureFunctionContract} from './featureFunctionContract.mjs';
+import {requireDiagnosticResourceConfiguration} from './diagnosticResourceConfiguration.mjs';
+import {describeCompactFeatureAsset,retainCompactFeatureAsset,releaseCompactFeatureAsset,readCompactVectorPage} from './compactFeatureAssets.mjs';
 const SH=/^[a-f0-9]{64}$/,SCOPES=new Set(['prior_maps','current_identity','current_draft','current_live','series_context','previous_series_maps','candidate_axis']);
 const verifiedSchemas=new WeakMap(),verifiedVectors=new WeakMap();
+const projectedRowAuthorities=new WeakMap(),projectedRowPairs=new WeakMap();
 const fail=x=>{throw Error('unified_features:'+x);};
+/** The compiler's actual assembly relation is independent from the two memory
+ * leases. Two genuine, separately compiled objects never establish this relation.
+ * A copied token/JSON hash cannot mint it. Freshness remains the host's separate
+ * source fence; this capability authenticates an intact diagnostic row only. */
+export function retainVerifiedProjectedRow({schema,vector,expectedSchemaHash,projectedRowAuthority=null}={}){
+ let authority=projectedRowAuthority;
+ if(authority===null){const candidates=projectedRowPairs.get(schema)?.get(vector);if(!candidates)return null;const live=[...candidates].filter(token=>{const r=projectedRowAuthorities.get(token);return r?.rowRecord.value!==null&&r?.schemaRecord.value!==null&&r?.vectorRecord.value!==null;});if(live.length!==1)return null;[authority]=live;const only=projectedRowAuthorities.get(authority);if(only.rowRecord.value.descriptor.authorityProfile!=='compiler_only_forensic_v1')return null;}
+ const r=projectedRowAuthorities.get(authority);if(!r||r.schema!==schema||r.vector!==vector||r.schemaHash!==expectedSchemaHash||r.rowRecord.value===null||r.schemaRecord.value===null||r.vectorRecord.value===null)return null;
+ const rowLease=retainFeatureAsset(r.arena,r.rowRecord);if(!rowLease)return null;
+ const s=retainVerifiedProjectionSchema(schema,{expectedSchemaHash});if(!s){rowLease.release();return null;}let v;
+ try{v=retainVerifiedProjectionVector(vector,{expectedNamesHash:s.descriptor.namesSha256,featureCount:s.descriptor.featureCount});if(!v){s.release();rowLease.release();return null;}let active=true;return Object.freeze(withFeatureRelease({schema,vector,descriptor:r.rowRecord.value.descriptor,provenance:r.rowRecord.value.provenance,projectedRowAuthority:authority,s,v},()=>{if(!active)return false;active=false;v.release();s.release();rowLease.release();return true;}));}catch(error){v?.release();s.release();rowLease.release();throw error;}
+}
+function rowValuesHash(vector){const h=createHash('sha256');h.update('{"values":[');for(let i=0;i<vector.values.length;i++){if(i)h.update(',');h.update(JSON.stringify([vector.values[i],Object.is(vector.values[i],-0)]));}h.update('],"missing":[');for(let i=0;i<vector.missing.length;i++){if(i)h.update(',');h.update(vector.missing[i]?'true':'false');}h.update(']}');return h.digest('hex');}
+function mintProjectedRow({arena,schema,vector,schemaRecord,vectorRecord,schemaHash,functionContract,parts,bindings,semanticInputs,rowInstanceProvenance}){
+ const provenance=freeze(structuredClone(rowInstanceProvenance)),token=Object.freeze({contract:'aegis.private-projected-row-authority.v1'});
+ const descriptor=freeze({contract:'aegis.projected-row-binding.v1',authorityProfile:provenance===null?'compiler_only_forensic_v1':provenance.contract==='aegis.unified-producer-row.v1'?'producer_bound_diagnostic_v1':'compiler_context_bound_forensic_v1',schemaSha256:schemaHash,featureFunctionSha256:functionContract.sha256,producerCompatibilitySha256:functionContract.producerCompatibilitySha256,rowParameterBindingsSha256:functionContract.rowParameterBindingsSha256,contextSha256:hash({semanticInputs,provenance}),componentRowIds:bindings.map(b=>b.rowId),projectionSha256:hash(parts),valuesAndMasksSha256:rowValuesHash(vector),targetId:schema.targetId,stateMode:schema.stateMode,sourceAvailabilityAttested:false,eligibleForTraining:false,eligibleForServing:false});
+ const payload=freeze({descriptor,provenance}),bytes=inspectFeatureAsset(payload,{maxBytes:2*1024*1024}).bytes,rowRecord=featureAssetRecord(payload,bytes,[schemaRecord,vectorRecord]),lease=retainFeatureAsset(arena,rowRecord);if(!lease)fail('compiler_resource_admission');
+ projectedRowAuthorities.set(token,{arena,schema,vector,schemaRecord,vectorRecord,rowRecord,schemaHash});let pairs=projectedRowPairs.get(schema);if(!pairs){pairs=new WeakMap();projectedRowPairs.set(schema,pairs);}let tokens=pairs.get(vector);if(!tokens){tokens=new Set();pairs.set(vector,tokens);}for(const old of tokens){const r=projectedRowAuthorities.get(old);if(r?.rowRecord.value===null||r?.schemaRecord.value===null||r?.vectorRecord.value===null)tokens.delete(old);}tokens.add(token);return{token,lease};
+}
+/** Proof-oriented restored input. The expected private row must have been
+ * regenerated by the normal retained-source producer. Private decoded compact
+ * handles supply the ACTUAL restored values. Saved JSON cannot be its witness.
+ * Exact original horizon/provenance is required; currentness remains host-owned.
+ * This first seam deliberately retains regeneration cost rather than laundering
+ * a disk checksum into independent source authority. */
+export function rehydrateVerifiedProjectedRowFromCompact({expectedProjection,schemaHandle,vectorHandle,resourceArena=null}={}){
+ const witness=retainVerifiedProjectedRow(expectedProjection);if(!witness)fail('rehydration_private_witness_required');const bound=projectedRowAuthorities.get(witness.projectedRowAuthority),arena=resourceArena??bound.arena;let compactSchema=null,compactVector=null,creation=null,vectorLease=null,rowLease=null;
+ try{
+  if(arena!==bound.arena)fail('rehydration_same_arena_required');
+  compactSchema=retainCompactFeatureAsset(schemaHandle);compactVector=retainCompactFeatureAsset(vectorHandle);if(!compactSchema||!compactVector)fail('rehydration_compact_owner_required');
+  const sd=describeCompactFeatureAsset(compactSchema),vd=describeCompactFeatureAsset(compactVector),n=witness.s.descriptor.featureCount;
+  if(!sd.contract.includes('schema')||!vd.contract.includes('vector')||sd.expandedSchemaHash!==witness.s.descriptor.sha256||vd.expandedSchemaHash!==sd.expandedSchemaHash||sd.namesHash!==witness.s.descriptor.namesSha256||vd.namesHash!==sd.namesHash||sd.featureCount!==n||vd.featureCount!==n)fail('rehydration_schema_binding');
+  const bytes=65536+n*32;creation=arena.reserve(bytes);if(!creation)fail('compiler_resource_admission');
+  const names=[],values=[],missing=[];
+  for(let offset=0;offset<n;offset+=200){const page=readCompactVectorPage(compactVector,{offset,limit:200});if(!page)fail('rehydration_page_admission');try{for(let j=0;j<page.values.length;j++){const i=offset+j;if(page.names[j]!==witness.vector.names[i]||page.missing[j]!==witness.vector.missing[i]||!Object.is(page.values[j],witness.vector.values[i]))fail('rehydration_value_binding');names.push(page.names[j]);values.push(page.values[j]);missing.push(page.missing[j]);}}finally{page.release();}}
+  const vectorRecord=featureAssetRecord(freeze({names,values,missing}),bytes,[bound.schemaRecord]);vectorLease=retainFeatureAsset(arena,vectorRecord);if(!vectorLease)fail('compiler_resource_admission');
+  verifiedVectors.set(vectorRecord.value,{arena,record:vectorRecord,descriptor:freeze({namesSha256:sd.namesHash,featureCount:n})});
+  const plan=bound.schemaRecord.value,minted=mintProjectedRow({arena,schema:witness.schema,vector:vectorRecord.value,schemaRecord:bound.schemaRecord,vectorRecord,schemaHash:witness.s.descriptor.sha256,functionContract:plan.functionContract,parts:plan.parts,bindings:witness.descriptor.componentRowIds.map(rowId=>({rowId})),semanticInputs:witness.schema.semanticInputs??null,rowInstanceProvenance:witness.provenance});rowLease=minted.lease;
+  let active=true;const profile=sd.capacityProfile?{capacityProfile:sd.capacityProfile}:{};return Object.freeze(withFeatureRelease({targetId:witness.schema.targetId,stateMode:witness.schema.stateMode,schemaRef:{sha256:sd.expandedSchemaHash,namesSha256:sd.namesHash,featureCount:n,...profile},featureFunctionContract:plan.functionContract,diagnosticSchema:witness.schema,diagnosticVector:vectorRecord.value,projectedRowAuthority:minted.token,restoration:{contract:'aegis.source-witnessed-restored-projection.v1',valueSource:'verified_loaded_compact_vector_pages',sourceAuthority:'regenerated_private_row_exact_original_horizon',autonomousRestore:false,sourceAvailabilityAttested:false},eligibleForTraining:false,eligibleForServing:false},()=>{if(!active)return false;active=false;rowLease.release();vectorLease.release();return true;}));
+ }catch(error){rowLease?.release();vectorLease?.release();throw error;}finally{creation?.release();if(compactVector)releaseCompactFeatureAsset(compactVector);if(compactSchema)releaseCompactFeatureAsset(compactSchema);witness.release();}
+}
 /** Only the actual-byte schema identity minted here is accepted. Lookalikes,
  * frozen JSON copies and a caller's declared hash cannot bypass verification. */
 export function retainVerifiedProjectionSchema(schema,{expectedSchemaHash}={}){
@@ -21,10 +67,12 @@ export function retainVerifiedProjectionVector(vector,{expectedNamesHash,feature
  const verified=verifiedVectors.get(vector);if(!verified||verified.record.value===null||expectedNamesHash!==verified.descriptor.namesSha256||featureCount!==verified.descriptor.featureCount)return null;
  const lease=retainFeatureAsset(verified.arena,verified.record);return lease?Object.freeze(withFeatureRelease({vector,descriptor:verified.descriptor},()=>lease.release())):null;
 }
-export function createFeatureProjectionCompiler({registry,registryHash,sourceInventory,sourceProfiles,maxSchemas=32,maxComponentSchemas=16,resourceArena=null,workingBytes=FEATURE_ASSET_WORKING_BYTES,capacityProfile=LEGACY_FEATURE_CAPACITY_PROFILE.id}={}){
- if(!Number.isSafeInteger(maxSchemas)||maxSchemas<1||maxSchemas>64||!Number.isSafeInteger(maxComponentSchemas)||maxComponentSchemas<1||maxComponentSchemas>32||!Number.isSafeInteger(workingBytes)||workingBytes<1024||workingBytes>FEATURE_ASSET_WORKING_BYTES)fail('compiler_bounds');
- const arena=resourceArena??createDiagnosticResourceArena();if(typeof arena?.reserve!=='function'||typeof arena?.retainAsset!=='function')fail('compiler_arena');
- const capacity=resolveFeatureCapacityProfile(capacityProfile),profileFields=capacity.id===LEGACY_FEATURE_CAPACITY_PROFILE.id?{}:{capacityProfile:capacity.id};
+export function createFeatureProjectionCompiler({registry,registryHash,sourceInventory,sourceProfiles,maxSchemas=32,maxComponentSchemas=16,resourceArena=null,workingBytes=null,capacityProfile=LEGACY_FEATURE_CAPACITY_PROFILE.id,resourceConfiguration=null}={}){
+ const resources=resourceConfiguration===null?null:requireDiagnosticResourceConfiguration(resourceConfiguration),maximumWorking=resources?.descriptor.compilerWorkingBytes??FEATURE_ASSET_WORKING_BYTES;workingBytes??=maximumWorking;
+ if(resources!==null&&resourceArena!==null&&resourceArena!==resources.resourceArena)fail('compiler_resource_configuration_arena');
+ if(!Number.isSafeInteger(maxSchemas)||maxSchemas<1||maxSchemas>64||!Number.isSafeInteger(maxComponentSchemas)||maxComponentSchemas<1||maxComponentSchemas>32||!Number.isSafeInteger(workingBytes)||workingBytes<1024||workingBytes>maximumWorking)fail('compiler_bounds');
+ const arena=resourceArena??resources?.resourceArena??createDiagnosticResourceArena();if(typeof arena?.reserve!=='function'||typeof arena?.retainAsset!=='function')fail('compiler_arena');
+ const capacity=resolveFeatureCapacityProfile(capacityProfile),profileFields=capacity.id===LEGACY_FEATURE_CAPACITY_PROFILE.id?{}:{capacityProfile:capacity.id},scanOptions={workingBytes,maxBytes:capacity.maxExpandedSchemaBytes,maxNodes:capacity.maxExpandedNodes};
  const components=new Map(),plans=new Map(),metadataMemo=new WeakMap(),normalized=new WeakMap(),vectors=new WeakMap(),validatedDefinitions=new WeakSet();
  let closed=false,componentCompilations=0,projectionCompilations=0,componentEvictions=0,projectionEvictions=0,metadataIdentityHits=0,activeBlocks=0,activeRoutes=0,nextRow=0;
  const reserve=bytes=>{const r=arena.reserve(bytes);if(!r)fail('compiler_resource_admission');return r;};
@@ -37,7 +85,7 @@ export function createFeatureProjectionCompiler({registry,registryHash,sourceInv
  let owned,localRegistry,configuration;const setup=reserve(workingBytes);
  try{
   const input={sourceInventory,sourceProfiles,families:[...registry.families.values()],targets:[...registry.targets.values()]};
-  const size=inspectFeatureAsset(input,{workingBytes});const creation=reserve(size.bytes*2+65536);
+  const size=inspectFeatureAsset(input,scanOptions);const creation=reserve(size.bytes*2+65536);
   try{owned=freeze(structuredClone(input));localRegistry={families:new Map(owned.families.map(f=>[f.id,f])),targets:new Map(owned.targets.map(t=>[t.id,t]))};configuration=featureAssetRecord(owned,size.bytes+owned.families.length*64+owned.targets.length*64);configuration.lease=hold(configuration);}finally{creation.release();}
  }finally{setup.release();}
  function cache(map,key,record,maximum,component){while(map.size>=maximum)evict(map,component);const lease=hold(record);map.set(key,{record,lease});}
@@ -52,7 +100,7 @@ export function createFeatureProjectionCompiler({registry,registryHash,sourceInv
    let schemaRecord=null;const memo=metadataMemo.get(rawDefs);
    if(memo?.id===id&&memo.names===names&&memo.declaredSchema===declaredSchema&&memo.record.value!==null){schemaRecord=memo.record;metadataIdentityHits++;if(components.has(memo.cacheKey))touch(components,memo.cacheKey,components.get(memo.cacheKey));}
    if(!schemaRecord){
-    const metadataSize=inspectFeatureAsset(rawDefs,{workingBytes}),namesSize=inspectFeatureAsset(names,{workingBytes}),immutable=Object.isFrozen(names)&&metadataSize.deeplyFrozen;
+    const metadataSize=inspectFeatureAsset(rawDefs,scanOptions),namesSize=inspectFeatureAsset(names,scanOptions),immutable=Object.isFrozen(names)&&metadataSize.deeplyFrozen;
     if(new Set(names).size!==names.length)fail('component_name_collision:'+id);
     // Inspected deeply frozen metadata can be borrowed into this owned schema:
     // its nested operands stay immutable and the schema record charges the full
@@ -76,7 +124,7 @@ export function createFeatureProjectionCompiler({registry,registryHash,sourceInv
      });
      const namesHash=hash(names),semanticHash=hash(definitions),cacheKey=digest({id,declaredSchema,namesHash,semanticHash});schemaRecord=components.get(cacheKey)?.record??null;
      if(schemaRecord)touch(components,cacheKey,components.get(cacheKey));
-     else{const data=freeze({id,names:[...names],namesHash,definitions,componentSchemaHash:declaredSchema,semanticHash,sourceInventory:owned.sourceInventory[id]}),size=inspectFeatureAsset(data,{workingBytes});schemaRecord=featureAssetRecord(data,size.bytes,[configuration]);cache(components,cacheKey,schemaRecord,maxComponentSchemas,true);componentCompilations++;}
+     else{const data=freeze({id,names:[...names],namesHash,definitions,componentSchemaHash:declaredSchema,semanticHash,sourceInventory:owned.sourceInventory[id]}),size=inspectFeatureAsset(data,scanOptions);schemaRecord=featureAssetRecord(data,size.bytes,[configuration]);cache(components,cacheKey,schemaRecord,maxComponentSchemas,true);componentCompilations++;}
      if(immutable)metadataMemo.set(rawDefs,{id,names,declaredSchema,cacheKey,record:schemaRecord});
     }finally{creation.release();}
    }
@@ -95,13 +143,14 @@ export function createFeatureProjectionCompiler({registry,registryHash,sourceInv
    normalized.set(out,{schemaRecord,rowRecord,rowId:++nextRow,isActive:()=>active});activeBlocks++;return Object.freeze(out);
   }catch(error){rowLease?.release();throw error;}finally{transient.release();}
  }
- function project(blocks,targetId,stateMode,semanticInputs=null,rowVectorCache=new Map()){
+ function project(blocks,targetId,stateMode,semanticInputs=null,rowVectorCache=new Map(),rowInstanceProvenance=null){
   ensure();if(!Array.isArray(blocks)||blocks.length>8||new Set(blocks.map(b=>b.id)).size!==blocks.length)fail('component_blocks');
   const bindings=blocks.map(b=>{const held=normalized.get(b);if(!held?.isActive())fail('component_ownership_required');return held;});
   const target=localRegistry.targets.get(targetId);if(!target||!target.stateModes.includes(stateMode))fail('projection_state_mode');
-  const transient=reserve(workingBytes);let routeLease=null,planLease=null;
+  const transient=reserve(workingBytes);let routeLease=null,planLease=null,rowAuthorityLease=null;
   try{
-   const semanticSize=inspectFeatureAsset(semanticInputs,{workingBytes,maxBytes:1024*1024});
+   const semanticSize=inspectFeatureAsset(semanticInputs,{...scanOptions,maxBytes:1024*1024});
+   inspectFeatureAsset(rowInstanceProvenance,{...scanOptions,maxBytes:1024*1024});
    const key=hash({targetId,stateMode,registryHash,components:blocks.map(b=>({id:b.id,schema:b.semanticHash,declared:b.componentSchemaHash})),semanticInputs});
    let planRecord=plans.get(key)?.record??null;if(planRecord)touch(plans,key,plans.get(key));
    if(!planRecord){
@@ -116,7 +165,7 @@ export function createFeatureProjectionCompiler({registry,registryHash,sourceInv
      if(names.length>capacity.maxFeatures){const error=Error('unified_features:projected_feature_count_bound');error.diagnostics=Object.freeze({contract:'aegis.projection-capacity-refusal.v1',targetId,stateMode,featureCount:names.length,maxFeatureCount:capacity.maxFeatures,capacityProfile:capacity.id,limitsUnchanged:true});throw error;}if(new Set(names).size!==names.length)fail('qualified_name_collision');
      const schema=freeze({contract:capacity.schemaContract,...profileFields,registryHash,targetId,stateMode,definitions,sourceInventory:owned.sourceInventory,componentSchemas:blocks.map(b=>({id:b.id,sha256:b.componentSchemaHash})),semanticInputs:structuredClone(semanticInputs)});
      const schemaHash=hash(schema),familyStatuses=FAMILY_IDS.map(familyId=>{const f=localRegistry.families.get(familyId),n=familyCounts.get(familyId)??0,eligible=f.eligibleTargets.includes(targetId);return{familyId,eligibleInCanonicalTarget:eligible,generatedColumnCount:n,status:n?'implemented_subset_requires_full_family_review':eligible?'not_generated':'not_eligible_in_canonical_target',implementationStatus:n?'generated_subset':eligible?'implementation_gap':'not_applicable',catalogueSourceDisposition:f.status,sourceAvailabilityAttested:false};});
-     const plan=freeze({schema,hash:schemaHash,names,namesHash:hash(names),parts,vectorSignature:hash(parts),familyStatuses,excluded});
+     const functionContract=compileFeatureFunctionContract(schema),plan=freeze({schema,hash:schemaHash,functionContract,names,namesHash:hash(names),parts,vectorSignature:hash(parts),familyStatuses,excluded});
      // Shared definitions/strings/configuration belong to dependencies. This
      // plan owns reference/index arrays, dispositions and its small header.
      planRecord=featureAssetRecord(plan,131072+count*32+excluded.length*192+semanticSize.bytes,[...bindings.map(b=>b.schemaRecord)]);cache(plans,key,planRecord,maxSchemas,false);projectionCompilations++;
@@ -129,9 +178,10 @@ export function createFeatureProjectionCompiler({registry,registryHash,sourceInv
     const bytes=65536+plan.names.length*32,creation=reserve(bytes);
     try{const values=[],missing=[],byId=new Map(blocks.map(b=>[b.id,b]));for(const p of plan.parts){const b=byId.get(p.id);for(const i of p.indices){values.push(b.values[i]);missing.push(b.missing[i]);}}vectorRecord=featureAssetRecord(freeze({names:plan.names,values,missing}),bytes,[planRecord]);routeLease=hold(vectorRecord);verifiedVectors.set(vectorRecord.value,{arena,record:vectorRecord,descriptor:freeze({namesSha256:plan.namesHash,featureCount:plan.names.length})});const ref=Object.freeze({contract:'aegis.private-row-vector.v1'});vectors.set(ref,vectorRecord);rowVectorCache.set(rowKey,ref);}finally{creation.release();}
    }else routeLease=hold(vectorRecord);
-   let active=true;const out=withFeatureRelease({targetId,stateMode,schemaRef:{sha256:plan.hash,featureCount:plan.names.length,namesSha256:plan.namesHash,...profileFields},diagnosticSchema:plan.schema,diagnosticVector:vectorRecord.value,inferenceVector:null,familyStatuses:plan.familyStatuses,excludedDefinitions:plan.excluded,completenessScope:'explicit_generated_diagnostic_components_not_all79_families',eligibleForTraining:false,eligibleForServing:false},()=>{if(!active)return false;active=false;activeRoutes--;routeLease.release();planLease.release();return true;});activeRoutes++;return out;
-  }catch(error){routeLease?.release();planLease?.release();throw error;}finally{transient.release();}
+   const minted=mintProjectedRow({arena,schema:plan.schema,vector:vectorRecord.value,schemaRecord:planRecord,vectorRecord,schemaHash:plan.hash,functionContract:plan.functionContract,parts:plan.parts,bindings,semanticInputs,rowInstanceProvenance});rowAuthorityLease=minted.lease;
+   let active=true;const out=withFeatureRelease({targetId,stateMode,schemaRef:{sha256:plan.hash,featureCount:plan.names.length,namesSha256:plan.namesHash,...profileFields},featureFunctionContract:plan.functionContract,diagnosticSchema:plan.schema,diagnosticVector:vectorRecord.value,projectedRowAuthority:minted.token,inferenceVector:null,familyStatuses:plan.familyStatuses,excludedDefinitions:plan.excluded,completenessScope:'explicit_generated_diagnostic_components_not_all79_families',eligibleForTraining:false,eligibleForServing:false},()=>{if(!active)return false;active=false;activeRoutes--;rowAuthorityLease.release();routeLease.release();planLease.release();return true;});activeRoutes++;return out;
+  }catch(error){rowAuthorityLease?.release();routeLease?.release();planLease?.release();throw error;}finally{transient.release();}
  }
  function getSchema(schemaHash){if(!SH.test(schemaHash))fail('schema_hash');for(const[key,e]of plans)if(e.record.value?.hash===schemaHash){touch(plans,key,e);return e.record.value.schema;}return null;}
- return Object.freeze({normalize,project,getSchema,retainSchema(schemaHash){const schema=getSchema(schemaHash);return schema?retainVerifiedProjectionSchema(schema,{expectedSchemaHash:schemaHash}):null;},close(){if(closed)return false;closed=true;for(const e of plans.values())e.lease.release();plans.clear();for(const e of components.values())e.lease.release();components.clear();configuration.lease.release();owned=null;localRegistry=null;return true;},status(){return{componentSchemas:components.size,projectionSchemas:plans.size,componentCompilations,projectionCompilations,componentEvictions,projectionEvictions,metadataIdentityHits,activeBlocks,activeRoutes,maxSchemas,maxComponentSchemas,closed,resources:arena.status?.()??null};}});
+ return Object.freeze({normalize,project,getSchema,retainSchema(schemaHash){const schema=getSchema(schemaHash);return schema?retainVerifiedProjectionSchema(schema,{expectedSchemaHash:schemaHash}):null;},close(){if(closed)return false;closed=true;for(const e of plans.values())e.lease.release();plans.clear();for(const e of components.values())e.lease.release();components.clear();configuration.lease.release();owned=null;localRegistry=null;return true;},status(){return{componentSchemas:components.size,projectionSchemas:plans.size,componentCompilations,projectionCompilations,componentEvictions,projectionEvictions,metadataIdentityHits,activeBlocks,activeRoutes,maxSchemas,maxComponentSchemas,workingBytes,capacityProfile:capacity.id,scanMaxBytes:scanOptions.maxBytes,scanMaxNodes:scanOptions.maxNodes,closed,resources:arena.status?.()??null};}});
 }

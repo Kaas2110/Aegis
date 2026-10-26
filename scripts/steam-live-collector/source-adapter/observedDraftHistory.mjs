@@ -4,7 +4,7 @@ import {instantNs} from './causalTime.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {createDraftCaptureProof,advanceObservedDraft,draftHash} from './observedDraft.mjs';
 import {readPinnedHistoricalJson} from './historicalAlignment.mjs';
-import {pinned,calculateHistoryCore,qualifyRetainedHistoryCorpus,FACTS_CONTRACT,NATIVE_CONTRACT} from './historyCalculationCore.mjs';
+import {pinned,calculateHistoryCore,qualifyRetainedHistoryCorpus,FACTS_CONTRACT,NATIVE_CONTRACT,NATIVE_REFERENCE_METRICS,NATIVE_LEVEL_REFERENCE_DEFINITION,NATIVE_CLOSING_REFERENCE_DEFINITION} from './historyCalculationCore.mjs';
 import {evidenceHash} from './playerHeroEconomyFeatures.mjs';
 import {readRetainedMapViewCoreInputs} from './retainedHistoryViewInputs.mjs';
 
@@ -80,7 +80,8 @@ export function validateObservedDraftHistory(context,{matchId,decisionAt,readMod
  const outcomes=new Set();
  for(const d of context.dependencies){
   const at=instantNs(d?.availableAt);
-  if(!id(d?.matchId)||d.matchId===matchId||!hash(d.sha256)||typeof d.evidenceRef!=='string'||at===null||at>cutoff||!['outcome','roster','hero_roster','native_frame'].includes(d.kind))return reject('draft_history_future_or_current_dependency');
+  if(!id(d?.matchId)||d.matchId===matchId||!hash(d.sha256)||typeof d.evidenceRef!=='string'||at===null||at>cutoff||!['outcome','roster','hero_roster','native_frame','static_reference'].includes(d.kind))return reject('draft_history_future_or_current_dependency');
+  if(d.kind==='static_reference'&&(d.referenceType!=='prior_duration_fact'||!Number.isFinite(d.durationSeconds)||d.durationSeconds<=0))return reject('draft_history_duration_dependency');
   if(d.kind==='outcome'){if(instantNs(d.endedAt)===null||instantNs(d.endedAt)>at||typeof d.value!=='boolean')return reject('draft_history_outcome_dependency');outcomes.add(d.matchId);}
  }
  if(context.dependencies.some(d=>!outcomes.has(d.matchId)))return reject('draft_history_prior_completion');
@@ -108,7 +109,7 @@ function produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,
  const emptyRetained=retained&&facts.rows.length===0&&native.rows.length===0;
  const calculated=calculateHistoryCore({target,known,roster,facts,native,roleProofs:[],minimumSupport,audit,bindings,nativeEvidenceInputs,nativeAlignmentInputs,nativeProofPolicy:'raw_replay_required',alignmentComputedAt:computedAt,expectedProfileReviewSha256,allowEmptyRetainedCorpus:emptyRetained});
  if(calculated.status==='blocked')return blocked(calculated.reason,audit,bindings);
- const {players,roles,references,sourceMatches,heroCohort}=calculated;
+ const {players,roles,references,closingLandmarkReferences,sourceMatches,heroCohort}=calculated;
  // Late identity is a new selector at the original cutoff. A complete old query
  // for different accounts is not a complete history for newly disclosed players.
  const scope=facts.data.scope,ids=xs=>Array.isArray(xs)&&xs.every(id)&&new Set(xs).size===xs.length;
@@ -120,12 +121,13 @@ function produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,
   if(p.teamId!==null&&(!teamScope||!retained&&!scope.targetTeamIds.includes(p.teamId)))suppress(p,TEAM_KEYS,'team_source_scope_coverage_unproven');
   if(retained)for(const statistic of Object.values(p.statistics)){statistic.sourcePopulation='provided_retained_response_corpus_only';statistic.globalPopulationComplete=false;}
  }
+ for(const ref of closingLandmarkReferences){if(!teamScope||ref.teamId===null||!retained&&!scope.targetTeamIds.includes(ref.teamId)){ref.cohortQualified=false;ref.reason='team_source_scope_coverage_unproven';for(const key of Object.keys(ref.values))ref.values[key]=null;}if(retained){ref.sourcePopulation='provided_retained_response_corpus_only';ref.globalPopulationComplete=false;}}
  audit.targetHistoryScope={metadataValid:!!scopeBase||retained,accountIdsQualified:accountScope?roster.filter(p=>p.accountId!==null&&(retained||scope.targetAccountIds.includes(p.accountId))).length:0,teamIdsQualified:teamScope?[...new Set(roster.map(p=>p.teamId).filter(x=>x!==null&&(retained||scope.targetTeamIds.includes(x))))].length:0,...(retained?{population:'provided_retained_response_corpus_only',globalPopulationComplete:false}: {})};
  const heroKeys=['heroLateTendency'],teamKeys=TEAM_KEYS;
  const subset=(p,keys)=>({values:Object.fromEntries(keys.map(k=>[k,p.values[k]])),definitions:Object.fromEntries(keys.map(k=>[k,p.definitions[k]])),statistics:Object.fromEntries(keys.map(k=>[k,p.statistics[k]]))});
  const heroes=players.map(p=>({heroId:p.heroId,side:p.side,teamId:p.teamId,...subset(p,heroKeys)}));
  const teams=['radiant','dire'].map(side=>{const p=players.find(x=>x.side===side);return{side,teamId:p.teamId,...subset(p,teamKeys)};});
- const featurePayload={players:players.filter(p=>account(p.accountId)),heroes,teams,roles,heroMinuteReferences:references};
+ const featurePayload={players:players.filter(p=>account(p.accountId)),heroes,teams,roles,heroMinuteReferences:references,closingLandmarkReferences};
  const dependencies=[];
  for(const m of calculated.usedMapRecords){
   const common={matchId:m.matchId,sha256:facts.pin.sha256,evidenceRef:facts.ref+'#map/'+m.matchId};
@@ -133,9 +135,10 @@ function produceResolvedObservedDraftHistory({matchId,computedAt,minimumSupport,
   if(m.players.length)dependencies.push({...common,kind:'roster',availableAt:m.playersKnownAt});
   if(m.heroRoster.length)dependencies.push({...common,kind:'hero_roster',availableAt:m.heroesKnownAt});
  }
- const frameIds=new Set();for(const ref of references)for(const o of ref.sourceObservations){if(frameIds.has(o.observationId))continue;frameIds.add(o.observationId);dependencies.push({kind:'native_frame',matchId:o.matchId,availableAt:o.knownAt,sha256:native.pin.sha256,evidenceRef:native.ref+'#observation/'+o.observationId,rawSha256:o.rawSha256,observationId:o.observationId});}
+ const frameIds=new Set();for(const ref of [...references,...closingLandmarkReferences])for(const o of ref.sourceObservations){if(frameIds.has(o.observationId))continue;frameIds.add(o.observationId);dependencies.push({kind:'native_frame',matchId:o.matchId,availableAt:o.knownAt,sha256:native.pin.sha256,evidenceRef:native.ref+'#observation/'+o.observationId,rawSha256:o.rawSha256,observationId:o.observationId});}
+ const durationIds=new Set();for(const ref of closingLandmarkReferences)for(const o of ref.sourceObservations){if(durationIds.has(o.matchId))continue;durationIds.add(o.matchId);const map=calculated.usedMapRecords.find(map=>map.matchId===o.matchId);dependencies.push({kind:'static_reference',referenceType:'prior_duration_fact',matchId:o.matchId,durationSeconds:map.durationSeconds,availableAt:o.durationKnownAt,sha256:facts.pin.sha256,evidenceRef:facts.ref+'#duration/'+o.matchId});}
  const body={contract:CONTEXT_CONTRACT,mode:'observed_draft_frozen',matchId,historyCutoffAt:state.historyCutoffAt,validFrom:state.validFrom,computedAt,cutoffPolicy:state.cutoffPolicy,availabilityBasis,draftState:state,sourceMatches,dependencies,featurePayload,
-  producer:{contract:PRODUCER_CONTRACT,bindings,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,noNetWorthToGpmSubstitution:true,nativeProofPolicy:'raw_replay_required',nativeAlignmentBindings:calculated.nativeAlignmentBindings,nativeEvidenceBindings:calculated.nativeEvidenceBindings,originalCutoffImmutable:true,lateIdentityDoesNotExpandHistory:true,zeroMinuteCohortClaimed:false,learnedState:null,...(emptyRetained?{emptyRetainedCorpus:true}:{}),...(retained?{sourcePopulation:{basis:'provided_retained_response_corpus_only',...retainedScope,originalHistoricalAvailabilityProven:false,...(emptyRetained?{providedMapCount:0}:{})}}:{})},
+  producer:{contract:PRODUCER_CONTRACT,bindings,minimumSupport,newLateMinimumSupport:Math.max(5,minimumSupport),heroCohort,aggressionIsKillPaceProxy:true,lateThresholdMinutes:40,nativeMinuteSelection:'last_clock_at_or_before_minute_within_30_seconds',recordsPerMapHeroMinuteMaximum:1,nativeReferenceMetrics:NATIVE_REFERENCE_METRICS,nativeLevelReferenceDefinition:NATIVE_LEVEL_REFERENCE_DEFINITION,nativeClosingReferenceDefinition:NATIVE_CLOSING_REFERENCE_DEFINITION,noNetWorthToGpmSubstitution:true,nativeProofPolicy:'raw_replay_required',nativeAlignmentBindings:calculated.nativeAlignmentBindings,nativeEvidenceBindings:calculated.nativeEvidenceBindings,originalCutoffImmutable:true,lateIdentityDoesNotExpandHistory:true,zeroMinuteCohortClaimed:false,learnedState:null,...(emptyRetained?{emptyRetainedCorpus:true}:{}),...(retained?{sourcePopulation:{basis:'provided_retained_response_corpus_only',...retainedScope,originalHistoricalAvailabilityProven:false,...(emptyRetained?{providedMapCount:0}:{})}}:{})},
   eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
  const context={...body,contentHash:evidenceHash(body)};
  const verified=validateObservedDraftHistory(context,{matchId,decisionAt:computedAt});if(!verified.accepted)throw Error('generated_draft_context_invalid:'+verified.reason);

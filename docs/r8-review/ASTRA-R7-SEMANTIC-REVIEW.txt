@@ -1,0 +1,247 @@
+AEGIS ASTRA R7 SEMANTIC REVIEW
+26 October 2026. Architecture and static review only; no application/test edits,
+test execution, provider calls, data refresh, training or activation.
+
+Reviewed baseline: PR12 merge 85c3b056769cf98f2bedfa233036e56b854201e4.
+Canonical files: C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Root supplied the publication receipt. Current scoped source hashes were read,
+not extended from old receipts; six pins are listed at the end of this document.
+The prior 79-family meaning document remains authoritative except for the explicit
+additive clarifications here. This review does not redefine legacy weight inputs.
+
+1. WHAT THE 9,952 LIVE GAPS ACTUALLY MEAN
+
+The saved final all13 audit reports 9,232 unverified native plus 720 unbound
+parameter occurrences in EACH of four LIVE heads. They are repeated vocabulary
+occurrences, not 39,808 independent new concepts. Static generator grammar gives
+this exact decomposition, consistent with the recorded family totals:
+
+  Native opaque branches                                     Count per LIVE head
+  hero native_gold observed_value, 250 dictionary slots                       250
+  hero net_gold_raw, 250 dictionary slots                                    250
+  native_gold hero-minute residual and standardized, 250 * 2                 500
+  native_gold * 8 frozen context fields * 2 variants * 250                 4,000
+  native_gold team interaction, 3 sides * 8 contexts * 3 terms                 72
+  native_gold economic-rank interaction, 2 bases * 5 ranks * 2 sides * 208   4,160
+  Total                                                                   9,232
+
+The 208 profile keys are 16 nonperformance keys plus 32 historical performance
+metrics times 6 profile transformations. Root's saved audit has L02=500,
+L06=500, L14=8,232 native gaps, exactly matching this expansion.
+
+This is NOT 9,232 missing mathematical descriptions. Their arithmetic is already
+specified. The unresolved fact is the physical meaning of Steam player.gold and
+player.net_gold under the current profile. describeNativeEconomyOperand preserves
+them as provider_gold_raw/provider_net_gold_raw (playerHeroEconomyFeatures.mjs:13-18),
+and nativeFieldEvidence.mjs:5-6 explicitly calls their units unverified. No current
+evidence justifies substituting netWorth, earned total gold, goldSpent, or GPM.
+
+ASTRA DECISION S1: preserve every occurrence in inventory and forensic diagnostics;
+record formulaStatus=specified_literal_algebra, sourceMeaningStatus=opaque_provider,
+candidateDisposition=diagnostic_only_unqualified_source. Every dependent product,
+residual and standardized value inherits that source limitation. A model profile
+must not silently admit these branches merely because the dependency description
+is complete, nor silently delete their vocabulary. An observed raw zero remains
+observed raw zero; an absent/invalid input remains missing. The 240 unpicked hero
+slots cannot make active selected-hero coverage appear complete.
+
+Literal opaque ultimate/position/timer/buyback fields need the same TWO-AXIS
+classification. dynamicSemanticBindings.mjs:6,37 currently binds them without
+setting opaque, and so labels their literal transforms authoritative_template.
+That may describe faithful copying, but it is not certification of cooldown
+seconds, enum readiness, map coordinates, alive state or buyback feasibility.
+Keep raw diagnostics; admit interpreted gameplay features only under exact proved
+source/rules semantics. Do not relabel them unavailable at the endpoint: the
+missing evidence is their interpretation, not necessarily field presence.
+
+2. EXACT RESOLUTION OF THE 720 PROGRAMMING GAPS
+
+observedDraftFeatureBundle.mjs:274-284 computes nine trajectory statistics for
+5 lead metrics, 4 windows and two sides. Each is multiplied by one of three
+EXPLICIT team profile keys: formWinFraction30d, late40Fraction90d,
+winMeanDurationSeconds90d. The numeric code selects that same-side team row.
+The descriptor instead puts d.definition into historyDefinitions. This is an
+operator template ID, not an operand address.
+
+dynamicSemanticBindings.mjs:16-25 indexes every players/teams/heroes statistic by
+both key and generic definition. Its identity comparison includes key/window.
+Generic rawWinFraction matches 7/30/90-day and multiple profile keys. Generic
+late40Fraction matches team/player/player-hero/hero keys. Each of those two
+ambiguous templates occurs 5 * 4 * 9 * 2 = 360 times, totaling 720. The win-duration
+team key does not collide in the same way. This count is a source-derived
+reconciliation, not a newly executed full audit.
+
+ASTRA DECISION S2: keep current arithmetic. Bind each trajectory product to an
+EXACT typed historical-statistic reference (details in FORMULA-CONTRACTS.txt):
+  component=relational; profileKind=team; side=the emitted side;
+  selector=current same-side teamId; key=formWinFraction30d or late40Fraction90d
+  or winMeanDurationSeconds90d; window=30/90/90 respectively;
+  operator=rawWinFraction/late40Fraction/winMeanDurationSeconds;
+  formulaVersion=aegis.prior-map-relational-statistics.v3;
+  support=the exact selected statistic.minimumSupport and supportMaps;
+  availability=its support receipt closure <= immutable map history cutoff.
+Do not pick the first matching generic template or select a window from a name.
+Store formula template identity separately from actual dependency references.
+The existing false-ambiguity guard remains useful for truly conflicting contracts.
+
+3. DECLARED-COMPLETE IS NOT DEPENDENCY-COMPLETE
+
+P1/S3 — ranked interactions omit the actual ranking input and current selectors.
+observedDraftFeatureBundle.mjs:267-269 ranks by basis native_nw/native_gpm, then
+emits nativeField * selected player's history. inputFields contains only nativeField
+and history key. For a native_xpm product at a native_gpm rank, GPM is not declared.
+Current hero/account/team/side selector operands are also not exact dependencies.
+The basis string in formulaParameters names intent but does not supply its native
+port/identity/time binding. dynamicSemanticBindings can call this authoritative.
+
+Static counterexample (not executed): rank1 Radiant player A and B both have XPM500,
+but form30(A)=0.1 and form30(B)=0.9. Initially GPM(A)=1000,GPM(B)=500 => output50;
+change ONLY GPM(A)=100,GPM(B)=1000 => output450. The declared XPM/history inputs
+are unchanged; the omitted sorting input explains the change. Ties use numeric
+hero ID, so that selector input must be declared too. All five same-side basis
+values are required to know rank1, not merely the chosen hero's value.
+
+Implement explicit rankingBasis input and full ranking roster, selected hero
+identity, selected account/team IDs for the chosen historical population, side
+orientation and exact selected statistic. Golden semantic dependency checks must
+vary a non-value ranking input and demonstrate it is present in the dependency
+closure. Adding metadata must preserve original numeric arithmetic and name order.
+
+P1/S4 — coherent economic-rank minute products omit current clock.
+coherentEconomyContextFeatures.mjs:104-105 multiplies by minute in at(), but the
+descriptor inputFields lists only native metric and heroId. Unlike team/hero
+minute products at100/111, line105 omits providerGameClockSeconds. Example with
+top NW1000: clock600 -> 10,000; clock1200 -> 20,000 with listed inputs fixed.
+Declare same-frame providerGameClockSeconds explicitly for that variant, with
+seconds-to-minutes conversion. This affects 3 metrics * 5 ranks * 3 orientations
+* 4 terms = 180 declared-complete columns per LIVE head.
+
+P1/S5 — history selector presence is requested but not bound transitively.
+dynamicSemanticBindings.mjs:25 writes requiresExactSelectorBinding:true but only
+stores key/definition/units/support/window; input binding says 'bound account/hero/
+team selector' without the actual typed selector. Hero direct/history inputs at
+observedDraftFeatureBundle.mjs:246-249 omit the current hero/account/side/team ports
+that select and orient values. A shared context protects current execution, but
+metadata is not yet a standalone executable dependency contract for future model
+or dataset compatibility. Specify selectors in the function grammar; place actual
+current IDs and source receipts in row/instance identity. Do not hash them into
+the reusable function type, and do not remove them from row provenance.
+
+P2/S6 — native-level historical reference has no producer.
+observedDraftFeatureBundle.mjs:30,256-259 emits native_level hero-minute residual/z
+for 250 heroes (500 columns). historyCalculationCore.mjs:12,186-193 creates only
+native_nw/native_gpm/native_xpm references. Therefore selected hero level references
+cannot be populated by the current canonical producer, although their descriptors
+are structurally complete. This is an implementation gap, not proof Steam lacks
+level. The source has literal level already. Define/add an explicit native_level
+prior-frame reference path under the same exact-clock/as-of proof contract, or
+record its implementation gap until the path is implemented. Do not reuse XPM as
+level. Native_gold references also lack a producer, but remain opaque under S1.
+
+P2/S7 — generic historyDefinitions is not one executable reference type.
+historicalSemanticBindings.mjs:38,43 stores generic statistic formula IDs for older
+profile rows; newer reviewed summary helpers store actual emitted column names.
+Both currently satisfy array-of-string validation. registry-contract.mjs:132-145
+validates structural fields and self-reported verification; it does not prove
+executable dependency closure or exact selector consumption. Retain the historical
+receipt truth ('declaration audit passed'), but stop presenting its 881,390 count
+as mathematically certified features. It was explicitly not an acceptance claim.
+
+4. DECISION S8 — TYPED DEPENDENCIES AND TRANSITIVE ELIGIBILITY
+
+Use three disjoint reference kinds:
+  input: exact source/profile/field/selector grammar, units and timestamp contract;
+  feature: existing emitted definition by component namespace plus stable ID;
+  formulaTemplate: reusable operator/version/parameters, never a substitute for
+    an operand edge. A historical statistic reference also binds profileKind/key,
+    window, support and selector grammar; it resolves to a typed input or feature.
+
+A finite compiled DAG must prove unique resolution, no cycles, complete operators,
+compatible dimensions, phase/time applicability and explicit current identity
+selectors. Bind it at the SAME numerical template. Do not parse feature-name text
+to invent units, source fields, time horizons or a population. Qualified provider
+input has separate evidence/version binding; a copied descriptor never mints
+source/causal authority. Every transform inherits the weakest source/availability
+eligibility among its required operands. Missing times or unknown measurement
+meaning cannot disappear through a product, aggregation, mask or formula alias.
+
+Separate dispositions: formula specified; implementation implemented/missing;
+source meaning qualified/opaque; measurement present/missing; causal available/
+unavailable; source coverage measured/unmeasured; phase allowed/forbidden;
+model eligibility (derived). 'Known unpicked' structural zero has its own case.
+Projection inclusion uses these statuses; preserve full inventory and diagnostics.
+No requirement that every conceivable unavailable feature become non-null before
+the rest can be assessed. No fit is authorized by this review.
+
+5. ACTIVE FEATURE SET AND ORIGINAL CATALOGUE
+
+The all13 recorded audit has 31 zero-emission family labels across its fixtures.
+Some are wrappers/metadata, duplicates of actual information under another family,
+labels/presentation or future learned states; zero count is not necessarily missing
+information. I01/I02/I04, O01-O04, Q07, T01/T02/T04 need a composition/role ledger,
+not duplicated numeric hashes/labels to force nonzero family counts. S06 content
+exists in L14 trajectory/form products; R05 known event counts appear under R02.
+Q05/Q06 are deliberately later out-of-fold model priors. L07 earned-resource
+reconstructions are incompatible with native Steam NW/GPM without equivalence.
+
+Real unfinished modes include L08 per-hero trajectories (computed in the native
+component but not projected as rich L08 columns), native-level references, L18
+structure mask decoding, Q03 historical series recovery, S03 style matchup and
+S05 closing after a prior lead. Each keeps the exact prior Astra formula/source
+requirements. D06/D08 and L17/L19/L20/R07 need supplied/qualified patch/mechanics/
+events/positions where applicable; D07 needs the actual retained population.
+No 'all 79 complete' conclusion follows from 13 routes passing.
+
+All 14 old catalogue groups remain inventoried. Only 1,280 old leaf occurrences
+(totals6, totals-draft1006, live268) have detailed mechanical migration candidates
+in the existing matrix. Candidate does not mean actual Steam source equivalence
+or legacy-weight compatibility. Opaque OpenDota radiantLead remains distinct from
+sum of ten native NW values. Old per-window slack, cast, role and outcome-rate
+variants cannot be silently aliased. Completion for new models means every current
+intended feature has a definite implemented/unsupported/ineligible disposition;
+it does not mean fabricating all 465,359 old aliases as identical.
+
+6. ACCEPTANCE TASKS FOR SOL, IN ORDER
+
+A. Typed schema/dependency contract and deterministic detailed gap report first.
+   Preserve old receipts and schema readers. No unreviewed global hash relaxation.
+B. Correct S3/S4/S5/S7 at numeric factories; exactly bind S2's 720 references.
+   Small synthetic tests reconstruct each sampled formula from declared operands,
+   include all ranking/clock counterexamples and wrong-population same-key tests.
+C. Complete native-level reference and intended L08 projections using the SAME
+   canonical offline/online functions; no fake data or source substitutions.
+D. Establish per-family delivery/composition/disposition ledger, including raw
+   opaque and external evidence gaps. Keep every agreed feature in inventory.
+E. Recompute exact13 declaration/closure report once on new pinned source after
+   small corrections pass, then one full combined technical route run. Scope
+   tests to changed dependency/identity contracts; do not repeat old1600 solely
+   to refresh metadata or launch fits for feature selection.
+
+Required tests: formula-ID rejected as feature reference; missing/cyclic edge;
+same key on team/player/hero never resolves by first occurrence; historical
+profile window M/cutoff changes alter contract/instance as appropriate; current
+account disclosure does not expand t0; lineage includes current side and roster;
+all9,232 opaque occurrences and descendants remain unqualified; all720 exact
+trajectory-history refs are mapped; level residual has a real qualified prior
+native-level reference; source proof/clock unavailable leaves dependent output
+missing; no names-only acceptance; numeric old golden values preserved except
+explicit additive/versioned newly implemented quantities.
+
+7. SCOPED SOURCE PINS
+dynamicSemanticBindings.mjs
+712dd26e85e79c45b8a2d6b8fbe928b50df15eaf74f4fe5993ffd5ed8b517d03
+observedDraftFeatureBundle.mjs
+ef074b7f73109f964470a753ddc60e15f50f5262144633b77c89222ec56df211
+coherentEconomyContextFeatures.mjs
+d69091766112e251dc21f2fc6fec5de96bef5cf35c97da8e5eb924f1204f3d5f
+historyCalculationCore.mjs
+12dcdd68e1d6b871a1a0ac79c65acbc5d4d512c8396897367970392d5d2d3f02
+historicalSemanticBindings.mjs
+7e54a8e9946524a08ac2592e09560755e9b589994c073a18840bf35b9b737647
+scripts/feature-registry/registry-contract.mjs
+c7bd7b83be9a3f909d85503aac9a130b217b7f6c5d3bb11ab1e395cad9ec1354
+
+Evidence read: outputs/Aegis-Astra-feature-semantics-20261025.txt,
+outputs/Aegis-Sol-R7-Astra-review-20261026.txt, final SEMANTICS13-RESULT.json,
+parsed original all256-semantics13-h8 log, current source and focused test source.
+No new full producer, audit, simulation or model-quality test was executed.

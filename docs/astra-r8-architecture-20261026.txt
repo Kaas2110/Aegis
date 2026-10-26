@@ -1,0 +1,390 @@
+AEGIS — ASTRA R8 ARCHITECTURE DECISIONS
+26 October2026. Binding design instructions for Sol; no application implementation.
+Read the consolidated R7 review and the exact formula-contract attachment first.
+The79-family meaning catalogue of25October remains valid unless refined here.
+
+A1. ONE PRODUCER, THREE TIME/AUTHORITY BINDINGS
+One logical formula producer serves offline replay and online decisions. Provider
+adapters normalize evidence; they do not maintain a second set of feature formulas.
+Historical inputs are from causal, versioned LOCAL history. Current dynamic inputs
+use one qualified Steam GLG scoreboard frame/continuity prefix, with no OpenDota
+HTTP dependency or silent alternate live source. Other profiles require a separate
+equivalence/availability decision. Legacy serving packages remain version-isolated.
+
+FrozenHistoricalBinding identifies the actual private view: source/corpus reference,
+snapshot/envelope, effective facts hash, target derivation, exact series receipt,
+immutable cutoff t0, validFrom/identity t1 and native-reference proof where used.
+ActiveTargetBinding identifies the host's selected entity/transition, identity
+revision and approved frozen historical view for THIS decision.
+CurrentSourceFence identifies latest admitted/classified packet, progression,
+terminal and STOP epochs, evaluated at owned current time after IO for LIVE.
+PRE/BETWEEN use target/series event authority; never fabricate a live generation.
+
+Match candidate private binding to active authority BEFORE generation and again
+after relevant awaits/before issuance. A fresh stable stamp does not validate an
+already stale candidate. A later irrelevant corpus append may reuse a view only
+through an explicit verified effective-view equivalence result. Preserve original
+generation provenance; factsSha alone does not waive other view/identity changes.
+Committed stale records may survive as forensic artifacts with current=false.
+
+A2. FIVE-MINUTE RETENTION AND CLASSIFICATION
+Keep qualification180s separate from eligible-state retention300s and from actual
+event-to-app latency. A fresh HTTP receipt never proves a fresh game state.
+Maintain admittedSourceHead, per-map classifiedSourceHead and lastSuccessfulState.
+Every valid committed outcome is classified exactly once; its classification may
+be a gap, repeated state, changed state, terminal or integrity rejection.
+Only a successfully classified ordinary gap/repeat delegates to the original
+retention lease. It does not renew lastConfirmedAt, create a new forecast or imply
+an actual pause. Confirmed pauses follow the existing evidence-based policy.
+Unclassified newer work fences issuance. An older operation may acknowledge only
+its own head, never a later queued head. Identity/terminal/STOP/integrity barriers
+remain hard. On restart derive authority from retained proof, not receipt age.
+
+A3. PRIVATE PROJECTED-ROW AUTHORITY
+At verified assembly, mint one nonforgeable/private projected-row capability.
+Its binding includes the actual source/history context, map/series/side identity,
+decision horizon, component row identities, stable function contract, ordered
+projection map, values/masks digest and the explicitly authorized target routes.
+Journal append and model input delivery require this relation, not independently
+borrowed schema/vector objects. Borrowing remains a memory-lifetime primitive.
+Same-row reuse across map winner/kills/duration is permitted through explicit
+authorized projections. Cross-context pairing fails even if all names and values
+coincidentally match. The final owning release or invalid mutation invalidates
+the in-memory capability; releasing one borrower does not invalidate other valid
+owned borrows. Source freshness expiry forbids CURRENT issuance, not explicitly
+forensic/historical replay of an intact authenticated row. Keep integrity lifetime,
+borrow lifetime and current eligibility as separate checks.
+Persisted JSON cannot mint authority. A source-bound rehydrator must verify pinned
+dependencies, semantics and row hashes, then mint an equivalent private capability.
+Compiler-only diagnostic fixtures keep a named forensic profile; do not silently
+promote them to real source admission. Keep the input-only recorder explicit.
+
+A4. VERSIONED FUNCTION, LEARNED STATE AND ROW IDENTITIES
+Do not modify the meaning of existing diagnostic schemaSha256 in place.
+Introduce a versioned FeatureFunctionContract with:
+ordered stable definition IDs, exact operator/version, raw input ports, typed
+dependency edges, selector GRAMMAR, side/slot ordering, constants/dictionary,
+dtype/units/missing rules, windows/support thresholds, phase/profile/as-of rules,
+mechanics qualification and canonical producer/projection compatibility policy.
+Changing a formula, unit, selector grammar, source measurement or missing rule
+changes the contract unless an independently reviewed equivalence is explicit.
+Bind producer implementation inventory/version as a separate mandatory package
+compatibility field; matching functions or names never authorize unknown code.
+
+Classify EVERY parameter explicitly, without generic key stripping:
+- 30-day window, rank-by-GPM rule and fixed hero dictionary index are constants.
+- The currently selected team's ID, actual account ID, roster and cutoff instant
+  are RowInstanceProvenance bindings to those functions.
+- Slot-order/tie rules are constants; resulting selected identities are row data.
+- Rule selection grammar is a function; actual qualified ruleset is bound evidence.
+If a rule changes numeric semantics it changes compatibility, not just provenance.
+- A fitted encoder/calibrator/prior is learned state, not a raw function constant.
+
+LearnedStateBinding identifies fitted artifact hash, TRAIN cohort and cutoff,
+fold, transform configuration and availability/derivation provenance. No fits now.
+RowInstanceProvenance contains actual IDs/order/source frame/profile/epoch, raw and
+receipt hashes, t0/t1/current times, history references/support, correction epochs,
+learned-state references and exact vector/mask hashes. Different teams/cutoffs can
+share a function contract while remaining different authenticated rows.
+Retain old instance descriptor/hash for forensic readers. New compact persistence
+stores invariant contracts once plus bounded row bindings. Lossless float64, masks,
+ordering and negative-zero behavior remain; no silent float32/quantization.
+
+A5. TYPED DEPENDENCIES, PHYSICAL MEANING AND THE REMAINING FEATURES
+Use distinct InputPortRef, EmittedFeatureRef, FormulaTemplateId and
+LearnedStateRef types. A formula template is never an operand address. Historical
+stat refs include profileKind,key,window,support,side/selector grammar and as-of
+contract. Runtime IDs/actual support receipts bind through the row capability.
+Compile finite acyclic unique dependency closure from the numerical factories.
+Include ranking inputs for all candidates, tie IDs, current selector joins and
+clock conversions even when they are absent from the final arithmetic expression.
+Do not recover these meanings from feature-name text or choose the first alias.
+
+Track independent axes: formula specified; implementation present; source meaning
+qualified; measurement observed/missing; causal availability; phase applicability;
+coverage evidence; derived model eligibility. Structural unpicked-hero zero differs
+from missing data for a selected hero. Zero multiplied by unknown stays missing.
+Eligibility limitations propagate transitively. An indicator of a missing optional
+measurement is a legitimate known state; it must not claim the measurement exists.
+Mandatory profile/source freshness/identity failures remain admission failures.
+
+Concrete semantic instructions are in FORMULA-CONTRACTS.txt:
+1. Resolve720 trajectory products/head to exact same-side team keys/windows.
+2. Add full ranking basis/roster/tie and selector dependencies to rank interactions.
+3. Add same-frame clock to180 rank minute-products/head.
+4. Implement native_level90-day prior Steam hero-minute reference, one selected
+   state per prior map/hero/minute; same<=30s anchor gap, <=5min lookup lag, support
+   and sampleSD conditions as the accepted native economy reference. Current
+   emitted500 residual/z columns then have a real producer. No final-level proxy.
+5. Preserve9,232 gold/net_gold-derived occurrences/head as literal algebra with
+   unqualified physical source semantics. Do not make them admissible merely to
+   obtain a zero unresolved count. Other raw timers/enums follow the same policy.
+6. Finish rich per-hero trajectories and all other implemented-but-unprojected
+   canonical outputs. Trace each intended feature to its actual input/vector index.
+
+Gold clarification: current wallet, current net worth and total earned gold are
+different measurements. Source names alone do not prove which Steam gold/net_gold
+represents. There is a separate net_worth port; keep it separate from GPM, too.
+Owner clarification confirms canonical netWorth is CURRENT inventory value plus
+wallet, not cumulative earned gold. It can decrease and is the primary economic
+measure. Sum the five coherent player net-worth values for each team's economy;
+never reconstruct it from incomplete slots merely because item prices exist.
+The23October retained GLG catalogue lists gold,net_worth,gold_per_min for81,165
+player records; it does not list net_gold. This is historical catalogue evidence,
+not a new census or source95 proof. net_gold parser support is not observed presence.
+The detailed realtime protocol declares net_gold in a different message family.
+Any source qualification must cite exact existing evidence/profile semantics,
+not infer equivalence from a few numeric examples. Unavailable evidence is a
+documented external gate; this plan does not authorize new provider probing.
+
+A6. HISTORY, ROSHAN AND ALL-FAMILY COMPLETENESS
+Use the retained raw+receipt intake to populate prior Steam economy/level references
+only for completed PRIOR maps whose required results/identities were known by t0.
+Mutable final DB rows without availability evidence remain reconstruction-only.
+Later roster disclosure must not expand the frozen map-history horizon. Role is
+not inferred merely from highest GPM; keep economic rank and proved position apart.
+Keep player/hero/player-hero/team form, hero meta, pair/synergy, opponent style and
+stage-specific historical behavior on their exact populations/support/windows.
+Past outcomes may be used in live; current final outcome may only be a label.
+
+Roshan: use qualified death/respawn rules and actual event clocks. Expose time since
+proved death, lower/upper respawn window, confirmed/unknown alive status and source
+support. A raw timer0 or elapsed upper bound alone does not prove alive. Current
+Aegis possession requires qualified item identity; expiry/pickup age requires an
+actual pickup episode. Explicit source-qualified theft events and inferred theft
+from linked killer/pickup sides are distinct derivations. Source gaps do
+not become inferred deaths. Prior closing/late-game statistics may interact with
+these values but do not create a made-up deterministic team strength or end time.
+The old9-kill/5.7-minute error is not evidence that Roshan caused the residual.
+
+Owner clarification: Roshan/Aegis is a contextual winner feature too, not a
+totals-only block. Project the qualified current objective/holder context into
+LIVE_MAP_WIN and SERIES_LIVE/LIVE as well as LIVE_KILLS and LIVE_DURATION. Before
+the current objective exists, PRE/POST/BETWEEN may use only causal prior-map
+Roshan control and Aegis conversion history, never future current-map possession.
+Holder hero/player/side, known pickup age/remaining lifetime, economic importance,
+draft/stage, advantage and coherent current item context may interact. No fixed
+win-probability bonus or mandatory monotonic winner relationship is imposed.
+Aegis can be consumed without obtaining lasting advantage. Keep confirmed use,
+expiry, denial, theft and unknown disappearance distinct; a missing slot/packet
+is not a confirmed consumption event. Reincarnation must not create a false kill.
+Historical conversion is an explicit descriptive statistic on completed prior
+Aegis episodes: subsequent objective/fight/economy changes over qualified fixed
+windows with support/missing masks and phase-appropriate availability. It does
+not establish that Aegis caused those outcomes. No unreviewed scalar 'Aegis power'
+or use of the current episode's future outcome is permitted.
+
+Every79-family and14-old-catalogue item must receive a definite disposition:
+implemented+projected; composition/metadata (with actual content refs); implemented
+but needing wiring; missing producer; external qualified evidence absent; forbidden
+phase/source; obsolete alias with exact replacement; future learned state.
+Resolve implementable gaps now. Preserve externally unavailable/future items in
+the catalogue without false aliases or numeric filler. Full-set experiments later
+mean the full QUALIFIED eligible set, not unknown or temporally impossible values.
+Legacy weights remain tied to their original measurement contracts. Sum native NW
+does not automatically replace an opaque OpenDota radiantLead feature.
+
+A7. PINNED DATASETS AND TWO PROVENANCE AXES
+One global chronological series/linked-component split inventory precedes target
+shards. All maps/frames from one connected series stay in one partition. Label
+availability/horizon, not just event start, constrains past TRAIN information.
+Shard by target/mode, source profile and stable function/learned-state contract;
+bind the same global split hash. Bounded manifests point to immutable schema and
+row pages; verify pagewise. Keep legacy32MiB/64-schema/300K aggregate manifest
+reader for old artifacts, not as the new full-archive serialization strategy.
+Set distinct finite per-contract column, per-page bytes and aggregate row/shard
+counts. Do not conflate per-row instance count with distinct estimator schemas.
+Weight series, then maps, then selected frames within stable estimator cohorts;
+instance schema hashes must not grant a long series extra independent weight.
+
+Separate original raw observation vs retrospective source reconstruction AND
+originally issued features vs replayed derived features. A retrospective OOF prior
+can be materialized later using strictly earlier TRAIN labels and honest replay
+provenance. An originally issued/online prior must actually have been available
+before the decision. Do not ban valid OOF replay, and do not label it original
+issuance. Metadata-only manifests are not substitutes for actual pinned proof reads.
+
+OOF child prediction features may have different fitted artifact hashes per fold
+while sharing one compatible output measurement contract (units, orientation,
+recipe/calibration semantics and chronological cross-fit policy). Preserve each
+row's exact child-state/cohort proof; do not fragment the downstream estimator by
+every child-state hash. Coordinate-changing encoders/scalers instead require an
+explicit common coordinate/transform compatibility contract or separate estimators;
+different fitted artifacts are not automatically coordinate-compatible.
+
+Landmarks5,10,...,80 minutes use latest qualified state AT/BEFORE each landmark,
+with a declared30s landmark-alignment tolerance for the initial evaluation profile;
+do not use a future nearest frame. Report missing slots if no eligible anchor.
+This tolerance is separate from300s UI retention and180s source qualification.
+80+ is one late group. Keep early-finished maps out of later live risk sets, but
+report their counts and changing populations. Do not majority-vote snapshots into
+one artificial success or count them as independent matches. No scoring/fits now.
+
+Owner-required full-feature DATA gate: a column in the registry/schema does not
+prove the dataset contains meaningful observations for it. Before any fit, produce
+one feature-support matrix for every proposed estimator/profile: exact definition,
+producer version, source mapping, applicable rows, valid observations, missing/
+nonfinite/constant values, support counts and causal eligibility. Report counts by
+map/series and minute/phase/patch/source; add selected-hero/player cohorts where
+relevant. Structural unselected-hero zeros and true event absence differ from
+missing measurements. Rare-event features need an observed-support disclosure;
+not every row must contain an event or a nonzero value. Never fill unknowns with
+zeros to claim completeness or require future-only data in earlier phases.
+All-null/unwired intended columns block a claim of full-feature readiness. Preserve
+them in the inventory with a concrete data/producer blocker rather than silently
+dropping them. Owner/Astra review is required before declaring a deliberately
+reduced eligible profile ready for training. This gate does not authorize a fit.
+Record actual min/max game time and label/source-known time separately for TRAIN,
+validation, calibration and locked test, plus the earlier history warmup interval.
+Archive coverage, reconstruction coverage and target training span are distinct.
+
+A7B. PATCH-AWARE META, HIGH-RANKED MATCHES AND ENRICHMENT COVERAGE
+Latest owner clarification: patch relevance/decay, public-meta benefit and adaptive
+learning are hypotheses for the LATER feature-selection stage, after full eligible
+boosting baselines. This section prepares causal data and candidate features only.
+No mandatory discount of old patches or automatic adaptation is approved. Read
+outputs/Aegis-patch-meta-experiment-plan-20261026.txt for the deferred protocol.
+Owner requires enrichment across the ENTIRE actual model period, not only the
+latest days. Resolve the target dataset calendar first, then include the earlier
+warmup required by the longest admitted historical window. Produce a map/field/
+period/source coverage ledger and backfill proposal; no fresh acquisition is
+authorized by this review. Reuse retained data and respect existing budgets/STOPs.
+An archive refresh date is not a model training-end date. Historical completed
+experiments and the future full-feature training proposal are separate records.
+
+Use high-ranked public matches as a separate meta reference population alongside
+professional maps, not as interchangeable outcome examples for pro-match models.
+Keep contemporaneous rank/cohort evidence, game mode, region, side, patch revision,
+time window and support. Today's player rank attached to an old match cannot prove
+its historical high-rank cohort. Unknown cohort qualification remains explicit.
+Pub-derived hero statistics can be inputs to pro-match winner/totals models through
+the same local historical store; professional target labels remain identified.
+Do not mix raw pub outcomes into a professional supervised training cohort without
+a separately reviewed domain-transfer experiment. Hero win rate is conditional
+on selection/population and is not an unbiased causal measure of hero strength.
+
+Proposed raw feature windows are7/14/30 days, each strictly before the decision,
+with separate same-letter-patch aggregates and sample support/patch age. Keep
+hero pick/available ban rates, win rates, role-qualified rates, matchup/synergy
+and player-hero forms on distinct populations. Unsupported bans/roles are missing,
+not zero. Actual window/hyperparameter selection remains a later TRAIN/validation
+experiment; do not optimize now or claim these windows are empirically best.
+
+Each letter patch is a separate revision. Preserve observed/inferred/unknown
+patch identity and calendar-boundary uncertainty. A new revision resets its
+same-revision support; older compatible evidence can be a separately identified
+prior with age/support, never renamed as current-patch observations. Do not choose
+fixed blending weights here. Learned empirical-Bayes or other fitted priors remain
+TRAIN-only and gated; raw separate window statistics require no model fit.
+Resetting the count for a new revision does NOT delete old rows or mandate reducing
+their influence. Whether and how to weight them is the deferred comparison.
+Mechanically incompatible rules/features do not borrow old values merely to fill
+gaps. Keep longer histories for player/team skill and behavior with explicit age,
+patch and support context rather than discarding all useful prior data on patch day.
+
+Future evaluation must expose across-patch and within-patch chronological slices,
+including sparse first days of a new letter revision. No future-patch aggregate
+may enter an earlier row, and the target map and later matches are excluded from
+all feature reference windows. Record maximum-known time for every aggregate.
+
+A8. ACTUAL DISABLED HOST, RESTORED DELIVERY AND ROUTING
+Use one reviewed resource/profile object for disabled host, journal and admin
+reader; share arena/lease ownership, close replaced readers and bound concurrency.
+Do not rely on test-only8GiB/2GiB overrides while runtime silently uses4GiB/512MiB.
+Defaults may stay smaller only as explicitly distinct profiles that fail closed.
+Exercise real Windows lease contention/loss/restart under the owned runner.
+Test one positive currently qualified LIVE main-series/detail-map read, then
+repeat/gap/pause/expiry/terminal/STOP/correction and delayed-IO rejection. A controllable
+clock advances through IO; freezing time throughout a slow run is not readiness.
+Deliver a verified RESTORED private row from actual saved bytes, not the original
+compiler object after merely checking readback hashes. Requalification at owned
+now is required for current issuance; historical rehydration alone is forensic.
+No listening production service or public model is enabled by these tests.
+
+Main card always predicts series winner; detail predicts selected map winner and
+map totals. Full draft triggers POST without a first-minute wait. Series PRE uses
+known series teams/format before map ID/sides exist; BETWEEN uses completed prefix;
+SERIES_LIVE has POST and LIVE projections. Current map/state updates series too.
+Manual prior-map viewing cannot retarget workers or contaminate current forecasts.
+Bookmaker mode uses the bookmaker's map-total lines with our probabilities; without
+bookmaker generate our grid from the same distribution. Missing model yields only
+the established short unavailable text. UI redesign is outside this block.
+
+A9. BOUNDED STORAGE, PERFORMANCE AND CLEANUP
+Keep one rich IO/decode operation and exclusive mutations initially; bounded FIFO
+four descriptors including active;2s default wait<=10s explicit cap. Preserve
+serialized native lease control. Optional two readers require measured benefit.
+Private verification epochs are root/generation/inventory-bound and cannot hide
+corrections or same-size corruption. No repeated full corpus verification perframe.
+Persist invariant schemas/history once; store compact row values/masks/bindings and
+reference them by verified content ID. Do not store150K repeated definitions perrow.
+Preflight distinct working-memory, encoded-asset, object/batch and physical-store
+budgets. Segmented roots need an immutable bounded catalog, pinned dependencies,
+aggregate disk ownership and restart validation. No silent per-root cap increase.
+Coalesce only unstarted replaceable forecast work, never evidence/events/commits.
+
+Keep30GiB aggregate admission,9GiB owned tree,8GiB arena,2GiB working; not additive
+per-instance allowances. Physical free>=4GiB throughout, preflight>=treeCap+4GiB.
+Encoded schema/vector256MiB all formats;16MiB objects/batches,1MiB chunks,
+256MiB per writer root remain separate. Full/legacy logical and node caps unchanged.
+Cold complete init target<=30s; warm complete generation+commit p95<=2s,p99<=5s,
+no frame>15s;<=64MiB unexplained retained growth; aggregate stress output<=4GiB.
+Report all queue, producer, commit, read and fence times; these are targets, not
+claimed results. Do not let raised caps or three warm observations imply a pass.
+
+Profile first; native adoption only for a material CPU kernel with>=30% complete
+operation improvement in>=3 measured pairs after warmup, includingIPC/startup and
+memory, exact float64/order/hash/mask/error/STOP behavior. No whole API rewrite.
+Reuse known unavailable-linker evidence; no unbounded toolchain searches or install.
+Cleanup requires positive caller/config/dynamic import/CLI/task/format evidence.
+Keep active old model/readers and migrations until replacement/rollback validated;
+retain raw data, fitted artifacts, feature catalogue and failed evidence. Deletion
+count is not a quality metric. Do not reopen the owner's closed backup task.
+
+A10. ACCEPTANCE AND LEARNING ARE SEPARATE
+Sol implements these decisions, runs meaningful bounded technical checks, records
+failures/corrections and finishes all independent unblocked work. No new fits, HPO,
+calibration, learned compression, predictive model scoring, provider calls, task
+activation or public promotion. A six-hour plan does not revoke these gates.
+Return exact source/contract/dataset/coverage/runtime receipts to Astra. External
+source evidence gaps are explicit exceptions, not reasons to fabricate100%.
+Only after architectural acceptance AND explicit training authorization may the
+prepared full-scope model experiments run. Public promotion has its own gate.
+
+DOCUMENTATION RESEARCH ADDENDUM
+The owner subsequently requested public Steam/OpenDota documentation and source
+research. This allows reading those sources, not fresh authenticated match-data
+acquisition or app implementation. Read the new OpenDota study and its pinned
+source reports before implementing the historical-to-live compatibility bridge.
+Keep the earlier review scope and the later web research separately recorded.
+
+A11. OPENDOTA REPLAY BRIDGE: MEASUREMENT AND CAUSAL HORIZONS
+Read outputs/Aegis-OpenDota-source-study-20261026.txt and its pinned core/parser/
+availability/constants reports. Implement this alongside R8.6 as R8.6A, with no
+new provider acquisition. OpenDota networth_t is a candidate native NW history;
+gold_t and the inspected parser's radiant_gold_adv are earned-gold measurements.
+Qualify historical implementation per retained evidence, not parse version22 alone.
+Never rename the latter to NW or reuse old learned weights across changed measures.
+Reject ambiguous optional-array/time alignment. Source interval fields discarded
+from final blobs cannot be reconstructed by substituting final scalars.
+
+Each derived field declares its maximum required event horizon/availability rule.
+Death duration, finalized teamfight outcome, completed pause duration and role
+estimation can require later events than their attached timestamp. Final inventory,
+lane histograms and aggregate uses are not early live states. Purchase events are
+not complete current inventory. Today's rank/MMR/benchmarks are not historical
+as-of facts; all game dictionaries/rules are versioned with correct units.
+Completed-map final statistics and finalized event summaries remain useful for
+causally available PRIOR-map history. Request-time profile/rank/benchmark enrichment
+is usable only under its own versioned knowledge-time contract; a match ID does
+not backdate it.
+
+Retrospective replay prefixes may populate a separately qualified reconstructed
+training cohort later; they do not need original live capture to be useful. They
+must contain only prefix-causal values that the intended live profile can supply.
+Original operation/coverage claims still require original receipts and failure
+denominators. Keep these evidence categories separate rather than banning valid
+reconstruction or relabeling it as originally issued online evidence.
+Resolve each OpenDota-to-Steam port as equivalent, explicit causal conversion,
+distinct useful measure, history-only or unsupported. Matching names/correlation
+alone are insufficient. Preserve all feature families with honest eligibility.

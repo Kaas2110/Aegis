@@ -1,0 +1,133 @@
+SOL R8.5A — ACTUAL PER-FEATURE COVERAGE ARTIFACT EXPORT
+26 October 2026. Staged source only; no helper-native command or runtime activation.
+
+Problem and decision
+The projected-row coverage adapter already checked an actual private projected
+row and computed complete ordered per-column support pages, but only summary and
+page hashes were retained. That was not an inspectable per-feature artifact.
+The new bounded exporter persists every intended column through the existing
+audit readPage(offset,limit<=200) interface, without a dense feature matrix.
+The harness applies that adapter to its actual decoded RESTORED private vector,
+then exports the resulting support pages. Original vector substitution is not used.
+
+New source and test files
+scripts/feature-registry/export-feature-data-coverage.mjs
+scripts/feature-registry/export-feature-data-coverage.test.mjs
+scripts/feature-registry/coverage-report-directory.mjs
+scripts/feature-registry/coverage-report-directory.test.mjs
+Modified existing r7ActualRetainedDelivery.test.mjs only; no generator changes.
+
+Pure exporter interface and limits
+exportFeatureDataCoveragePages({audit,rowBinding,provenance,featureProvenance,
+ writePinned,readPinned,resourceArena,shouldContinue,maxWallMs})
+The injected writer takes {reference,bytes:Buffer,fileLabel}; the reader returns
+actual Buffer bytes. Every artifact write is read back with exact byte length and
+SHA256. Each gzip JSON page contains at most200 ordered columns,4MiB expanded,
+16MiB encoded object maximum. Up to1500pages/300000columns are allowed; the final
+per-row/mode index is bounded4MiB. Work is admitted under128MiB in the same arena,
+released on every exit. shouldContinue must return exactlytrue; wall time is
+finite and cannot exceed1200seconds. STOP after a write prevents a complete index.
+Pages are decompressed under the4MiB limit and compared with their original exact
+expanded bytes. Existing adapter fullColumnPagesSha256 is verified when supplied.
+
+Indexes bind exact target/state mode, profile, actual schema/function/producer/
+row-parameter/context/value/projection hashes and row-binding digest, plus every
+ordered page pin and column-definition digest. Source/raw and feature-issuance
+axes stay explicit. No opaque private capability is serialized. Full source
+meaning remains referenced by the exact schema/function contracts; the audit's
+bounded display names retain their full-name SHA and ordered column indexes.
+The exporter itself does not certify an arbitrary callback as a private source.
+If audit.descriptor is available, its entire canonical row-binding digest MUST
+equal the supplied rowBinding; same-function/context-mismatched audits refuse.
+The actual private projected profile/actualPrivateRowVerified summary requires
+that descriptor. Generic audits without it are explicitly marked
+not_provided_unverified_generic_audit and never gain source/private authority.
+
+Separate persistent report directory
+createCoverageReportDirectory requires explicit absolute directory and scopeRoot;
+the destination must be a strict descendant of the allowed working root. Each
+ancestor and file is checked as a plain nonsymlink directory/regular file. New
+files are hash-named, written with wx and never overwritten or deleted. Known
+existing files are exact-hash re-read, not trusted by filename alone. Unknown
+entries, mismatched identities, foreign locks, larger/changed files or out-of-
+scope paths refuse. A new owned .coverage-writer.lock prevents cooperating report
+writers from overlapping; only that exact owned token/file is removed on close.
+Existing foreign locks are never removed. This is not the native Windows journal
+lease and does not claim an OS-wide supervisor/security isolation guarantee.
+Owned lock identity and a bounded token read are checked before and after each
+read/mutation/receipt and after initial inventory. Loss permanently poisons that
+owner; it cannot continue with its old encoded-retention ledger. The final close
+checks the identity/token again immediately before unlink and preserves changed
+foreign locks. These lstat/open/token fences are cooperative checks, NOT atomic
+native OS lease proof; an adversarial same-token race is not claimed solved.
+
+One independent128MiB cumulative retained-encoded-file-byte cap includes ALL
+report pages, indexes and the temporary lock, with25000file bound. This sums file
+lengths; allocated NTFS sectors and filesystem overhead are NOT measured. It does not alter the journal's
+separate256MiB root limit. Directory inventory ownership has a bounded32MiB arena
+reservation; bounded read buffers have additional transient reservations.
+Partial reports from failed/stopped exports remain; no completed exporter receipt
+or full collection is accepted without successful readback. A written but not
+accepted final index may remain after failure. Nothing is deleted automatically.
+Use a fresh named folder for
+a new technical run. No report directory is cleaned by the harness.
+
+Actual all13 harness wiring
+Default env absent leaves existing behavior unchanged. Only explicit
+AEGIS_R8_COVERAGE_DIRECTORY enables the persistent report path. Launch from W
+(workspace root), and set a fresh descendant W/work/.../coverage-output directory.
+The Node test cancellation signal and1200s wall govern both exporter and sink.
+The root-owned external STOP/9GiB/30GiB/CPU/headroom guard remains unchanged.
+Each restored target gets a mode/context-specific FEATURE-DATA-COVERAGE index;
+SERIES_LIVE observed_postdraft/observed_live are distinct, and both SERIES_PRE
+instances are preserved. Filenames use a short context prefix plus full content
+SHA to keep Windows components compact; the index retains the exact full context.
+After all target exports, a bounded collection index references every actual mode/
+row index and source-inventory hash. It is also hash-read back before completion.
+
+The persistent sink's32MiB owner remains across phases and is explicitly accounted
+in per-phase cleanup assertions. It closes before restart/admin checks so final
+arena charges still reach zero. Existing temporary-journal cleanup now validates
+the resolved mkdtemp root/prefix; it never removes the persistent report root.
+coverageExportMs is recorded separately. readAndModelInputMs excludes export work;
+completeGenerateCommitReadMs explicitly says whether report export is included,
+and completeWithoutCoverageExportMs preserves that comparison boundary. No paired
+performance acceptance follows from those fields.
+
+Evidence meaning and admission
+Current harness inputs are synthetic, issuance is replayed_derived, realRows=0,
+originalObservationReceiptVerified=false and sourceAvailabilityAttested=false.
+Every intended column gets an inspectable entry, including missing, nonfinite,
+constant, low-support and unpicked-hero structural-zero cases. This is not proof
+that every feature has populated real data, all79families are implemented, source
+availability exceeds95%, models are trained, or their accuracy is good. All
+training/source/model-quality/serving gates remain false. No data refresh occurs.
+
+Tests prepared, NOT executed by this helper
+Callback exporter:401intended columns survive3gzip pages with exact order/counts,
+row pins and synthetic flags; tampered readback; immediate/nontrue STOP and STOP
+after first write; wall/feature/row-mode/page-order refusal; final arena release.
+Filesystem sink: actual immutable readback/reopen, no overwrite on repeated export,
+saved-page tampering, independent encoded-retention cap, preserved foreign lock/unknown
+owner file, out-of-scope rejection, no report deletion and zero arena after close.
+Temporary test cleanup validates the exact owned mkdtemp path before recursion.
+
+Independent review correction boundary
+Root19 passed the initial exporter/directory unit scopes. Track A subsequently
+identified two missing counterexamples: mislabeled same-function/different-row
+audit binding, and continuing IO after lock removal/replacement. Both are now
+implemented fail-closed and have new focused regression cases. The old19 receipt
+does not cover these corrections. Root must rerun the exact frozen sources;
+this helper has still executed no native command or test.
+
+Root focused payload under the unchanged owned serial guard
+node --test scripts/feature-registry/export-feature-data-coverage.test.mjs scripts/feature-registry/coverage-report-directory.test.mjs
+
+Root actual retained payload, launch cwd W with source-frozen test path
+AEGIS_R7_ACTUAL_RETAINED_DELIVERY=1
+AEGIS_R7_RETAINED_DELIVERY_SKIP_PILOT=1 (only if using declared functional decomposition)
+AEGIS_R8_COVERAGE_DIRECTORY=<absolute fresh W/work/.../coverage-output>
+node --test <frozenAPP>/scripts/steam-live-collector/source-adapter/r7ActualRetainedDelivery.test.mjs
+
+Root must record exact source manifests and current execution results separately.
+The older R7 run and native15 do not prove these new per-feature files were written.

@@ -1,0 +1,74 @@
+Independent B review of C compact structure-refusal diagnostics
+26 October 2026; source-only review, no helper execution
+
+Decision
+No blocking issue found in the reviewed diagnostic correction. It does not fix or
+bypass the actual LIVE structure-capacity failure. Root may perform the separately
+bounded isolated refusal diagnostic; no warm/all13 acceptance follows from this
+review. The architecture decision for a larger/versioned representation remains
+with Astra.
+
+Exact comparison
+Frozen baseline: checks/actual-final-29/APP/scripts/steam-live-collector/
+source-adapter/compactFeatureAssets.mjs, SHA256
+de154545a93ee382b6b512e16484e9a12e1f596f5b620dd39d7e583b0d11e822.
+Current staged same relative path, SHA256
+a3607ebc3c2a42f5319cfef1e08b1d98f5074ac48558c350898bf085b0c54823.
+New compactFeatureStructureRefusal.r8.test.mjs, SHA256
+0ef640d4097dd37b30ed78528a757db8ee534abd493bc475903c3a87426b9409.
+The scoped actual diff was inspected. Existing working-refusal diagnostics and
+factoring counters already belonged to frozen29; this correction adds structure
+refusal diagnostics, a lower-only construction parameter and its validation.
+
+Preserved contracts
+The default distinct encoded-DAG bound remains 1,000,000 for both profiles.
+Strings retain the same separate 1,000,000 dictionary guard. The encoded JSON
+traversal bound remains 16,000,000; logical expansion remains 16,000,000 for
+LEGACY and 128,000,000 for FULL. These counts are not interchangeable. Profile
+feature counts, schema/vector contracts, encoded byte maxima, working reservation,
+canonical node tags, sorted object keys, dedup keys and definition order are
+unchanged. No formula, definition, dependency, family or provenance is dropped.
+All successful default construction follows the same exact wire-building path.
+Read admission is unchanged; the lower construction option is not wire authority.
+
+The new maxDistinctFactoringNodes option admits only safe integers in [1,1000000]
+and defaults to the old maximum. Validation occurs before configuration, arena
+reservation and schema traversal. A caller can tighten construction, never raise
+the guard. This does not conflate FULL logical expansion with distinct structure.
+
+Refusal safety
+The original node_bound/dictionary_bound error messages remain. Added diagnostics
+are shallow frozen scalar records and fixed-size count/tag tables; they contain
+no raw definitions, keys, input values, source identities or schema payload. The
+reported counts are explicitly the observed prefix, not required total capacity.
+Held/peak bytes are explicit estimates, not measured heap. Caller lower-cap state
+and the independently named caps are retained. Failure unwinds through the existing
+finally that releases the working reservation; no asset/record is installed first.
+No catch resumes partial encoding, truncates columns or promotes an incomplete row.
+
+Regression review and execution boundary
+The four new small cases cover both profile refusals, exact node/tag counters,
+bounded/frozen diagnostics, invalid upper/lower inputs before caller traversal,
+owned-arena cleanup, and exact FULL encoded bytes/receipt equivalence for default
+versus explicit unchanged maximum. They intentionally do not allocate a million-node
+stress graph or claim an actual FULL LIVE successful encoding. Existing legacy/FULL
+codec compatibility suites remain the appropriate broader wire regressions.
+Root reports exact current-source run33: 34 passed, one opt-in stress skipped,
+2.594 seconds, peak owned tree 301424640 bytes. This is root execution evidence,
+not a helper test run or model/source-coverage quality result.
+
+Evidence limits and next action
+Actual-final-29 remains FAILED at LIVE distinct structure admission. Its nine
+saved static/POST vectors and independently recovered coverage artifacts are a
+partial scope, not positive LIVE/router/restart/admin/warm acceptance. Root's next
+isolated31 run can identify the refused prefix/profile/position/cost under the same
+caps; it cannot determine total required capacity by extrapolation alone. Do not
+repeat all13 or launch the prepared warm test around the same unresolved guard.
+
+compactFeatureAssets is in the producer compatibility inventory. Its source change
+therefore changes the exact compatibility hash even though formula/value semantics
+and successful default wire grammar are preserved. Old21/24 evidence may be reused
+only for explicitly unchanged numeric/function semantics. Do not extend their old
+exact context/row/deployment hashes to current source; root33 is the new scoped
+compatibility receipt. No training, provider probing, runtime activation or public
+promotion was performed or authorized here.

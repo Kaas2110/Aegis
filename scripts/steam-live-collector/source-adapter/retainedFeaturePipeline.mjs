@@ -38,14 +38,16 @@ export async function readCommittedSteamCapture({archive,receiptFile}={}){
  return{receiptInput,rawInput};
 }
 function decodeCapture(input,decisionAt){
- const r=verified(input.receiptInput,65536);verified(input.rawInput,4*1024*1024);
- if(r.version!=='steam-live-diagnostic-collector.v1'||r.source!=='steam'||r.endpoint!=='GetLiveLeagueGames/v1'||r.httpStatus!==200||r.status!=='captured_diagnostic'||r.diagnosticOnly!==true||r.servingEnabled!==false||r.trainingEnabled!==false||r.publicPromotion!==false||r.rawSha256!==input.rawInput.pin.sha256)fail('successful_owned_capture_required');
- const received=instantNs(r.receivedAt),persisted=instantNs(r.rawPersistedAt),complete=instantNs(r.completedAt),decision=instantNs(decisionAt);
- if([received,persisted,complete,decision].some(x=>x===null)||received>persisted||persisted>complete||complete>decision)fail('receipt_chronology');
- const capture={endpoint:r.endpoint,httpStatus:200,requestStartedAt:r.requestStartedAt,receivedAt:r.receivedAt,persistedAt:r.rawPersistedAt,authenticatedAttempt:true};
+ const r=verified(input.receiptInput,65536);verified(input.rawInput,4*1024*1024,false);
+ if(r.version!=='steam-live-diagnostic-collector.v1'||r.source!=='steam'||r.endpoint!=='GetLiveLeagueGames/v1'||!Number.isSafeInteger(r.httpStatus)||r.httpStatus<100||r.httpStatus>599||r.diagnosticOnly!==true||r.servingEnabled!==false||r.trainingEnabled!==false||r.publicPromotion!==false||typeof r.requestId!=='string'||!r.requestId.length||r.requestId.length>128||r.rawSha256!==input.rawInput.pin.sha256||r.rawFile!=='raw/'+input.rawInput.pin.sha256+'.body'||r.payloadRef!=='journal:'+input.rawInput.pin.sha256||r.bodyBytes!==input.rawInput.pin.bytes)fail('owned_committed_capture_required');
+ const started=instantNs(r.requestStartedAt),received=instantNs(r.receivedAt),persisted=instantNs(r.rawPersistedAt),complete=instantNs(r.completedAt),decision=instantNs(decisionAt);
+ if([started,received,persisted,complete,decision].some(x=>x===null)||started>received||received>persisted||persisted>complete||complete>decision)fail('receipt_chronology');
+ const capture={endpoint:r.endpoint,httpStatus:r.httpStatus,requestStartedAt:r.requestStartedAt,receivedAt:r.receivedAt,persistedAt:r.rawPersistedAt,authenticatedAttempt:true};
+ if(r.httpStatus!==200&&r.status==='degraded')return{receipt:r,capture,normalized:null,sourceGap:true};
+ if(r.httpStatus!==200||r.status!=='captured_diagnostic')fail('successful_owned_capture_required');
  const normalized=normalizeLocalCapture({...capture,body:Buffer.from(input.rawInput.utf8),rawSha256:r.rawSha256,payloadRef:'journal:'+r.rawSha256});
  if(!['normalized_capture_diagnostic','empty_games_diagnostic'].includes(normalized.status))fail('raw_replay_rejected');
- return{receipt:r,capture,normalized};
+ return{receipt:r,capture,normalized,sourceGap:false};
 }
 export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRevisions,historyProfileSha256,materializationGeneration='initial',featureJournal,now=()=>new Date().toISOString(),shouldContinue=()=>true,signal=null,limits={},historySourceFactory=null,resourceArena=null,isCurrentSeriesInput=null,boundedHistory=null}={}){
  const compact=featureJournal?.contract==='aegis.compact-diagnostic-feature-journal.v2';
@@ -63,6 +65,9 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   if(yes)stopObserved=false;return yes;
  }
  const status=(state,reason,extra={})=>({contract:RETAINED_PIPELINE_CONTRACT,status:state,reason,...extra,...flags});
+ // Classification acknowledges only the executing immutable receipt. It must
+ // never borrow the admitted head, which may already name queued newer work.
+ function classified(slot,classification){if(slot.classifiedSourceHead?.key!==executingSourceKey)slot.classifiedSourceHead={key:executingSourceKey,classification};}
  function interruptEligibility(slot,matchId,barrier='source_gap',decisionAt=slot.eligibilityDecisionAt??now()){
   if(slot.eligibilityDecisionAt!==undefined&&instantNs(decisionAt)<instantNs(slot.eligibilityDecisionAt))return;
   const r=advanceSteamEligibleState(slot.eligibleStateToken,{matchId,decisionAt,barrier});
@@ -87,20 +92,36 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   executingSourceKey=sourceKey(input);
   const captureKey=draftHash({input,replayOnly,restoreTracesByMap});if(completed.has(captureKey)){const cached=structuredClone(completed.get(captureKey));cached.reusedReceipt=true;cached.results=cached.results.map(r=>({...r,stateAdvanced:false}));return cached;}
   const decisionAt=now();let decoded;try{decoded=decodeCapture(input,decisionAt);}catch{
-   // Invalid/failed committed captures break progression for every tracked map.
+   // Pin-valid but invalid collector contracts are integrity barriers, not an
+   // ordinary provider gap. A classified rejection never grants retention.
    const r=JSON.parse(input.receiptInput.utf8),at=instantNs(r?.completedAt)!==null&&instantNs(r?.completedAt)<=instantNs(decisionAt)?r.completedAt:decisionAt;
    for(const[matchId,slot]of maps){
+    if(slot.classifiedSourceHead?.key===executingSourceKey)continue;
     if(slot.lastCaptureReceivedAt!==null&&instantNs(r?.receivedAt)!==null&&instantNs(r.receivedAt)<instantNs(slot.lastCaptureReceivedAt))continue;
-    progressionFor(slot,input,matchId,at);interruptEligibility(slot,matchId,'source_gap',at);resetFeatureContinuity(matchId);
+    progressionFor(slot,input,matchId,at);interruptEligibility(slot,matchId,'invalid_committed_source_contract',at);resetFeatureContinuity(matchId);classified(slot,'integrity_rejection');
    }
    return status('blocked','capture_pin_or_contract');
+  }
+  if(decoded.sourceGap){
+   for(const[matchId,slot]of maps){
+    if(slot.classifiedSourceHead?.key===executingSourceKey)continue;
+    if(slot.lastCaptureReceivedAt!==null&&instantNs(decoded.receipt.receivedAt)<instantNs(slot.lastCaptureReceivedAt))continue;
+    progressionFor(slot,input,matchId,decoded.receipt.completedAt);
+    const eligibility=advanceSteamEligibleState(slot.eligibleStateToken,{matchId,decisionAt:decoded.receipt.completedAt,retainedEntry:input});
+    slot.eligibleStateToken=eligibility.nextPrivateToken;slot.eligibility=eligibility;slot.eligibilityDecisionAt=decoded.receipt.completedAt;
+    resetFeatureContinuity(matchId);classified(slot,'source_gap');
+   }
+   return status('processed_source_gap','committed_provider_failure_original_deadline_preserved',{requestId:decoded.receipt.requestId});
   }
   const present=new Set(decoded.normalized.observations.map(o=>o.matchId));
   if(Object.keys(restoreTracesByMap).some(id=>!present.has(id)))return status('blocked','restore_map_missing_from_capture');
   const sourceDecisionAt=decoded.receipt.completedAt,retainedReplayProof=createRetainedReplayFrameProof({...input,reconstructedAt:decisionAt});
   for(const[matchId,slot]of maps)if(!present.has(matchId)){
+   if(slot.classifiedSourceHead?.key===executingSourceKey)continue;
    if(slot.lastCaptureReceivedAt!==null&&instantNs(decoded.receipt.receivedAt)<instantNs(slot.lastCaptureReceivedAt))continue;
-   progressionFor(slot,input,matchId,sourceDecisionAt);interruptEligibility(slot,matchId,'source_gap',sourceDecisionAt);resetFeatureContinuity(matchId);
+   progressionFor(slot,input,matchId,sourceDecisionAt);
+   const eligibility=advanceSteamEligibleState(slot.eligibleStateToken,{matchId,decisionAt:sourceDecisionAt,retainedEntry:input,...(decoded.normalized.rejections.length?{barrier:'integrity_rejected_source_packet'}:{})});
+   slot.eligibleStateToken=eligibility.nextPrivateToken;slot.eligibility=eligibility;slot.eligibilityDecisionAt=sourceDecisionAt;resetFeatureContinuity(matchId);classified(slot,decoded.normalized.rejections.length?'integrity_rejection':'source_gap');
   }
 
   const results=[];
@@ -118,8 +139,9 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    // Static draft packets are not live-state failures. Start the independent
    // eligibility observer only when live is qualified or a live state existed.
    const observeLiveState=admission.dynamicDiagnosticAllowed||admission.terminal||slot.eligibleStateToken!==null||progression.privateProof!=null;
-   const eligibility=observeLiveState?advanceSteamEligibleState(slot.eligibleStateToken,{matchId:o.matchId,decisionAt:sourceDecisionAt,retainedEntry:input,progressionProof:progression.privateProof}):{nextPrivateToken:null,mayGenerateNewVector:false,eligibleForRetainingForecast:false,resetDynamicWindows:false};
+   const eligibility=slot.classifiedSourceHead?.key===executingSourceKey?slot.eligibility:observeLiveState?advanceSteamEligibleState(slot.eligibleStateToken,{matchId:o.matchId,decisionAt:sourceDecisionAt,retainedEntry:input,progressionProof:progression.privateProof}):{nextPrivateToken:null,mayGenerateNewVector:false,eligibleForRetainingForecast:false,resetDynamicWindows:false};
    slot.eligibleStateToken=eligibility.nextPrivateToken;slot.eligibility=eligibility;slot.eligibilityDecisionAt=sourceDecisionAt;
+   classified(slot,admission.terminal?'terminal':eligibility.mayGenerateNewVector?'changed_state':eligibility.eligibleForRetainingForecast?'retained_state':'source_rejection');
    if(eligibility.resetDynamicWindows)resetFeatureContinuity(o.matchId);
    if(slot.blockedReason){results.push(status('blocked',slot.blockedReason,{matchId:o.matchId}));continue;}
    if(slot.closedSource){results.push(status('source_closed','terminal_source_closed',{matchId:o.matchId,terminalSource:{...slot.closedSource}}));continue;}
@@ -136,7 +158,7 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    if(!admission.dynamicDiagnosticAllowed&&!admission.staticDraftDiagnosticAllowed&&admission.reason!=='complete_coherent_draft_required'){
     // A rejected frame never joins the accepted history prefix or poisons the
     // map's identity checkpoint. An initial incomplete draft still replays below.
-    resetFeatureContinuity(o.matchId);results.push(status('blocked','current_source_rejected:'+admission.reason,{matchId:o.matchId}));continue;
+    interruptEligibility(slot,o.matchId,'current_source_rejected:'+admission.reason,sourceDecisionAt);resetFeatureContinuity(o.matchId);results.push(status('blocked','current_source_rejected:'+admission.reason,{matchId:o.matchId}));continue;
    }
    // Repeated unconfirmed state is not another newly observed situation. Keep
    // its original state/trace reference; reader-time expiry never uses NOW as
@@ -145,7 +167,6 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
    const restoring=restoreTracesByMap[o.matchId]!==undefined;
    const retryQualified=eligibility.eligibleForRetainingForecast===true&&eligibility.stateView?.observationId===o.observationId&&slot.lastLiveObservationId!==o.observationId;
    if(isLiveCandidate&&!eligibility.mayGenerateNewVector&&!retryQualified&&!restoring&&!replayOnly){
-    slot.processedSourceKey=executingSourceKey;
     results.push(status('retained_state_diagnostic',eligibility.reason??'unchanged_unconfirmed_source_state',{matchId:o.matchId,traceSha256:slot.lastLiveTraceSha256??null,sourceState:readSteamEligibleState(slot.eligibleStateToken,{matchId:o.matchId,decisionAt:now()}),recordedPrediction:false}));continue;
    }
    const basePrefix=slot.anchors??slot.prefix,baseBytes=basePrefix.reduce((n,e)=>n+e.rawInput.pin.bytes+e.metadataInput.pin.bytes,0);
@@ -205,7 +226,6 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
     const series=input.seriesByMatch?.[o.matchId]??{};
     const consumed=await consumer.consume({mode:'AUTO',matchId:o.matchId,decisionAt:now(),historyProof:slot.proof,sourceExportHandle:slot.sourceHandle,expectedSourceSnapshotHash:slot.source.sourceSnapshotHash,livePrefixInputs:[entry],progressionProof:progression.privateProof,retainedReplayProof,...(series.seriesInput?{seriesInput:series.seriesInput,currentMapNumber:series.currentMapNumber}:{})},{restoreTraceSha256});
     if(consumed.traceCommitted&&consumed.stateAdvanced&&consumed.mode==='LIVE'){slot.lastLiveTraceSha256=consumed.traceSha256;slot.lastLiveObservationId=o.observationId;}
-    if(consumed.status==='recorded_diagnostic')slot.processedSourceKey=executingSourceKey;
     results.push(consumed);
    }catch{if(!continuing())return status('blocked',stopPoint,{results});results.push(status('failed','history_materialization_or_generation',{matchId:o.matchId}));}
   }
@@ -217,8 +237,10 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   breakSourceContinuity(){if(pending)return{cleared:false,reason:'pipeline_work_pending'};for(const[matchId,slot]of maps){const r=advanceSteamProgressionAdmission(slot.progressionToken,{matchId,decisionAt:now(),stopped:true});slot.progressionToken=r.nextPrivateToken;slot.progressionInputKey=null;slot.progressionResult=null;interruptEligibility(slot,matchId);resetFeatureContinuity(matchId);}return{cleared:true,reason:'owned_restart_or_stop_barrier; map_watermarks_preserved'};},
   readLiveEligibility({matchId,decisionAt=now()}={}){
    const slot=maps.get(matchId);if(!continuing())return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:'manual_stop_or_abort',userMessage:'Прогноз недоступен'};
-   if(slot&&slot.processedSourceKey!==admittedSourceHead?.key)return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:'newer_committed_source_pending',lastTraceSha256:slot.lastLiveTraceSha256??null,userMessage:'Прогноз недоступен',recordedPrediction:false};
+   if(slot&&slot.classifiedSourceHead?.key!==admittedSourceHead?.key)return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:'newer_committed_source_pending',lastTraceSha256:slot.lastLiveTraceSha256??null,userMessage:'Прогноз недоступен',recordedPrediction:false};
+   if(slot?.blockedReason||slot?.closedSource)return{eligibleForRetainingForecast:false,mayGenerateNewVector:false,reason:slot.blockedReason??'terminal_source_closed',lastTraceSha256:slot.lastLiveTraceSha256??null,userMessage:'Прогноз недоступен',recordedPrediction:false};
    const view=readSteamEligibleState(slot?.eligibleStateToken,{matchId,decisionAt});
+   if(view.eligibleForRetainingForecast&&(!slot?.lastLiveTraceSha256||slot.lastLiveObservationId!==view.stateView?.observationId))return{...view,eligibleForRetainingForecast:false,reason:'classified_state_trace_not_materialized',lastTraceSha256:slot?.lastLiveTraceSha256??null,userMessage:'Прогноз недоступен'};
    return{...view,lastTraceSha256:slot?.lastLiveTraceSha256??null,recordedPrediction:false};
   },
   consumeCapture(input,options={}){
@@ -235,6 +257,6 @@ export function createRetainedFeaturePipeline({db,producer,sourceStore,historyRe
   },
   forgetMap(matchId){const slot=maps.get(matchId);if(pending)return{released:false,reason:'pipeline_work_pending'};if(!slot)return{released:false,reason:'map_not_cached'};consumer.forgetMap(matchId);slot.historyOwner?.release();maps.delete(matchId);for(const[key,r]of completed)if(r.results.some(x=>x.matchId===matchId))completed.delete(key);return{released:true,reason:'explicit_host_release_restart_requires_retained_prefix_replay'};},
   close(){if(pending)return{closed:false,reason:'pipeline_work_pending'};closed=true;for(const[matchId,slot]of maps){consumer.forgetMap(matchId);slot.historyOwner?.release();}maps.clear();completed.clear();return{closed:true};},
-  status(){return{contract:RETAINED_PIPELINE_CONTRACT,maps:maps.size,pending,limits:{...config},consumer:consumer.status(),tracked:[...maps].map(([matchId,s])=>({matchId,captureCount:s.captureCount,retainedDraftFrames:s.prefix.length,retainedDraftBytes:s.prefixBytes,identityAnchors:s.anchors?.length??0,terminalSourceClosed:s.closedSource!==null})),...flags};}
+  status(){return{contract:RETAINED_PIPELINE_CONTRACT,maps:maps.size,pending,admittedSourceHead:admittedSourceHead?.key??null,limits:{...config},consumer:consumer.status(),tracked:[...maps].map(([matchId,s])=>({matchId,captureCount:s.captureCount,retainedDraftFrames:s.prefix.length,retainedDraftBytes:s.prefixBytes,identityAnchors:s.anchors?.length??0,terminalSourceClosed:s.closedSource!==null,classifiedSourceHead:s.classifiedSourceHead?{...s.classifiedSourceHead}:null})),...flags};}
  });
 }

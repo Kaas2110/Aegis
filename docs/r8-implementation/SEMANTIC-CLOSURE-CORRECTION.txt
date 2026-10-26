@@ -1,0 +1,103 @@
+R8 actual-constructor typed closure and stable-function correction
+Date: 2026-10-26. Staged source only. No helper test/native/provider execution.
+
+Trigger and preserved evidence
+Root's actual13 semantics run16 completed technically (reported710s/~3.807GB),
+but its new typed closure audit exposed real declaration gaps. The immutable
+report is reports/r8-actual13-semantics-16/0.json under this R8 work directory.
+PRE_MAP_WIN:15623 columns,11154 declaration gaps,2002 transitively ineligible.
+POST_MAP_WIN:60399 columns,60804 gaps,10852 transitively ineligible.
+LIVE_MAP_WIN:153649 columns,60804 gaps,21834 transitively ineligible.
+The live count includes the pre-existing10982 opaque/unqualified occurrences;
+these are NOT certified or removed by the correction. Series history also had
+stale typed component/name edges; series-context emitters had no typed refs.
+These findings do not invalidate the numerical roundtrip receipt; they prevent
+claiming complete feature/semantic acceptance from that technical result.
+
+Root causes and exact source corrections
+1. reviewedHistoricalSummaries.output.put emitted inputBindings/historyDefinitions
+but no dependencyRefs. Every raw tail, form difference, finite-member/quantile
+summary, opposing pair and aggregate-of25-pairs constructor passed through it.
+Raw tails now emit their explicit prior-fact ports, including actual duration,
+identity and receipt fields, and current selector ports. Derived outputs emit
+exact SAME-generator feature edges supplied by the numerical constructor.
+Generic statistic.definition/formula IDs remain formula metadata only. Expected
+edges are retained even if a declared namespace is absent/incomplete, so a real
+missing emitted operand still fails closure; namespace absence also retains its
+existing parameter_binding_required status. No missing operand is inferred.
+
+2. Reviewed summary parameter factories now have a closed explicit classification
+table. Raw-tail selector team/account/hero IDs belong to rowParameters; the exact
+selector grammar belongs to functionParameters. Operators, thresholds, windows,
+metric/formula IDs, side/slot addresses and source formulas remain constants.
+Unknown keys/selectors or missing formula IDs retain literal un-generalized
+fallback. Nothing is silently stripped to make an estimator appear stable.
+The historical selector-grammar helper is reused through a narrow named export.
+
+3. The series history wrapper previously renamed historyDefinitions but retained
+feature edges to the history component and original histrel names. Its new pure
+namespace bridge remaps EXACT known emitted references to seriesHistory and
+series_history/team1/team2 names. It also remaps explicit input-field references
+and sourceStatistics emitted-reference/unit keys, including their function-class
+metadata. Unknown references are kept unchanged and remain unresolved. Generic
+formula IDs, raw prior-map field names and internal selector algebra are retained.
+There is no side inferred from nominal team IDs or a current draft in PRE.
+
+4. Draft identity and current-series context emitters now explicitly attach their
+existing typed input ports and a separate formula-template reference. Draft-side
+encoding additionally records the actually consumed scoreboard side-membership
+port. Existing classification, formulas, names, values, positions, support and
+source/phase gates remain unchanged. These definitions do not receive a blanket
+eligibility promotion or a fabricated provider receipt.
+
+Changed source paths
+scripts/steam-live-collector/source-adapter/historicalSemanticBindings.mjs
+scripts/steam-live-collector/source-adapter/reviewedHistoricalSummaries.mjs
+scripts/steam-live-collector/source-adapter/historicalRelationalFeatures.mjs
+scripts/steam-live-collector/source-adapter/draftIdentityFeatures.mjs
+scripts/steam-live-collector/source-adapter/seriesContextFeatures.mjs
+Changed tests
+scripts/steam-live-collector/source-adapter/reviewedHistoricalDependencies.r8.test.mjs
+scripts/steam-live-collector/source-adapter/draftIdentityFeatures.test.mjs
+scripts/steam-live-collector/source-adapter/seriesContextFeatures.test.mjs
+Exact hashes: B/SEMANTIC-CLOSURE-CORRECTION-PATHS.json. Earlier B and all13 hashes
+remain evidence for their original frozen source, not for these changed files.
+
+Focused root-only validation requests (staged APP; existing owned guard)
+node --test scripts/steam-live-collector/source-adapter/reviewedHistoricalDependencies.r8.test.mjs
+node --test scripts/steam-live-collector/source-adapter/reviewedHistoricalSummaries.r7.test.mjs
+node --test scripts/steam-live-collector/source-adapter/reviewedHistorySemanticIdentity.r7.test.mjs
+node --test scripts/steam-live-collector/source-adapter/draftIdentityFeatures.test.mjs
+node --test scripts/steam-live-collector/source-adapter/seriesContextFeatures.test.mjs
+node --test scripts/steam-live-collector/source-adapter/r8SemanticDependencies.test.mjs
+
+The new four-case golden exercises all106 reviewed output variants on explicitly
+declared synthetic primary leaves. It checks exact typed closure, no template
+alias repair, finite member/pair operand counts, function SHA stability with
+changed actual selector IDs and changed row binding SHA, plus exact seriesHistory
+namespace transformation. Negatives remove actual leaves, substitute template
+metadata for an operand and withhold the namespace. Existing numeric tests remain
+the oracle for tail thresholds, differences, quantiles and pair aggregation.
+Draft/series tests now check every actual constructor's ports and typed closure.
+All tests are synthetic technical evidence, never original-source or ML quality.
+
+Next full source-pinned verification
+Root must audit all13 modes again and record the exact new source inventory,
+schema/function identities, declaration gaps and transitive ineligibility.
+Expected implemented binding gaps should be zero. The10982 pre-existing LIVE
+opaque/unqualified occurrences must remain separately ineligible; no source95,
+all-feature, training or serving acceptance follows from declaration closure.
+Record feature-function generalized/unclassified counts for every actual mode,
+separately from diagnostic schema identity and semantic completeness.
+No typed checker relaxation was needed for this correction: actual factory
+metadata and stale exact namespace edges were the defects.
+
+Preserved first focused execution failure
+Root reported prep19:77/78 cases passed,85.547s,peak owned job~5.025GB. The one
+failure was the new reviewedHistoricalDependencies.r8.test.mjs file failing to
+parse: its nested fixture flatMap/Array.from expression missed one closing
+parenthesis. It is replaced by explicit side/slot loops constructing the same
+players, avoiding the nested delimiter mistake. Assertions and producer source
+are unchanged by this syntax correction. Root preserves the failed receipt and
+must execute the four-case file again before the final all13 audit. B ran no
+parser/test/native command itself. Updated hash is in the same correction manifest.

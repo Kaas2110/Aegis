@@ -1,0 +1,179 @@
+R8 Track C final scoped independent source review, 26 October 2026
+
+Scope and authority
+Current staged APP files, not the older Graphify/installed snapshot, are authority.
+Read-only review of root/B paged preparation, actual private projection/restoration,
+owned resource/reader wiring, publication exclusions and L01-L14 legacy-use ledger.
+No tests, provider calls, fits, task changes, toolchain discovery or deletion were
+performed by this helper. Root runs the exact final bounded native snapshot.
+This is not a scan of every application caller, installed job or runtime process.
+
+Paged preparation findings
+The new global inventory is private and frozen; actual page reads require its live
+WeakMap handle. Pre-clone input admission and compact closed scalar/map inventory
+prevent a caller from hiding unbounded payloads inside accepted series metadata.
+Chronological series/component assignment is shared across targets. The new shard
+reads exact hash-pinned page bytes, bounds functions/pages/rows, preserves separate
+raw/history/feature provenance and refuses feature/binding versus label pin reuse
+across rows/pages/functions in both arrival orders. Membership accounting charges
+four persisted sets in blocks. It intentionally does not claim private source,
+row-dependency, label-byte, encoder-fold or original-availability verification.
+
+Root's two-pass extension correctly groups compatible estimator coordinates by
+target/mode/profile/stable function hash/producer compatibility. Diagnostic schema,
+row context and child OOF artifact identity do not become estimator shards. Each
+series contributes one unit split equally across its maps and selected samples,
+within that declared estimator/profile/role. Distinct stable function contracts
+stay separate. The extension reads pinned pages again on pass2, writes actual
+prepared bytes and checks exact write receipt and readback. Original row lineage
+and label fields are retained, not reconstructed from the weights.
+
+One narrow gap was found and sent to root: the helper originally had no finite
+maxWallMs/elapsed check. Root added finite positive<=1200000ms monotonic deadlines
+to both paged helpers, before/after read/write callbacks and before completion.
+The outer preparation passes its shared deadline check through the inner factory;
+starting an inner stage does not reset the outer horizon. This exact four-path
+correction was reread and hashes refreshed below. Its focused delayed read/write,
+invalid bound and existing preparation/config cases passed20/20 in root28. Hard
+cancellation of a callback that never returns is still explicitly host-owned;
+these elapsed checks do not claim to abort arbitrary awaiting promises. No duplicate
+split framework or weights/model fit was introduced. Learned coordinate-changing
+state compatibility remains unimplemented/unadmitted; OOF IDs alone do not prove
+interchangeable encoders.
+
+The shard conservatively requires labelKnownAt >= enclosing series end even for
+map targets. This can exclude an early map label originally received before the
+whole series ended. It does not introduce future inputs, but should remain an
+explicit preparation limitation until an actual per-map terminal receipt contract
+exists. A future join of independently prepared target shards must preserve global
+feature/label pin isolation; the current factory covers one target shard only.
+
+Resource/restoration and routing findings
+The closed named rich configuration reaches the real producer, compiler, compact
+journal and saved reader. Rich is8GiB arena/2GiB compact working, with256MiB producer
+and compiler scan working; existing FULL logical/node caps are selected explicitly,
+not silently enlarged. Caller lower limits remain effective and reported. Legacy
+default profiles remain distinct. Shared JS objects in one owned host do not create
+cross-process shared memory or a project-wide OS supervisor.
+
+Borrowed readers reuse the host journal/writer instead of acquiring another native
+exclusive lease. Pending returned trace loans must be released before borrowed
+reader/host closure finishes. This preserves borrower lifetime, but a nonreturning
+borrower can delay closure; finite owner execution/cancellation policy still matters.
+No default application listener or diagnostic environment was enabled.
+
+The compiler privately binds each actual schema/vector/context assembly. An unrelated
+genuine vector, a JSON clone or a hash/name-only object cannot mint the relation.
+One actual row can explicitly serve winner/kills/duration heads; shared numeric
+storage does not waive target identity. Restored projections require a regenerated
+private witness at the exact original source horizon and contain actual decoded
+saved vector values, masks and negative-zero bits. This is not autonomous coldstart
+restoration from JSON and does not refresh original source timestamps. The final
+currentness/STOP fence remains separate from storage capability and borrowing.
+
+The final actual harness now adds a genuine same-frame private eligible-state
+adapter at a controlled original replay clock and an actual persisted LIVE router
+read/finalize before phase closure. Whole-series main, current-map winner/remaining
+totals, expiry and terminal-barrier refusals are explicit checks. The synthetic
+committed-receipt shape does NOT substitute for actual collector intake or provider
+latency proof. Default late-read rejection remains a separate forensic/restart check.
+The native Windows lease opt-in reuses the existing provider, with an approved
+absolute Python path. Its own receipt does not claim contention; root27 separately
+verified contention/reacquisition with the actual helper.
+
+Publication/privacy review
+Applicable project instructions exclude credentials, environment files, raw provider
+observations, real fixtures, databases, archives and fitted artifacts. The existing
+source-sync exclusion policy and secret scan were read, not rerun. Old publisher
+policy has explicit binary/data/weights/raw directory exclusions and reports only
+secret rule/path/line, never matched values. Current changes use synthetic source
+fixtures and contain no user credentials copied from the chat or environment.
+
+Important boundary: per-feature coverage reports include ordinary JSON indexes and
+must remain in the explicitly private W/work report directory. A generic .gitignore
+or old extension denylist alone does not exclude every such plain JSON file. Final
+publication must use the root-owned explicit changed source/documentation allowlist,
+exclude technical report roots and retain its exact reviewed-head receipt. No final
+publication allowlist/merge receipt was available at this review, so exclusion is a
+required boundary, not an independently completed publication claim. Do not publish
+reports/raw rows merely to make Graphify current. No broad source scan was repeated.
+
+Legacy cleanup and performance
+The separate CLEANUP-PERFORMANCE-REVIEW.txt records exact L01-L14 entrypoint/import/
+configuration/format anchors and bounded search scope. Active old model loaders,
+DB loader wrappers, CLI/task source references, gated routers and serialized-format
+readers are retained. runAnalytics has no second exact-symbol source caller in the
+bounded search, while its shared types and series algebra do have positive callers;
+only narrow extraction followed by migration is a candidate. Two pure prototypes
+are conditional test/contract migration candidates, not evidence for wholesale
+removal. No additional obviously dead wrapper was proven. All79 feature-family and
+14 catalogue dispositions remain; no feature pruning was performed.
+
+Measured evidence is kept distinct from static optimization candidates. Recorded
+R7 LIVE cold operations spend substantially more time on compact commit/reload than
+generation; generation-only replacement cannot deliver a30% complete-path reduction
+under those proportions. Prioritize shared immutable schema/definition work, bounded
+hash/serialization reuse, streaming copying and actual IO lifecycle before native
+translation. C++ requires a measured pure seam and>=30% full-operation gain including
+marshalling, exact results/masks/order, memory/STOP parity and paired scope evidence.
+No C++ toolchain, benchmark or performance acceptance occurred in this review.
+
+Verification reuse and next checks
+Root26 passed20 support-policy cases, including the exact S05 min0 versus statistical
+floor distinction. Root27 actual Windows contention/reacquisition passed1case with
+zero skips in0.578s, peak188313600bytes. Earlier root22 corrected coverage exporter/
+directory units passed; root21 all13 typed semantics and root24 actual POST function
+identity are separately scoped producer receipts. They do not validate a changed
+journal/consumer/reader merely because the producer hash is unchanged.
+No redundant broad generator rerun is needed solely for the journal-policy fix.
+Root final actual13 delivery/coverage29 FAILED at the LIVE distinct encoded-DAG
+1M guard after successful PRE/SERIES_PRE/POST persistence, private restored input
+delivery and per-feature export. It is not an all13 success; positive LIVE routing,
+BETWEEN and final restart/admin remain unexecuted in that invocation. Exact evidence
+and the non-relaxing diagnostic follow-up are in LIVE-CODEC-STRUCTURE-BLOCKER.txt.
+The existing FULL128M logical expansion cap is a different measure and must not be
+substituted silently. Warm is unadmitted until this architecture is resolved.
+Root28 narrow preparation
+deadline suite passed20/20 with0skips,0.797s elapsed,137326592bytes peak owned commit;
+its exact log/resources were read. B independently reviewed the frozen final29 LIVE/
+native harness hash and dependencies and found no blocker; see B/C-LIVE-ROUTER-
+NATIVE-REVIEW.txt. That source review did not remove the later codec blocker.
+Source95, real
+archive feature population,326-state performance, autonomous restore and all
+training/model-quality gates remain open. No new fits are authorized.
+
+Reviewed source hashes at this read (root/B later edits require scoped refresh)
+paged-dataset-manifest.mjs AFTER reviewed wall correction
+03a257a092e78e3c9ee0fb5f496b78c73248e737d0edc7ebbef5da78b13880f7
+paged-dataset-manifest.test.mjs AFTER reviewed wall correction
+d4c51e2b884bd5f10c163055d7873b6fcfa20a232869a57e30ff7cd3672fc2f4
+paged-sample-preparation.mjs AFTER reviewed wall correction
+0254ccc3c9889b44e838b3eba58cbc6f3f67da4fba276d25dca87739461ca869
+paged-sample-preparation.test.mjs AFTER reviewed wall correction
+6b37b20297dfe58e5266310d72ad406eec00785d02c008e41e130b34c773388e
+diagnosticResourceConfiguration.mjs
+abfe1da51c5fcc2526d4a74a7edd618869f2c93db913d30069b7c7de3d9cba00
+savedDiagnosticReaderFactory.mjs
+969b6902820c3c4c5a9aaf3f7c15e522c1c96495c7f4ed430cea38d397c64dac
+retainedDiagnosticBootstrap.mjs
+5cb2351cee753b87dc03c0cfc1575b37d6a9e87ad6f317e634770fd0d397e47e
+featureProjectionCompiler.mjs
+8cb4170ffbbeac33227bd979b2af0880248641f37753dade8df0bdb00b39c938
+featureFunctionContract.mjs
+31c21a1e5ce51e5943723a18cdd6423b6e30806d45567409694a5134d9073982
+diagnosticModelInputDelivery.mjs
+fa8571701bbdeabcc524652258d44dd705e350edabe648ac7a87990288f24c4c
+compactFeatureJournal.mjs
+b657cbcba20d6876a3e689506b0a84ae6f6d22b570376c885dd2815295e7e3ad
+staticSupportFloor.r7.test.mjs
+fda0bc38829dd03b3b363fb341947c7794609460fad1aff5ea5d60e21ccfdb3c
+r7ActualRetainedDelivery.test.mjs
+269a976fc00e1fea0e525f24876c9e0d5348b632ee7c4f232a48e5969b4fba00
+export-feature-data-coverage.mjs
+8e3cbf62f9b90ee5ba7fe0ef7c4c4b6c749ad115065f1c6797ea157124976a4b
+coverage-report-directory.mjs
+7bf3a346115b15e09adb8756239ad3ceccbc4b253d7bd7af926b1bc6705810f4
+future-boosting-runner-config.mjs
+ce24b4cd6eac054313b9abf64a04aae0c7d29138a61c7fcd43e8ba6955731c21
+artifacts/api-server/src/services/FeatureDiagnosticAdmin.ts
+68f6d995fca9964e08a5c3098491bc9b87b599cc9b3ea3f71f9b632187833325

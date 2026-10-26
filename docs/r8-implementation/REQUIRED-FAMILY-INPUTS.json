@@ -1,0 +1,86 @@
+{
+  "contract": "aegis.r8.required-family-input-contracts.v1",
+  "date": "2026-10-26",
+  "kind": "static_required_capability_and_gap_specification_not_runtime_authority",
+  "trainingAdmitted": false,
+  "providerProbingAuthorized": false,
+  "rawJsonOrSelfAssertedHashesMintAuthority": false,
+  "capabilities": [
+    {
+      "id": "S03_OPPONENT_STYLE_HISTORY",
+      "familyId": "S03",
+      "status": "required_prior_prematch_context_not_available_in_current_history_port",
+      "approvedFormula": "For each prior focal-team map, w=2^(-ageEndedDays/explicit_recency_window_days)*exp(-abs(priorOpponentPrematchPace-currentOpponentPrematchPace)/0.25); emit sum(w), sum(w)^2/sum(w^2), sum(w*ownWin)/sum(w), and optional sum(w*(ownWin-priorPrematchExpectation))/sum(w).",
+      "formulaAuthority": "outputs/Aegis-Astra-feature-semantics-20261025.txt C2/C5/S03",
+      "functionParameters": {
+        "opponentPaceWindowDays": 30,
+        "paceUnits": "team_kills_per_played_minute",
+        "kernelScale": 0.25,
+        "recencyWindowDays": "explicit named variant among reviewed7/30/90 day windows; no hidden default",
+        "minimumSupport": "max(5,contextMinimumSupport) for new conditional statistics"
+      },
+      "requiredTypedPorts": [
+        {"kind": "currentIdentity", "field": "currentOpponentTeamId", "type": "nominal_team_id", "availability": "current target validFrom <= decision; history cutoff unchanged"},
+        {"kind": "historicalStatistic", "field": "currentOpponentPrematchPace", "type": "finite_nonnegative_rate", "definition": "aegis.team_mean_kills_per_minute_30d.proxy.v1", "selector": "current opposing nominal team", "availability": "support and dependency receipts <= target immutable history cutoff"},
+        {"kind": "priorMap", "field": "priorFocalTeamMap", "type": "distinct_completed_map", "members": ["mapId", "focalTeamId", "opponentTeamId", "ownSide", "endedAt", "outcomeKnownAt", "ownWin", "provedPrematchCutoffAt"]},
+        {"kind": "historicalStatistic", "field": "priorOpponentPrematchPace", "type": "versioned_statistic_with_distinct_support_and_selector", "availability": "its own exact frozen prior-map prematch horizon; not rebuilt using that prior map's final rate or later-map outcomes"},
+        {"kind": "priorState", "field": "priorPrematchExpectation", "type": "finite_probability_0_to_1_with_causal_rating_origin_and_proof", "requiredFor": "weighted residual variant only", "availability": "strictly pre-result state for that same prior map"}
+      ],
+      "availableNow": ["Current same-side/opponent team pace proxy in frozen history", "Prior map outcomes, kills and duration at current target cutoff", "Chronological result-state replay for supplied events"],
+      "missingNow": ["A qualified per-prior-map prematch pace context and its frozen receipt/source closure", "Explicit prior prematch cutoff/start binding in the generic prior-map feature port", "A bound per-prior-map causal expectation for the residual variant"],
+      "forbiddenSubstitutions": ["Prior map's final kills/minute as its opponent's prematch style", "Current global mean as a prior historical prematch statistic", "Post-result rating as p_pre", "Old20-stat Gaussian kernel relabeled as the new scalar-pace kernel"],
+      "sourceEvidence": ["historyCalculationCore.mjs mapRecord/current cutoff", "historicalRelationalFeatures.mjs cohort/statistic inputs", "chronologicalResultRatings.mjs pre-result update arithmetic"]
+    },
+    {
+      "id": "Q03_HISTORICAL_SERIES_RECOVERY",
+      "familyId": "Q03",
+      "status": "completed_series_population_and_causal_identity_port_missing",
+      "approvedFormula": "Next-map own-win fraction after a prior loss/win uses distinct eligible historical transitions. BO3 reverse sweep is0:1->2:1; BO5 is0:2->3:2. Its denominator is completed distinct eligible series reaching the exact deficit.",
+      "formulaAuthority": "outputs/Aegis-Astra-feature-semantics-20261025.txt Q03",
+      "requiredTypedPorts": [
+        {"kind": "historicalSeriesPopulation", "field": "completedSeries", "type": "bounded_distinct_series", "members": ["seriesId", "bestOf", "team1Id", "team2Id", "completeThroughMapNumber", "terminalWinnerTeamId", "completionKnownAt", "sourceVersionAndReceiptClosure"]},
+        {"kind": "historicalSeriesMap", "field": "completedSeries.maps", "type": "complete_ordered_prefix", "members": ["mapId", "mapNumber", "winnerTeamId", "finishedAt", "outcomeKnownAt", "seriesMembershipKnownAt"]},
+        {"kind": "optionalStratum", "field": "rosterStratum", "type": "qualified_prior_roster_identity_and_explicit_equality_rule", "availability": "per-map receipt at the appropriate historical transition horizon"},
+        {"kind": "optionalStratum", "field": "expectationStratum", "type": "causal_prematch_expectation_plus_reviewed_stratum_boundaries", "availability": "pre-map state only; boundaries are not invented from current results"}
+      ],
+      "availableNow": ["One current series receipt with its complete previousMaps prefix, score and format", "Within-current-series winner-change and immediately-after-loss counts under Q02"],
+      "missingNow": ["Bounded proved population of completed historical series with exact map membership and terminal completion", "Roster/expectation stratum boundaries and proof-bearing per-map state where required"],
+      "forbiddenSubstitutions": ["Guess series membership from equal team names, IDs or dates", "Count current-series wins as historical recovery skill", "Count frames/maps rather than distinct series in reverse-sweep denominators", "Count unfinished series as completed failed or successful reverse sweeps"],
+      "sourceEvidence": ["seriesContextFeatures.mjs current series receipt contract", "retainedOpenDotaFacts.mjs generic prior-map export lacks a completed-series population", "boundedRetainedHistory.mjs map reducer"]
+    },
+    {
+      "id": "Q04_CURRENT_SERIES_DRAFT_ADAPTATION",
+      "familyId": "Q04",
+      "status": "pick_based_subset_already_implemented_bans_and_undefined_variants_gated",
+      "approvedFormula": "Current pick repeat/novelty counts compare the received current five-hero draft against the union of actually observed earlier same-team drafts in the current series; prior draft coverage is reported.",
+      "formulaAuthority": "outputs/Aegis-Astra-feature-semantics-20261025.txt Q04 and existing seriesContextFeatures.mjs",
+      "implementedOutputs": ["team1/team2 prior_hero_variety", "team1/team2 prior_draft_coverage", "team1/team2 current_hero_repeats", "team1/team2 current_hero_novelty"],
+      "requiredTypedPorts": [
+        {"kind": "previousSeriesDraft", "field": "seriesInput.previousMaps[].team1Heroes/team2Heroes", "type": "five_distinct_nominal_hero_ids_or_null", "availability": "previous map availableAt <= decision and complete series prefix"},
+        {"kind": "currentDraft", "field": "currentDraft.team1Heroes/team2Heroes", "type": "five_distinct_nominal_hero_ids", "members": ["seriesId", "mapId", "availableAt"], "availability": "same current series/map, no later than decision and no earlier than previous map end"},
+        {"kind": "optionalBanEvent", "field": "priorAndCurrentBans", "type": "explicit_event_hero_team_order_and_receipt", "requiredFor": "ban-dependent adaptation variants only", "availability": "actual received ban sequence; missing list is not zero bans"}
+      ],
+      "availableNow": ["Verified typed current/previous hero sets in the series component when host supplies them", "Eight existing pick-based Q04 outputs"],
+      "missingNow": ["The generic currentDraft/previousMaps port has no qualified ban-event stream", "Exact definitions for further opponent-change variants: latest-map versus all-prior exposure, opponent attribution and denominator must be reviewed"],
+      "forbiddenSubstitutions": ["Invent bans from unpicked heroes", "Treat missing previous draft as no prior exposure", "Add future upcoming map heroes to PRE/BETWEEN", "Relabel unobserved earlier picks as proven never-used heroes"],
+      "sourceEvidence": ["seriesContextFeatures.mjs heroes/currentDraft/previousMaps validation and Q04 loop", "seriesContextFeatures.test.mjs draft causality cases"]
+    },
+    {
+      "id": "PRIOR_AEGIS_CONVERSION_EPISODES",
+      "familyIds": ["R03", "R04", "R06"],
+      "status": "prior_episode_input_and_reviewed_window_set_missing",
+      "approvedFormula": "Descriptive subsequent objective/fight/economy change over explicit qualified fixed windows after completed PRIOR Aegis episodes. No causal effect or deterministic advantage scalar is asserted.",
+      "formulaAuthority": "outputs/Aegis-Astra-R8-architecture-20261026.txt A6",
+      "requiredTypedPorts": [
+        {"kind": "qualifiedPriorEpisode", "field": "priorAegisEpisodes", "type": "pickup_episode_with_source_receipt_closure", "members": ["mapId", "pickupEventId", "pickupGameClockSeconds", "pickupKnownAt", "holderSide", "holderHeroId", "linkedDeathEventId", "explicitTerminalEventOrUnknown"], "availability": "all episode facts known by target history cutoff; prior map completed"},
+        {"kind": "priorNativePrefix", "field": "episodeWindowStates", "type": "coherent_same_profile_identity_prefix", "members": ["actualAnchorClock", "actualFollowupClock", "sourceRawHashes", "receipts", "NWOrOtherQualifiedMetric", "continuityProof"], "availability": "do not bridge source gaps, infer unseen states, or use the current episode's future outcome"},
+        {"kind": "reviewedFunctionParameter", "field": "conversionWindowSeconds", "type": "explicit_named_positive_integer_window_set", "default": null, "availability": "architecture specifies fixed windows but no numeric set yet; do not silently select30/60/120 seconds"},
+        {"kind": "optionalQualifiedEventStream", "field": "followupObjectivesAndFights", "type": "exact_episode_linked_observed_events_with_receipts", "requiredFor": "objective/fight conversion variants; economy-only variants still need qualified episode anchors"}
+      ],
+      "availableNow": ["Qualified current-map Roshan/Aegis reducer accepts linked event/rule bytes", "Current inventory can prove qualified present possession", "Prior native raw/normalized frames and completed-map facts are retained by the separate history view"],
+      "missingNow": ["retainedNativeHistoryView entry contract has no prior confirmed event/rule episode field", "Current optional eventsEvidence is not a source-qualified historical episode corpus", "Reviewed fixed conversion window set and explicit episode follow-up censoring/risk-set policy"],
+      "forbiddenSubstitutions": ["First observed item slot as exact pickup time", "Missing slot/packet as confirmed Aegis consumption", "Unlinked Roshan killer and holder sides as a theft event", "Current episode's later result in its early current features", "Hard-coded Aegis probability bonus"],
+      "sourceEvidence": ["roshanFeatures.mjs qualified current event/rule reducer", "retainedNativeHistoryView.mjs entryOf allowed keys", "observedDraftFeatureBundle.mjs current eventsEvidence input"]
+    }
+  ]
+}

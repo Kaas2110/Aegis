@@ -1,0 +1,98 @@
+RETAINED STEAM PROFILE COVERAGE — GLG AND RT ARE DISTINCT
+26 October2026. Read-only exact-input review, no providers or native execution.
+
+EVIDENCE AND REPRODUCIBLE SCOPE
+GLG: REAL-STEAM-INVENTORY-HISTORIC-20261026.json from root's owned inventory12.
+467raw-backed captures,8619observations,401maps. The field counters below sum
+ALL401 map records. The first map alone has7complete metric states,0six-slot
+states and7Roshan timer states; those are not global totals.
+
+RT: REAL-RT-PINNED-FIELD-CENSUS-20261026.json records the exact14W files already
+listed by work/steam-api-catalog-20261023-r1/OBSERVED-CORPUS.json. That catalogue
+was rehashed against its sealed MANIFEST:915a661cd8b91c197d1ffc1e61371bbfb2923f9c
+af76f27c65794322bc30141a. The manifest hash is4bcd4b78ba8b34776d2c919d911194336
+fd959882c18590b628467dca961b414. All14body sizes/hashes and adjacent original
+realtime-RECEIPT.json raw SHA/byte bindings were rechecked in a bounded read-only
+inspection.130992raw bytes,9distinct maps,140player records. Exact original
+receipt timestamps and per-body receipt hashes remain in the new census.
+
+Only these existing W paths were read: sol-actual-start-probe-20261020,
+sol-steam-exact-cdf-prospective-20261020-r3,
+sol-steam-persistent-20261020-r1 and sol-steam-rt-live-20261020, each limited to
+the catalogue's exact realtime.body list and adjacent receipts. No private
+provider path, key, config credential, recursive search or HTTP call was used.
+Root reported an inaccessible private-provider scope; it was not retried or
+bypassed. This is not a census of that inaccessible scope or every RT capture.
+
+OBSERVED FIELD PORTS (EXACT PHASE/DENOMINATOR MATTERS)
+GLG observed player metric records:81865each for NW,GPM,XPM,level and gold.
+8176states contain all ten NW/GPM/XPM/level operands.8057states have all account
+IDs;6413all hero IDs;237have all ten six-slot nonmissing item fields;8213have a
+named Roshan timer. These are observed presence counts across repeated frames.
+No phase-qualified source95 or complete inventory is implied.
+
+RT observed records: NW,level,gold,KDA,LH/denies,accountid and heroid names are
+present in140/140player records. Literal GPM/XPM are present in0/140. Items and
+abilities occur in100/140records, with nine item entries per present array.
+None of the14states has all ten players' first six entries nonnegative. Negative
+sentinels remain unqualified; array length does not certify empty-slot semantics.
+has_buyback,buyback_cooldown and respawn_timer are absent from all140records.
+No named Roshan timer/Aegis field appears among the67observed RT JSON paths.
+
+The14RT bodies split into4HERO_SELECTION states(game_state2,4distinct maps),
+2PRE_GAME states(state4,2maps),8GAME_IN_PROGRESS states(state5,ONLY3distinct
+maps). All four draft bodies have heroid0 placeholders and no items/abilities;
+their NW/level fields include zeros. Three draft clocks are positive631,216,
+500seconds. Therefore positive clock and numeric field presence are insufficient
+to classify live or usable economic state. All80player records in the8explicit
+in-progress bodies have NW/level/items; literal GPM/XPM are still absent.
+
+The catalogue's earlier REPORT already correctly described these distinctions.
+Its67RT paths were literal observed paths, not67model-ready fields or complete
+telemetry. It explicitly said no observed RT GPM/XPM and compared the actual
+Terse-compatible18PlayerDetails layout with richer FULL protobuf declarations.
+No earlier source-study GPM claim needs to be silently rewritten. Item absence
+in draft is a phase effect and must not by itself classify a full/terse endpoint.
+
+COHERENCE AND AUTHORITY ARE ADDITIONAL GATES
+13/14RT bodies carry delta_frame:true;1omits the field. This read does not prove
+whether each packet is a complete standalone state, establish a baseline/delta
+sequence or assemble one. Many present fields cannot substitute for that contract.
+Original transport receipts and raw pins prove what was retained locally, not a
+signed provider event timestamp, current eligible state, or an originally issued
+model vector. Event-to-app latency and source95 remain unmeasured.
+
+GLG originals predate dynamic normalization: their saved objects are verified in
+full with the historical normalizer; current dynamic fields are a separately
+identified reconstruction from original raw. They are not relabelled old features.
+Every8619GLG state lacks explicit phase; reviewed absent-phase progression and
+historical alignment remain necessary. Receipt time, game time and current
+qualification/retention are independent clocks and cannot be collapsed.
+
+CURRENT ARCHITECTURE GAP FOR ASTRA
+Current R8 normalizer/native proof profile is GLG scoreboard. GetRealtimeStats/v1
+still receives schema_UNCONFIRMED in that adapter; prior native proofs require
+the exact GLG source profile. The separately retained RT raw and old standalone
+RT reader do not automatically enter the reviewed R8 coherent feature path.
+
+RT cannot currently replace all GLG current inputs: literal GPM/XPM and named
+Roshan timer are missing in these observed RT bodies. NW/time is not GPM and
+opaque net_gold is not a replacement. GLG GPM cannot be pasted into a newer RT
+NW/item state merely because the map ID matches. An exact cross-profile clock,
+identity and measurement contract has not been accepted here.
+
+Family impact: hero/player/team GPM/XPM economics retain GLG port dependence;
+NW/level/lead context could use a separately accepted RT profile only after its
+own source/delta/phase/identity review; items/Aegis require slot/possession/event
+semantics; Roshan timing retains a separate qualified timer/event/rule dependency.
+Historical form from the local prior store remains independent of both current
+transport profiles. Missing current ports remain missing, never fabricated.
+
+STEAM-GLG-RT-PORT-MATRIX-20261026.json contains the exact port/family/authority
+matrix for Astra. It records the unresolved source-profile architecture decision;
+no source switch, new API design, mix, provider call, fit or activation was made.
+
+Do not pool the catalogue's broader historical GLG468bodies/428maps/8664states
+with inventory12's467completion-receipt captures/401maps/8619normalized states.
+Their source universes differ. Do not present8RT live states as8independent maps:
+they belong to3distinct maps and cannot establish timely professional coverage.

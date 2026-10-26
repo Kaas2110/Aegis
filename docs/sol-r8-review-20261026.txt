@@ -1,0 +1,256 @@
+AEGIS SOL R8 SOURCE PREPARATION — REVIEW FOR ASTRA
+26 October 2026. English documentation; owner communication remains Russian.
+
+Outcome and gate
+This is a substantial reviewed source-preparation subblock, not completion of the
+full R8 feature/data/runtime gate. Training, HPO, calibration, ablation, learned
+compression, predictive scoring, provider probing/refresh, runtime/task activation
+and model promotion were not performed. Current public/application baseline before
+this block was PR12/main85c3b056769cf98f2bedfa233036e56b854201e4.
+
+The actual canonical producer emits all13 target/mode combinations with complete
+typed dependency closure and generalized function contracts. Actual disk/model-input
+delivery succeeded for nine synthetic PRE/SERIES_PRE/POST variants, then correctly
+refused the large LIVE schema at the existing distinct encoded-DAG node limit.
+Consequently full13 delivery, positive current-LIVE routing, BETWEEN/restart/admin
+completion, warm/sustained performance, real complete feature coverage and training
+admission remain OPEN. Do not label the failed full run as a passing integration.
+
+Exact source and evidence locations
+W=C:/Users/Admin/Documents/Codex/2026-10-03/new-chat-2.
+APP=C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Stage:work/sol-r8-20261026/stage/APP.
+Root:work/sol-r8-20261026/. SOURCE-PUBLICATION-MANIFEST.json lists every selected
+source/document path, byte count, prior/current hash and source-only exclusions.
+INSTALL-RECEIPT.json and PUBLICATION-RECEIPT.json, when present, establish actual
+installation and merge. Absence means those actions are not yet established.
+Never infer publication from this document or rerun an old installation guard.
+checks/*/SOURCE-MANIFEST.json pins every native source snapshot. Native logs and
+resource receipts are under work/sol-r7-resume-20261026/r8-* because that unchanged
+serial runner owns execution. Original failures and instrumented probes remain.
+
+R8.0-R8.3 core corrections
+1. retainedFeaturePipeline/steamEligibleState separate admitted, classified and
+   last-successful source heads. A classified HTTP500/empty/missing-map response
+   may retain the old state only until its ORIGINAL300-second expiry. It never
+   renews by HTTP receipt alone. Truly queued newer heads, integrity/identity,
+   terminal, correction and STOP barriers remain fail-closed. Phase absence and
+   stationary clocks are not fabricated pause confirmation.
+2. staticDiagnosticWriter gets expected source-view/target/current authority from
+   the actual private retained history proof. Entry and post-IO fences reject an
+   old candidate even if a flat newer stamp is internally consistent. Frozen
+   history, current target identity and current source eligibility remain distinct.
+3. featureProjectionCompiler mints an actual private common schema/vector/context
+   assembly capability. Journal append and diagnostic model input reject separately
+   genuine cross-context objects, clones, mismatched values/masks/units/windows,
+   wrong routes and released owners. Same-row three-head sharing is explicit;
+   borrower lifetime cannot bypass source or target identity.
+4. Exact typed input/feature/template references and source-eligibility propagation
+   replace ambiguous dependency summaries.720 history products and180 minute-rank
+   edges/head now bind actual operands, all sorting/tie inputs and the clock.
+   The actual producer audit initially exposed missing derived-history dependencies
+   and incorrect series-history namespaces; constructor-specific corrections keep
+   formulas/values/order and resolve the precise references. No name-based repair
+   or semantic eligibility waiver was added.
+5. Existing500 native historical-level outputs now have a real prior-Steam level
+   producer; final level/XPM are not proxies. L08 adds3000 hero native NW/GPM/XPM
+   trajectory outputs. S05 adds96 past-team landmark/lead/closing outputs with
+  600/1200/1800s anchors,<=30s preceding lag, prior90d, distinct-map support and
+   separate durationKnownAt. Unknown duration availability cannot borrow outcome
+   timestamps. Source-supported raw Roshan/Aegis context remains shared across
+   winner/series/totals; unsupported life/possession/event meanings remain unknown.
+6. Full79-family/14-catalogue disposition and required-input ledgers are saved.
+   Composition, labels and presentation are not filled with meaningless numeric
+   columns. Missing recovery/style/episode/rule/population ports are explicit.
+   All feature vocabulary remains; no feature selection/pruning was performed.
+
+Stable functions, storage and resource wiring
+Factory-classified selector identities belong to row provenance; fixed heroes,
+windows, support thresholds, formulas, units and missing policies remain stable
+function definitions. There is no generic ID stripping. Diagnostic schema SHA,
+function SHA, producer compatibility, row/context/source hashes and learned state
+have different roles. Actual two-context POST test24 verifies same function and
+different context/schema/row bindings across all four heads, including genuine
+cross-pair rejection while both witnesses remain owned. All leases close to zero.
+
+Versioned input/persisted manifests enforce the private row relation. Restored
+delivery uses actual decoded saved values/masks/negative-zero bits in a DISTINCT
+private vector, after matching an exact regenerated source witness. This is not
+autonomous authority from disk JSON and not cheap independent cold restoration.
+Stable function identity alone does not physically deduplicate every saved schema.
+
+Named private R8_RICH_8G configuration reaches actual producer/compiler/journal/
+reader/admin paths.8GiB arena/2GiB compact work and256MiB producer/compiler scans
+are explicit; smaller caller caps and legacy defaults remain. Existing FULL logical
+128M-node/4GiB and legacy16M/256MiB limits are selected deliberately. Borrowed
+readers share their actual host's arena and owned writer, not cross-process memory.
+One root-owned9GiB technical child tree,30GiB aggregate admission, CPU4, minimum
+4GiB physical free, finite wall and STOP/foreign-lock controls remain. No unrelated
+process was killed/restarted or attached to a new global service supervisor.
+
+Dataset/runner and full-column support preparation
+Global bounded series/component splits are reused across target/function shards.
+Closed admission occurs before legacy cloning. Pages and function bytes are read
+and hash-checked, with cross-row feature/binding versus label-pin isolation.
+Two-pass sample preparation groups stable estimator coordinates, preserving
+diagnostic row/schema/OOF child IDs as lineage. Each series contributes one unit,
+divided over its maps and then samples. Learned encoders need explicit coordinate
+compatibility; child artifact IDs are insufficient. Both paged helpers now enforce
+finite monotonic deadlines at continuation boundaries, with hard cancellation of
+non-returning callbacks explicitly left to the owned host/process.
+
+These are preparation factories, not a completed causally admitted training set:
+vector/label bytes, source/private proof, fold dependencies and per-map terminal
+receipts still need full integration. The current conservative label cutoff uses
+enclosing series end even for map targets; it can exclude an early map label and
+must not be relaxed without the per-map terminal contract.
+
+All12 logical outputs/13 modes have closed future boosting descriptors: whole-series
+SERIES_PRE/BETWEEN and POST/LIVE SERIES_LIVE; selected-map PRE/POST/LIVE winner,
+kills and seconds-duration distributions. Main/detail orientation and remaining
+versus final totals are explicit. Pooled-minute versus5-minute experts plus80+,
+BO1/3/5 context, full-set-first, TRAIN-only HPO/calibration and later patch/age/
+public-transfer/compression experiments remain proposals. No fixed compression
+dimension or default time/patch decay is imposed. Metadata-only discovery found
+LightGBM4.6.0 in the actual ML Python; it did not import its DLL or fit anything.
+Existing native adapters do not automatically consume the new private paged rows;
+the actual boosting/distribution runner adapter remains unfinished.
+
+Streaming per-column audits distinguish applicable, missing, nonfinite, constant,
+valid zero, unselected-hero structural zero, rare support and unqualified source.
+The exporter writes bounded gzip pages and exact indexes to a private W directory,
+not the256MiB journal root. Foreign/replaced owner locks, mismatched row bindings,
+readback corruption, wall/STOP and byte caps refuse safely. This is retained encoded
+byte accounting, not NTFS allocated-sector measurement or a native atomic lease.
+
+Run29's nine saved synthetic variants across eight distinct target/modes produced
+319,781 column occurrences on1,604
+gzip pages. Recovery32 rechecked all compressed/expanded hashes, ordering/counts
+and successful-operation schema bindings; private FEATURE-DATA-COVERAGE.json records
+the PARTIAL result. These are synthetic/replayed-derived rows, not observed real
+training support. Their JSON/gzip files are excluded from source publication.
+All13 original generated vectors also have per-column support summaries in21;
+no claim that all real feature ports are populated follows from either artifact.
+
+Real retained source/period evidence
+Corrected intake verifies467 GLG captures,3 no-response transport failures,8,619
+states and401 maps from19-20October. Historical normalization bytes are verified
+with their original version; the current dynamic projection is separately labeled
+reconstructed from raw. All explicit phases are absent. Ten-player NW/GPM/XPM/level
+presence exists in8,176 states; complete six observed item slots in237. These are
+descriptive capture counts, not eligible/timely/source95 denominators.
+
+The separately pinned14 RT bodies cover9 maps/140 player records;8 in-progress
+packets belong to only3 maps. Literal GPM/XPM are absent;13 bodies are delta_frame.
+RT item arrays/ability/phase semantics and delta assembly are not an admitted R8
+profile. Current normalizer/native proof is GLG only. No cross-profile fill, source
+switch or equation such as GPM=NW/min was activated. Genuine completed-prior history
+still lacks a real bound prior-fact/profile-review/alignment example; a current
+progression token cannot be transplanted into that proof seam.
+
+OpenDota candidate bridge keeps native networth_t, cumulative earned gold_t and
+the studied parser's earned radiant_gold_adv distinct. Prefix/clock alignment,
+optional arrays, death/fight/pause closure, role horizons and parser lineage have
+technical contracts/tests; paired real measurement equivalence is not established.
+Existing prior final summaries can be historical context if causally available.
+
+DATASET-CALENDAR.json records actual saved20October fold extrema: training starts
+1January; the final rolling train fold ends30July; temporal OOF spans1May-30August
+over1,537 maps/10,651 repeated live frames. This is not an independent holdout or
+R8 training calendar. R8 TRAIN/validation/calibration/locked-test remain unselected.
+90d is rolling-stat warmup only; stateful ratings require pinned genesis/checkpoint
+plus intervening admitted events. No full-period refresh/backfill was executed.
+Raw pro/high-rank meta preparation reuses existing historical reducers with separate
+7/14/30d and same-letter partitions; unknown historical rank/roles/bans stay missing.
+The new meta preparation is not yet projected into model vectors. Its inactive
+backfill proposal preserves100req/min and20USD monthly total including archive,
+with20USD separate archive ceiling; examples are not actual missing-request counts.
+
+Remaining semantic versus source gaps
+Actual audit21 covers934,446 definition occurrences:890,518 semantically complete,
+43,928 unresolved across the four LIVE heads. Every mode has typed gapCount0 and
+generalized function/unclassified0. Each LIVE head has10,982 ineligible definitions:
+L02 wealth/opaque native gold500; L06 deviations500; L11 life/respawn250;
+L12 ability readiness500; L14 interactions8,232; L15 buyback500; L16 geometry500.
+Typed descendants remain ineligible; an interaction cannot repair unknown operands.
+Source95, real coverage and semantic/model admission remain distinct and false.
+
+Actual integration failure and measured performance
+Run23 first failed PRE on the old journal support-policy whitelist. The exact S05
+rule is now recognized on write/read: supportMaps uses0 only as qualified-cohort
+count; seven estimates retain max(5,context). Unknown versions/windows/sides/risk/
+units still reject. Twenty focused cases26 passed, independently reviewed by B.
+
+Run29 then completed actual PRE, independent SERIES_PRE and POST generation,
+commit, decoded vector restoration and full input-only recording before LIVE failed
+at compact_feature_asset:node_bound. Complete boundaries were89.607s,21.456s and
+303.397s; POST generation54.349s/commit165.047s/read73.568s/coverage10.017s. These
+are synthetic technical timings, not live performance acceptance. Full run elapsed
+617.078s, peak owned commit3,949,719,552B. No model output was computed.
+
+Distinct encoded DAG cap1M, dictionary1M, encoded-JSON traversal16M, FULL logical
+expansion128M,2GiB factoring work,8GiB arena and256MiB wire are DIFFERENT limits.
+They were not conflated or enlarged. New bounded prefix refusal diagnostics and
+lower-only construction cap preserve old defaults/wire/read admission. Run33
+comprised35 codec cases/34passes/1explicit stress skip. Isolated31
+confirmed the guard in158.437s/3,539,537,920B:1,000,000 distinct nodes at zero-based
+definitionIndex142,882 of153,649 features, with1,088,637,884B estimated factoring
+work held below2GiB. Those counters describe the observed PREFIX, not full required
+capacity or a successful LIVE path. See C/LIVE-CODEC-STRUCTURE-BLOCKER.txt.
+
+The separate64-version/30-60-90s warm test is prepared but UNADMITTED because its
+full LIVE head hits the same unresolved encoding barrier. Default parse/skip run34
+confirms only that it remains opt-in; it did not execute the warm body or establish
+warm throughput. No warm percentiles,326-state pass, cold<=30s or live
+p95<=2s/p99<=5s/max15s acceptance is claimed.
+Stable definitions versus instance storage/paging or an explicitly funded distinct
+FULL cap needs Astra's decision. C++ cannot fix a valid structural limit by itself.
+Prior measurements also make generation-only translation insufficient for>=30%
+full-boundary gain; no new native toolchain, install or blanket API rewrite occurred.
+
+Legacy and review scope
+The L01-L14 use/migration ledger records active old model/DB/CLI/task/format readers.
+No additional wholesale deletion was proven safe. Existing narrow hello/E1 cleanup
+was preserved; no dataset, weight, family, source receipt or old format was deleted.
+runAnalytics narrow extraction and prototype migration are candidates with evidence
+requirements, not authorization to remove modules with live shared consumers.
+
+Independent A reviewed causal/source and coverage seams, B reviewed root contracts
+and C support/router/codec changes, C reviewed paged preparation/resources/privacy.
+Exact scoped hashes and accepted/rejected alternatives remain in A/B/C review files.
+Those are peer technical reviews, not Astra's final architectural acceptance.
+No one scanned all possible application callers or proved the absence of all bugs.
+
+Verification interpretation
+Keep exact per-run source/hash scopes.01 timed out;03/04/06/09/10/11/13 had failures;
+08 initially rejected old normalization;19 had one test syntax failure;23 and29
+are integration failures. Corrections have separate receipts, never rewritten
+history.07 actual pipeline14/14,14 root counterexamples19/19,15 mixed20/20,
+20 constructor4/4,21 actual all13 audit,22 exporter7/7,24 actual function identity,
+26 support20/20,27 native lease1/1,28 preparation20/20,32 recovery,33 codec34+skip
+are different overlapping scopes. Do not sum them into a fictitious test total.
+Changing compactFeatureAssets for diagnostics changes producer inventory identity.
+21/24's unchanged-formula/default-wire evidence is reusable by inspected delta;
+their exact source inventory/row deployment hashes are not relabeled as current.
+
+R8 task dispositions and next actor
+R8.0 complete baseline/seams. R8.1 implemented and scoped-checked; real pause/source
+coverage still separate. R8.2 authentic row assembly/delivery implemented/checked.
+R8.3 partial: specified level/trajectory/dependencies added,79/14 ledger complete,
+seven semantic families and missing ports open. R8.4 partial: stable identity and
+decoded restoration implemented; large LIVE encoding/invariant physical reuse open.
+R8.5 partial: bounded metadata/split/weight factories and closed runner descriptors,
+not actual private causal matrices/native runner. R8.5A partial: full synthetic
+audits/9 saved variants; whole real period/support/calendar open. R8.6 partial real
+intake/census; genuine prior-history bridge/source95 open. R8.6A contract implemented,
+real paired equivalence open. R8.6B partial raw-meta preparation/inactive proposal;
+real full-period acquisition/qualified projection open. R8.7 prepared/partial actual
+PRE/POST; LIVE/BETWEEN/admin all13 acceptance blocked. R8.8 partial measurements/
+cleanup ledger; storage optimization/warm/C++ acceptance open. R8.9 partial typed
+audit passed; whole delivery failed. R8.10 closes THIS reviewed source-preparation
+subblock only; publication state is established by its separate receipts.
+
+Next actor:Astra for the source/profile/semantic/history/dataset/storage decisions
+in R8-REMAINING-EXECUTION.txt, especially the distinct DAG representation/cap barrier.
+Then Sol implements the exact reviewed remainder. Keep training OFF until the full
+qualified feature/data/runtime preparation gate is reviewed and separately authorized.

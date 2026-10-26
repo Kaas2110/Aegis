@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test,{afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createRetainedFeaturePipeline} from './retainedFeaturePipeline.mjs';
@@ -6,18 +6,20 @@ import {createUnifiedFeatureProducer} from './unifiedFeatureProducer.mjs';
 import {normalizeLocalCapture} from './steamLiveAdapter.mjs';
 import {draftArgs,draftEntry,pinned} from './observedDraftHistory.fixtures.mjs';
 import {syntheticRegistry} from '../../feature-registry/registry-contract.fixtures.mjs';
+import {createDiagnosticResourceArena} from './diagnosticResourceArena.mjs';
 const NOW='2026-10-23T12:40:00Z';
+const ownedFixtures=new Set();afterEach(()=>{for(const f of ownedFixtures){f.pipeline.close();f.producer.close();}ownedFixtures.clear();});
 function fixture(){
  const a=draftArgs({accounts:true}),rows=JSON.parse(a.factsInput.utf8).maps.map(m=>({...m,players:m.players.map((p,i)=>({account_id:Number(p.accountId),hero_id:Number(p.heroId),player_slot:p.side==='radiant'?i%5:128+i%5,historical_performance:{}}))}));
  const objects=new Map(),revisions=new Map();let queries=0,writes=0;
  const [index,familyDocument,targetDocument]=syntheticRegistry();
- const producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,sourceInventory:Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});
- const pipeline=createRetainedFeaturePipeline({producer,now:()=>NOW,historyProfileSha256:'b'.repeat(64),
+ const resourceArena=createDiagnosticResourceArena({maxBytes:8*1024**3}),producer=createUnifiedFeatureProducer({index,familyDocument,targetDocument,resourceArena,sourceInventory:Object.fromEntries(['history','live','series','draft','seriesHistory'].map(k=>[k,{primarySha256:'a'.repeat(64),files:[{path:k+'.mjs',sha256:'a'.repeat(64)}]}]))});
+ const pipeline=createRetainedFeaturePipeline({producer,resourceArena,now:()=>NOW,historyProfileSha256:'b'.repeat(64),
   db:{async query(sql){queries++;return {rows:structuredClone(sql.includes('FROM pro_matches')?rows:[])};}},
   sourceStore:{async put(e){objects.set(e.sourceSnapshotHash,e);return {reference:e.reference,sourceSnapshotHash:e.sourceSnapshotHash};},async load(r){return objects.get(r.sha256);}},
   historyRevisions:{async getOrCreate(key,fn){if(!revisions.has(key))revisions.set(key,await fn({}));return revisions.get(key);}},
   featureJournal:{async writeSchema({schemaHash}){writes++;return {status:'created',schemaHash};},async appendTrace(e){writes++;return {status:'created',sha256:e.sha256};}}});
- return {pipeline,get queries(){return queries;},get writes(){return writes;}};
+ ownedFixtures.add({pipeline,producer});return {pipeline,get queries(){return queries;},get writes(){return writes;}};
 }
 function capture(options={},edit=null){
  const e=draftEntry({accounts:true,...options});let rawInput=e.rawInput,m=JSON.parse(e.metadataInput.utf8);

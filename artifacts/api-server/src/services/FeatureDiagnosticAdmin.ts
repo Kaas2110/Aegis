@@ -8,7 +8,9 @@ import {lstat,realpath} from 'node:fs/promises';
 type Result={status:number;headers:Record<string,string>;body:unknown};
 type ReadApi={handle:(input:{method:string;url:string;signal?:AbortSignal|null})=>Promise<Result>};
 type ReaderOwner={journal:unknown;close:()=>void|Promise<void>};
-type RuntimeModules={createDiagnosticFeatureJournal:(options:{directory:string})=>unknown;createDiagnosticFeatureReadApi:(options:{journal:unknown;enabled:boolean;basePath:string})=>ReadApi;openSavedDiagnosticReader?:(options:{format:string;directory:string;pythonExecutable:string|null})=>Promise<ReaderOwner>};
+type RuntimeModules={createDiagnosticFeatureJournal:(options:{directory:string})=>unknown;createDiagnosticFeatureReadApi:(options:{journal:unknown;enabled:boolean;basePath:string})=>ReadApi;openSavedDiagnosticReader?:(options:{format:string;directory:string;pythonExecutable:string|null;resourceProfile:string})=>Promise<ReaderOwner>};
+type OwnedReaderPort={directory:string;format:'v1'|'compact_v2';resourceProfile:string;openReader:()=>ReaderOwner|Promise<ReaderOwner>};
+const RESOURCE_PROFILES=new Set(['R8_RICH_8G','LEGACY_HOST_2G','LEGACY_SAVED_READER_4G']);
 const unavailable=(status:number):Result=>({status,headers:{'Cache-Control':'no-store'},body:{status:'unavailable',diagnosticOnly:true,recordedPrediction:false,eligibleForTraining:false,eligibleForServing:false}});
 const busy=():Result=>({...unavailable(429),headers:{'Cache-Control':'no-store','Retry-After':'1'}});
 const same=(a:string,b:string)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b;
@@ -22,10 +24,11 @@ export async function loadFeatureDiagnosticModules(appRoot:string):Promise<Runti
  if(typeof journalModule.createDiagnosticFeatureJournal!=='function'||typeof apiModule.createDiagnosticFeatureReadApi!=='function')throw Error('diagnostic_reader_modules_unavailable');
  return{createDiagnosticFeatureJournal:journalModule.createDiagnosticFeatureJournal,createDiagnosticFeatureReadApi:apiModule.createDiagnosticFeatureReadApi,openSavedDiagnosticReader:readerModule.openSavedDiagnosticReader};
 }
-export function createFeatureDiagnosticAdminService({environment=()=>process.env,loadModules=loadFeatureDiagnosticModules,maxPendingReads=4,maxInitializationWaitMs=2000}:{environment?:()=>NodeJS.ProcessEnv;loadModules?:(root:string)=>Promise<RuntimeModules>;maxPendingReads?:number;maxInitializationWaitMs?:number}={}){
+export function createFeatureDiagnosticAdminService({environment=()=>process.env,loadModules=loadFeatureDiagnosticModules,maxPendingReads=4,maxInitializationWaitMs=2000,ownedReader=null}:{environment?:()=>NodeJS.ProcessEnv;loadModules?:(root:string)=>Promise<RuntimeModules>;maxPendingReads?:number;maxInitializationWaitMs?:number;ownedReader?:OwnedReaderPort|null}={}){
  if(!Number.isSafeInteger(maxPendingReads)||maxPendingReads<1||maxPendingReads>4||!Number.isSafeInteger(maxInitializationWaitMs)||maxInitializationWaitMs<1||maxInitializationWaitMs>2000)throw Error('diagnostic_admin_admission_configuration');
+ if(ownedReader!==null&&(typeof ownedReader.directory!=='string'||!isAbsolute(ownedReader.directory)||ownedReader.directory.startsWith('\\\\')||!['v1','compact_v2'].includes(ownedReader.format)||!RESOURCE_PROFILES.has(ownedReader.resourceProfile)||typeof ownedReader.openReader!=='function'))throw Error('diagnostic_admin_owned_reader_configuration');
  type State={key:string;retired:boolean;reads:number;ready:Promise<{api:ReadApi;owner:ReaderOwner}>;idle:(()=>void)|null;close:Promise<void>|null};
- let active:State|null=null,retirement:Promise<void>=Promise.resolve();
+ let active:State|null=null,retirement:Promise<void>=Promise.resolve(),closed=false;
  function retire(state:State|null):Promise<void>{
   if(state===null)return Promise.resolve();if(state.close)return state.close;
   state.retired=true;
@@ -34,21 +37,23 @@ export function createFeatureDiagnosticAdminService({environment=()=>process.env
   return state.close;
  }
  async function unavailableAndClose(status:number){const previous=active;active=null;await retire(previous).catch(()=>{});return unavailable(status);}
- return Object.freeze({async close(){const previous=active;active=null;await retire(previous);},async handle(input:{method:string;url:string;signal?:AbortSignal|null}):Promise<Result>{
+ return Object.freeze({async close(){closed=true;const previous=active;active=null;await retire(previous);await retirement;},async handle(input:{method:string;url:string;signal?:AbortSignal|null}):Promise<Result>{
+  if(closed)return unavailable(503);
   const env=environment();
   if(env.AEGIS_FEATURE_DIAGNOSTICS_ENABLED!=='1')return unavailableAndClose(404);
   const directory=env.AEGIS_FEATURE_DIAGNOSTICS_DIRECTORY,appRoot=env.AEGIS_FEATURE_DIAGNOSTICS_APP_ROOT;
   if(!directory||!appRoot||!isAbsolute(directory)||!isAbsolute(appRoot)||directory.startsWith('\\\\')||appRoot.startsWith('\\\\'))return unavailableAndClose(503);
   if(typeof input.method!=='string'||typeof input.url!=='string'||input.url.length>2048)return unavailable(400);
   if(input.signal!==undefined&&input.signal!==null&&!(input.signal instanceof AbortSignal))return unavailable(400);if(input.signal?.aborted)return unavailable(499);
-  const format=env.AEGIS_FEATURE_DIAGNOSTICS_FORMAT??'v1',pythonExecutable=env.AEGIS_FEATURE_DIAGNOSTICS_PYTHON??null;
-  if(!['v1','compact_v2'].includes(format)||format==='compact_v2'&&(!pythonExecutable||!isAbsolute(pythonExecutable)))return unavailableAndClose(503);
-  const key=JSON.stringify([resolve(directory),resolve(appRoot),format,pythonExecutable]);let state:State|null=null,counted=false;
+  const format=env.AEGIS_FEATURE_DIAGNOSTICS_FORMAT??'v1',pythonExecutable=env.AEGIS_FEATURE_DIAGNOSTICS_PYTHON??null,resourceProfile=env.AEGIS_FEATURE_DIAGNOSTICS_RESOURCE_PROFILE??(format==='compact_v2'?'LEGACY_SAVED_READER_4G':'LEGACY_HOST_2G');
+  if(!['v1','compact_v2'].includes(format)||format==='compact_v2'&&ownedReader===null&&(!pythonExecutable||!isAbsolute(pythonExecutable)))return unavailableAndClose(503);
+  if(!RESOURCE_PROFILES.has(resourceProfile)||format==='v1'&&resourceProfile==='R8_RICH_8G'||ownedReader!==null&&(!same(resolve(directory),resolve(ownedReader.directory))||format!==ownedReader.format||resourceProfile!==ownedReader.resourceProfile))return unavailableAndClose(503);
+  const key=JSON.stringify([resolve(directory),resolve(appRoot),format,pythonExecutable,resourceProfile]);let state:State|null=null,counted=false;
   try{
    if(key!==active?.key){
     const previous=active,previousRetirement=retirement;
     const next:State={key,retired:false,reads:0,idle:null,close:null,ready:Promise.resolve(null as never)};
-    next.ready=(async()=>{await previousRetirement;await retire(previous);await plainDirectory(resolve(directory));const modules=await loadModules(resolve(appRoot));let owner:ReaderOwner|null=null;try{if(format==='compact_v2'&&!modules.openSavedDiagnosticReader)throw Error('compact_reader_factory_required');owner=modules.openSavedDiagnosticReader?await modules.openSavedDiagnosticReader({format,directory:resolve(directory),pythonExecutable}):{journal:modules.createDiagnosticFeatureJournal({directory:resolve(directory)}),close(){}};return{owner,api:modules.createDiagnosticFeatureReadApi({journal:owner.journal,enabled:true,basePath:'/admin/feature-diagnostics'})};}catch(error){await owner?.close();throw error;}})();
+    next.ready=(async()=>{await previousRetirement;await retire(previous);if(next.retired||closed)throw Error('diagnostic_admin_retired_before_open');await plainDirectory(resolve(directory));const modules=await loadModules(resolve(appRoot));let owner:ReaderOwner|null=null;try{if(next.retired||closed)throw Error('diagnostic_admin_retired_before_open');if(format==='compact_v2'&&ownedReader===null&&!modules.openSavedDiagnosticReader)throw Error('compact_reader_factory_required');owner=ownedReader!==null?await ownedReader.openReader():modules.openSavedDiagnosticReader?await modules.openSavedDiagnosticReader({format,directory:resolve(directory),pythonExecutable,resourceProfile}):{journal:modules.createDiagnosticFeatureJournal({directory:resolve(directory)}),close(){}};return{owner,api:modules.createDiagnosticFeatureReadApi({journal:owner.journal,enabled:true,basePath:'/admin/feature-diagnostics'})};}catch(error){await owner?.close();throw error;}})();
     active=next;
    }
    state=active!;if(state.reads>=maxPendingReads)return busy();state.reads++;counted=true;
