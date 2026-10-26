@@ -4,7 +4,8 @@
  */
 import {createHash} from 'node:crypto';
 import {instantNs} from './causalTime.mjs';
-import {pinned, FACTS_CONTRACT} from './historyCalculationCore.mjs';
+import {pinned, FACTS_CONTRACT,NATIVE_CLOSING_REFERENCE_DEFINITION} from './historyCalculationCore.mjs';
+import {defineFeatureSemanticTemplate,bindFeatureSemanticTemplate} from '../../feature-registry/feature-semantic-template.mjs';
 import {validateObservedDraftHistory} from './observedDraftHistory.mjs';
 import {PERFORMANCE_CONTRACT,PERFORMANCE_FIELDS} from './historicalPerformanceFields.mjs';
 import {readRetainedReferenceHistoryMapView,iterateRetainedReferenceHistoryMapView,readRetainedReferenceStaticMapView,iterateRetainedReferenceStaticMapView} from './retainedReferenceCorpus.mjs';
@@ -16,18 +17,28 @@ import {collectReviewedDurationTails,produceReviewedHistoricalSummaries} from '.
 import {produceChronologicalResultRatings} from './chronologicalResultRatings.mjs';
 import {createProofScopedMapReader} from './proofScopedMapReader.mjs';
 import {readActualPrivateViewWriterEpoch} from './retainedReferenceCorpus.mjs';
+import {hashCanonicalEvidence} from './canonicalEvidenceHash.mjs';
 
 export const HISTORICAL_RELATIONAL_CONTRACT='aegis.historical-relational-features.v1';
 export const HISTORICAL_RELATIONAL_FORMULA_VERSION='aegis.prior-map-relational-statistics.v3';
 const WINDOWS=[7,30,90],DAY=86400n*1000000000n,MAX_MAPS=50000;
+const closingTemplate=defineFeatureSemanticTemplate({templateId:NATIVE_CLOSING_REFERENCE_DEFINITION,policies:{supportUnit:'distinct prior completed maps per current team/landmark/native NW risk set',supportPolicy:'count observed qualified maps; statistical values require max(5,context minimumSupport); sample SD requires at least2; no repeated-frame support inflation',populationPolicy:'only provided raw-replayed prior native frames and as-of completed-map facts; not a globally complete population',eventTimePolicy:'prior10/20/30minute landmark; maps ending at or before landmark excluded; last clock<=landmark within30s',availabilityTimePolicy:'raw observation, outcome, known roster and explicit duration receipt <= immutable history cutoff; missing durationKnownAt never aliases outcomeKnownAt',gameClockPolicy:'remaining duration = prior final durationSeconds - landmarkSeconds; actual observed anchor lag reported separately',rolePolicy:'complete five native NW observations on each prior side; no role or carry inference',patchPolicy:'unconditioned across recorded patches; no automatic patch reset or current-patch assumption',phasePolicy:'past-only history selected by current team identity; no current-map outcome or current live requirement',missingReasonPolicy:'missing producer or source/identity/timestamp/support =>null; count0 is only provided qualified cohort support,not no maps worldwide',windowPolicy:'prior90d by endedAt; landmark600/1200/1800 seconds; anchor max30s preceding gap',weightPolicy:'unweighted distinct-map mean/proportion; own-side native NW lead>=1000 or deficit<=-1000 reference risk sets',tiePolicy:'greatest prior game clock then latest receipt then lexicographically smallest observation ID; deterministic numeric map order',variancePolicy:'sample SD divisor(n-1)',quantilePolicy:'linear empirical quantile index(n-1)*q for q25/median/q75',coordinate:'not_applicable: no candidate axis',orientation:'historical own-team lead/outcome selected by current nominal team identity; current Radiant/Dire tag only orients output'}});
+const CLOSING_METRICS={supportMaps:'distinct_maps',winFraction:'fraction',meanRemainingDurationSeconds:'seconds',remainingDurationSampleSdSeconds:'seconds',remainingDurationP25Seconds:'seconds',remainingDurationMedianSeconds:'seconds',remainingDurationP75Seconds:'seconds',meanAnchorLagSeconds:'seconds'};
+function projectClosingLandmarks(historyContext,roster,minimumSupport,formulaVersion){
+ const features=[],refs=historyContext.featurePayload?.closingLandmarkReferences??[],cutoff=instantNs(historyContext.historyCutoffAt),threshold=Math.max(5,minimumSupport);
+ for(const side of SIDE){const teamId=roster.find(p=>p.side===side)?.teamId??null;for(const landmarkSeconds of [600,1200,1800])for(const condition of ['lead_at_least_1000','deficit_at_most_minus_1000']){const selected=refs.filter(ref=>ref.side===side&&ref.teamId===teamId&&ref.landmarkSeconds===landmarkSeconds&&ref.condition===condition),ref=selected.length===1?selected[0]:null,sourceValid=ref?.definition===NATIVE_CLOSING_REFERENCE_DEFINITION&&ref.cohortQualified===true&&ref.minimumSupport===threshold&&ref.windowDays===90&&Number.isSafeInteger(ref.supportMaps)&&ref.supportMaps>=0&&Array.isArray(ref.sourceObservations)&&ref.sourceObservations.length===ref.supportMaps&&new Set(ref.sourceObservations.map(o=>o.matchId)).size===ref.supportMaps&&ref.sourceObservations.every(o=>o.matchId!==historyContext.matchId&&instantNs(o.dependencyKnownAt)!==null&&instantNs(o.dependencyKnownAt)<=cutoff);
+  for(const [metric,units]of Object.entries(CLOSING_METRICS)){const value=sourceValid&&(metric==='supportMaps'||ref.supportMaps>=threshold)&&finite(ref.values?.[metric])?ref.values[metric]:null,name=`histrel.${side}.closing_landmark.${landmarkSeconds}s.${condition}.${metric}`,inputBindings=[{normalizedField:'historyContext.featurePayload.closingLandmarkReferences[exact_selector].'+metric,rawField:'qualified prior Steam ten-player NW and completed prior map outcome/duration receipt',sourceProfile:'steam.GetLiveLeagueGames.v1.scoreboard + local_prior_completed_map_facts',sourceKind:'prior_native_landmark_history_reference',units,availabilityPolicy:'all exact reference dependency receipts <= immutable historyCutoffAt; no original provider publication inferred',selector:{kind:'current_same_side_team',side,landmarkSeconds,condition}},{normalizedField:'roster.'+side+'.teamId',rawField:'validated enclosing current target team identity',sourceProfile:'historical_relational.current_target_identity',sourceKind:'supplied_normalized_current_identity',units:'nominal_team_id',availabilityPolicy:'current target identity at validFrom; does not expand immutable history cutoff'}],metadata=bindFeatureSemanticTemplate(closingTemplate,{inputBindings,minimumSupport:metric==='supportMaps'?0:threshold,historyWindowDays:90,formulaParameters:{side,landmarkSeconds,condition,thresholdNativeNetWorth:condition==='lead_at_least_1000'?1000:-1000,metric,contextMinimumSupport:minimumSupport,referenceDefinition:NATIVE_CLOSING_REFERENCE_DEFINITION}});
+   features.push({name,value,definition:{name,familyId:'S05',formula:'literal '+metric+' from qualified distinct-map prior90d landmark/native-NW risk set; remaining duration is final duration minus landmark, not anchor; actual lag separate',formulaVersion,type:'float64',units,inputScopes:['prior_completed_maps','current_identity'],inputFields:inputBindings.map(port=>port.normalizedField),historyDefinitions:[],knownAt:sourceValid?ref.latestHistoryAvailabilityAt:null,supportRefs:[],missingPolicy:'null_with_missing_mask; explicit count of qualified provided maps only',...metadata,dependencyRefs:[...inputBindings.map(port=>({kind:'input',port})),{kind:'formulaTemplate',templateId:closingTemplate.templateId}],parameterClassification:{contract:'aegis.feature-parameter-classification.v1',functionParameters:metadata.formulaParameters,rowParameters:{currentTeamId:teamId},classifiedKeys:Object.keys(metadata.formulaParameters),unclassifiedKeys:[]}}});
+  }
+ }}return features;
+}
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
 const id=x=>typeof x==='string'&&/^[1-9]\d{0,19}$/.test(x);
 const account=x=>id(x)&&BigInt(x)<4294967295n;
 const hero=x=>(typeof x==='number'&&Number.isSafeInteger(x)||typeof x==='string'&&/^[1-9]\d*$/.test(x))&&Number(x)>0&&Number(x)<=250;
 const sha=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
-const canonical=x=>Array.isArray(x)?'['+x.map(canonical).join(',')+']':obj(x)?'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}':JSON.stringify(x);
-export const historicalRelationalHash=x=>createHash('sha256').update(canonical(x)).digest('hex');
+export const historicalRelationalHash=hashCanonicalEvidence;
 const byId=(a,b)=>a.matchId.length-b.matchId.length||a.matchId.localeCompare(b.matchId,'en');
 const mean=xs=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
 const variance=xs=>{if(xs.length<2)return null;const center=mean(xs);return xs.reduce((s,x)=>s+(x-center)**2,0)/(xs.length-1);};
@@ -326,13 +337,22 @@ export function produceSeriesHistoricalRelationalFeatures({targetInput,factsInpu
 function orientSeriesRelationalComponent(b,parsed,targetInput){
  const t=parsed.target,p=targetInput.pin;
  const indices=b.definitions.flatMap((d,i)=>d.inputScopes.includes('current_draft')?[]:[i]);
- const rename=s=>s.replace(/^histrel\./,'series_history.').replace(/\.radiant\./g,'.team1.').replace(/\.dire\./g,'.team2.').replace(/radiant_minus_dire/g,'team1_minus_team2');
- const baseNames=new Set(b.names),definitions=indices.map(i=>({...b.definitions[i],name:rename(b.names[i]),...(b.definitions[i].historyDefinitions?{historyDefinitions:b.definitions[i].historyDefinitions.map(ref=>baseNames.has(ref)?rename(ref):ref)}:{}),orientation:'team1/team2 nominal axes; never assumed Radiant/Dire',allowedTargets:[t.phase,'SERIES_LIVE']}));
+ const baseNames=new Set(b.names),definitions=indices.map(i=>orientSeriesRelationalDefinition(b.definitions[i],{baseNames,phase:t.phase}));
  const names=definitions.map(d=>d.name),values=indices.map(i=>b.values[i]),masks=indices.map(i=>b.masks[i]);
  const schemaHash=historicalRelationalHash({contract:'aegis.series-historical-relational-features.v1',baseSchemaHash:b.schemaHash,phase:t.phase,definitions:definitions.map(({knownAt,supportRef,supportRefs,selectorRef,...d})=>d)});
  const out={...b,contract:'aegis.series-historical-relational-features.v1',phase:t.phase,seriesId:t.seriesId,transitionId:t.transitionId,identityRevision:t.identityRevision,team1Id:t.team1Id,team2Id:t.team2Id,matchId:null,names,values,masks,definitions,schemaHash,targetInputPin:structuredClone(p),baseRelationalContentHash:b.contentHash,audit:{...b.audit,featureCount:names.length,currentMapExcluded:'no_current_map_in_series_target',nominalSideAliasesInternalOnly:true,currentHeroFeaturesExcluded:true},profiles:undefined,contentHash:undefined};
  delete out.profiles;delete out.contentHash;
  return{...out,contentHash:historicalRelationalHash(out)};
+}
+
+/** Pure namespace bridge used by the actual series wrapper. Only EXACT known
+ * same-generator column references are rewritten. Generic formula IDs/unknown
+ * operands are retained and cannot be repaired by a spelling resemblance. */
+export function orientSeriesRelationalDefinition(d,{baseNames,phase}){
+ const rename=s=>s.replace(/^histrel\./,'series_history.').replace(/\.radiant\./g,'.team1.').replace(/\.dire\./g,'.team2.').replace(/radiant_minus_dire/g,'team1_minus_team2'),reference=s=>baseNames.has(s)?rename(s):s;
+ const port=p=>baseNames.has(p.normalizedField)?{...p,normalizedField:reference(p.normalizedField)}:p;
+ const parameters=p=>p?.sourceStatistics?{...p,sourceStatistics:p.sourceStatistics.map(s=>({...s,...(s.emittedReferences?{emittedReferences:s.emittedReferences.map(reference)}:{}),...(s.emittedOperandUnits?{emittedOperandUnits:Object.fromEntries(Object.entries(s.emittedOperandUnits).map(([key,units])=>[reference(key),units]))}:{})}))}:p;
+ return{...d,name:rename(d.name),...(d.historyDefinitions?{historyDefinitions:d.historyDefinitions.map(reference)}:{}),...(d.inputFields?{inputFields:d.inputFields.map(reference)}:{}),...(d.inputBindings?{inputBindings:d.inputBindings.map(port)}:{}),...(d.dependencyRefs?{dependencyRefs:d.dependencyRefs.map(r=>r.kind==='feature'&&r.component==='history'&&baseNames.has(r.name)?{...r,component:'seriesHistory',name:reference(r.name)}:r.kind==='input'?{...r,port:port(r.port)}:r)}:{}),...(d.formulaParameters?{formulaParameters:parameters(d.formulaParameters)}:{}),...(d.parameterClassification?{parameterClassification:{...d.parameterClassification,functionParameters:parameters(d.parameterClassification.functionParameters)}}:{}),orientation:'team1/team2 nominal axes; never assumed Radiant/Dire',allowedTargets:[phase,'SERIES_LIVE']};
 }
 
 function compactChronologicalEvent(map){return{matchId:map.matchId,endedAt:map.endedAt,outcomeKnownAt:map.outcomeKnownAt,playersKnownAt:map.playersKnownAt,radiantTeamId:map.radiantTeamId,direTeamId:map.direTeamId,radiantWon:map.radiantWon,players:map.players.map(p=>({accountId:p.accountId,side:p.side}))};}
@@ -356,7 +376,8 @@ function* relationalCalculationSteps({historyContext,facts,matchId,decisionAt,mi
   const text=rows.map(r=>r.map.matchId+'@'+r.availableAt).join('|');if(supportCache.has(text))return supportCache.get(text);
   const ref='cohort:'+createHash('sha256').update(text).digest('hex');supportCache.set(text,ref);supportRows[ref]={mapIds:rows.map(r=>r.map.matchId),availability:rows.map(r=>({matchId:r.map.matchId,availableAt:r.availableAt})),supportMaps:rows.length,latestHistoryAvailabilityAt:latest(rows.map(r=>r.availableAt))};return ref;
  };
- const names=[],values=[],masks=[],definitions=[];
+ const names=[],values=[],masks=[],definitions=[],statisticColumns=new WeakMap(),derivedOperands=new WeakMap(),statisticUnits=new Map();
+ const statisticReferences=s=>{const direct=statisticColumns.get(s);if(direct)return[direct];return[...new Set((derivedOperands.get(s)??[]).flatMap(statisticReferences))];};
  for(const selector of selectors){
   const rows=yield selector;
   selectorBindings[selector.key]={kind:selector.kind,...selector.selector};
@@ -366,13 +387,13 @@ function* relationalCalculationSteps({historyContext,facts,matchId,decisionAt,mi
    if(['team','player','hero','player_hero'].includes(selector.kind))tailCohorts.push(collectReviewedDurationTails(selected,{selector,windowDays,cutoff,minimumSupport,supportRef:ref}));
    const stats=calculateStats(selected,{windowDays,minimumSupport,cutoff,qualified:selector.qualified,reason:selector.reason,supportRef:ref,latestKnownAt:supportRows[support[ref].sourceRowsRef].latestHistoryAvailabilityAt});statistics[ref]=stats;
    for(const [metric,s]of Object.entries(stats)){
-    const name='histrel.'+ref+'.'+metric;names.push(name);values.push(s.value);masks.push(s.value===null?1:0);
+    const name='histrel.'+ref+'.'+metric;names.push(name);values.push(s.value);masks.push(s.value===null?1:0);statisticColumns.set(s,name);statisticUnits.set(name,s.units);
     definitions.push({name,familyId:familyFor(selector,metric),formulaParameters:{inputClass:'outcome',operator:metric,selector:selector.selector,selectorKind:selector.kind},formula:s.formula,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,type:'float64',units:s.units,inputScopes:['prior_completed_maps',...(selector.requiresCurrentDraft?['current_draft']:['current_identity'])],historyWindowDays:windowDays,minimumSupport,supportRef:ref,knownAt:s.latestHistoryAvailabilityAt,selectorRef:selector.key,missingPolicy:'null_and_mask_1; support_zero_is_observed_cohort_not_proof_of_no_games',orientation:'selected_entity_side_then_radiant_minus_dire_for_derived_summaries'});
    }
    if(['team','player','player_hero','player_team','player_team_hero','hero','team_hero'].includes(selector.kind)){
     const computed=performanceStatistics(selector,selected,{windowDays,minimumSupport,qualified:selector.qualified,supportRef:ref,registerSupportRows,supportLatestAt:ref=>supportRows[ref].latestHistoryAvailabilityAt});performanceStats[ref]=computed.statistics;Object.assign(support,computed.supports);
     for(const [metric,s]of Object.entries(computed.statistics)){
-     const name='histrel.'+ref+'.past_performance.'+metric;names.push(name);values.push(s.value);masks.push(s.value===null?1:0);
+     const name='histrel.'+ref+'.past_performance.'+metric;names.push(name);values.push(s.value);masks.push(s.value===null?1:0);statisticColumns.set(s,name);statisticUnits.set(name,s.units);
      definitions.push({name,familyId:/PerGpm/.test(metric)?'H11':'H08',formulaParameters:{inputClass:'performance',operator:metric,selector:selector.selector,selectorKind:selector.kind},formula:s.formula,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,type:'float64',units:s.units,inputScopes:['prior_completed_maps',...(selector.requiresCurrentDraft?['current_draft']:['current_identity'])],historyWindowDays:windowDays,minimumSupport,supportRef:s.supportRef,knownAt:s.latestHistoryAvailabilityAt,selectorRef:selector.key,missingPolicy:'native prior-performance missing; never replace with current-game or team-kill proxy'});
     }
    }
@@ -383,7 +404,7 @@ function* relationalCalculationSteps({historyContext,facts,matchId,decisionAt,mi
  const profiles={players:[],teams:[],heroes:[]};
  const derive=(a,b,operation,definition,units)=>{
   const ok=a.cohortQualified&&b.cohortQualified,value=a.value===null||b.value===null?null:operation(a.value,b.value);
-  return{value:finite(value)&&ok?value:null,supportMaps:Math.min(a.supportMaps,b.supportMaps),effectiveCount:Math.min(a.effectiveCount,b.effectiveCount),cohortQualified:ok,reason:!ok?'component_cohort_unproven':value===null?'component_missing':null,definition,units,windowDays:90,minimumSupport,latestHistoryAvailabilityAt:latest([a.latestHistoryAvailabilityAt,b.latestHistoryAvailabilityAt].filter(Boolean)),supportRef:[a.supportRef,b.supportRef]};
+  const result={value:finite(value)&&ok?value:null,supportMaps:Math.min(a.supportMaps,b.supportMaps),effectiveCount:Math.min(a.effectiveCount,b.effectiveCount),cohortQualified:ok,reason:!ok?'component_cohort_unproven':value===null?'component_missing':null,definition,units,windowDays:90,minimumSupport,latestHistoryAvailabilityAt:latest([a.latestHistoryAvailabilityAt,b.latestHistoryAvailabilityAt].filter(Boolean)),supportRef:[a.supportRef,b.supportRef]};derivedOperands.set(result,[a,b]);return result;
  };
  for(const side of SIDE){
   const group=roster.filter(p=>p.side===side),teamStats={};for(const days of WINDOWS)teamStats['formWinFraction'+days+'d']=get(side+'.team','rawWinFraction',days);
@@ -415,7 +436,7 @@ function* relationalCalculationSteps({historyContext,facts,matchId,decisionAt,mi
  // Explicit derived player form/lift and side summaries retain all original axes.
  for(const side of SIDE)for(const [i,p]of profiles.players.filter(p=>p.side===side).entries())for(const key of HISTORICAL_PLAYER_PROFILE_KEYS){
   const s=p.statistics[key],name='histrel.'+side+'.slot_'+i+'.profile.'+key,requiresDraft=key.startsWith('hero')||key.startsWith('playerHero');names.push(name);values.push(s.value);masks.push(s.value===null?1:0);
-  definitions.push({name,familyId:playerProfileFamily(key),formulaParameters:{inputClass:'profile',profileOperation:key,sourceStatistics:[{definition:s.definition,units:s.units}]},formula:s.formula??s.definition,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,type:'float64',units:s.units,inputScopes:['prior_completed_maps',requiresDraft?'current_draft':'current_identity'],supportRefs:Array.isArray(s.supportRef)?s.supportRef:[s.supportRef],knownAt:s.latestHistoryAvailabilityAt,minimumSupport,historyWindowDays:s.windowDays,missingPolicy:'null and mask for absent or insufficient qualified component'});
+  definitions.push({name,familyId:playerProfileFamily(key),formulaParameters:{inputClass:'profile',profileOperation:key,sourceStatistics:[{definition:s.definition,units:s.units,emittedReferences:statisticReferences(s),emittedOperandUnits:Object.fromEntries(statisticReferences(s).map(name=>[name,statisticUnits.get(name)]))}]},formula:s.formula??s.definition,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,type:'float64',units:s.units,inputScopes:['prior_completed_maps',requiresDraft?'current_draft':'current_identity'],supportRefs:Array.isArray(s.supportRef)?s.supportRef:[s.supportRef],knownAt:s.latestHistoryAvailabilityAt,minimumSupport,historyWindowDays:s.windowDays,missingPolicy:'null and mask for absent or insufficient qualified component'});
  }
  for(const side of SIDE){
   const pp=profiles.players.filter(p=>p.side===side);
@@ -423,7 +444,7 @@ function* relationalCalculationSteps({historyContext,facts,matchId,decisionAt,mi
    const valid=pp.map(p=>p.values[key]).filter(finite),s=pp.map(p=>p.statistics[key]),sourceRefs=[...new Set(s.flatMap(v=>Array.isArray(v.supportRef)?v.supportRef:[v.supportRef]))],knownAt=latest(s.map(v=>v.latestHistoryAvailabilityAt).filter(Boolean));
    for(const [metric,computed]of Object.entries({coverage:valid.length/5,mean:mean(valid),min:valid.length?Math.min(...valid):null,max:valid.length?Math.max(...valid):null,standardDeviation:valid.length?Math.sqrt(valid.reduce((n,x)=>n+(x-mean(valid))**2,0)/valid.length):null})){
     const requiresDraft=key.startsWith('hero')||key.startsWith('playerHero'),value=phase==='PRE'&&requiresDraft?null:computed;
-    const name='histrel.'+side+'.player_profile.'+key+'.'+metric;names.push(name);values.push(value);masks.push(value===null?1:0);definitions.push({name,familyId:'H12',formulaParameters:{inputClass:'profile_aggregation',profileOperation:key,aggregation:metric,sourceStatistics:s.map(v=>({definition:v.definition,units:v.units}))},formula:metric==='coverage'?'count(available player profile values)/5':metric+' across known observed-player profiles; not role or latent strength',formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,type:'float64',units:metric==='coverage'?'fraction':s[0].units,inputScopes:['prior_completed_maps',requiresDraft?'current_draft':'current_identity'],supportRefs:sourceRefs,knownAt,minimumSupport,historyWindowDays:s[0].windowDays,missingPolicy:'null if no qualified values or draft-only scope before draft; missing players reduce coverage'});
+    const name='histrel.'+side+'.player_profile.'+key+'.'+metric;names.push(name);values.push(value);masks.push(value===null?1:0);definitions.push({name,familyId:'H12',formulaParameters:{inputClass:'profile_aggregation',profileOperation:key,aggregation:metric,sourceStatistics:s.map(v=>({definition:v.definition,units:v.units,emittedReferences:statisticReferences(v),emittedOperandUnits:Object.fromEntries(statisticReferences(v).map(name=>[name,statisticUnits.get(name)]))}))},formula:metric==='coverage'?'count(available player profile values)/5':metric+' across known observed-player profiles; not role or latent strength',formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,type:'float64',units:metric==='coverage'?'fraction':s[0].units,inputScopes:['prior_completed_maps',requiresDraft?'current_draft':'current_identity'],supportRefs:sourceRefs,knownAt,minimumSupport,historyWindowDays:s[0].windowDays,missingPolicy:'null if no qualified values or draft-only scope before draft; missing players reduce coverage'});
    }
   }
  }
@@ -441,6 +462,7 @@ function* relationalCalculationSteps({historyContext,facts,matchId,decisionAt,mi
  // descriptor binding. No old value,name,formula or ordering is replaced.
  const additions=produceReviewedHistoricalSummaries({phase,profiles,statistics,tailCohorts,profileKeys:HISTORICAL_PLAYER_PROFILE_KEYS,minimumSupport,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,historyDefinitionNamespace:names});names.push(...additions.names);values.push(...additions.values);masks.push(...additions.masks);definitions.push(...additions.definitions);
  const events=yield{kind:'r7_all_provided_events'};const chronology=produceChronologicalResultRatings({events,roster,historyCutoffAt:historyContext.historyCutoffAt,minimumSupport,factsPin:facts.pin,populationBasis:scope.populationBasis??'local_sql_selected_corpus_not_global',populationQualified:scope.base,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION});names.push(...chronology.names);values.push(...chronology.values);masks.push(...chronology.masks);definitions.push(...chronology.definitions);
+ const closing=projectClosingLandmarks(historyContext,roster,minimumSupport,HISTORICAL_RELATIONAL_FORMULA_VERSION);for(const feature of closing){names.push(feature.name);values.push(feature.value);masks.push(Number(feature.value===null));definitions.push(feature.definition);}
  const schema=definitions.map(({knownAt,supportRef,supportRefs,selectorRef,...s})=>s),schemaHash=historicalRelationalHash({contract:HISTORICAL_RELATIONAL_CONTRACT,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,phase,minimumSupport,windows:WINDOWS,betaPrior:[10,10],performanceContract:PERFORMANCE_CONTRACT,nativeSourceFields:PERFORMANCE_FIELDS,definitions:schema});
  const implemented=[...new Set(definitions.map(d=>d.familyId))].sort(),familyCoverage=implemented.map(familyId=>({familyId,status:'implemented_partial_diagnostic',notWholeFamily:true}));
  const body={contract:HISTORICAL_RELATIONAL_CONTRACT,status:'diagnostic_produced',formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,phase,matchId,decisionAt,historyCutoffAt:historyContext.historyCutoffAt,validFrom:historyContext.validFrom,availabilityBasis:historyContext.availabilityBasis,originalHistoryContentHash:historyContext.contentHash??null,prematchTargetBinding:targetBinding,factsSha256:facts.pin.sha256,draftIdentityRevision:historyContext.draftState?.revision??null,names,values,masks,definitions,schemaHash,support,supportRows,selectorBindings,profiles,familyCoverage,pendingFamilies:HISTORICAL_RELATIONAL_PENDING_FAMILIES,audit:{...audit,eligiblePriorMaps:eligibleMapCount,selectors:selectors.length,featureCount:names.length,knownValues:values.filter(finite).length,supportCohortCount:Object.keys(supportRows).length,chronologicalResultReference:chronology.audit,rawSourceReceiptAuthenticatedByThisModule:false,currentMapExcluded:true,roleInference:false,learnedState:null,zeroProviderCalls:true},eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
@@ -501,4 +523,15 @@ export function validateHistoricalRelationalFeatures(component,{matchId,decision
  const schema=component.definitions.map(({knownAt,supportRef,supportRefs,selectorRef,...s})=>s),schemaHash=historicalRelationalHash({contract:HISTORICAL_RELATIONAL_CONTRACT,formulaVersion:HISTORICAL_RELATIONAL_FORMULA_VERSION,phase:component.phase,minimumSupport:component.audit.minimumSupport,windows:WINDOWS,betaPrior:[10,10],performanceContract:PERFORMANCE_CONTRACT,nativeSourceFields:PERFORMANCE_FIELDS,definitions:schema});
  if(schemaHash!==component.schemaHash)return reject('relational_component_schema_hash');
  return{accepted:true,reason:'semantic_integrity_not_receipt_authentication',component};
+}
+
+/** Preparation-only raw view of the SAME aggregate algebra. The caller owns
+ * population/patch/role/identity qualification; this cannot authorize a source.
+ * No existing generator schema/formula/window changes. Legacy smoothed/decayed
+ * side calculations are not returned, weighted or admitted into this raw port. */
+export function collectRetainedRawMetaOutcome(rows,{windowDays,minimumSupport,cutoff,qualified,supportRef}={}){
+ if(!Array.isArray(rows)||rows.length>20000||![7,14,30].includes(windowDays)||!Number.isSafeInteger(minimumSupport)||minimumSupport<3||minimumSupport>1000||typeof cutoff!=='bigint'||typeof qualified!=='boolean'||typeof supportRef!=='string'||supportRef.length>256)throw Error('retained_raw_meta:configuration');
+ const seen=new Set();for(const row of rows){const m=row?.map;if(!m||typeof m.matchId!=='string'||seen.has(m.matchId)||typeof m.ended!=='bigint'||m.ended>=cutoff||m.ended<cutoff-BigInt(windowDays)*DAY||typeof row.won!=='boolean'||!SIDE.includes(row.side)||!finite(m.durationSeconds)||m.durationSeconds<=0||!m.kills||instantNs(row.availableAt)===null||instantNs(row.availableAt)>cutoff)throw Error('retained_raw_meta:unqualified_row');seen.add(m.matchId);}
+ const at=latest(rows.map(r=>r.availableAt)),stats=calculateStats(rows,{windowDays,minimumSupport,cutoff,qualified,reason:'explicit_population_port_unqualified',supportRef,latestKnownAt:at});
+ return {contract:'aegis.retained-raw-population-meta-outcome.v1',supportMaps:stats.supportMaps.value,rawWinFraction:stats.rawWinFraction.value,reason:stats.rawWinFraction.reason,latestHistoryAvailabilityAt:stats.rawWinFraction.latestHistoryAvailabilityAt,minimumSupport,windowDays,qualified,sourceAggregate:HISTORICAL_RELATIONAL_FORMULA_VERSION,sourceMetric:'rawWinFraction',weightPolicy:'unweighted_distinct_prior_maps',defaultDecayApplied:false,learnedSmoothingApplied:false,eligibleForTraining:false,eligibleForServing:false,recordedPrediction:false};
 }

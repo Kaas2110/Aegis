@@ -1,0 +1,64 @@
+R8.4 opt-in actual canonical POST function-identity golden
+Date:2026-10-26. Source/test preparation only; no helper execution.
+
+New test
+scripts/steam-live-collector/source-adapter/r8ActualPostFunctionIdentity.test.mjs
+Opt-in environment: AEGIS_R8_ACTUAL_POST_FUNCTION_IDENTITY=1.
+Without this exact flag, ordinary runs explicitly SKIP the heavy test.
+Root must execute Node through the existing serial owned9GiB/fourCPU/STOP/free
+headroom/finite-wall guard, not as an unowned shell process. Node test timeout
+is1100s, below the outer1200s limit. Shared profile is explicitly R8_RICH_8G.
+
+What is actually exercised
+- Two genuine private history proof contexts are built by the unchanged real
+  createDynamicHistoryProof and produceObservedDraftHistory/relational factories.
+- Current draft raw Steam bytes contain complete selected heroes/accounts and
+  are normalized by the actual adapter. Prior native inputs use explicit-phase
+  raw Steam evidence, actual normalized observation pins and exact prior-map
+  pins. Rewritten raw bytes are replayed; normalized observations are not edited
+  to claim authority. Nonempty raw-qualified native references are asserted.
+- Context B relabels team/account/current-map/prior-map and series identities.
+  Hero coordinates, receipt times, actual native metrics, prior outcomes,
+  support5, windows, rules, source profiles and canonical producer config remain
+  fixed. Facts scope selector IDs and every raw/normalized/fact binding change
+  consistently. Both are explicitly SYNTHETIC, not collected real match evidence.
+- Both actual canonical POST producers return all four applicable heads:
+  POST_MAP_WIN,POST_KILLS,POST_DURATION,SERIES_LIVE observed_postdraft.
+  No hand-created definitions, syntheticRegistry or mocked vectors are supplied.
+
+Expected identity contracts
+Per corresponding head, feature count, ordered names, generalized function SHA
+and producer compatibility must agree. Original diagnostic schema SHA, private
+context SHA and row-parameter binding SHA must differ. History context hashes
+must differ. Values may coincide after consistent nominal relabeling; neither
+equal nor unequal values are used as a surrogate for context/function identity.
+All heads must report generalized=true and unclassifiedDefinitionCount=0.
+
+Bounded actual cross-pair negative
+Root approved retaining just ONE leased actual A map-head row while constructing
+B under the SAME8GiB arena. The first full bundle and producer caches close
+before B is built. Only the explicit private row witness survives; no uncharged
+full schema serialization/inspection copy is retained by the harness. While A
+and B rows both genuinely remain valid, A-schema/B-vector and B-schema/A-vector
+pairs must fail. The valid A pair is rechecked, so this is not a stale-token
+negative. B's full bundle/caches close, then the single A witness releases.
+Finally chargedBytes,leases and heldAssets must all equal zero, including errors.
+This intentional single-plan overlap replaces retaining two full producers.
+The owned OS cap remains the final measured-memory guard; arena charges are
+engineering estimates, not an assertion of full process RSS supervision.
+
+Evidence boundary
+The test emits compact hash/count/resource receipts only. It performs no fit,
+HPO, scoring, provider call, refresh, public activation or source95 validation.
+No generator implementation changed for this test. A failure must be diagnosed
+as its exact constructor/config/identity mismatch; it does not authorize blanket
+deletion of source/row fields from function contracts. No passing receipt exists
+until root executes the frozen source. SHA is in the adjacent JSON receipt.
+
+Root execution receipt
+Root reports run24 PASS in136.516s,peak owned job3470782464B. The actual test
+therefore verified equal function identities for all four corresponding POST
+heads, distinct actual diagnostic/context/row bindings and refusal of both
+genuine cross-context pairings, with zero final arena ownership. This is synthetic
+technical evidence from root's frozen source, not source95/model quality or an
+assertion about independent future inputs. B did not execute the test itself.

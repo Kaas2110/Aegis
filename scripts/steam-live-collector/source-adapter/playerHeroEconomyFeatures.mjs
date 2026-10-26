@@ -1,10 +1,10 @@
 /** Pure shared offline/online algebra. No IO, provider, model, role inference or fit. */
-import {createHash} from 'node:crypto';
 import {instantNs} from './causalTime.mjs';
 import {validateFrozenHistory} from './causalContext.mjs';
 import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {readSteamProgressionProof} from './steamProgressionAdmission.mjs';
 import {steamPlayerInputBinding} from '../../feature-registry/feature-semantic-template.mjs';
+import {hashCanonicalEvidence} from './canonicalEvidenceHash.mjs';
 export const CONTRACT='aegis.player-hero-native-economy-features.v3';
 export const PROGRESSING_ECONOMY_CONTRACT='aegis.player-hero-native-economy-features.v4';
 export const HERO_IDS=Object.freeze(Array.from({length:250},(_,i)=>i+1));
@@ -22,8 +22,7 @@ const LATE_DEFINITIONS={playerLateTendency:'aegis.player_fraction_duration_at_le
 const TERMS=['value','log1p','team_share','team_centered','minute_product','log_minute_product','late_phase_product',...CONTEXTS.map(x=>'context_'+x),'hero_minute_residual','hero_minute_standardized'];
 const WINDOWS=[60,180,300,600],SIDES=['radiant','dire'];
 const finite=x=>typeof x==='number'&&Number.isFinite(x),value=x=>x?.missing===false&&finite(x.value)&&x.value>=0?x.value:null;
-const canonical=x=>x===null||typeof x!=='object'?JSON.stringify(x):Array.isArray(x)?'['+x.map(canonical).join(',')+']':'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}';
-export const evidenceHash=x=>createHash('sha256').update(canonical(x)).digest('hex');
+export const evidenceHash=hashCanonicalEvidence;
 const proof=x=>typeof x==='string'&&x.length>0&&x.length<=512;
 const digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const key=p=>p.identity.side+'|'+String(p.identity.teamId)+'|'+String(p.identity.accountId)+'|'+String(p.identity.heroId);

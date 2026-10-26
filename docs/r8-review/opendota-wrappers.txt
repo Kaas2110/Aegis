@@ -1,0 +1,89 @@
+Aegis Astra R7: Steam economy source-document research
+Date: 2026-10-26. Read-only public documentation/source inspection. No Steam,
+OpenDota or STRATZ provider requests, credentials, training or app changes.
+
+Conclusion
+The requested sources support keeping wallet gold, cumulative earned gold and
+net worth distinct. They do NOT establish a current Valve implementation formula
+mapping GetLiveLeagueGames.gold to net worth, or prove that GetRealtimeStats.net_gold
+equals either cumulative earned gold or net worth. Do not join those raw keys just
+because their names look similar. Endpoint-specific mapping remains necessary.
+
+1. bobbyrward/dota2_stats
+Repository master b3d2e7fbe4712dcb08f75e3a15b358a8388711a3 has a last commit dated
+2013-02-15; GitHub marks the repository archived on 2020-10-22. It is a third-party
+prototype, not Valve implementation or current API documentation.
+docs/apis/match_details.rst:36,39,41 describes FINAL match gold as remaining gold,
+gold_per_min as gold/min, and gold_spent as spending over the completed match.
+dota2_stats/tasks/updates.py:150,153,155 copies those individual fields unchanged.
+GitHub code search of this repository found no GetLiveLeagueGames occurrence.
+This supports the final-match distinction only; it supplies no live mapping.
+https://github.com/bobbyrward/dota2_stats
+https://github.com/bobbyrward/dota2_stats/blob/b3d2e7fbe4712dcb08f75e3a15b358a8388711a3/docs/apis/match_details.rst#L36-L41
+https://github.com/bobbyrward/dota2_stats/blob/b3d2e7fbe4712dcb08f75e3a15b358a8388711a3/dota2_stats/tasks/updates.py#L150-L155
+
+2. egger0a6/dota-web-api
+Inspected main f327941e596d32ad121a912d8730c89f1503a265, dated 2024-07-02.
+lib/api.js:167-181 calls GetLiveLeagueGames/v1; handleResponse at596-613 returns
+res.json() unchanged. No gold normalization or financial formula is implemented.
+Its README's live example includes scoreboard duration and roshan_respawn_timer,
+but scoreboard player details are collapsed as [Array]. The final-match example
+is explicitly separate. This wrapper does not define gold/net_gold/net_worth.
+https://github.com/egger0a6/dota-web-api/blob/f327941e596d32ad121a912d8730c89f1503a265/lib/api.js#L167-L181
+https://github.com/egger0a6/dota-web-api/blob/f327941e596d32ad121a912d8730c89f1503a265/lib/api.js#L596-L613
+https://github.com/egger0a6/dota-web-api#readme
+
+3. RDota2
+The requested get_match_details documentation was built on 2019-05-01. It defines
+FINAL gold as gold left when the game ends, separately from gold_spent. Its live
+method page only describes scoreboard as a nested information list; no gold
+mapping is supplied. These are third-party R-client docs, not a current Valve
+contract. The linked Team Fortress community-wiki live page returned HTTP403 to
+the documentation fetch; no bypass or inference from that failure was attempted.
+https://rdrr.io/cran/RDota2/man/get_match_details.html
+https://rdrr.io/cran/RDota2/man/get_live_league_games.html
+
+4. Maintained OpenDota source: stronger implementation evidence, distinct scopes
+OpenDota is community maintained. Its source is primary evidence of OpenDota's own
+implementation, not Valve's private WebAPI server implementation.
+
+core snapshot86e09304d7775540fd5e22e9a94d930034c4da09:
+- proto/dota_gcmessages_server.proto:525-586 defines LiveScoreboardUpdate.Player
+  gold(tag10), gold_per_min(tag12) and net_worth(tag26) separately. No net_gold
+  field appears in that Player message and no computation/units are defined.
+- proto/dota_gcmessages_common.proto:563-566 separately defines realtime-player
+  gold_per_min(tag34), net_gold(tag36), gold(tag37). This is a DIFFERENT message.
+  Copied protocol field declarations show wire names, not the producer formulas
+  or a demonstrated WebAPI serialization bridge between the two endpoints.
+- svc/livegames.ts:12-16 fetches GetTopLiveGame; detailed GetRealtimeStats polling
+  is commented at43-46. svc/util/http.ts:41-50 separately declares all three URLs.
+  Repository code searches found api_live/GetLiveLeagueGames only in that URL
+  helper, not a live-economy normalizer. Thus this worker cannot validate Aegis's
+  detailed GLG-to-realtime field interchangeability.
+- svc/util/compute.ts:73-74 derives final total_gold as floor(GPM*duration/60).
+  This is OpenDota-derived total_gold, not a formula for current net worth.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/proto/dota_gcmessages_server.proto#L525-L586
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/proto/dota_gcmessages_common.proto#L563-L566
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/livegames.ts#L8-L48
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L73-L74
+
+parser snapshot927adf6bbd1fd321b711f544a5d754bfe75d89a7:
+- Parse.java:715 reads entry.networth from replay property m_iNetWorth.
+- Parse.java:723 reads entry.gold from m_iTotalEarnedGold independently.
+- CreateParsedDataBlob.java:1457-1466 appends entry.gold into gold_t and entry.networth
+  into networth_t at minute intervals; absent replay networth is left absent.
+These are concrete REPLAY-PARSER mappings, not raw GetLiveLeagueGames definitions.
+They establish why OpenDota gold_t cannot safely be relabelled net_worth by name,
+and show a useful explicit networth_t source when that array exists. No claim is
+made that all retained Aegis responses already contain it or that its historical
+availability has been established. Causal event/availability gates still apply.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java#L715-L725
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1457-L1466
+
+Recommended Sol documentation action
+Record source endpoint/message, literal field name, interpretation and evidence
+separately. Keep GetLiveLeagueGames.net_worth and replay networth_t as explicit
+source-qualified net-worth candidates; preserve raw realtime net_gold separately
+until its meaning is established. Retain unknown rather than silently equating
+wallet, earned and wealth. Research narrowed the uncertainty; it did not justify
+discarding a source or declaring all cross-source model features equivalent.

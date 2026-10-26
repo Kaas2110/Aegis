@@ -14,7 +14,7 @@ const groups={
 export function loadLocalUnifiedProducerConfig(){
  const canonical=loadCanonicalRegistry();
  const sourceInventory=Object.fromEntries(Object.entries(groups).map(([id,files])=>{
-  const rows=[...new Set([...files,'unifiedFeatureProducer.mjs','unifiedProducerConfig.mjs','featureProjectionCompiler.mjs','featureProjectionOwnership.mjs','featureCapacityProfiles.mjs','diagnosticResourceArena.mjs','boundedJsonSource.mjs','causalTime.mjs','causalContext.mjs','observedDraft.mjs','historicalAlignment.mjs','recordedNormalization.mjs'])].map(name=>({path:'scripts/steam-live-collector/source-adapter/'+name,sha256:createHash('sha256').update(readFileSync(new URL(name,import.meta.url))).digest('hex')}));
+  const rows=[...new Set([...files,'unifiedFeatureProducer.mjs','unifiedProducerConfig.mjs','featureProjectionCompiler.mjs','featureFunctionContract.mjs','compactFeatureAssets.mjs','featureProjectionOwnership.mjs','featureCapacityProfiles.mjs','diagnosticResourceArena.mjs','diagnosticResourceConfiguration.mjs','canonicalEvidenceHash.mjs','boundedJsonSource.mjs','causalTime.mjs','causalContext.mjs','observedDraft.mjs','historicalAlignment.mjs','recordedNormalization.mjs'])].map(name=>({path:'scripts/steam-live-collector/source-adapter/'+name,sha256:createHash('sha256').update(readFileSync(new URL(name,import.meta.url))).digest('hex')}));
   for(const name of ['registry-contract.mjs','historical-target-eligibility.mjs','canonical-registry.mjs','feature-semantic-template.mjs'])rows.push({path:'scripts/feature-registry/'+name,sha256:createHash('sha256').update(readFileSync(new URL('../../feature-registry/'+name,import.meta.url))).digest('hex')});
   return[id,{primarySha256:rows[0].sha256,files:rows}];
  }));

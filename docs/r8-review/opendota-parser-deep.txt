@@ -1,0 +1,315 @@
+Aegis: deep OpenDota parser semantics and causal-use review
+2026-10-26 / Astra / source-document research only
+
+Scope and authority
+Pinned parser: odota/parser 927adf6bbd1fd321b711f544a5d754bfe75d89a7.
+Pinned core bridge: odota/core 86e09304d7775540fd5e22e9a94d930034c4da09.
+Read Java replay collection/blob assembly and the parallel JS processors. This is
+primary evidence of these OpenDota implementations, not Valve WebAPI producer
+formulas, deployed-service build identity, retained-Aegis coverage, or a measured
+Steam/OpenDota equivalence. No provider/match requests, replay downloads, parser
+execution, local database scan, application edits, experiments or training.
+
+Important conclusions
+1. OpenDota can supply useful historical trajectories/events, but its final-match
+   JSON is not a collection of automatically safe live features. Field-specific
+   event cutoffs, derivation horizons and source availability are essential.
+2. This parser distinguishes earned-gold gold_t from networth_t. Its current
+   radiant_gold_adv code sums EARNED gold, not net worth. Source/build/cohort must
+   qualify any equivalence with a Steam lead field.
+3. Public parsed output does not preserve every rich raw frame. It discards the
+   interval objects, and inventory collection is incomplete and transient. Full
+   final API inventories and purchase histories cannot replace actual inventories
+   at an earlier prediction time.
+4. Roshan kills, Aegis pickup/theft/denial, buybacks and building deaths have useful
+   explicit event records. Exact Roshan next-spawn time, alive state, or current
+   buyback availability do not follow automatically from those records.
+5. Some timestamped derived records depend on future events: finalized teamfight
+   outcomes, death duration and some death/reincarnation classifications. Merely
+   filtering their displayed event timestamp is insufficient.
+
+Source reference key (all URLs pinned, line references below are one based)
+P = replay collector Parse.java
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java
+B = Java parsed blob producer CreateParsedDataBlob.java
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java
+E = collected event shape Entry.java
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Entry.java
+M = Java parser HTTP entrypoints Main.java
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Main.java
+F = current core caller ParsedFetcher.ts
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/ParsedFetcher.ts
+J = parallel JS final-blob entrypoint
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/processors/createParsedDataBlob.mjs
+S = JS output schema
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/processors/parseSchema.mjs
+X = JS expanded-event processor
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/processors/processExpand.mjs
+
+A. Pipeline and version boundaries
+F:41-43 requests /blob?replay_url=... from a parser; M:159-164 invokes Parse(...,
+true), which collects entries, requires the epilogue and assembles Java B at
+P:143-166. In B:190-223 the sequence is metadata scan, expansion, final population,
+teamfights, pauses and all-player advantages. This code operates after reading a
+completed replay; it does not preserve original online receipt timestamps.
+
+J:12-38 also assembles a blob from JSON event lines after an epilogue, but has a
+different implementation. Both B:17 and S:2 declare version22 despite different
+field inventories. B contains networth_t, deaths_log and additional minute series;
+S does not. Both currently leave draft_timings empty (B:26 and190-223; J:27-29).
+Existence of a processDraftTimings module or emitted raw draft timing events does
+not prove the public blob populated them. Preserve actual payload/build evidence,
+not just version22. No deployment/coverage claim follows from repository HEAD.
+
+B. Time and alignment contract
+P:99 specifies a one-second target interval. P:672-688 and832-834 emit interval
+entries when initialized, not post-game, and time>=nextInterval, then increment
+the target by one. This is a sampling implementation, not proof of perfect
+continuous observations in every replay. P:370 rounds combat-log timestamps.
+P:506-544 either rounds the older game-time property or uses pause-adjusted ticks
+divided by30, then obtains gameStartTime; output at169-175 subtracts gameStartTime.
+Therefore exposed event time is rounded relative game time, potentially negative
+before start; it is not UNIX time, service receipt time or subsecond precision.
+
+B:1387-1486 emits ordinary time arrays only at e.time>=0 and e.time%60==0.
+times/gold_t/xp_t/lh_t/dn_t are appended together. Array index alone must NOT be
+assumed to mean minute k: use validated times, detect gaps/duplicates, and choose
+the latest observation at or before a target. Never interpolate with a later
+sample to build a supposedly contemporaneous row. A non-minute terminal time does
+not create a new time-array point. The game-state6 event stops future raw interval
+sampling (P:409-410); no final-endpoint scalar may be spliced into an earlier row.
+
+Optional networth_t/camps_stacked_t/tower_damage_t/hero_damage_t values are appended
+only when non-null (B:1463-1479). Entirely absent older data can yield empty arrays.
+Partially absent values can yield a shorter array without individual timestamps:
+blindly zipping such an array with the beginning of times would invent alignment.
+Reject ambiguous alignment or reconstruct from an explicitly timed retained raw
+source. Zero and missing are different. P:1062-1077 returns null on unavailable
+properties; many output defaults (B:36-99) are zero/empty and do not prove coverage.
+
+Pause events are emitted only on unpause, at the earlier pause-start game time,
+with completed duration (P:509-530; B:1566-1581). Such an event may reconstruct
+past pauses but is not proof that an online system knew the full duration during
+the pause. The older m_fGameTime branch does not execute this pause-event logic.
+Source-clock freshness and source transport lag remain separate Aegis concerns.
+
+C. Semantic table
+Candidate | Actual source meaning/output | Causal use and Steam qualification
+
+times | Rounded relative seconds, retained minute boundaries (P169-175; B1457-1462).
+  Join by this axis only after validation; independently prove the Steam clock
+  convention and profile. Do not use match start_time+event time as originalKnownAt.
+
+gold_t | P723 m_iTotalEarnedGold -> e.gold -> B1459, cumulative earned-gold samples.
+  Suitable replay-reconstructed earned-gold trajectories through t. Not wallet,
+  not net worth; GPM-derived approximation must have a separately checked formula.
+
+networth_t | P715 m_iNetWorth -> e.networth -> B1463-1465 when available.
+  Strong source-qualified candidate for hero wealth-by-minute, but Steam raw
+  net_gold has not been proven equivalent; coverage/alignment remain mandatory.
+
+xp_t | P725 m_iTotalEarnedXP -> B1460, cumulative earned XP.
+  Candidate for same-time experience/tempo; not automatically Steam XPM or level.
+  Actual XPM reconstruction needs its own clock/rounding/zero-time definition.
+
+lh_t / dn_t | P724 m_iLastHitCount / P705 m_iDenyCount -> B1461-1462.
+  Current cumulative counters at t, useful for hero/role/opponent differences and
+  past-window deltas. They do not identify all creep types or exact lane events.
+
+radiant_gold_adv / radiant_xp_adv | B469-494 sums signed e.gold/e.xp per minute,
+  side from player_slot<128. Here gold means total earned gold, NOT e.networth.
+  JS processAllPlayers:13-30 does the same. Team net-worth lead must instead use
+  validated same-time per-player net worth, with ten-player identity/completeness.
+
+level / kills / deaths / assists | P701-704 reads current scoreboard counters
+  into raw interval entries. E52-56 defines them, but B249-252 drops interval
+  objects; B36-99 has no per-minute arrays for these counters.
+  Final-match scalars do not reconstruct them. kills_log/deaths_log are different
+  event products, with correction/lookahead caveats below; assists_t is not shown.
+
+camps_stacked_t | P709 m_iCampsStacked -> B1467-1469 optional cumulative series.
+  Useful historical farming style; no Steam same-field availability proof here.
+
+tower_damage_t / hero_damage_t | P728-729 / P716-719 read game counters and round
+  float values; B1471-1479 optionally retains minute samples.
+  These are counter semantics, not simply a sum of replay combat damage events.
+  The corresponding Steam profile and missing behavior need explicit validation.
+
+hero_healing_t | B153-187 pre-scans heal events, excludes illusions/self-healing,
+  buckets events in (previous minute,current minute], then cumulatively emits at
+  B1481-1485. Retrospective event-order correction, not a Steam healing field alias.
+  If any boundary is missing, audit cumulative integrity before accepting values.
+
+purchase_log / purchase | B1134-1155 records purchases, excluding recipe_ entries
+  from purchase_log, preserving limited charges at B363-367. P815-827 also emits
+  synthetic purchase events for initially observed inventory.
+  Useful known-by-t purchase milestones; NOT current inventory/ownership/equipped
+  power. Sales, consumption, transfers, courier/stash, upgrades and drops matter.
+
+hero_inventory | P800/853-865 collects items; loop covers indices0..7 only,
+  although P890's comment lists inventory0..5, backpack6..8, stash9..16.
+  E47 declares this field transient. It is not serialized as raw JSON inventory,
+  and B has no current-inventory timeline output. Item extraction exceptions are
+  swallowed per slot; an empty list is not certified absence. Cannot reconstruct
+  full time-varying item power from this blob by assuming all purchases remain.
+
+neutral_item_history | P448-460 observes entering neutral-drop entities; B407-435
+  groups by time and distinguishes active item/enhancement.
+  This is not a guaranteed current-equipped-item timeline. Patch-specific keys,
+  owner resolution, drops/transfers and availability require retained evidence.
+
+abilities / item_uses | P781-797 emits ability-level changes; P870-881 scans up to
+ 32 ability handles and tolerates read failures. B1076-1111 creates use/level events;
+  B275-279 stores levels in internal metadata, not a public chronological output.
+  Final ability_uses/item_uses are aggregate maps. They do not provide live ultimate
+  cooldown, mana, readiness or all current levels. Replay/event and Steam current
+  ability-state features are distinct unless retained inputs support both.
+
+positions / lane_pos | P77-79 computes (cell*128+vec)/128; P742-750 reads coordinates.
+  B1489-1496 samples lane_pos for e.time<=600, including possible negative pregame
+  times; B334-343 aggregates rounded position counts, losing chronology.
+  lane_pos is neither current location nor a full trajectory. It can describe
+  completed earlier maps, but at minute5 its final 10-minute histogram leaks later
+  play. Steam raw world coordinates require a documented transform, not direct join.
+
+life_state | P769 samples m_lifeState. B1404-1406 counts samples per state; B92
+  stores a final map of counts. This is not a timestamped current alive flag.
+  Use genuine current Steam state or timed raw replay frames; do not slice totals.
+
+obs_log/sen_log/obs_left_log/sen_left_log | P1122-1167 emits placement/removal events
+  with entityhandle, owner and transformed location; B1318-1374 preserves logs.
+  Can reconstruct event-qualified historical vision subject to identity and removal
+  completeness, but snapshot Steam availability is unproven. Final obs/sen heatmaps
+  and ward totals are aggregate information, not current vision.
+
+building_kill | B987-995 recognizes _tower/_rax_/_healers/_fort death names and
+  writes time, unit and key into objectives (B265-273).
+  Can construct a past-event building-destruction history with a reviewed patch
+  catalogue. It does not supply current building HP, complete initial state, or
+  automatic equivalence with Steam tower/barracks bitmasks.
+
+buyback_log | B1159-1164 maps combat-log BUYBACK to time and player slot.
+  Confirms an observed buyback occurred, supporting time-since/count features.
+  It does not establish current affordability/has_buyback, exact cooldown, current
+  respawn time, or unobserved previous buyback. These need rules plus live evidence.
+
+Roshan/Aegis objectives | P282-292 captures chat events. B1250-1279 emits pickup,
+  stolen, denied Aegis with slot; Roshan kill with team=e.player1, preserving time.
+  Positive explicit events support distinct kill-side, recipient, steal and deny
+  history after their occurrence. No generic assumption that the killer picked up
+  Aegis, or that missing steal events prove no theft, is justified.
+
+D. Roshan feature design supported by these sources
+Implement separately: last confirmed kill time/age, kill count and team, last
+confirmed Aegis pickup/recipient/side, explicit stolen/denied indicators, and known
+event evidence/missing masks. Reconcile slot/player_slot/team encoding explicitly.
+A later Aegis pickup may occur after a kill; never backdate holder knowledge to
+the kill. A contested Roshan outcome and a stolen Aegis are not synonymous.
+
+No exact spawn schedule or roshan_respawn_timer is generated by the inspected
+Java blob path. A death event alone does not prove an exact future respawn second.
+A reviewed patch-specific respawn window can be an interval-valued derived feature;
+after the earliest bound, alive/dead may remain unknown without observation. Never
+use the next Roshan death to invent its earlier spawn or exact alive state.
+
+B535 hardcodes a300-second Aegis window for death classification. This is evidence
+of this parser's rule, not independent validation for every historical patch.
+Holder expiry/use needs patch-aware rules plus events. Death of a holder can mean
+reincarnation rather than a scoreboard death; avoid inventing a kill or extra life.
+
+E. Retrospective derivation hazards (material counterexamples)
+- deaths_log.time_dead is attached to the earlier death but computed from a future
+  return to life (B593-608;765-774). At t=death+1s the finalized value is unavailable.
+- WK death classification may use a modifier within +/-3seconds or a subsequently
+  observed revive within4seconds, excluding intervening buyback (B611-635).
+  Use a causally delayed correction or current scoreboard counters at that cutoff.
+- gold_lost/gold_fed can match events up to2seconds AFTER a death (B719-745).
+  Per-death gold_fed can be shared/ambiguous within the same side/second; preserve
+  gold_fed_shared rather than treating each allocation as exact (B733-758).
+- Teamfights begin15seconds before first kill, close15seconds after last kill,
+  require>=3deaths and use end-of-fight XP/damage/events (B1589-1719). A fight that
+  eventually closes at t+20 cannot provide its final result at t. In-progress
+  fight features must be recomputed from the prefix with the same online rules.
+- Final lane_pos includes the subsequent early-game horizon (B1489-1496); final
+  damage, ability_uses, gold_reasons, purchase, teamfight_participation, max_hero_hit
+  and life_state aggregates include later play. Restrict them to previous completed
+  maps or reconstruct prefix measures from sufficiently granular retained events.
+- Pause duration is timestamped at pause start but learned at resume, as above.
+- A raw event timestamp is not always faithfully propagated into every expanded
+  product: B926-931 constructs damage_targets without setting time; E6 defaults
+  time to0. That aggregate path is not a causal timestamped damage-event source.
+
+These are source semantics, not an assertion that Aegis currently consumes all of
+these fields or already suffers each leakage. A late replay parse can legitimately
+provide prefix-only reconstructed training features, with explicit reconstruction
+labels and deployed-input parity. It cannot be relabelled an actual issued online
+forecast or originally available history merely because event_time is earlier.
+
+F. Missingness, ownership and fidelity rules
+The parser buffers all events and scans the full replay for hero/slot metadata
+(B1536-1554). Resolve player-slot0..9 versus Dota player_slot0..4/128..132 separately.
+Do not infer draft availability before heroes were actually known from final
+metadata. Missing field, unparsed match, unsupported replay version, empty array,
+zero events and an observed true zero are separate states. Optional arrays may
+not align positionally; aggregate maps may have no event axis. At rounded-second
+boundaries state timing has finite resolution, so do not claim exact subsecond
+ordering. Stable sorting of retained events is not permission to import future
+derived dependencies into an earlier state.
+
+Code completeness is not source95% coverage. No network round-trip latency, actual
+provider lag, current API release or installed Aegis source-parity claim was
+measured by this source-only study.
+
+G. Actionable Sol retained-data audit checklist (no provider activation)
+1. Inventory existing raw payloads/normalized rows by source, method, parse version,
+   observedAt/availableAt, patch, parser fingerprint and fields; keep an explicit
+   unknown build class. Do not download/reparse the archive just to conduct this.
+2. Test times/base-array alignment, monotonic gameclock, duplicates, gaps, final
+   partial minute, pregame, pauses and every optional-array mismatch. Emit coverage
+   by map/profile/patch, not only frame-weighted overall percentages.
+3. Trace existing Aegis gold features end to end. Label gold_t and this parser's
+   radiant_gold_adv as earned-gold source semantics; label networth_t separately.
+   Do not rewrite stored values or existing model contracts under an old name.
+4. For retained same-map/same-player Steam/replay overlaps, compare only matching
+   source-game times with explicit clock tolerance. Check units, starting offsets,
+   deaths/buybacks, item sales and shared gold events. Correlation alone is not
+   equality; retain values/differences/masks and a source-qualified mapping verdict.
+5. Prioritize hero/position/role x current verified economy x minute x historical
+   player-hero form, but only from actual supplied measures. Keep earned-income,
+   wealth, current inventory and combat outcomes separate factors.
+6. Audit retained Roshan/Aegis logs and Steam current fields independently. Prove
+   identity, event order, recipient side and event completeness; implement known
+   death-age and explicit theft first. Keep exact respawn/alive/holder-use unknown
+   when unsupported; interval predictions and assumptions must carry provenance.
+7. Block final inventory, final aggregate damage/role/heatmaps and completed-fight
+   outcomes from current-map early rows. Keep them available for causal historical
+   form/style features from earlier maps once their facts were available.
+8. Add adversarial prefix tests: death before revive, fight before closure, pause
+   before resume, Aegis pickup after kill, same-second deaths/shared gold, missing
+   optional minute, index mismatch and differing coordinate units. Appending future
+   raw events must not alter an already sealed past feature row except through an
+   explicit later revision/availability record.
+9. Separate schemas for observed-online input, replay-reconstructed input and final
+   labels; preserve stable feature functions plus per-row source/derivation trace.
+   Only admit a shared model feature after actual input semantics and availability
+   match. Preserve unsupported feature families in the catalogue with reasons.
+10. Send Astra the evidence matrix and exact unsupported interfaces before any
+   training gate. Source reading alone does not admit a model or authorize new
+   provider tasks, replay parsing, calibration or fitting.
+
+Supplemental pinned locations
+Minute/output alignment:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1387-L1497
+Team advantage:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L469-L505
+Replay economy counters:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java#L701-L729
+Roshan/Aegis objectives:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1250-L1279
+Future-dependent death derivation:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L562-L650
+Future-dependent teamfight derivation:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1589-L1719
+Inventory serialization boundary:
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Entry.java#L35-L51
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java#L853-L926

@@ -22,7 +22,7 @@ const validMap=x=>typeof x==='string'&&/^[1-9]\d{0,19}$/.test(x)&&BigInt(x)<(1n<
 
 function decode(entry,decision){
  const receipt=readPinnedHistoricalJson(entry?.receiptInput,{maxBytes:65536}),r=receipt.data,input=entry?.rawInput;
- if(typeof input?.utf8!=='string'||input.pin?.bytes!==Buffer.byteLength(input.utf8)||input.pin.bytes<1||input.pin.bytes>6*1024*1024||sha(input.utf8)!==input.pin.sha256)throw Error('eligible_state_actual_pinned_raw_required');
+ if(typeof input?.utf8!=='string'||input.pin?.bytes!==Buffer.byteLength(input.utf8)||input.pin.bytes<0||input.pin.bytes===0&&(r.httpStatus===200||r.status!=='degraded')||input.pin.bytes>6*1024*1024||sha(input.utf8)!==input.pin.sha256)throw Error('eligible_state_actual_pinned_raw_required');
  if(r.version!=='steam-live-diagnostic-collector.v1'||r.source!=='steam'||r.diagnosticOnly!==true||r.servingEnabled!==false||r.trainingEnabled!==false||r.publicPromotion!==false||typeof r.requestId!=='string'||!r.requestId.length||r.requestId.length>128||r.rawSha256!==input.pin.sha256||r.rawFile!=='raw/'+input.pin.sha256+'.body'||r.payloadRef!=='journal:'+input.pin.sha256||r.bodyBytes!==input.pin.bytes)throw Error('eligible_state_committed_receipt_required');
  const received=instantNs(r.receivedAt),started=instantNs(r.requestStartedAt),persisted=instantNs(r.rawPersistedAt),complete=instantNs(r.completedAt);
  if([received,started,persisted,complete].some(x=>x===null)||started>received||received>persisted||persisted>complete||complete>decision)throw Error('eligible_state_capture_chronology');

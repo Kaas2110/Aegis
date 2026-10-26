@@ -1,0 +1,322 @@
+OpenDota core: source-level provenance and Aegis bridge decisions
+Date: 2026-10-26
+Reviewer: Astra delegated source/semantics review
+Scope: public source inspection only; no provider match requests, app edits, tests,
+training, dependency installation, task activation, or runtime/source switch.
+
+PINNED EVIDENCE AND LIMITS
+
+Core commit: 86e09304d7775540fd5e22e9a94d930034c4da09.
+All core links below refer to this immutable snapshot. Source was read through the
+GitHub connector. No local clone or running OpenDota deployment was inspected.
+Repository behavior is evidence of this implementation, not proof of what the
+public service currently deploys, actual latency, field coverage, or entitlement.
+An initial short-SHA web lookup failed; the full pinned source reads succeeded.
+
+Companion reports: opendota-parser-deep.txt (parser owner) and the root constants
+review. Parser provenance cited here is the colleague's independently inspected
+pin 927adf6bbd1fd321b711f544a5d754bfe75d89a7, not an assumption from field names.
+Keep core commit, parser implementation/commit and constants commit separately.
+The parser's numeric version alone does not identify Java versus JavaScript
+implementations or guarantee identical field meanings/availability.
+
+MAIN DECISION
+
+OpenDota is useful as a historical acquisition, parsing, storage and enrichment
+layer. A single Steam Web API response cannot replace that entire layer merely
+because some original inputs ultimately come from Valve. The sources expose
+different stages and clocks. Aegis should keep historical facts in its local
+causal store and use a qualified coherent Steam state for current dynamic inputs.
+Historical OpenDota fields may bridge to Steam features only after exact semantic,
+clock, identity and support checks. Source-name similarity is insufficient.
+
+1. INGESTION AND SOURCE STAGES
+
+Scanner: svc/scanner.ts uses GetMatchHistoryBySequenceNum, a 100-match page and a
+5-second loop, maintains a match-sequence cursor, and enqueues completed results.
+svc/inserter.ts drains that queue through insertMatch(type=api, origin=scanner).
+These are source configuration values, not our polling recommendation or a
+measured public API update interval. Neither match ID order nor sequence order
+is a substitute for causal availability time.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/scanner.ts
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/inserter.ts
+
+API stage: ApiFetcher.ts:26-35 has its direct GetMatchDetails request commented
+out and allows an optional sequence-number backfill. The source comment calls
+GetMatchDetails broken. That establishes this pinned code's fallback decision,
+not that the endpoint is broken now or that Aegis should probe it. The archived
+API blob can still serve old data. The fallback explicitly acknowledges that
+match_id and match_seq_num do not share one ordering.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/ApiFetcher.ts#L26-L35
+
+GC stage: GcdataFetcher reads a separate archived gcdata blob and can fetch an
+internal retriever result. It extracts replay cluster/salt, series ID/type and
+player account/slot/party/permanent-buff information. This is not an individual
+hero's rich minute-by-minute economy. retriever.ts requests GC match details
+through a logged-in Steam client playing app 570; a Web API key alone does not
+instantiate that GC transport. Missing/old/blocked replay metadata is handled
+explicitly. No GC login or infrastructure deployment is proposed by this review.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/GcdataFetcher.ts#L17-L115
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/retriever.ts#L176-L206
+
+Replay stage: parser.ts obtains the API context, pgroup and replay location;
+ParsedFetcher.ts:22-66 checks replay availability and calls a separate parser.
+The result is augmented with match ID, league, start_time and final duration
+before storage. Thus rich arrays are reconstructed after the match, even when
+their game-time samples describe early states. They are not retained live
+observations and do not establish a historical live transport's latency.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/parser.ts
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/ParsedFetcher.ts#L22-L76
+
+Metadata stage: MetaFetcher.ts builds a separate .meta.bz2 URL from GC metadata,
+detects Zstandard magic bytes despite the historical filename extension, falls
+back to bzip2, and decodes CDOTAMatchMetadataFile. It removes private_metadata.
+Optional end-of-match metadata is not a promise of every replay/live field.
+Source comments contain illustrative timings; these are not Aegis measurements.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/MetaFetcher.ts#L26-L66
+
+2. THE PUBLIC MATCH OBJECT IS A COMPOSITE, NOT ONE OBSERVATION
+
+getMatchBlob.ts:14-30 reads api, gcdata, parsed and archived data in parallel and
+sets od_data.has_api/has_gcdata/has_parsed/has_archive. Lines 40-65 merge top-level
+objects and player objects (joined by player_slot) in this overwrite order:
+archived < parsed < gcdata < api. It returns null without archive or API base data.
+The flags attest the presence of stage blobs, not per-field completeness,
+semantic equivalence, original observation time, or qualified live availability.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/getMatchBlob.ts#L14-L68
+
+ParsedFetcher.checkAvailable checks a parsed_matches row. insert.ts:456-463
+creates that marker after parsing. A marker does not mean all arrays, all ten
+identities, all requested events, or new fields such as networth_t are present.
+The replay may be unavailable, a parse may use an older implementation, and
+partial stage coverage can coexist in the merged object.
+
+Automatic parsing is selected: insert.ts:475-500 only schedules it for a fresh
+scanner/API insert and a tracked player or league match (subject to skipParse).
+This selection is not proof that all professional maps or all archive rows have
+equivalent parsed coverage. Aegis needs measured field/cohort counts.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/insert.ts#L456-L500
+
+Storage writes stage blobs keyed by match ID/type. insert.ts:628-652 documents
+that a later refresh may overwrite data, including losing fields formerly
+present. This is not an append-only point-in-time feature store. Aegis must retain
+its own source versions, receivedAt/availableAt and correction lineage; final
+endedAt=start_time+duration is not an arrival timestamp.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/insert.ts#L628-L652
+
+3. ECONOMY: EXACT MEANINGS AND NON-EQUIVALENCES
+
+Field / source / interpretation / eligibility
+
+total_gold:
+  compute.ts:73-74 derives floor(gold_per_min * final_duration_seconds / 60).
+  It is an earnings proxy reconstructed from final GPM, including its rounding,
+  not current wallet and not inventory-plus-wallet net worth. It cannot generate
+  an early-map current economy feature. For a completed prior map it may be a
+  qualified historical statistic once that map's information is available.
+
+gold_per_min:
+  The core calculation consumes the endpoint's final metric; it does not derive
+  this from net_worth / minutes. Dividing final total_gold by an early clock also
+  cannot recover live GPM. Preserve the source/profile GPM field and qualify its
+  time support separately. This review does not resolve opaque Steam GLG gold or
+  detailed-RT net_gold from this final endpoint's naming.
+
+gold_t:
+  Core schema only says total gold over time. The companion pinned parser maps
+  interval gold from m_iTotalEarnedGold. Consequently this lineage is cumulative
+  earned gold at sampled game times, not native net worth. Retain it as earned
+  economy. Require per-row times/value alignment rather than assuming index i
+  always means minute i in arbitrary historical data.
+
+networth_t:
+  The companion pinned Java parser optionally collects m_iNetWorth separately.
+  The inspected core global.d.ts and MatchResponse schema do not declare it;
+  absence from those declarations does not prove the parser cannot produce it.
+  Preserve raw additional fields and qualify actual arrays. Do not synthesize it
+  from gold_t, GPM, final net worth, or prices of current item IDs.
+
+radiant_gold_adv:
+  The core schema's broad description does not establish net-worth semantics.
+  In the companion pinned parser, each minute's value is the signed team sum of
+  interval gold=m_iTotalEarnedGold. For THAT lineage it is earned-gold advantage.
+  It must not be renamed to Steam net-worth lead. Older/newer archives may have
+  different lineage; keep them unknown until the implementation is identified.
+
+gold (final match), gold_spent, net_worth, live gold and live net_gold:
+  Distinct endpoint/profile fields. Core does not establish a general equality
+  among them. In particular no reviewed core conversion justifies unlocking all
+  formerly opaque Aegis gold/net_gold descendants as net worth. Current canonical
+  NW is inventory value plus wallet, may decrease, and requires its own source.
+
+Economy source lines:
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L60-L80
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/responses/MatchResponse.ts#L161-L167
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/responses/MatchResponse.ts#L383-L405
+See opendota-parser-deep.txt for the pinned Parse.java and CreateParsedDataBlob
+line references supporting earned-gold/net-worth/time distinctions.
+
+4. DERIVED FIELDS THAT NEED SPECIAL CAUSAL TREATMENT
+
+Current ranks/MMR in old match responses:
+buildMatch.ts:173-200 queries current players/notable_players/rank_tier/
+player_computed_mmr/subscriber and attaches rank_tier and computed_mmr. The API
+view of a past match therefore cannot be treated as the player's past rank/MMR.
+insert.ts:59-71 itself only captures average rank for fresh scanner/API inserts
+and notes that current player rank at view time is less accurate for old games.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/buildMatch.ts#L173-L200
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/insert.ts#L57-L72
+
+Benchmarks:
+buildMatch.ts:119-145 selects a previous/current benchmark retention epoch at
+request time, with a hero ID and optional turbo cohort. Those percentiles are not
+automatically a baseline known when an old map occurred. Preserve final raw
+metric separately from a versioned reference distribution. Do not import a
+present-day percentile as an as-of historical hero-strength feature.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/buildMatch.ts#L119-L145
+
+Lane efficiency:
+compute.ts:159-170 computes gold_t[10] / 4948, where 4948=40*60+45*20+74*2+
+600*1.5+600, followed by floor(100*ratio). The fixed benchmark is explicitly
+associated with an old 6.84 change. This is neither current optimal-farm physics
+nor a patch/hero-specific modern gold expectation. Preserve its source meaning
+if used historically; design a separate, versioned empirical expected-economy
+feature rather than silently redefining this column.
+
+Lane versus position:
+compute.ts:417-462 turns a spatial histogram into the dominant static lane
+bucket. lane_role means safe lane/mid/off lane/jungle; it does not distinguish
+carry from support. is_roaming uses dominant-lane proportion below 0.45.
+The parser's lane_pos aggregation loses chronology and includes eligible
+pregame positions; a finished lane_pos is not a minute-5 causal trajectory.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L417-L462
+
+position_est:
+compute.ts:266-335 requires all five players on a side to have gold_t and lh_t
+through indices 10-12 plus lane_role. It averages those three entries, sums gold
+and LH ranks, breaks farm-rank ties using ward purchases through 720 seconds,
+calls the top three cores and the other two supports, then assigns positions
+using lane preferences and farm-order fallbacks. This is an inferred role, not
+an official role, hero tag, or pre-draft fact. It cannot enter a 5-minute vector
+unchanged; even a 12-minute retrospective inference needs availability/profile
+qualification before comparison with a live role. Its comment's external small
+validation claim is not our validation evidence.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L254-L335
+
+Comeback/throw/stomp/loss:
+compute.ts:227-244 uses the full advantage curve's extrema AND the final winner.
+These are outcome-conditioned completed-map descriptors, not live evidence of
+a comeback at an early timestamp. Use them as labels or qualified past-map form
+statistics. A prefix-only current trend is a different explicitly named formula.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L226-L244
+
+Purchase time documentation mismatch:
+MatchResponse.ts:903-905 calls purchase_time the last purchase time, but
+compute.ts:178-204 accumulates the SUM of filtered item purchase times per key;
+first_purchase_time is separately the first observed time. The filter removes
+recipes and ward_dispenser. item_win also uses the final winner. Do not trust a
+human schema description over the implementation or use a full purchase list
+as the current inventory. Prefix purchase history still cannot account for all
+sales, transfers, consumption and item transformations without corresponding
+events/current inventory observations.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L178-L204
+
+5. PATCH, DRAFT AND IDENTITY
+
+Patch is inferred from start_time against dotaconstants dates:
+compute.ts:397-408 returns the last dated patch at or before match start.
+MatchResponse.version is the OpenDota parse version, not the Dota patch version.
+Root independently inspected constants pin5c0242df9057848fa2036ca3fafe9f2bd4508163:
+its 61 patch records end at base7.41/id60 and contain no letter variants.
+Aegis's letter-patch calendar remains a separate versioned inference with
+boundary precision/ambiguity; a core patch integer does not supply 7.41e proof.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L397-L408
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/responses/MatchResponse.ts#L198-L200
+
+Draft data is split across picks/bans, player hero IDs and optional replay draft
+timings. MatchResponse.ts:57-87 declares draft_timings with pick/order/team/hero/
+slot/timing attributes but does not prove their live availability. Joining final
+player heroes to an earlier draft requires a qualified observed identity map;
+identity can be known at a different time from the hero choice itself.
+getPGroup explicitly notes that GC lacks hero ID and ParserMatch lacks account ID;
+the helper constructs a slot->account/hero relation from combined input. Keep
+mapping provenance and anonymous/missing accounts, not guessed player joins.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/pgroup.ts
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/responses/MatchResponse.ts#L57-L87
+
+transformMatch:466-485 removes anonymous account IDs, reduces ability_upgrades
+to an ID-only ability_upgrades_arr and deletes the original, and removes scaled
+damage/healing fields. The compact ability array cannot recreate original
+upgrade timestamps. Preserve any earlier retained raw response in Aegis rather
+than assuming OpenDota's final response is lossless.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L466-L485
+
+6. OPEN DOTA /LIVE IS NOT A GUARANTEED DETAILED STEAM STATE
+
+svc/livegames.ts:12-48 calls GetTopLiveGame, randomly chooses partner1/2, adds
+notable-player metadata and writes Redis entries keyed by lobby ID. Entries have
+28800-second TTL, the set retains 100 entries, and the loop runs every60seconds.
+The detailed GetRealtimeStats code is commented out. api/spec.ts:2489-2522
+serves these cached entries. TTL is storage retention, not a source freshness
+guarantee; missing/expired rows and stale states need separate interpretation.
+This code does not establish that OpenDota /live and our qualified Steam GLG or
+detailed RT stream expose equivalent fields or clock support. No live latency or
+source95 coverage measurement was performed in this research.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/livegames.ts#L8-L48
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/spec.ts#L2489-L2522
+
+7. SOL IMPLEMENTATION CONTRACT / ACCEPTANCE
+
+A. Add a versioned OpenDota historical adapter profile, never a blanket alias.
+   For each field retain: provider/stage, endpoint/schema version, acquisition
+   time, parser implementation/commit where known, game-time support, unit,
+   identity join basis, null/support mask and reconstruction qualification.
+   Unknown historic parser lineage stays unknown; no guessed backward migration.
+
+B. Separate earned gold, wallet, net worth and source-opaque gold/net_gold across
+   raw inputs, canonical typed features and model manifests. Keep all agreed
+   feature families in the inventory. Semantic decisions may be complete while
+   source eligibility remains false; never clear a gate through naming alone.
+
+C. Build offline prefixes using actual timestamps <=target time. Maintain the
+   reconstruction-versus-retained-live distinction. A postmatch replay may train
+   a permitted reconstructed profile; it is not receipt-time or source95 proof.
+   Map each trained column to a genuinely available live counterpart, or keep it
+   in a separately typed ineligible profile. Do not interpolate from future ends.
+
+D. Historical player/hero/team form can feed live models from the local store.
+   Cut at the proper pre-map/series decision boundary and historical availableAt;
+   current-state Steam fields must share one coherent qualified frame/profile.
+   No OpenDota HTTP request should be introduced into the new live decision path.
+   Do not bring today's rank/MMR, benchmark percentile or constants backward.
+
+E. Tests to specify for Sol (not executed here): earned gold can rise while NW
+   falls; total_gold differs from current NW; absent networth_t stays missing;
+   sparse/misaligned times reject or mask safely; final role/curve extrema do not
+   alter earlier prefixes; present-day rank changes do not rewrite old vectors;
+   purchase_time SUM differs from last event; parser marker does not admit absent
+   fields; source stage overwrite retains both original versions; draft account
+   anonymity and unknown identities never join by guessed order; patch letter
+   inference has exact source/precision; existing feature families remain counted.
+
+F. Historical matrices/old model columns previously named gold advantage require
+   a semantic-version audit before reuse. Changing earned lead to NW lead can
+   change values and learned meaning. Do not silently reuse fitted weights or
+   extend old test receipts across that contract change. Training stays paused.
+
+8. REUSE AND PRACTICAL BOUNDARY
+
+Core is MIT licensed (Copyright2018TheOpenDotaProject); source/substantial code
+reuse must retain the copyright and permission notice. This license does not
+establish service quotas, data rights or Valve asset permissions. Pure transforms
+and adapter patterns may be useful with attribution and explicit corrected
+semantics. Do not transplant key rotation/proxy/retry/logging transport, the whole
+multi-service stack, old map constants, or heuristic metrics without review.
+No new dependency, parser, GC client, service or provider call was installed.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/LICENSE
+
+Conclusion: the useful deliverable is a precise historical-to-live bridge and
+field-support ledger. Source research resolves several meanings and exposes
+specific leakage hazards; it does not prove existing archive coverage or make
+every OpenDota rich field reproducible from Steam live. Those checks belong in
+the bounded Sol implementation/acceptance block before any new model fits.

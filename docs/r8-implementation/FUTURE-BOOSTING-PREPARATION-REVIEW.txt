@@ -1,0 +1,71 @@
+SOL R8 TRACK C — FUTURE BOOSTING PREPARATION AND WEIGHT REVIEW
+26 October 2026. Staged source only. Helper ran no native or provider commands.
+
+Exact source files
+scripts/feature-registry/discover-boosting-metadata.py
+scripts/feature-registry/future-boosting-runner-config.mjs
+scripts/feature-registry/future-boosting-runner-config.test.mjs
+
+Metadata discovery
+The stdlib-only Python script reads installed distribution metadata for exactly
+LightGBM/CatBoost/XGBoost, plus Python version/platform and a UTC recording time.
+It does not import those model libraries, install anything, call providers or
+fit/score models. Exception text and local paths are not returned. A found
+distribution is NOT verified native usability. Run it with the intended ML
+Python environment; output from another interpreter cannot establish that
+environment's installed distributions. No current versions are asserted until
+root records its actual metadata-only receipt. Use isolated Python startup.
+
+Root metadata-only payload (under the existing owned serial guard)
+<verified-ML-python.exe> -I scripts/feature-registry/discover-boosting-metadata.py
+
+Current source inspection, not a native-backend claim
+Canonical requirements.txt pins LightGBM4.6.0; pyproject.toml allows4.5..<5.
+The old candidate-planner common_native adapter checks exactly4.6.0 plus a private
+Dataset sampling-source hash and imports natively only inside make_backend().
+Existing adapters expect old dense/packed recipe/sample/target structures. They
+are NOT automatically compatible with the new paged private-row preparation.
+The new descriptor explicitly declares adapterImplemented:false and requires
+a separately reviewed aegis.paged-private-proof-boosting-runner.v1 adapter.
+
+Closed future configurations
+createFutureBoostingRunnerConfiguration validates a closed metadata receipt,
+stable global split/sample-preparation pins, one bounded profile ID, a closed
+boosting backend name and1..4CPU threads. It emits all13 existing target/mode
+descriptors:12 logical outcomes, with SERIES_LIVE postdraft/live kept distinct.
+Whole-series main-card orientation is nominal team1; map-detail orientation is
+Radiant, with map kills/duration distributions in kills/seconds. LIVE totals
+retain remaining quantities and exact observed offsets; PRE/POST totals are final.
+Binary parameters are backend-specific declarations. A named future conditional
+CDF threshold-head candidate preserves coherent totals distributions, monotone
+CDF, explicit kill-line mass and train-fold-only calibration/grid construction.
+It is a preparation candidate, not an implemented or validated totals runner.
+Live pooled/specialist candidates preserve the same eligible landmarks and one
+80+ group. Full features precede later selection/compression; no dimension is fixed.
+No objective labels, grids, learned state, matrices or native models are created.
+All execution, training, backend usability, source/label proof and activation
+flags remain false. Distribution metadata cannot flip any admission gate.
+
+Root technical payload
+node --test scripts/feature-registry/future-boosting-runner-config.test.mjs
+
+Independent static review of ROOT-owned paged-sample-preparation.mjs
+Its grouping uses target/mode/profile/stable function/producer compatibility and
+keeps diagnostic row/schema/child OOF IDs attached to rows without sharding those
+instances. The two-pass arithmetic assigns one unit per series, equally to its
+maps and then retained samples within each stable estimator and split role.
+Pinned pages are re-read, output byte pins are checked and read back, labels and
+all original row lineage fields are preserved. The module makes no private source
+or durable-storage claim and does not fit models. No dense feature matrix is made.
+Review findings sent to root: fail closed unless shouldContinue returns true in
+both added passes; add multiple-map/series weight-sum and changed-callback cases.
+Root accepted those fixes and owns their implementation/tests. Coordinate-changing
+learned-state compatibility is NOT implemented: a child ID alone cannot prove
+coordinate interchangeability. Keep that gate unadmitted until an explicit
+verified coordinate contract exists. This review did not edit root's module.
+
+Unchanged limitations
+No training authorization, current source95, complete real feature support,
+label/fold dependency verification, native import usability or model quality
+follows from these declarations or the metadata-only receipt. Future native
+adapters/HPO and candidate admission still require their separate reviewed gates.

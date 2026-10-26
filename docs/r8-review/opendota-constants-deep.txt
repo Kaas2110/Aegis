@@ -1,0 +1,92 @@
+OPENDOTA CONSTANTS — SOURCE/PATCH/MECHANICS REVIEW FOR AEGIS
+26 October2026. Public documentation and source inspection only. No builder run,
+game endpoint call, app change, training, dependency installation or data refresh.
+
+Pinned repository: odota/dotaconstants
+commit5c0242df9057848fa2036ca3fafe9f2bd4508163, dated2026-10-12.
+tree436c1e2c456d82439c6a77aa05f3175492389787.
+Primary implementation source for this package, not an official Valve API SLA.
+Read README,index.ts,tasks/newpatch.ts,tasks/util.ts,tasks/updateconstants.ts,
+build/patch.json,build/heroes.json,build/items.json,LICENSE and bounded file tree.
+
+1. WHAT IS USEFUL
+index.ts exports separate dictionaries for heroes, abilities, hero-ability slots,
+items and item IDs, Aghanim descriptions, buffs, XP thresholds, maps of regions/
+clusters/game modes and patch metadata. These can support deterministic ID joins,
+hero mechanics/item predicates and correctly qualified draft/economy interactions.
+They do not supply historical player form, actual player positions or match events.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/index.ts
+
+2. CURRENT SNAPSHOT IS NOT A PER-HISTORICAL-MATCH RULESET
+The builder obtains current extracted game files and game data, transforms them,
+then writes build/*.json. Manually maintained json files are copied into build.
+No invocation of the builder was made here. Its source references include remote
+datafeed URLs; reading code is not permission to run those calls.
+Historical use needs a pinned matching game-rule version and availability policy.
+Applying today's item costs/hero attributes to all old matches changes feature
+meaning and can introduce retrospective information. Commit time is a provenance
+timestamp, not proof of exact game deployment or of what Aegis knew historically.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/tasks/updateconstants.ts#L140-L175
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/tasks/updateconstants.ts#L1390-L1412
+
+3. PATCH LETTERS ARE NOT COVERED BY THIS PATCH-ID TABLE
+build/patch.json has61 entries, ending base7.41/id60 dated2026-03-24.
+No entry name in that pinned table ends in a letter. This does NOT establish the
+current Valve patch and cannot distinguish7.41a/b/c/d/e in Aegis history.
+newpatch.ts appends a numeric+0.01 name, current wall date and sequential ID.
+Keep calendar-inferred patch intervals separate from observed game build/rules;
+do not assign tournament match patches with absolute certainty from this table.
+The owner's letter-aware patch contract still needs separate release/rule evidence.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/build/patch.json
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/tasks/newpatch.ts
+
+4. HERO ROLES AND A CONCRETE NAMING TRAP
+At this snapshot build/heroes.json has127 keys. roles comes from the game hero's
+Role tag list. Carry/Escape/Nuker-style tags are hero capabilities, not proof that
+the currently selected player is position1,2,3,4 or5. Economic rank is separate.
+The builder sets attack_rate from AttackRate, but base_attack_time from
+BaseAttackSpeed. A sampled Anti-Mage entry has attack_rate1.4 and
+base_attack_time100. Do not interpret the latter as seconds merely from its name.
+Use exact upstream binding/units, or mark the source unqualified until resolved.
+This is a source-code finding, not an Aegis runtime bug or a claim about actual
+attack rate after items/buffs. No derived power formula was installed.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/tasks/updateconstants.ts#L1938-L2009
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/build/heroes.json
+
+5. ITEM/AEGIS RULE CANDIDATES
+Pinned items dictionary has501 keys. Aegis entry has itemID117, cost0, separate
+reincarnate/disappear timing attributes including ordinary300s and turbo240s.
+These provide a rule candidate for a qualified matching mode/patch/item protocol;
+they do not prove current possession, pickup age, steal or Roshan death time.
+Use actual Steam item IDs and event evidence; do not sum an incomplete six-slot
+inventory to replace a provider's complete native net worth. Current item cost
+cannot reconstruct total historical spending, sale losses, consumption or transfers.
+Only a summary of this dictionary entry is reproduced; no game assets copied.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/build/items.json
+
+6. VERSIONING AND REUSE
+Preserve upstream repository commit/blob and the specific parser/rule contract in
+every imported descriptor. The package LICENSE is MIT; any later actual code reuse
+must retain its license/copyright notices. That does not automatically establish
+rights or semantic guarantees for every upstream game asset. No library source
+was copied into the application or installed by this review.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/LICENSE
+
+Observed blob identities:
+tasks/updateconstants.ts ee7c39471fc8962d7057936a439af9b6748b0dfb
+tasks/newpatch.ts 0babf8f031d47dd0f602406bf480532d1b9ffe23
+tasks/util.ts 374fc756fa5abdf56021e917f7a59ce0e0c5f1f8
+build/patch.json a170cf376f45c013bfc1ee645b320d296247d31b
+build/heroes.json 9c5d32883d4ec9522ac27c8a24a43afbfceaa8a7
+build/items.json 94070e3e9efb13d378930eb4db21f89cd0fb5d50
+
+SOL ACTIONS
+- Add source-qualified dictionary/rule refs to existing feature contracts, not a
+  second feature generator. Audit already retained dependencies before acquisition.
+- Preserve letter-patch unknown/inferred/observed statuses and as-of versions.
+- Treat hero tags and current player position as distinct inputs.
+- Add source-name/unit counterexamples, including the attack-time/speed mismatch.
+- Build Roshan/Aegis features from current events and compatible rules, with
+  explicit unknowns; don't infer an exact respawn from a dictionary alone.
+- Keep full feature inventory. These are preparation/semantic tasks, not permission
+  to retrain models, request fresh data or deploy a new live source.

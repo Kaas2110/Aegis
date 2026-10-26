@@ -61,8 +61,8 @@ test('static post-commit fence preserves durable trace but rejects STOP, abort a
  }
 });
 
-test('static owned authority is rechecked after IO and an unchanged owner is verified',async()=>{
+test('legacy static stamps are fenced after each IO but cannot certify current private authority',async()=>{
  let reads=0;const current={sourceGeneration:'s1',identityRevision:'i1',seriesRevision:'r1',targetGeneration:'t1',terminal:false};
  const f=ownedFixture({readCurrentAuthority:()=>{reads++;return {...current};}}),result=await f.writer.consume(f.input);
- assert.equal(result.status,'recorded_diagnostic');assert.equal(result.currentAuthorityVerified,true);assert.equal(reads,2);
+ assert.equal(result.status,'recorded_diagnostic');assert.equal(result.currentAuthorityVerified,false);assert.equal(reads,4);
 });

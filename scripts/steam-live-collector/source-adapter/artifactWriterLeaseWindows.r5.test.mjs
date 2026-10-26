@@ -14,7 +14,7 @@ test('Windows OS-held lease excludes a second helper and releases on owner close
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'aegis-windows-artifact-lease-r5-'));
  const provider=createWindowsArtifactWriterLeaseProvider({pythonExecutable:process.env.AEGIS_TEST_PYTHON});
  let first,second;
- t.after(async()=>{await releaseArtifactWriterLease(first);await releaseArtifactWriterLease(second);await fs.rm(directory,{recursive:true,force:true});});
+ t.after(async()=>{await releaseArtifactWriterLease(first);await releaseArtifactWriterLease(second);const target=path.resolve(directory);assert.equal(path.dirname(target),path.resolve(os.tmpdir()));assert.ok(path.basename(target).startsWith('aegis-windows-artifact-lease-r5-'));await fs.rm(target,{recursive:true,force:true});});
  first=await acquireArtifactWriterLease(provider,directory);await assertArtifactWriterLease(first,directory);
  await assert.rejects(acquireArtifactWriterLease(provider,directory),/acquire_or_assert_failed|released_or_exited/);
  await assertArtifactWriterLease(first,directory);await releaseArtifactWriterLease(first);

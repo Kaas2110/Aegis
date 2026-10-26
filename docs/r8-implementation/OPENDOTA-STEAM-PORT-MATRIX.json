@@ -1,0 +1,114 @@
+{
+  "contract": "aegis.retained-opendota-steam-measurement-bridge.v1",
+  "parserRepository": "odota/parser",
+  "parserCommit": "927adf6bbd1fd321b711f544a5d754bfe75d89a7",
+  "implementationFamily": "java_blob",
+  "coreCommit": "86e09304d7775540fd5e22e9a94d930034c4da09",
+  "ports": [
+    {
+      "field": "gold_t",
+      "port": "historical.opendota.cumulative_earned_gold",
+      "quantity": "cumulative_earned_gold",
+      "units": "gold_earned",
+      "steamCounterpart": null,
+      "alignment": "required_base_times",
+      "sourceProperty": "m_iTotalEarnedGold"
+    },
+    {
+      "field": "networth_t",
+      "port": "historical.opendota.native_net_worth",
+      "quantity": "current_assets_value",
+      "units": "gold_current_assets",
+      "steamCounterpart": "steam.GetLiveLeagueGames.v1.scoreboard.net_worth",
+      "alignment": "optional_exact_times_only",
+      "sourceProperty": "m_iNetWorth"
+    },
+    {
+      "field": "xp_t",
+      "port": "historical.opendota.cumulative_earned_xp",
+      "quantity": "cumulative_earned_experience",
+      "units": "xp_earned",
+      "steamCounterpart": null,
+      "alignment": "required_base_times",
+      "sourceProperty": "m_iTotalEarnedXP"
+    },
+    {
+      "field": "lh_t",
+      "port": "historical.opendota.cumulative_last_hits",
+      "quantity": "cumulative_last_hits",
+      "units": "last_hits",
+      "steamCounterpart": "steam.GetLiveLeagueGames.v1.scoreboard.last_hits",
+      "alignment": "required_base_times",
+      "sourceProperty": "m_iLastHitCount"
+    },
+    {
+      "field": "dn_t",
+      "port": "historical.opendota.cumulative_denies",
+      "quantity": "cumulative_denies",
+      "units": "denies",
+      "steamCounterpart": "steam.GetLiveLeagueGames.v1.scoreboard.denies",
+      "alignment": "required_base_times",
+      "sourceProperty": "m_iDenyCount"
+    },
+    {
+      "field": "hero_damage_t",
+      "port": "historical.opendota.cumulative_hero_damage",
+      "quantity": "cumulative_hero_damage_counter",
+      "units": "damage",
+      "steamCounterpart": null,
+      "alignment": "optional_exact_times_only",
+      "sourceProperty": "rounded_native_hero_damage_counter"
+    },
+    {
+      "field": "tower_damage_t",
+      "port": "historical.opendota.cumulative_tower_damage",
+      "quantity": "cumulative_tower_damage_counter",
+      "units": "damage",
+      "steamCounterpart": null,
+      "alignment": "optional_exact_times_only",
+      "sourceProperty": "rounded_native_tower_damage_counter"
+    },
+    {
+      "field": "camps_stacked_t",
+      "port": "historical.opendota.cumulative_camps_stacked",
+      "quantity": "cumulative_camps_stacked",
+      "units": "camps",
+      "steamCounterpart": null,
+      "alignment": "optional_exact_times_only",
+      "sourceProperty": "m_iCampsStacked"
+    },
+    {
+      "field": "hero_healing_t",
+      "port": "historical.opendota.cumulative_filtered_healing",
+      "quantity": "cumulative_healing_excluding_illusions_and_self",
+      "units": "healing",
+      "steamCounterpart": null,
+      "alignment": "exact_times_and_source_rules_required",
+      "sourceProperty": "filtered_heal_events"
+    }
+  ],
+  "nonAliases": {
+    "radiant_gold_adv": "earned-gold lead in pinned implementation; NOT native net-worth lead",
+    "net_gold": "separate Steam endpoint field; physical equivalence unqualified",
+    "gold_per_min": "final scalar is not early GPM",
+    "gold_t": "not wallet, not net worth, not early GPM",
+    "xp_t": "not level or XPM",
+    "purchase_log": "purchase events do not establish complete current inventory"
+  },
+  "parseVersionAloneQualifiesImplementation": false,
+  "automaticMeasurementSubstitution": false,
+  "diagnosticOnly": true,
+  "eligibleForTraining": false,
+  "eligibleForServing": false,
+  "recordedPrediction": false,
+  "providerCalls": 0,
+  "trainingRuns": 0,
+  "sourceContractExport": true,
+  "empiricalPairedRealMeasurementAcceptance": false,
+  "originalObservedVsReconstructed": "Historical OpenDota prefixes are retrospective source reconstruction; current Steam fields require their own original raw receipt. Literal field equivalence alone never proves timely original availability.",
+  "originalIssuedVsReplayed": "No originally issued forecast is established by replaying retained raw bytes through the current generator.",
+  "modelPortAdmission": "No automatic old-weight reuse, renamed measures or serving/profile switch.",
+  "testEvidence": "r8-a-c-integration-11: eight synthetic bridge cases passed; no newly collected real matched-pair equivalence receipt.",
+  "sourceAuthorityProfile": "candidate retained-only measurement contract; not a production source admission",
+  "matrixCodeSha256": "adcd42e58a33bd326bfed1c49c33e8aeb17fe17a37fb1f0d93099998ec45ab77"
+}

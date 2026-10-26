@@ -1,0 +1,207 @@
+{
+  "contract": "aegis.r8-enrichment-coverage-proposal.v1",
+  "reviewedAt": "2026-10-26",
+  "scope": "retained-data evidence and inactive backfill proposal; not whole-database acceptance",
+  "sourceEvidence": [
+    {
+      "path": "work/sol-r8-20261026/A/REAL-STEAM-INVENTORY-20261026.json",
+      "state": "preserved initial unsupported-normalization report",
+      "capturesEnumerated": 470,
+      "capturesVerified": 0
+    },
+    {
+      "path": "work/sol-r8-20261026/A/REAL-STEAM-INVENTORY-HISTORIC-20261026.json",
+      "inventorySha256": "6a62c2dd5f3d3564610ccba82660627b8f220ad42057f49572ec61a0eb12a57e",
+      "capturesEnumerated": 470,
+      "capturesVerified": 467,
+      "capturesRejected": 0,
+      "transportFailuresWithoutResponse": 3,
+      "observations": 8619,
+      "distinctMaps": 401,
+      "sourceProfile": "steam.GetLiveLeagueGames.v1.scoreboard",
+      "receiptFrom": "2026-10-19T20:58:08.183Z",
+      "receiptThrough": "2026-10-20T15:39:59.856Z",
+      "allObservationPhases": "absent",
+      "originalRawAndNormalizationVerified": true,
+      "currentDynamicProjection": "reconstructed from original raw",
+      "originalIssuedForecastsProven": false,
+      "providerEventToAppLatencyMeasured": false,
+      "source95Claimed": false
+    },
+    {
+      "path": "work/astra-r7-review-20261026/training-period-evidence.txt",
+      "evidence": "saved October20 paired experiment",
+      "earliestTrainStart": "2026-01-01T00:53:40Z",
+      "latestRollingTrainStart": "2026-07-30T19:01:30Z",
+      "earliestOofStart": "2026-05-01T03:12:13Z",
+      "latestOofStart": "2026-08-30T18:27:44Z",
+      "distinctOofMaps": 1537,
+      "liveOofFrames": 10651,
+      "independentHoldout": false,
+      "newR8TrainingPeriodEstablished": false
+    }
+  ],
+  "featureFieldCoverage": [
+    {
+      "port": "ten player NW+GPM+XPM+level same raw state",
+      "retainedUsableObservationPresenceCount": 8176,
+      "phaseAndAsOfEligibleCount": null,
+      "missingOrIncompletePresenceCount": 443
+    },
+    {
+      "port": "ten known account IDs",
+      "retainedUsableObservationPresenceCount": 8057,
+      "missingOrIncompletePresenceCount": 562
+    },
+    {
+      "port": "ten known hero IDs",
+      "retainedUsableObservationPresenceCount": 6413,
+      "missingOrIncompletePresenceCount": 2206
+    },
+    {
+      "port": "all ten players have six nonmissing observed item-slot values",
+      "retainedUsableObservationPresenceCount": 237,
+      "missingOrIncompletePresenceCount": 8382,
+      "meansCompleteInventory": false
+    },
+    {
+      "port": "Roshan respawn timer named field",
+      "retainedUsableObservationPresenceCount": 8213,
+      "missingOrIncompletePresenceCount": 406,
+      "exactAliveOrRespawnSemanticsQualified": false
+    },
+    {
+      "port": "explicit in-progress phase",
+      "retainedUsableObservationPresenceCount": 0,
+      "missingOrIncompletePresenceCount": 8619,
+      "alternativeAdmission": "independent reviewed phase-absence profile + progression/alignment proofs required"
+    },
+    {
+      "port": "professional vs historical highrank",
+      "retainedUsableObservationPresenceCount": null,
+      "reason": "Steam archive inventory does not contain qualified population receipts"
+    },
+    {
+      "port": "letter patch / contemporaneous rank / explicit player positions / complete bans",
+      "retainedUsableObservationPresenceCount": null,
+      "reason": "No real bound auxiliary evidence artifact has been established for R8.6B"
+    },
+    {
+      "port": "OpenDota complete raw/event/clock fields over whole target calendar",
+      "retainedCount": null,
+      "parsedCount": null,
+      "usableCount": null,
+      "missingCount": null,
+      "reason": "No root-owned whole-archive coverage receipt exists in this track; do not substitute the Steam census or1600-map technical fixture"
+    }
+  ],
+  "additionalRTProfileEvidence": {
+    "path": "work/sol-r8-20261026/A/REAL-RT-PINNED-FIELD-CENSUS-20261026.json",
+    "portMatrix": "work/sol-r8-20261026/A/STEAM-GLG-RT-PORT-MATRIX-20261026.json",
+    "review": "work/sol-r8-20261026/A/STEAM-PROFILE-COVERAGE-REVIEW-20261026.txt",
+    "exactScope": "14 existing W files named by the sealed23October catalogue, independently rehashed with adjacent receipt/raw byte bindings",
+    "rawFiles": 14,
+    "rawBytes": 130992,
+    "distinctMaps": 9,
+    "playerRecords": 140,
+    "explicitInProgressStates": 8,
+    "distinctExplicitInProgressMaps": 3,
+    "deltaFrameTrueBodies": 13,
+    "literalGpmPlayerRecords": 0,
+    "literalXpmPlayerRecords": 0,
+    "itemsArrayPlayerRecords": 100,
+    "phaseQualificationAndDeltaAssemblyStillRequired": true,
+    "currentR8RTProfileAdmitted": false,
+    "crossProfileFillOrSourceSwitchActivated": false,
+    "privateProviderScopeAccessed": false,
+    "wholeRTArchiveInventoried": false
+  },
+  "calendar": {
+    "futureR8TargetCalendar": "not selected; must be explicitly pinned before acquisition or fitting",
+    "historicalReferenceOnly": {
+      "targetStart": "2026-01-01T00:53:40Z",
+      "latestEvaluatedTargetStart": "2026-08-30T18:27:44Z",
+      "maximumReviewedRollingStatisticHistoryDays": 90,
+      "earliestRollingStatisticHistoryEndForFirstTarget": "2025-10-03T00:53:40Z",
+      "rollingWarmupIsUniversalHistoryRequirement": false,
+      "chronologicalResultRatingsHistory": "all admitted as-of events since an explicitly pinned genesis, or an equivalent independently pinned causal rating checkpoint plus every subsequent admitted event; no implicit90-day reset",
+      "ratingGenesisOrCheckpointEstablishedForFutureR8": false,
+      "sourceWindowMeaning": "The90-day date covers the reviewed rolling-statistic windows only. Chronological ratings have cumulative state and require separate genesis/checkpoint coverage. Labels, receipts, series purge and current-map exclusion remain separate."
+    },
+    "archiveFreshnessIsTrainingEnd": false,
+    "perCalendarMonthAndLetterPatchCounts": null,
+    "reason": "Real retained Steam cohort spans only19–20October. Pro/highrank historical calendar and letter-patch inventory remain open."
+  },
+  "proposal": {
+    "active": false,
+    "providerCallsExecuted": 0,
+    "queueEntriesMaterialized": 0,
+    "requiresRootOwnedRetainedInventoryBeforeConcreteQueue": true,
+    "dedupKeyFields": [
+      "provider",
+      "endpoint",
+      "matchId",
+      "payloadSchema",
+      "requiredFieldGroup",
+      "qualificationPolicy"
+    ],
+    "skipAlreadyCovered": "Exact retained payload/receipt and per-field causal/source eligibility, not just existence of a database row",
+    "stages": [
+      "extract and qualify all already-retained selected/full OpenDota responses",
+      "join original Steam observation/receipt/raw companion to exact completed-map facts without inventing phase",
+      "inventory pro/public and letter-patch/rank/role/ban qualification by month",
+      "compute unique missing match/field groups for pinned targets plus reviewed rolling-statistic warmup; separately inventory cumulative rating genesis/checkpoint and all intervening events",
+      "prepare bounded GET-only acquisition queue proposal; do not execute in this block",
+      "explicitly mark unrecoverable original Steam states and historical-rank snapshots rather than attempting a misleading backfill"
+    ],
+    "retryPolicy": "retain404/403/429/source-missing distinctions; do not bypass403/429, reset counters or remove STOP/foreign locks",
+    "rateRequestsPerMinute": 100,
+    "archiveBudgetUsd": 20,
+    "monthlyTotalBudgetUsd": 20,
+    "monthlyBudgetIncludesArchive": true,
+    "currentRemainingBudgetUsd": null,
+    "planningPriceUsdPerSuccessfulRequest": 0.0001,
+    "planningCostFormula": "unique admitted requests *0.0001 USD; reserve conservative retries within remaining ledgers",
+    "planningMinimumDurationMinutesFormula": "unique admitted requests /100, plus policy/network/parser delays",
+    "examples": [
+      {
+        "requests": 10000,
+        "theoreticalCostUsd": 1,
+        "theoreticalMinutes": 100
+      },
+      {
+        "requests": 32500,
+        "theoreticalCostUsd": 3.25,
+        "theoreticalMinutes": 325
+      }
+    ],
+    "examplesAreActualMissingCounts": false,
+    "noParseJobsOrReplayDownloadsAuthorized": true,
+    "noNewHighRankOutcomePoolingIntoProfessionalTraining": true
+  },
+  "preparationState": {
+    "rawPopulationMetaAdapter": "implemented, awaiting root technical receipt",
+    "existingAggregateReused": "historicalRelationalFeatures.calculateStats raw supportMaps/rawWinFraction through new narrow export",
+    "populationWindowsDays": [
+      7,
+      14,
+      30
+    ],
+    "partitions": [
+      "professional",
+      "qualified historical_high_rank"
+    ],
+    "revisionPartitions": [
+      "all_revisions",
+      "same_letter_revision"
+    ],
+    "noDefaultAgeOrPatchDecay": true,
+    "noLearnedSmoothing": true,
+    "noPubProBlend": true,
+    "fullFeatureIntegrationClaimed": false,
+    "externalDataGatesOpen": true
+  },
+  "training": false,
+  "providersActivated": false,
+  "runtimeActivated": false
+}

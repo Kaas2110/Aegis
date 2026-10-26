@@ -17,7 +17,7 @@ import {steamObservationIdentity} from './steamObservationIdentity.mjs';
 import {readRetainedReplayFrameProof} from './retainedReplayFrame.mjs';
 import {readSteamReceiptFreshness} from './steamPhasePolicy.mjs';
 import {produceCoherentEconomyContextFeatures,CONTRACT as ECONOMY_CONTEXT_CONTRACT,FORMULA_VERSION as ECONOMY_CONTEXT_FORMULA_VERSION} from './coherentEconomyContextFeatures.mjs';
-import {bindObservedDynamicSemantics} from './dynamicSemanticBindings.mjs';
+import {bindObservedDynamicSemantics,historicalStatisticRef} from './dynamicSemanticBindings.mjs';
 
 export const CONTRACT='aegis.observed-draft-steam-feature-bundle.v2';
 export const PROGRESSING_CONTRACT='aegis.observed-draft-steam-feature-bundle.v3';
@@ -103,7 +103,21 @@ export function readDynamicHistoryProof(historyProof,{matchId,decisionAt,readMod
 }
 
 function descriptor(name,{familyId,formula,formulaVersion='1',units,inputScopes=['current_live'],inputFields=[],historyDefinitions=[],...metadata},environment){
- const d={contract:'aegis.executable-feature-definition.v1',id:CONTRACT+':'+name,name,version:'1',familyId,formula,formulaVersion,units,dtype:'float64',missingPolicy:'null_with_separate_missing_mask; absent hero interaction is structural zero',timePolicy:'coherent current capture; prior history available no later than immutable first_complete_draft_receipt; receipt <= decision',sourceProfile:PROFILE,learnedStatePolicy:'none',inputScopes,allowedTargets:LIVE_TARGETS,semanticStatus:'specified',inputFields,historyDefinitions,...metadata};
+ const p=metadata.formulaParameters??{},selector={kind:p.rank?'economic_rank':p.heroId!==undefined||p.hero!==undefined?'current_hero':'current_roster',side:p.side??'current_hero_side',...(p.heroId!==undefined||p.hero!==undefined?{heroId:p.heroId??p.hero}:{}),...(p.rank?{basis:p.basis??p.metric,rank:p.rank,tie:'numeric_hero_id_ascending',roster:'all_five_side_players'}:{})},refs=[];
+ const frozenKinds={recentForm:'player',heroForm:'player',teamForm:'team',aggression:'team',lateTendency:'team',playerLateTendency:'player',heroLateTendency:'hero',playerHeroLateTendency:'player'};
+ if(inputScopes.includes('prior_maps')){
+  if(p.basis&&p.key)refs.push(historicalStatisticRef({profileKind:'player',key:p.key,side:p.side,selector}));
+  else if(p.historyKey||p.finish||FINISH_KEYS.includes(p.style)){const key=p.historyKey??p.finish??p.style;refs.push(historicalStatisticRef({profileKind:'team',key,side:p.side??'current_hero_side',selector:{kind:'current_same_side_team',...(p.hero!==undefined?{heroId:p.hero}:{})},windowDays:key==='formWinFraction30d'?30:90}));}
+  else if(p.variant==='opponentHeroLateMean')refs.push(historicalStatisticRef({component:'frozen',profileKind:'hero',key:'heroLateTendency',side:'opposing_hero_side',selector:{kind:'opposing_current_five_hero_roster',heroId:p.hero,aggregation:'arithmetic_mean_exact_five'},windowDays:90}));
+  else{const key=Object.hasOwn(frozenKinds,p.key)?p.key:Object.hasOwn(frozenKinds,p.variant)?p.variant:null;if(key)refs.push(historicalStatisticRef({component:'frozen',profileKind:frozenKinds[key],key,side:p.side??'current_hero_side',selector,windowDays:['recentForm','teamForm','aggression'].includes(key)?30:90}));}
+ }
+ const accountConditioned=refs.some(ref=>{if(ref.profileKind!=='player')return false;if(ref.component==='frozen')return true;const statistic=environment.relational.profiles.players.find(row=>row.statistics?.[ref.key])?.statistics[ref.key],supportRefs=[statistic?.supportRef].flat(3).filter(Boolean);if(!supportRefs.length)return true;return supportRefs.some(key=>{const support=environment.relational.support?.[key],selectorKey=support?.selectorRef??environment.relational.support?.[support?.cohortRef]?.selectorRef,selection=environment.relational.selectorBindings?.[selectorKey];return !selection||selection.players?.some(player=>Object.hasOwn(player,'accountId'))||selection.opponents?.some(player=>Object.hasOwn(player,'accountId'));});});
+ const identityFields=['sides.players.identity.heroId','sides.players.identity.side',...(accountConditioned?['sides.players.identity.accountId']:[]),...(inputScopes.includes('prior_maps')?['sides.players.identity.teamId']:[])];
+ const rankingFields=p.basis?['sides.'+p.side+'.players.'+METRICS[p.basis][0]]:[];
+ inputFields=[...new Set([...inputFields,...(inputScopes.includes('current_draft')||p.rank||refs.length?identityFields:[]),...rankingFields])];
+ if(refs.length){historyDefinitions=refs.map(r=>r.key);inputFields=inputFields.filter(field=>field!=='qualified_frozen_context.opponentHeroLateMean');}
+ const fixedHero=p.heroId??p.hero,applicabilityPolicy=Number.isSafeInteger(fixedHero)&&HERO_IDS.includes(fixedHero)?{kind:'selected_draft_hero',heroId:fixedHero,unselectedValuePolicy:'structural_zero',selectedMissingPolicy:'missing_operand_not_structural_zero'}:{kind:'always_applicable_when_target_profile_admitted'};
+ const d={contract:'aegis.executable-feature-definition.v1',id:CONTRACT+':'+name,name,version:'1',familyId,formula,formulaVersion,units,dtype:'float64',missingPolicy:'null_with_separate_missing_mask; absent hero interaction is structural zero',timePolicy:'coherent current capture; prior history available no later than immutable first_complete_draft_receipt; receipt <= decision',sourceProfile:PROFILE,learnedStatePolicy:'none',inputScopes,allowedTargets:LIVE_TARGETS,semanticStatus:'specified',...metadata,inputFields,historyDefinitions,historicalStatisticRefs:refs,selectorGrammar:selector,applicabilityPolicy};
  return{...d,...bindObservedDynamicSemantics(d,environment),legacyCounterpart:legacyCounterpartForDynamicFeature(name)};
 }
 /** Mapping evidence, NOT a global alias/dedup assertion. The legacy columns stay
@@ -287,6 +301,11 @@ function projectInteractions(o,native,context,relational,leadHistory,decisionAt,
  const economyContext=produceCoherentEconomyContextFeatures({observation:o,historyContext:context,relationalContext:relational,nativeBundle:native,decisionAt});
  if(economyContext.status!=='diagnostic_produced')throw Error('dynamic_economy_context:'+economyContext.reason);
  for(const feature of economyContext.features)put(feature.name,feature.value,feature.definition);
+ // Additive L08 wiring of the existing canonical native per-hero producer.
+ // Earlier columns retain their positions. No current field is reconstructed.
+ for(const heroId of HERO_IDS)for(const metric of ['native_nw','native_gpm','native_xpm'])for(const window of WINDOWS){const [fieldName,units]=METRICS[metric],sourceName=`native_economy.hero.${heroId}.${metric}.past_${window}s_change_per_minute`;
+  put(`draft_live.hero.${heroId}.${metric}.past_${window}s_change_per_minute`,players.some(p=>Number(p.identity.heroId)===heroId)?nativeValues.get(sourceName)??null:0,()=>({familyId:'L08',formulaParameters:{heroId,metric,window,operator:'canonical_native_hero_change_per_played_minute',sourceName},formula:'existing canonical native same-map coherent identity-prefix side_sign * (current - latest preceding anchor)/(actual elapsed game seconds/60); anchor <= clock-window and <=30s gap; future/changed identity prefix excluded; known unpicked hero=0; selected missing anchor remains null',units:units+'_per_played_minute',inputScopes:['current_live','current_draft'],inputFields:[fieldName,'retained causal native prefix','providerGameClockSeconds']}));
+ }
  if((!cached&&names.length!==new Set(names).size)||names.length!==values.length||definitions.length!==names.length)throw Error('dynamic_interaction_schema');
  let compiled=cached;
  if(!compiled){

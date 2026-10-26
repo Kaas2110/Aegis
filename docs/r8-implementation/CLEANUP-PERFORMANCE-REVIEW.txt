@@ -1,0 +1,293 @@
+SOL R8.8 — SCOPED LEGACY USE, CLEANUP AND PERFORMANCE REVIEW
+26 October 2026. Source/static review only. No deletion, build, provider call,
+native/toolchain command, task change, fit or public model activation.
+
+Authority and scope
+A = C:/Users/Admin/Documents/Codex/Aegis-local/app (installed source).
+L = C:/Users/Admin/Documents/Codex/Aegis-local/scripts (launcher source only).
+S = work/sol-r8-20261026/stage/APP (current staged R8 source, not installed).
+W = C:/Users/Admin/Documents/Codex/2026-10-03/new-chat-2.
+R8 staged files override their installed counterparts for the new diagnostic
+contract. The installed production entrypoints remain a separate static path.
+This refresh reuses Astra's L01-L14 grouping from
+work/astra-r6b-review-20261025/legacy-inventory-review.txt. These are fourteen
+module/use groups, NOT permission to discard the fourteen feature catalogues.
+The full79-family/14-catalogue semantic/disposition inventory remains intact.
+
+Read scope: exact package/build/launcher/CLI/schedule/router/model/shadow/import
+anchors below, their targeted caller hits, the named prototype README, and the
+current staged compiler/function/input/compact-journal/writer/reader source.
+One bounded source-symbol search across A's TS/TSX/MJS/CJS/JS/PY/PS1/SH/JSON
+excluded dependency/build/export/backup/cache trees. It searched only exact
+prototype module names and runAnalytics(), not every possible dependency.
+No installed task census, process state, environment/secrets, model DB selection,
+fitted artifact content, UI owner-use census, shell history, build output or all
+application callers were audited. Source reachability is not runtime activation.
+No Graphify snapshot was treated as authority over these newer staged sources.
+
+Refreshed L01-L14 ledger
+
+L01 RETAIN — production entrypoints/loaders and their model contracts.
+A/artifacts/api-server/package.json starts dist/index.mjs; build.mjs:18 bundles
+src/index.ts. index.ts:7-14 imports workers and LiveWinnerModel/AsymLiveModel/
+MarketLgbm/SeriesMidModel loaders; startup still references those loaders/workers.
+routes/analytics.ts:7,37-39 calls ServingPredictions; ServingPredictions.ts:8-12
+imports PredictionModel/MarketLgbm/PredictionContract. PredictionModel.ts:77,924
+still uses AsymPrematchModel. A/artifacts/ml-service/src/main.py retains /predict.
+L/Start-Aegis.ps1:11-12 launches uvicorn src.main:app and API dist/index.mjs.
+These are positive callers. Keep legacy model inputs/readers until a reviewed
+replacement, exact selected-artifact migration and rollback are verified. Old LR
+fallback branches in PredictionModel are still source-reachable; this review
+does not select, fit, promote or silently remove them. The owner's new-model
+boosting policy is preserved separately from compatibility with existing models.
+
+L02 CONDITIONAL SYMBOL EXTRACTION — heuristic algebra and shared types.
+A/artifacts/api-server/src/services/AnalyticsEngine.ts:201 defines runAnalytics;
+the scoped exact-symbol search found no other runAnalytics() source call.
+AnalyticsEngine is positively imported for MatchInput/AnalyticsResult by routes,
+ServingPredictions, PredictionContract, BookmakerTotalsLadder, PopularMarkets,
+ServingOutcomeGuard and TeamIdentity. BetTypeModels.ts cannot be removed as a
+whole: PredictionContract.ts:5,240-242 calls seriesWinProb for whole-series logic.
+Candidate change: extract shared types and exact BO1/BO3/BO5 series algebra, then
+retire only proven unused heuristic symbols after checking manual/external uses.
+Required checks: score/format/terminal/orientation golden cases, serving contracts,
+affected TypeScript type/build checks. No whole-file deletion authorized here.
+
+L03 COMPLETED PURE-MATH CONSOLIDATION — retain loader compatibility ports.
+A/shared/feature-math/e1-features.mjs is now the common pure implementation.
+A/scripts/src/lib/e1-features.ts:17-18 and API src/lib/e1-features.ts:17-18
+re-export/import its types through their respective relative paths. Both wrappers
+still implement DB loader functions with SQL/iteration behavior preserved.
+train-lightgbm.ts:73, train-market-models.ts:48 and train-live-totals.ts:50 use the
+training port; PredictionModel.ts:73 and MarketLgbm.ts:40 use the API port.
+The prior duplicate pure implementation has already been addressed; do not redo
+it. Shared/feature-math tests and PR11 oracle remain intentional compatibility
+evidence. No wrapper is dead. Further query-loader consolidation would require
+explicit as-of/current DB boundaries and order/null parity, not blind deduplication.
+
+L04 CONDITIONAL PURE-MIRROR CONSOLIDATION — retain distinct as-of/fit work.
+A/scripts/src/lib/{hero-features,team-extended,isotonic}.ts and corresponding API
+src/lib files retain actual callers: train-model/train-lightgbm, compute-team-
+extended and PredictionModel. Source comments still identify inference mirrors.
+Training isotonic contains fit; inference contains application. Team training
+constructs as-of snapshots, while current compute/inference uses current inputs.
+Only identical pure arithmetic/application is a consolidation candidate. Preserve
+cutoffs, unseen/missing behavior, numerical order and old artifact feature order.
+
+L05 RETAIN — public-data/compute CLI and source task references.
+A/scripts/package.json still declares ingestion, computed-form/series/team/player,
+match-detail, parsing, patch and paid-backfill aliases. job-schedules.json hourly
+steps include patch:check, ingest:matches, refresh:match-details, patch:assign,
+compute:recent-form, compute:bo3-series and candidate:plan. run-pipeline.mjs is the
+finite pipeline CLI. L/Install-AegisTasks.ps1:13 references Run-AegisJob -Pipeline
+hourly; L/Install-AegisPaidTask.ps1:7 references paid-backfill. These source actions
+are not evidence that tasks are currently enabled. Preserve STOP/locks/checkpoints,
+budgets and owner pauses. Do not remove CLI modules merely for lacking imports.
+
+L06 RETAIN, TRAINING PAUSED — training/admin/manual entrypoints.
+A/scripts/package.json retains all train:* aliases. SchedulerWorker.ts:389-458
+has six train invocations; :724-730 exposes a train-script whitelist consumed by
+routes/admin.ts:477. ML main.py:323-324 still registers /ml/train and /train with
+require_legacy_http_training_admission; training_admission.py remains default-
+closed for that scope. Static presence is not permission to call those routes or
+enable a scheduler. New paged/private rows are not compatible with old adapters
+merely because both use LightGBM. Keep explicit training gates and rollback data.
+
+L07 RETAIN, GATED — shadow routers/experiments and their serialized pins.
+ML main.py:294-305 and :561-562 imports/mounts live-winner, postdraft, hazard,
+wide, C2 and series diagnostic routers. LiveWorker.ts:30-33,247,253-254,345 calls
+the corresponding enqueue ports; WideShadow.ts:263,266 is explicitly environment-
+gated. Do not equate a disabled switch with dead code. Preserve source/profile,
+pin/model/journal formats and STOP/cancellation/resource tests. Retirement needs
+router->builder->artifact->DB/journal migration, not family-name substitution.
+
+L08 RETAIN — legacy persistence and explicit format readers.
+S/retainedDiagnosticBootstrap.mjs keeps legacyJournal plus verified compact
+fallback. S/savedDiagnosticReaderFactory.mjs supports v1 and compact_v2 and
+requires an existing compact root for GET. S/API FeatureDiagnosticAdmin.ts
+dynamically loads the journal/read API/saved-reader modules, selects format and
+closed resource profile through explicit AEGIS_FEATURE_DIAGNOSTICS_* settings,
+and may borrow an owned host reader. API routes/admin.ts:42,118 mounts the saved
+diagnostic subrouter. Compact assets preserve v2 legacy and v3 FULL codecs;
+trace.v2 and versioned asset manifests remain separate compatibility contracts.
+R8 input manifest.v3 does not invalidate saved older forensic schemas. Never
+delete readers on the assumption that all retained evidence has been migrated.
+
+L09 RETAIN — current disabled replacement core and explicit host entrypoint.
+A/scripts/steam-live-collector/run-retained-diagnostic-host.mjs accepts only
+--config; it dynamically imports retainedDiagnosticBootstrap only if explicitly
+enabled. S bootstrap wires actual producer/pipeline/journal/read API and optional
+series routing without starting a listener. The common producer, compiler,
+private source/static proofs, compact assets and resource config are incomplete
+replacement/adoption infrastructure, not dead code because public serving has
+not switched. Root's final source-frozen all13 checks determine this block's
+technical acceptance; they do not activate it or prove source95/model quality.
+
+L10 CONDITIONAL ARCHIVE CANDIDATE — structural feature composer prototype.
+A/scripts/feature-registry/producer/feature-composer.mjs has exact source import
+hits only in its own test/fixture in the bounded search. Its README explicitly
+calls it a pure structural composer without formula evaluation or source
+authority. Current S producer uses featureProjectionCompiler instead. The
+prototype still has unique negative contracts: exact identity/history references,
+coherent anchor/prefix, maximal-family completeness and learned-state metadata.
+Before archive/removal, map each unique check to actual compiler/pipeline proof
+tests or retain it as a named oracle. Update old documentation/workflow references
+and record the replacement commit. No whole prototype deletion in this block.
+
+L11 CONDITIONAL ARCHIVE/ADOPT CANDIDATE — exact scalar statistics prototype.
+A/scripts/steam-live-collector/source-adapter/boundedExactHistoryStatistics.mjs
+has exact source import hits only in its own test in the bounded search; old
+technical evidence explicitly names it. The actual history route uses
+historyCalculationCore/historicalRelationalFeatures and has different weighted,
+selection and support policies. Keep its mathematical counterexamples or state
+a future manual role before archival. Do not replace real family arithmetic by
+the scalar subset or call that replacement feature completeness.
+
+L12 RETAIN PENDING OWNER-USE CENSUS — development mockup workspace.
+A/pnpm-workspace.yaml:40 includes artifacts/*; package.json build/typecheck scans
+artifacts; artifacts/mockup-sandbox/package.json declares build/typecheck.
+Its vite.config.ts:6,33 loads mockupPreviewPlugin; src/App.tsx:3 imports generated
+mockup component discovery and :39 selects a component path. These are real
+development/canvas entrypoints. Production launcher does not launch this sandbox,
+but owner/manual use was not checked. Any later removal is one coordinated
+workspace/config/generated-asset/dependency change, preserving shared UI clients.
+
+L13 COMPLETED NARROW CLEANUP — broken hello scaffold alias is already absent.
+Current A/scripts/package.json has no hello alias; no src/hello match appeared in
+the bounded exact-name source/config search. This confirms the recorded narrow
+R7 cleanup. Do not restore/re-remove it or create a pointer-only cleanup PR.
+No additional obviously dead narrow wrapper was positively proven in this review.
+
+L14 RETAIN — manual acceptance/export/planner tooling.
+source-parity/check_source_parity.py is a manual CLI, not a runtime import.
+candidate:plan is positively referenced by package.json and the hourly pipeline.
+candidate-planner/executor remains separately owned/gated training infrastructure.
+Registry/ledger/audit/dataset preparation modules are acceptance and future
+preparation tooling. Preserve fixed source heads, split/label lineage, failed
+receipts and STOP policies. New all13 future configs explicitly require a new
+reviewed paged/private adapter; they do not admit legacy execution.
+
+Removal decision and rollback boundary
+No source was removed or archived by this review. Preserve completed hello/E1
+changes. Potential next cleanup blocks are L02 pure type/algebra extraction, L04
+pure mirror extraction, and L10/L11 contract-oracle adoption/archival. Each needs
+an exact changed-symbol/consumer/replacement manifest, relevant scoped tests and
+a rollback commit; do not bundle speculative deletion into resource fixes.
+Do not remove active loaders, serialized readers, public contracts, datasets,
+weights, features, backups, immutable prior receipts or owner task controls.
+
+Measured evidence — historical, exact operation boundaries
+R7 W/work/sol-r7-resume-20261026/DELIVERY13-RESULT.json is a synthetic functional
+all13 run with14 schema variants and14 input-only receipts. Elapsed822.547s,
+owned peak5,917,442,048bytes; final arena0. It skipped only three extra warm frames.
+Its cold phase operations were generation + commit + complete saved read/input
+recording, excluding the later router/admin scan:
+               generate(s)    commit(s)    read/record(s)    complete(s)
+PRE                 13.976       20.440             2.188          36.810
+SERIES_PRE           9.367        5.059             0.569          15.177
+POST                16.500       72.691            31.329         120.930
+LIVE                36.938      149.625            62.433         250.016
+BETWEEN              9.454        5.518             0.884          16.287
+LIVE is roughly15% generation,60% commit,25% read/record. Eliminating all
+generation alone could therefore save less than15% of this complete operation,
+below the current30% native adoption gate. The table's small boundary overhead
+is retained; do not force subtimes to sum exactly by altering measurements.
+No p95/p99 or326-state claim follows from this cold run or three future frames.
+
+Current R8 narrow evidence — not a comparable benchmark
+Root reports native15:20/20 passing,177.406s, peak2,764,214,272bytes, including
+the true rich bootstrap STOP-before-commit case. Its frozen source had256MiB
+producer/compiler scans but preceded explicit FULL logical-scan profile binding.
+This test suite differs from the R7 all13 operation and aborts before commit.
+It is not a paired speedup, current serving latency or measured phase profile.
+Root probe13's exact asset_scan_working_bound failure explains a resource wiring
+defect; increasing a cap is not itself an optimization or a throughput result.
+Root native16/current final all13 runs were still pending when this note was
+prepared. Use their exact receipts separately when available.
+
+Static repeated-work candidates — hypotheses, not measured time attribution
+1. Compiler normalization already caches immutable metadata identity and uses
+bounded component/plan LRUs. Do not recreate an unbounded second graph. On plan
+miss, featureProjectionCompiler.project still canonical-hashes the full schema,
+then compileFeatureFunctionContract transforms/hashes every ordered definition.
+Several target heads reuse the same actual immutable definitions. A privately
+owned per-definition semantic-leaf digest cache could reuse exact validated work,
+while each target/mode header and actual row-parameter binding remains distinct.
+Measure actual hit/miss counts and bytes; never use names-only compatibility.
+2. mintProjectedRow computes a full values/masks/negative-zero digest for each
+target relation. Same-row heads share a private vector; its immutable exact digest
+could be retained once by the vector owner, without sharing target/context
+authority. DiagnosticModelInputDelivery.describe still independently scans all
+positions for manifest construction and delivery. Reuse only an actual private
+owner's complete proof result; keep adversarial manifest/position-consumption
+checks and do not accept caller JSON digests as a substitute.
+3. compactFeatureJournal currently factors each target's complete schema unless
+its exact original schema object and parsed handle are still cached. Its new
+stable function descriptor is not yet a replacement disk representation. Actual
+row selector IDs remain in the old forensic schema by design. A versioned leaf/
+function schema store plus separate instance bindings could avoid repeated large
+descriptors while preserving legacy hashes/readers and exact row capability.
+This needs explicit persistence/migration, not field stripping or hash aliasing.
+4. Each target still creates/persists a compact vector tied to its target-specific
+schema hash, even when numerical values/order/masks are shared. Reusing numerical
+payload chunks across heads requires a versioned payload/binding separation;
+current schema-hash-bound vectors cannot simply be substituted between targets.
+5. persistAsset emits bounded chunks but currently joins them to complete UTF8,
+converts to Buffer, slices aligned chunks, and hashes/commits them. readAssetWire
+reads/hash-checks chunks, joins them, hashes the complete text and decodes. These
+are source-visible copy/traversal costs. A bounded streaming encoder/sink/decoder
+can be evaluated before C++; changing binary/hex/UTF8 encoding needs a new format
+and retained readers, exact Float64/-0/mask parity and failure/STOP checks.
+6. Persistent writer already offers commitMany/readMany and bounded verification
+epochs. Per-operation begin/finish still checks ROOT/ledger anchors and inventory;
+new epoch optimization must retain exclusive lease, tamper/size/global accounting,
+acknowledgement, crash recovery and post-IO fencing. The journal deliberately
+re-verifies committed bytes on parsed-cache hits; removing that check without an
+approved immutable-handle/epoch proof would weaken evidence, not improve it.
+7. Restored private rows currently regenerate the normal source witness, decode
+saved pages, compare every value/mask, construct a distinct private vector and
+re-hash it. This is deliberately proof-oriented and expensive. A cheaper cold
+restore requires a reviewed source-bound retained proof, not checksum promotion.
+
+Finite measurement plan for the next optimization block
+Use one pinned64-version/short-frame fixture and exact frozen source/profile;
+do not refresh maps or rerun unchanged large archives just to populate context.
+Record separate history/context, metadata normalization, full-schema hash,
+function-leaf compile, row digest, compact factor/encode, writer epoch/flush,
+read/coalesce/decode, restored-witness/input scan, queue and final-fence times.
+Also record cache hit/miss, bytes/object counts, IO/epoch counts, full operation
+time, owned job peak and arena charges after release. Separate cold from warm.
+First remove repeated work with preserved proofs, then compare the same complete
+operation at least three pairs after a separate warmup. Root's existing test
+profile remains the only execution owner; source freezes remain exact.
+
+Conditional C++ decision
+No whole API/HTTP/UI/provider or all-generator rewrite is justified by these
+measurements. Tree-library numerical training kernels are already a distinct
+native backend concern; no fit is authorized. Node's canonical traversal/hash
+feeding, codec factoring and compact packing are the first possible pure seams
+if the post-JS profile proves they dominate. Calling createHash itself is not a
+JavaScript SHA256 implementation to replace blindly.
+Priority1: canonical factor/decode/Float64+bitmap pack or batch hash feeding, with
+an exact wire/hash oracle. Priority2: indexed cohort/quantile reduction only if
+it dominates after repeated-history work is removed and the exact reviewed
+weight/window/support/reduction semantics can be preserved. The prior
+exactStatsKernel prototype is only an unweighted subset, not all family math.
+Priority3: a native IO helper only for measured control/OS needs, preserving the
+real Windows writer lease and bounded durable protocol. No native fallback may
+hide source, corruption, cancellation or currentness refusal.
+Reuse the recorded prototype COFF compile/linker failure: it did not produce a
+runnable paired complete-path benchmark. No toolchain search/install or duplicate
+prototype was performed now. Older20% draft gate is superseded by current R8's
+>=30% COMPLETE-operation gain in at least three measured pairs after warmup,
+including IPC/startup/cancellation and no material resource regression. Exact
+values, masks, order, -0, UTF8/hash/wire and failure behavior are mandatory.
+Keep owned child/job/STOP/headroom limits. If no usable toolchain or no qualifying
+gain exists, retain optimized JS and record a no-go rather than a speed promise.
+
+Current exit statement
+The fourteen module/use groups have a refreshed scoped static disposition and
+concrete evidence. No new deletion is approved by absent text matches. There is
+no new paired performance or C++ acceptance, no source95 claim and no inference
+that all possible app consumers or bugs have been inspected. Root can consolidate
+this note with the exact final technical receipts and Astra review package.

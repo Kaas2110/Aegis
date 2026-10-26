@@ -1,0 +1,497 @@
+AEGIS — SOL R8: CORRECT, COMPLETE AND MAKE THE FULL MODEL INPUT PATH USABLE
+26 October2026. Detailed implementation plan with a six-hour execution envelope.
+Supersedes R7 execution order. Preserve all older source and immutable evidence.
+
+READ FIRST / SCOPE
+1. outputs/Aegis-Astra-to-Sol-R8-20261026.txt (exact start and prohibitions).
+2. outputs/Aegis-Astra-R7-review-20261026.txt (findings and evidence boundaries).
+3. outputs/Aegis-Astra-R8-architecture-20261026.txt (binding design decisions).
+4. work/astra-r7-review-20261026/semantics/FORMULA-CONTRACTS.txt.
+5. outputs/Aegis-Astra-feature-semantics-20261025.txt for the full79-family meaning
+   and14-original-catalogue decisions; do not reread all old project history.
+6. outputs/Aegis-OpenDota-source-study-20261026.txt and the relevant pinned reports
+   for the historical-to-Steam bridge. These refine meanings, not model admission.
+The independent review reports under work/astra-r7-review-20261026/ supply exact
+counterexamples and source locations. Read only the relevant sections per task.
+
+W=C:/Users/Admin/Documents/Codex/2026-10-03/new-chat-2.
+APP=C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Most files below are relative to APP/scripts/steam-live-collector/source-adapter/.
+R7 is already merged via PR12, main85c3b056769cf98f2bedfa233036e56b854201e4,
+reviewed head4fe709dfc2b54e78a6dbdc8df180a5e71f07dbf4. Local APP Git HEAD is older
+with installed changes: do not reset, clean or blindly stage all. Reuse current
+publication manifest and scope changed files. No old assembly guard may be rerun.
+Graphify last checked on PR11; use current local source while it lags. No routine
+duplicate build or all-source/byte-parity scan. Documentation stays in English.
+
+PERMITTED NOW
+Implement features, proof/contract fixes, bounded dataset factories, model-runner
+CODE, disabled integration, technical tests, performance measurements and proven
+cleanup. Existing retained raw data may be audited/replayed offline. Keep current
+production models/collector/provider behavior unchanged by diagnostic work.
+
+FORBIDDEN NOW
+Training/fits/HPO/calibration/ablations/learned compression/predictive-quality
+scoring; new provider probes/data refresh/STRATZ changes; runtime or scheduled-task
+activation; model promotion/app release/purchases. Do not infer permission from
+the owner's wish to finish models overnight. Prepare the whole remaining work,
+but explicit training authorization and architecture review are still required.
+Do not restart manually stopped work, erase STOP/locks or alter budget counters.
+
+RESOURCE CONTRACT
+One root-owned native test/process tree at a time.30GiB aggregate admission,
+9GiB owned tree INCLUDING descendants,8GiB shared rich arena,2GiB compact working,
+4CPUs,wall<=1200s,min4GiB physical free during execution. Initial preflight must
+have requested whole-tree cap+4GiB free (13GiB when requesting9GiB). No global
+service supervisor is attached; never kill unrelated services to meet admission.
+Runner: work/sol-r7-resume-20261026/run-bounded-tests-30g.py,
+SHA658fdf27b812f186fd3c8090e6038add1d4866d4f5c857bf3cd2c5fa5d3900ca.
+Verify unchanged runner once, do not alter old receipts.256MiB encoded assets in
+all compact profiles;16MiB objects/batches,1MiB chunks,256MiB physical writer root,
+existing legacy/FULL logical and node limits remain separate. Caller-lower limits
+still apply. No automatic cap increases. Aggregate stress output<=4GiB.
+
+DELIVERY CONTRACT
+Finish all independent unblocked implementation, not just helper scaffolding.
+For each substantive stage save changed paths/hashes/interfaces, decision rationale,
+small regression failure/pass, actual vs synthetic scope, remaining risks and next
+command. The handoff must allow Astra to review logic without rerunning everything.
+Preserve initial failures; do not sum overlapping runs into a fictitious pass count.
+Unknown source meaning is an explicit disposition, not a reason to fabricate values
+or drop the entire feature catalogue. Training remains OFF at every checkpoint.
+
+R8.0 — BASELINE, OWNERSHIP AND PRECISE SEAMS (ABOUT15MIN)
+Create work/sol-r8-20261026/ with STATUS.json, INTERFACES.txt, FINDINGS.json,
+SOURCE-MANIFEST.json and per-stage receipts. Inspect existing owned jobs and STOPs
+read-only before launching anything. Pin relevant source and fixed fixtures; reuse
+R7 all13/metadata evidence only for unchanged contracts. Do not repeat 1600-map
+or all13 checks to rediscover context.
+Freeze the interfaces from architecture A1-A4: typed authority triple, projected
+row capability, function contract + learned state + row provenance, typed refs.
+Record exact file ownership before parallel edits. No helper runs heavy jobs.
+Start three disjoint tracks where slots permit:
+A: causal history/source classification/static authority and real retained intake;
+B: feature semantics, selector/rank/clock edges, level/trajectory/family completion;
+C: compiler/row capability/function-contract persistence and resource wiring.
+Root owns dataset/split integration, test queue, cross-track review and publication.
+Shared observedDraftFeatureBundle.mjs/historical bindings get ONE named editor;
+other tracks propose patches/messages, never silently overwrite each other.
+Exit: interfaces and counterexample list pinned, no duplicated active job.
+
+R8.1 — CORRECT CURRENTNESS AND FIVE-MINUTE RETENTION
+Files: retainedFeaturePipeline.mjs, steamEligibleState.mjs,
+staticDiagnosticWriter.mjs, retainedStaticHistoryView.mjs and their tests.
+Implement architecture A1/A2 and causality review C1/C2.
+1. Split admitted head / fully classified head / last successful observation.
+   A successfully classified failed response or absent map is not pending forever.
+   It may retain the last forecast only until its ORIGINAL deadline.
+2. Keep genuinely queued newer heads fail-closed. An older operation cannot mark
+   a later head classified. Preserve exact durable capture/event order.
+3. Bind static expected authority to the private candidate at entry and after IO.
+   Separate frozen source-view identity from active target and current live fence.
+   Forensic retention and current issuance remain different outcomes.
+Required small cases: valid A then HTTP500/empty/missing B; eligibility at299/301s
+without lease renewal; repeated clock; confirmed pause; queuedB then terminalC;
+two maps one response; stale proof already on entry with unchanged newer stamp;
+wrong target/series score/roster/correction; STOP and identity change during IO;
+restart without renewal; irrelevant post-cutoff append under explicit reuse rule.
+Exit: actual pipeline tests, not only standalone state helper tests; initial static
+counterexamples reproduced or explicitly refuted with inspected code evidence.
+
+R8.2 — AUTHENTICATE PROJECTED ROWS, NOT SEPARATE OBJECTS
+Files: featureProjectionCompiler.mjs, diagnosticModelInputDelivery.mjs,
+compactFeatureJournal.mjs and actual producer/delivery callers.
+Mint a private capability at verified assembly. Include exact context, semantics,
+projection mapping, values/masks and authorized target routes. Schema/vector lease
+ownership alone is insufficient. Same-row multihead reuse remains explicit.
+Specify the verified persisted-row reconstruction seam now; implement its actual
+versioned storage reader once in R8.7 after R8.4. Plain parsed descriptors cannot
+create model/source authority. Preserve named compiler-only forensic fixtures.
+Required cases: genuine schemaA+genuine vectorB with same names/count; different
+units/window/formula but same names; swapped sides/targets; equal values but
+different source rows; clone/final-owner-released capability; cancelled delayed
+persistence; authorized same-row3-head reuse and independent borrower release.
+Historical row integrity survives source freshness expiry under explicit forensic
+policy; current issuance does not. Actual restored-capability acceptance is R8.7.
+Exit: model-port and append both enforce row identity; rejection leaves no leaked
+reservations or usable trace. This is input-delivery validation, not inference.
+
+R8.3 — FINISH SEMANTIC DEPENDENCIES AND IMPLEMENTABLE FEATURES
+Files: observedDraftFeatureBundle.mjs, dynamicSemanticBindings.mjs,
+historicalSemanticBindings.mjs, coherentEconomyContextFeatures.mjs,
+historyCalculationCore.mjs, playerHeroEconomyFeatures.mjs,
+APP/scripts/feature-registry/registry-contract.mjs and family producers.
+Apply exact FORMULA-CONTRACTS; do not invent gameplay semantics from column names.
+1. Typed raw input, emitted feature, formula template and learned-state references.
+   Exact historical selector/key/window/support references; no generic first match.
+2. Bind720 trajectory-history products/head precisely; keep existing arithmetic.
+3. Include all sorting inputs/tie identities in rank interactions and clock in
+   180 rank minute products/head. Include actual selector grammar transitively.
+4. Add native_level historical reference from qualified prior Steam frames.
+   Preserve existing support, anchor, sampleSD and cutoff behavior. Retain the
+   EXISTING500 output names/order/count; version producer/contract compatibility
+   as required, never add another500 duplicate columns. No XPM/final-level proxy.
+5. Project intended native per-hero trajectory outputs through the rich path,
+   preserving hero identity, causal anchors, gaps, signs, units and missing masks.
+6. Finish retained-data-supported series recovery, style matchup and closing-after-
+   lead features using the approved formulas/populations. Decode structures only
+   with qualified mask/profile semantics. No pretense of direct role labels.
+7. Keep9,232 gold/net_gold branches/head and opaque mechanics as raw diagnostic
+   vocabulary with transitive unqualified-source status. No disguised NW/GPM alias.
+8. Produce a complete79-family/14-catalogue disposition and delivery ledger. For
+   wrappers/labels/composition show content references; do not add filler columns.
+   For external-source/rule gaps list exact missing evidence and unaffected work.
+9. Roshan/Aegis is shared winner AND totals context. Wire qualified current state
+   into LIVE_MAP_WIN, SERIES_LIVE/LIVE, LIVE_KILLS and LIVE_DURATION. Project causal
+   prior-map control/conversion history into applicable PRE/POST/BETWEEN heads.
+   Keep holder hero/player/side, pickup age/qualified remaining life, economic rank,
+   draft/stage and lead interactions. No fixed probability bonus, synthetic current
+   possession or forced monotonic outcome relationship. Define conversion-history
+   episodes/windows/support explicitly from completed prior episodes only; preserve
+   descriptive interpretation and unknown use/expiry/disappearance classifications.
+Required cases: recompute sampled outputs from declared operands; ranking-input-
+only change; clock-only change; same statistic key wrong population/window;
+missing/duplicate/cyclic edge; selected missing vs unpicked zero; wrong hero/account;
+later identity with unchanged t0; zeroSD/support gaps; future-anchor rejection;
+all opaque descendants unqualified; no model label in feature dependency closure.
+Also verify all four LIVE routes receive the same qualified Aegis context; PRE/
+POST/BETWEEN cannot receive future current-map possession. A late pickup, holder
+change, use/expiry/unknown disappearance and a wasted Aegis must not fabricate
+an extra scoreboard kill or force a probability change in technical fixtures.
+Exit: formula/DAG correctness and explicit meaning/availability states, not merely
+zero text-field gaps. Preserve old numeric golden values except versioned additions.
+
+R8.4 — STABLE FUNCTION CONTRACTS AND LOSSLESS STORAGE
+Files: featureProjectionCompiler.mjs, historicalRelationalFeatures.mjs,
+historicalSemanticBindings.mjs, compactFeatureJournal.mjs, feature codecs,
+persistentArtifactWriter.mjs, diagnostic resource/reader factories.
+Separate stable feature functions, fitted-state binding and actual row provenance.
+Do not reinterpret old schema hashes or strip selector keys generically. Classify
+constant vs runtime selector at the numerical factory. Fixed hero dictionary
+constants remain functions; selected current identities are bound row evidence.
+Store verified invariant contract once and row bindings/values/masks separately.
+Version codecs/manifests/readers. Retain old read/forensic paths with finite limits.
+Measure avoided descriptor construction/serialization and IO. Reuse immutable
+history/compiled schema by exact proof generation; do not recompute unchanged
+history per frame or reverify whole corpus per target. Keep final currentness fence.
+Required cases: same function with different teams/cutoffs => same function hash,
+different row hash; changed formula/source meaning/window/tie/units/missing policy
+=> compatibility rejection or new contract; correction even with same values;
+negative zero/mask/order parity; same-size corruption; interrupted write/restart;
+partial batch/ACK, owned cancellation and bounded queue. Authentic row relation
+from R8.2 must remain mandatory after the optimization.
+Exit: one reusable contract fits multiple real row contexts with exact provenance;
+no new names-only compatibility rule, unbounded metadata cache or feature pruning.
+
+R8.5 — BOUNDED DATASET FACTORY AND ALL MODEL RUNNERS, WITHOUT FITTING
+Files: APP/scripts/feature-registry/pinned-dataset-manifest.mjs,
+existing split/row-builder/model-manifest/evaluation harness modules (discover
+exact existing entrypoints once; extend them rather than add a parallel framework).
+Create a versioned global chronological series/component split inventory and
+bounded target/profile/contract shards. Bind every shard to the same split hash.
+Read actual pinned source/proofs pagewise; metadata strings alone are not proof.
+Keep old manifest reader compatibility; no unlimited32MiB JSON replacement.
+Correct weight groups to stable estimator identity, not diagnostic instance SHA.
+Do not substitute per-fold OOF child artifact IDs as new estimator/shard boundaries:
+compatible prior-prediction measurements can share one downstream estimator while
+retaining exact per-row child-state/cohort lineage. Coordinate-changing fitted
+encoders/scalers require explicit coordinate compatibility or separate estimators.
+Separate raw-observed/reconstructed and original-issued/replayed-derived axes.
+Historical OOF priors can be replayed later from strictly past TRAIN labels; do
+not call them originally issued. Actual issued predictions require prior state
+availability by decision. Code paths for model/encoder/calibrator fitting stay OFF.
+Landmarks5..80 by5, then one80+ group; latest<=landmark within declared30s
+alignment tolerance, no future nearest state. Include unavailable eligible slots
+in coverage, distinguish ended-map risk sets and series/map independence.
+
+Complete technical manifests and routing for all12 logical outputs/13 modes:
+SERIES_PRE              before first map; main whole-series winner, no fake map ID.
+PRE_MAP_WIN             before selected map draft; detail map winner.
+PRE_KILLS              before selected map draft; detail final map kills.
+PRE_DURATION           before selected map draft; detail final map duration.
+POST_MAP_WIN            full draft received; detail map winner immediately.
+POST_KILLS              full draft received; detail final map kills.
+POST_DURATION           full draft received; detail final map duration.
+SERIES_LIVE / POST      full draft; main series forecast with current draft/context.
+SERIES_LIVE / LIVE      admitted in-game state; main series with current map state.
+LIVE_MAP_WIN            admitted in-game state; detail current map winner.
+LIVE_KILLS              admitted in-game state; detail final/remaining map kills.
+LIVE_DURATION          admitted in-game state; detail final/remaining duration.
+SERIES_BETWEEN          completed prior prefix; main series before next map.
+
+Prepare typed boosting-run configurations for CatBoost/LightGBM/XGBoost as supported
+by installed libraries, full qualified features first. Do not install all libraries
+or fit a toy model to prove wiring. Prepare pooled minute-aware LIVE vs5-minute
+experts with one80+ head; shared-vs-stage series contexts forBO1/3/5; PRE/POST/LIVE
+kills and time distribution heads. Run count follows actual estimator manifest.
+Prepare TRAIN-only transform/HPO/calibration boundaries, fixed holdout and finite
+experiment budgets as configuration proposals. No scheduled training activation.
+Evaluation code must be ready for minute accuracy/logloss/Brier/calibration,
+equal-strength/strong-team/comeback cohorts and series-clustered uncertainty.
+Totals: units(seconds internally), remaining vs final support, monotone CDF,
+discrete kills/push mass, interval coverage/width, MAE and distribution scores.
+Bookmaker-provided lines and our generated test grid are separate evaluation views
+of one distribution. Future grids must move beyond already exceeded totals.
+Exit: deterministic small fixture validation of splits/lineage/weights and model
+input/output schemas; no actual predictive-quality calculation or new learned state.
+
+R8.5A — FULL FEATURE DATA COVERAGE BEFORE TRAINING
+For every proposed model/mode, emit FEATURE-DATA-COVERAGE.json with one entry per
+intended feature (stable definition/function version and actual projected index).
+Include raw source/producer, applicability rule, eligible map/series/row counts,
+observed count, missing/nonfinite rate, zero/constant status and historical support.
+Break down by phase/minute, patch/source and relevant selected-hero/player groups.
+Unselected-hero structural zero, observed no-Roshan-yet and unknown Roshan state
+must remain distinct. Rare legitimate events need not occur in every row; disclose
+their sample support instead of substituting synthetic positive examples.
+Verify the intended train projection and deployed-input contract have the same
+definitions/order/units/masks; trace sampled real retained values through the
+shared generator, persisted row and model-input recorder. Technical synthetic
+goldens cannot establish observed training-data coverage.
+Report every intended all-null/unwired or causally ineligible column as a concrete
+blocker. Keep the full catalogue, no silent pruning or zero-filling. A deliberately
+narrower profile requires explicit review, not a renamed full-feature pass.
+Emit DATASET-CALENDAR.json with actual TRAIN/validation/calibration/locked-test
+min/max match times and separate history-warmup/source-known/label-known bounds;
+keep proposed windows distinct from completed experiment evidence. Source95 timely
+coverage is a different gate and does not follow from a complete retrospective row.
+Use streaming summaries under the existing resource guard; do not materialize an
+unbounded dense matrix just to count missing values. No fitting or quality scoring.
+Exit: exact intended-vs-observed feature ledger and explicit remaining data gaps,
+reviewable before training authorization. Include these artifacts in R8.10.
+
+R8.6 — REAL RETAINED HISTORY AND SOURCE AVAILABILITY AUDIT
+Files: retainedNativeHistoryView.mjs, retainedMapHistoryHost.mjs,
+historicalAlignment.mjs, retainedDiagnosticBootstrap.mjs and offline intake CLI.
+Build a pinned bounded intake manifest from ALREADY retained raw Steam packets and
+receipts; validate exact profile, entity, clocks, identities, prior-map outcomes
+and availableAt. Provide the actual nativeSourceHandle through the intended host.
+No new provider request, no mutable DB latest-row shortcut, no invented raw phase.
+Record accepted/rejected/missing reasons and hashes without exporting raw files.
+Show whether real selected heroes have reference support; account/hero disclosure
+and target t0 rules remain unchanged. Restored historical references cannot use
+facts that were unavailable at the target horizon merely because they exist now.
+Prepare old OpenDota dynamic -> current Steam field -> formula -> vector index ->
+serialized row -> model-port map. Mark incompatibilities explicitly; new models
+may use native Steam columns while old weights remain isolated.
+Measure present AND timely joint required-profile coverage per actual eligible
+opportunity, including failures/empty/stale states. Non-match hours are not failed
+match opportunities. Capture-only archive with no missing-poll ledger cannot
+prove an unbiased>=95% rate: report a conditional rate and missing denominator.
+Raw captured today vs retro source reconstruction must remain separate cohorts.
+Retained clocks can compare source lag; they do not independently prove real-world
+event latency. Document real external evidence gaps and proceed with other work.
+Exit: one genuine offline source-to-private-history-to-vector example if evidence
+permits, with exact limitations; otherwise precise intake rejection/capability gap,
+never claim synthetic all13 equals real source95 acceptance.
+
+R8.6A — OPENDOTA HISTORICAL PREFIX / STEAM MEASUREMENT BRIDGE
+Apply architecture A11 and the source study, within the same retained-data scope.
+Build a bounded versioned historical adapter and per-field causal-horizon ledger.
+Use exact API/GC/replay/enrichment provenance where known; retain unknown parser
+builds. A has_parsed marker or version22 does not certify fields or implementation.
+Keep native networth_t, earned gold_t and this parser's earned radiant_gold_adv
+separate. Inspect existing model-port contracts; no renamed measures/old-weight reuse.
+Validate times/optional-array alignment, identity, pause conventions and missingness.
+Do not recover public missing level/inventory timelines from final fields or treat
+purchase_log as current inventory. The prior-Steam level producer remains required.
+Define causal horizons for death duration/closure, teamfights, pause duration and
+10-12-minute role inference. Current rank/MMR/benchmark enrichment never rewrites
+old as-of history. Prefix-only online alternatives use distinct formulas. Qualified
+prior-map final summaries remain eligible historical inputs.
+Roshan kill, pickup, explicit steal/deny and rule-derived respawn window are separate
+inputs; no exact spawn or alive state from kill time alone. Keep item/rule/patch
+versions, letter precision and source-unit mismatches explicit.
+Test existing paired Steam/replay samples where available at the same game time,
+without future interpolation. Report unmatched/ambiguous cases, differences and
+source/profile scope. This is measurement validation, not predictive model scoring.
+Required negatives: earned gold increases while NW decreases; missing/short NW
+array; death before respawn; fight before closure; pause before resume; pickup after
+Roshan kill; role before its horizon; current rank change; historical rule mismatch.
+Deliver OPENDOTA-STEAM-PORT-MATRIX.json with original-observed vs reconstructed
+and original-issued vs replayed axes plus semantic/source eligibility decisions.
+No new parse requests, replay downloads, GC infrastructure or refresh. If paired
+evidence is absent, implement/test the contract and mark the empirical gate open;
+continue unrelated tasks. Include this result in R8.9 and the final Astra package.
+
+R8.6B — PERIOD-WIDE ENRICHMENT PLAN AND PATCH-AWARE HIGH-RANK META
+Apply architecture A7B. Resolve actual target calendar plus the maximum necessary
+history warmup from feature contracts; do not assume the archive refresh timestamp
+is the training end. Inventory existing pro and high-ranked public data separately.
+Produce ENRICHMENT-COVERAGE.json by calendar/letter patch/source/required field,
+with retained/parsed/usable/missing/ambiguous counts and exact per-feature gaps.
+Prepare an idempotent backfill queue proposal for the entire declared period plus
+warmup, estimated calls/costs and already-covered exclusions. Do not execute it,
+activate providers or reset API counters/STOPs in this feature-only block.
+Implement retained-data historical aggregates for separate pro and qualified
+high-ranked populations: proposed7/14/30-day and same-letter-patch windows, strict
+as-of cutoffs, counts/patch age, pick/available-ban rates, win rates and qualified
+role/matchup/synergy/player-hero context. Current rank enrichment does not qualify
+an old high-ranked match. Unknown roles/bans/cohorts remain explicitly missing.
+Keep raw window statistics distinct from learned smoothing/prior/strength models;
+no fitting or arbitrary hard-coded blending weights. Current patch observations
+and older compatible prior support must be separately identifiable. Preserve
+all approved feature families and reference the catalogue rather than duplicating
+an already implemented meta producer under a new name.
+Required tests: target-map exclusion; future match/patch changes leave old rows
+unchanged; letter revision reset; ambiguous patch boundary; missing old cohort;
+same hero differs by role/population; sparse new patch; history warmup truncation.
+Exit: source-to-feature coverage and exact acquisition proposal, implemented local
+aggregate contracts where data permits, and clear external data gaps. New empirical
+patch/population window selection and pub-to-pro transfer are future gated tests
+at P6 AFTER full-feature baselines. No old-patch weight reduction or adaptive
+learning is an accepted default. Source/time correctness remains mandatory.
+
+R8.7 — SHARED ACTUAL HOST/READER AND POSITIVE ALL13 ROUTING
+Files: savedDiagnosticReaderFactory.mjs, retainedDiagnosticBootstrap.mjs,
+diagnosticFeatureReadApi.mjs, diagnosticTargetRouting.mjs,
+APP/artifacts/api-server/src/services/FeatureDiagnosticAdmin.ts,
+compactFeatureJournal.mjs and r7ActualRetainedDelivery.test.mjs successors.
+Wire one explicit reviewed resource configuration and shared ownership to actual
+disabled host/journal/admin. Smaller default profiles stay distinct and fail safely.
+Use actual native Windows lease adapter for contention/loss/close/restart checks.
+Do not replace it with a fake and call the native contract passed.
+Add a positive eligible LIVE main-series/detail-map path with advancing controlled
+time and verified current source, then terminal/expiry/pause/repeat/gap/correction/
+STOP cases. Partial draft remains partial; full draft startsPOST immediately.
+Restore a private capability from committed bytes and deliver THAT restored row,
+not the original in-memory vector after a checksum check. Source requalification
+is required before any restored row claims currentness.
+Exercise all13 modes, saved/read/admin projection, side reversal, unknown PRE map
+ID, BETWEEN prefix and old-map manual navigation; never reuse last map as next.
+Decision-path tests deny provider clients; history comes from the verified local
+store. Model recorder remains input-only. No listening production activation.
+Exit: route-level positive and negative evidence with actual configured capacity,
+not just13 schema declarations or expired-LIVE rejection at restart.
+
+R8.8 — MEASURED SPEED, CONDITIONAL C++ AND PRECISE CLEANUP
+After R8.1-R8.4 correctness, instrument a fixed64-version/short-frame workload.
+Record producer/context/contract compile/encode/IO/read/queue/fence times and peaks.
+Reuse existing R7 timings as baseline only when operation scope is unchanged.
+Deduplicate invariant assets and avoid repeat root scans; keep immutable verified
+epochs, boundedFIFO(one rich IO+exclusive mutation) and real lease controls.
+If diskroot capacity requires segments, use an immutable bounded catalog, global
+disk accounting and restart verification, not a silent256MiB root increase.
+Cold target<=30s, warm full generation+commit p95<=2s,p99<=5s,max15s; actual
+measurements may fail. Do not report p99 from three warm frames as acceptance.
+
+C++: choose one material CPU kernel only after this profiling. Existing native
+prototype compiled but did not link; reuse that tooling evidence. One bounded
+known-toolchain check if concrete new evidence warrants it, no repeated scans or
+installation. Keep exact float64/reduction/order/hash/mask/STOP behavior and owned
+child process. Accept only>=30% COMPLETE-operation gain over optimized JS in>=3
+measured pairs after separate warmup, includingIPC/startup/cancellation. Otherwise
+record no-go and finish the other work. No blanket HTTP/API/UI rewrite.
+
+Cleanup: update the14-module migration/use ledger, including dynamic imports,
+configuration, CLI/task entrypoints, active old models and serialized formats.
+Preserve already completed narrow hello/E1 cleanup; do not redo it. Remove only
+positively proven dead/replaced symbols with exact path/callers/replacement and
+rollback record. Shared behavior needs wrapper/migration evidence. Disabled old
+serving/model readers are not automatically dead. Do not delete datasets, weights,
+feature families, prior receipts or backup files. Scope tests to changed callers.
+Exit: measured before/after and explicit native/cleanup decisions; no speed promise
+from language choice, leaf microbenchmark or raised memory ceilings.
+
+R8.9 — ONE INTEGRATED ACCEPTANCE ON THE FINAL PINNED SOURCE
+Sequence is dependent; do not run every expensive stage after every metadata edit.
+1. All affected small negatives/goldens pass; independent reviewer checks P1 fixes
+   and function/row/selector semantics. Freeze a final exact source manifest.
+2. Exact13 typed declaration/closure/projection audit, reporting semantic/status
+   axes honestly. No demand for opaque provider meanings to become verified.
+3. Actual full13 disabled route/persist/restore/input-port check on final source.
+   Record source scope and any explicit warm decomposition separately.
+4. Short warm pilot with real ownership/config; no unbounded cache, stale renewal
+   or uncharged state. Only then decide whether1600-source/sustained tests fit.
+5. Reuse the old1600 evidence where unchanged. If new contract/storage changes
+   invalidate it, run one affected representative restore/proof/producer/readback
+   case, with finite preflighted memory/disk/wall. Do not multiply variants blindly.
+6.326states only if short measurements and disk ownership predict completion under
+   <=1200s and current caps:324 advancing states across two81-minute contexts plus
+   two zero-time DRAFT states; include PRE/BETWEEN/terminal/lateidentity/repeat/
+   pause/STOP/cancel/corruption/rollback/currenthead changes. Label timing synthetic.
+   If prerequisites fail, fix or report the blocker; never repeat a known20-minute
+   timeout unchanged or claim the skipped326 passed.
+All child processes under one owner. Watch actual owned commit/RSS separately from
+logical reservations, headroom and retained growth. Final charged leases zero.
+Keep old/new reader overlap only within explicit combined ownership. Any partial
+failure preserves already acknowledged durable facts and rejects invalid issuance.
+Exit: a single matrix of passed/failed/not-run/not-applicable gates with exact
+receipts, no inferred original availability/model quality from technical passes.
+
+R8.10 — REVIEWABLE CLOSEOUT, NEXT PLAN AND PUBLICATION
+Write outputs/Aegis-Sol-R8-Astra-review-20261026.txt and exact continuation plus a
+publishable APP/docs mirror. Include source/contract versions; files/interfaces;
+findings and reasons; counterexamples; semantic79/14 ledger; OpenDota-to-Steam map;
+all13 delivery; original/replay lineage; real coverage bounds; speed/memory/native;
+safe deletion list; failures/corrections and unresolved external gates. State
+whether each R8 task is complete, partial, externally blocked or not started.
+Report which blockers prevent dataset construction, training admission or serving
+separately. Missing external semantics need not block independent well-defined
+features, but never self-authorize training through a narrower profile.
+If a coherent source block is reviewed and checked, update/create ONE source-only
+PR and merge reviewed exact head under standing owner authorization. No routine
+permission request or full/byte parity. Exclude keys, raw data, DBs, fixtures with
+real observations, archives and fitted weights. Record merge; Graphify auto-refresh
+only, no duplicate build or false readiness claim. Unfinished changes are clearly
+checkpointed and not represented as a reviewed completed block. Include these
+Astra documents and their supplied review attachments in that substantive block.
+No separate pointer-only PR for this architecture review.
+
+SIX-HOUR ORCHESTRATION (ESTIMATE, NOT A COMPLETION GUARANTEE)
+00:00-00:15 R8.0 baseline, short counterexamples, interface and file ownership.
+00:15-01:15 A=R8.1; B=R8.3; C=R8.2 then stable contract portionR8.4.
+01:15-02:30 integrate semantics/function-row identity; rootR8.5/R8.5A;
+            A=R8.6/R8.6A/R8.6B retained source/coverage/meta track;
+            B=remaining approved families; C=R8.4 persistence/resource ownership.
+02:30-03:45 actual restored-row routeR8.7, actual intake/coverage, model harness
+            contracts, profile-driven storage optimizationR8.8 and safe cleanup.
+03:45-05:00 final-source targeted tests, full13/closure and warm pilot; native
+            prototype only if already justified. Heavy checks serial, source work
+            parallel only when it cannot invalidate the running snapshot.
+05:00-05:40 eligible sustained/large check or its corrective independent work;
+            assemble exact receipts/limitations. Do not launch a job whose finite
+            bound plus closeout exceeds remaining authorized session time.
+05:40-06:00 independent review, coherent completed-block PR if ready, final
+            checkpoint and concise owner report. Safe boundary if any job remains.
+
+These allocations are planning budgets, not gates requiring idle waiting. Finish
+early if complete; do not pad work. If behind, preserve correctness and exact
+continuation rather than claim every task finished. No unjustified widening of
+scope or infinite fix/rerun loop. A prerequisite failure blocks its dependents,
+not unrelated source/docs work. If only a native job remains, save status/next
+action and yield. Use only an existing explicitly authorized follow-up if one is
+actually present; this plan itself does not start an automation or switch models.
+Do not keep polling or sleep for six hours merely to stay active.
+
+FULL MODEL WORK AFTER THE SEPARATE TRAINING GATE — RETAINED, NOT EXECUTED
+P1. Freeze all qualified feature contracts/data/splits; fit full eligible boosting
+    baselines for all12 outputs/13 modes, no feature-importance pruning first.
+P2. Compare pooled LIVE with5-minute specialists and one80+ group on matched maps/
+    minutes; separate original-observed and reconstructed/replayed evidence.
+P3. Compare series pooled/stage models acrossBO1/3/5 with prior-map history, current
+    draft/live state and nominal score; scarceBO5 requires explicit uncertainty.
+P4. Fit rich PRE/POST/LIVE kills and remaining-duration distributions; conditioning
+    on current score/time, Roshan/closing context and support. Calibrate on separate
+    past folds; evaluate actual book lines and generated grids without conflation.
+P5. Bounded validation-only HPO:depth/leaves/regularization/learningrate/subsampling,
+    time/history schemes and predeclared support. Never tune locked holdout.
+P6. After full baseline, family ablations/semantic consolidation and optional
+    interpretable/learned representations plus hybrid. No mandated100 dimensions;
+    choose by validated quality, latency and rare-context support, TRAIN-only.
+    Compile accepted masks into dependency plans to avoid unused computation.
+    Include the owner's patch/meta experiments HERE, not before full baselines:
+    no decay versus age/patch weights, alternative causal windows, pro/public meta,
+    first-days-after-patch behavior and justified small-data adaptation. Read
+    outputs/Aegis-patch-meta-experiment-plan-20261026.txt. Do not assume a useful
+    effect, silently pool pub targets, or activate automatic weighting/updating.
+P7. Report minute-level accuracy/logloss/Brier/calibration/coverage, matched equal/
+    strong-team and comeback slices with series-clustered intervals; totals MAE,
+    proper distribution scores/interval coverage. Majority votes of frames forbidden.
+P8. Package exact producer/function/transform/model/calibration/source profiles,
+    verify shadow routing/restart/STOP/rollback for mainseries/detailmap/totals.
+    Public activation/release requires separate authorization and quality review.
+Before P1, ask for explicit bounded training authorization ONLY after the concrete
+ready package is reviewable. Until then no new fit, including a quick toy fit.
+Do not promise80-85%/95-99% results or finish the entire empirical program in six
+hours without measurements. R8 prepares and verifies the prerequisites thoroughly.

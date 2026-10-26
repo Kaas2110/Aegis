@@ -1,0 +1,291 @@
+OPENDOTA AVAILABILITY, TEMPORAL LEAKAGE AND STEAM COMPATIBILITY REVIEW
+26 October 2026. Public source/documentation research, not provider probing.
+
+SCOPE AND EVIDENCE STATUS
+Pinned core: 86e09304d7775540fd5e22e9a94d930034c4da09.
+Pinned parser: 927adf6bbd1fd321b711f544a5d754bfe75d89a7.
+Read official API schema/docs, FAQ and focused source. Companion core/parser
+reviewers inspected the larger assembly and parser implementations; their exact
+source findings are cross-referenced below. No OpenDota/Steam match API request,
+parse request, new match acquisition, model fit, app edit or activation occurred.
+Public repository code is evidence of that source revision, NOT proof of the
+currently deployed service revision, every retained match's parser, or field coverage.
+All proposed compatibility/admission decisions below are recommendations for R8,
+not statements that Aegis already implements or passes them.
+
+DECISION
+Keep OpenDota as a rich completed-match and retrospective-history source. Keep the
+new current dynamic decision path on the qualified coherent Steam profile. A large
+part of OpenDota replay history CAN support future live-model training after an
+explicit compatibility and causal-reconstruction review. It need not have been
+downloaded during the original game to be useful. However, reconstructed game
+state is not evidence that OpenDota or Aegis actually published that state then.
+Do not replace the retained original-observation cohort with retrospective data,
+and do not treat a whole match response as one immutable historical snapshot.
+
+1. WHAT THE DOCUMENTATION AND SOURCE ACTUALLY ESTABLISH
+
+1.1 Acquisition stages and delay
+Official FAQ says basic information comes from Steam WebAPI, richer information
+from replay parsing; advanced data normally appears after the match and can be
+missing when replays expire, upstream services fail, or parsing fails. It describes
+best-effort availability. Its 2014 publication and older update context mean its
+approximate replay lifetime and typical delay are historical guidance, not a
+current SLA or measured latency for Aegis.
+https://blog.opendota.com/2014/08/01/faq/
+
+The pinned parser coordinator first obtains API data, then GC data/replay location,
+then the replay parser output. Queue delay, upstream retrieval and parsing are
+separate operations, with retry/failure paths. A successful match GET, a queued
+parse request and a completed parse therefore represent different capabilities.
+No fixed seconds/minutes bound follows from this code.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/parser.ts
+
+The documented POST /request/{match_id} submits a job; GET /request/{jobId}
+reports that job. The current source counts submission as ten rate-limit calls,
+not ten billing calls. This research did not submit any job and does not change
+the user's existing API budget. A job queue timestamp is not the first publication
+time of every field in the match.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/spec.ts#L1528-L1659
+https://docs.opendota.com/
+
+1.2 Match GET combines different sources
+getMatchBlob reads API, GC, parsed and archive stores, records has_api/has_gcdata/
+has_parsed/has_archive booleans, then merges values with precedence archive <
+parsed < GC < API. Players are joined by player_slot. Those booleans establish
+presence of source blobs, not complete field coverage or per-field original
+availability. Different fields in one response can have different origin and age.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/getMatchBlob.ts#L14-L68
+
+The companion core audit additionally finds current profile/rank/MMR enrichment
+and current benchmark epochs in buildMatch. A player rank or name in a historical
+match response must not automatically become that player's rank/name at match time.
+Keep match-derived facts separate from present-day enrichment.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/buildMatch.ts#L119-L200
+
+1.3 Public timing fields do not establish knownAt
+MatchResponse defines start_time as game start, version as an internal parse
+version, and players.times as game-time coordinates for arrays. It documents
+patch as a dotaconstants ID. None of those meanings is first-published-at or
+observed-by-Aegis-at. No per-field original-publication or corrected-version
+ledger was found in the inspected match response contract. SQL parsed_matches
+stores match_id/is_archived; its mere membership is not a parse-completion timestamp.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/responses/MatchResponse.ts#L179-L204
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/api/responses/MatchResponse.ts#L720-L775
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/sql/create_tables.sql#L430-L435
+
+Absence in these inspected contracts is a scoped finding, not proof that no internal
+OpenDota service log contains more timing. Aegis cannot silently rely on such logs
+when it has not received them. HTTP Date, file mtime, match start and job creation
+must not be substituted for field-knownAt. start_time + duration is also not
+source publication time; do not assume game-clock duration equals wall time
+without an independently verified pause/start contract.
+
+1.4 Reparse and version changes
+MatchFetcherBase may fetch again instead of using saved data; ParsedFetcher's
+saved-data behavior depends on DISABLE_REPARSE and it reads stored/archive data.
+The companion parser audit found Java and legacy JS outputs both carrying version22
+despite differing emitted fields. Thus version alone cannot identify formula or
+capability compatibility. Preserve response hashes, observed revisions, parser
+build when actually known, and exact field-presence fingerprints. Unknown build
+stays unknown. A later reparse/correction is a new observed version, not a rewrite
+of what Aegis knew before its receipt.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/MatchFetcherBase.ts#L4-L49
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/fetcher/ParsedFetcher.ts
+
+2. GOLD / NET WORTH: THE ACTUAL COMPATIBILITY DECISION
+
+The inspected Java parser reads two DISTINCT game properties:
+- entry.networth <- m_iNetWorth.
+- entry.gold <- m_iTotalEarnedGold.
+The blob emits networth_t from the first and gold_t from the second at minute
+boundaries. Therefore gold_t is not a valid renaming of networth_t. The API text
+"total gold" is too broad to establish interchangeability on its own.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java#L705-L729
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1457-L1485
+
+Mapping decision for Aegis:
+- OpenDota networth_t -> historical native-net-worth candidate, NOT automatically
+  an accepted replacement for Steam net_worth until profile/clock/identity tests.
+- OpenDota gold_t -> cumulative-earned-gold history. Do not feed it to a net-worth
+  feature or infer that its magnitude must equal current assets.
+- OpenDota radiant_gold_adv -> NOT automatically Steam sum(net_worth) difference.
+  The companion parser audit traces this array to the entry.gold earned-gold sums.
+- Final gold_per_min and xp_per_min -> final summaries of THIS completed map;
+  not its five-minute GPM/XPM. A derived earnedGold(t)*60/t is a distinct formula
+  until its relation to live Steam GPM is qualified (including zero/prestart time,
+  rounding, start convention and any initial gold). Never use networth(t)/t as GPM.
+- Current Steam gold/net_gold fields remain separately unqualified. The fact that
+  OpenDota's INTERNAL parser entry.gold means earned gold proves nothing about a
+  different Steam endpoint's similarly named JSON property.
+
+networth_t is conditionally appended when the replay property exists. Old replay
+data can lack it. If only some minute samples lack the property, the implementation
+can produce a shorter optional array than times without a separate timestamp for
+each optional entry. Reject ambiguous alignment; do not pad or blindly zip it.
+Equal lengths are necessary for that simple pairing, not sufficient without
+verified clock/slot ordering. Report actual retained coverage before proposing
+that this solves the whole archive. The public MatchResponse schema inspected here
+does not enumerate networth_t, although the parser code emits it: schema omission
+is not source impossibility, and repository capability is not observed coverage.
+
+3. TEMPORAL LEAKAGE: A TIMESTAMP ALONE IS INSUFFICIENT
+
+Classification for the TARGET map being forecast:
+
+A. Outcome labels / never current-map inputs
+Final winner, duration, total kills, final economy/items/levels, whole-match damage,
+final buybacks/ward totals, throw/comeback/loss/stomp, and final teamfight scores
+must not enter earlier live features. Full outcome-derived comeback/stomp metrics
+may label cohorts or be prior-match historical statistics after causal availability.
+The core computes throw/comeback using the full advantage sequence and outcome.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts
+
+B. Direct historical time slices / conditional reconstruction candidates
+Verified minute economy, XP, last hits and denies, and timestamped genuine kill/
+objective/purchase/buyback events can be truncated to a decision horizon, IF every
+operand is causal at that horizon and the equivalent measurement is available in
+the intended live profile. Match whole-map arrays cannot be passed through intact.
+Use the actual times coordinate; never use a future nearest sample or interpolate
+through a future sample. Missing samples remain missing under the declared contract.
+
+C. Timestamped records with FUTURE-derived attributes
+The companion parser audit traced these specific counterexamples:
+- deaths_log.time_dead requires the future respawn; its timestamp is the death.
+- Teamfight membership/end and xp_end require later activity; grouping ends only
+  after a gap after the last kill. An unfinished fight cannot expose its final row.
+- A completed pause duration is emitted at unpause while referring to pause start.
+- Death gold lost/fed and Wraith King death classification use neighboring/future
+  event windows. They require individual causal horizons, not only event.time<=t.
+Keep such finalized descriptors for labels/prior-match history, or implement a
+distinct ONLINE accumulator that uses only prefix information. Do not relabel the
+completed descriptor as if it existed at its starting timestamp.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L611-L774
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1589-L1637
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java#L506-L544
+
+D. Early-window role estimates are not pregame truth
+The current core's estimated position uses early farm/lane information, including
+minutes10-12. It cannot be used as a known position at draft or minute5 of that
+same map. Independently known roster roles, historical positions and economic rank
+are different typed features. Keep them separate; do not substitute one silently.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts
+
+E. Today's aggregate form/meta is not historical as-of form/meta
+Current hero/player/team aggregates can include the target map and later matches.
+Rebuild causal rolling statistics from pinned completed prior maps, with exact
+windows/populations, rather than fetching today's aggregates and joining them to
+old rows. Present-day profile/MMR/benchmark enrichment has the same risk.
+
+4. THREE CLOCKS AND TWO EVIDENCE AXES
+
+Retain separately for each source value or atomic group:
+gameTime; original source receipt/persist time if actually recorded; materialization
+and rule/transform qualification time. Also retain match/series/player/hero/side
+identity, source profile and pinned source/output/version/correction lineage.
+
+Source axis:
+- originally observed live packet, with its real capture receipt;
+- retrospective replay/API reconstruction obtained after the event.
+Feature axis:
+- originally produced/issued feature or prediction with real readyAt;
+- replayed derived feature, possibly calculated much later.
+These axes are independent. A replayed feature from a retained genuine live packet
+is still not an originally issued prediction. A postgame replay slice can be a
+valid causal state reconstruction without pretending its API publication was live.
+
+Exact original-operation backtesting needs actual historical input receipts and
+model/transform availability. Retrospective predeployment research may use rebuilt
+prefix states and strictly prior histories under a separately named reconstructed
+cohort. It estimates that pipeline under an assumed qualified deployment supply;
+it does not measure achieved original coverage or timing. Future training approval
+must explicitly state which cohort supports which result. This prevents both
+future leakage and the mistaken ban on all useful postgame reconstruction.
+
+5. PROPOSED OPENDOTA <-> STEAM COMPATIBILITY REVIEW PROTOCOL
+
+Step1 — Declare measurements before comparison.
+For each candidate port, specify quantity/unit, endpoint/profile, side/player-slot
+mapping, hero/account identity rules, clock zero and pause handling, sampling,
+missingness, source patch/build range and exact transformation. Never approve an
+entire provider or whole response wholesale. Preserve current legacy weight/profile
+boundaries; a new source measurement can require a new package contract.
+
+Step2 — Check source prefix causality.
+Trace every operand, event-window closure, aggregate and inferred label to its
+maximum required game time. Build a machine-readable causalHorizon or derivation
+availability rule. A timestamp attached to an aggregate is not enough. Run prefix
+counterexamples: append future events and ensure all already-admissible earlier
+features remain unchanged, except explicit later correction versions not backdated.
+
+Step3 — Use already retained paired maps where possible.
+Pair by exact match ID, nominal teams/side and hero/player slot; reject unresolved
+identity or map/series mismatch. Compare Steam current-state clock with OpenDota
+times after verifying pause/zero conventions. Use exact matching clock first;
+otherwise only earlier reference samples with a declared maximum skew. Do not
+interpolate from the future to manufacture agreement. Quarantine ambiguous optional
+array lengths, duplicate clocks or discontinuities. No new provider collection is
+authorized by this review; missing paired evidence is a documented gate.
+
+Step4 — Separate measurement disagreement from clock skew.
+Report signed/absolute differences, exact-match fraction, quantiles and failures
+by clock skew, minute, patch, source/parser capability, role/hero and relevant
+events (purchases/sales/deaths/buybacks/item transfers). An unexplained constant or
+percentage bias must not be fitted away simply to claim parity. Any proposed
+conversion is a separately versioned, causally justified formula with held-out
+checks; learned conversions remain under the no-training gate.
+
+Step5 — Cover counterexamples, not just averages.
+Net worth vs cumulative earnings must diverge legitimately in some situations.
+Check direct NW is preserved, not replaced by earnings. Include incomplete roster,
+late account disclosure, pregame/zero time, pause, disconnect/reconnect, malformed
+or missing series, corrected match/player identity, old parser capability and
+terminal states. There is no authority to claim every source has equal data when
+one of these cases is unobserved. Report coverage and unsupported cases.
+
+Step6 — Decide per port.
+Possible decisions: exact equivalent within declared profile; explicit causal
+conversion with measured bounds; distinct useful quantity; replay-only history;
+unavailable/ambiguous. A technically parsed field can remain unqualified. Prove
+the generator's resulting index/value/mask and stable function contract consume
+the intended port; verify restored row/model-port delivery separately.
+
+Step7 — Do not confuse source coverage with pairwise comparison coverage.
+Source95 uses all known eligible live opportunities, including failed/empty/stale
+polls, not just matches with paired successful replays. Capture-only data lacks a
+complete failure denominator; report conditional coverage. OpenDota parsed-match
+selection is not a uniform sample of professional play. Show missingness across
+patches/teams/durations and preserve map/series temporal splits before experiments.
+
+Step8 — Version and freeze the decision.
+Save contract IDs, exact source pins, source/build uncertainty, accepted mapping,
+rejection ledger, time policy and evidence hashes. Reparse corrections produce new
+versions. Revalidate affected contracts when parser/protocol/patch semantics change.
+No model fitting, source switch or public activation is implied by this checklist.
+
+6. PATCH AND HISTORICAL-MECHANICS BOUNDARY
+OpenDota's patch ID/calendar mapping, a replay's actual game build and a mechanics
+ruleset are related but distinct evidence. The root's dotaconstants review owns
+exact patch derivation. Preserve letters as separate owner-required revisions;
+do not apply today's item costs/XP thresholds/Roshan rules to every old map.
+Calendar inference needs an explicit basis/uncertainty, particularly around release
+boundaries or tournament server versions. A new parser can recover old facts without
+making today's formulas the correct historical game rules. Where a mechanic cannot
+be qualified for a historical patch, keep its features missing/ineligible explicitly.
+
+7. RECOMMENDED R8 ADDITIONS WITHOUT ANY FIT OR NEW PROVIDER REQUEST
+1. Add per-field causal-horizon and retrospective/publication distinctions to the
+   source capability ledger; include the concrete death/fight/pause counterexamples.
+2. Inventory retained networth_t presence and array alignment separately from gold_t;
+   preserve parser version/build unknown status. Build a bounded offline mapping audit.
+3. Produce one source-to-port-to-feature-to-row trace for qualified direct net worth,
+   and negative traces demonstrating gold_t/radiant_gold_adv cannot masquerade as NW.
+4. Keep native original-history intake from R8.6 separate from the candidate replay
+   bridge. Both can be valuable; neither inherits the other's availability claim.
+5. Record any missing paired corpus or mechanics evidence, continue independent
+   implementation, and return the compatibility decision to Astra before training.
+
+This report does not establish the latency of either provider, worldwide archive
+completeness, original historic publication times, current deployment health or
+predictive quality. It does establish why a qualified replay bridge is worth
+building and exactly why blindly swapping fields would be unsound.

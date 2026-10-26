@@ -1,0 +1,72 @@
+{
+  "contract": "aegis.r8.final-source-family-blockers.v1",
+  "date": "2026-10-26",
+  "reviewKind": "independent_static_and_saved_receipt_review",
+  "scopeIsAll289StagedFiles": false,
+  "actualSemanticReceipt": {
+    "path": "work/sol-r8-20261026/reports/r8-actual13-semantics-21/0.json",
+    "fileSha256": "bb464b14bb52c717211b44cc44bb0769f49bc3c61158d626f1709a1b386a2396",
+    "canonicalRegistrySha256": "bc54fbbebe3461ae3e25a96b075e8c434a9b073c5f619a18ded519c0d1e6cf31",
+    "targetModes": 13,
+    "definitionOccurrences": 934446,
+    "typedDeclarationGapCount": 0,
+    "generalizedFunctions": 13,
+    "unclassifiedDefinitionCount": 0,
+    "semanticIdentityCompleteOccurrences": 890518,
+    "semanticIdentityUnresolvedOccurrences": 43928,
+    "syntheticInputs": true,
+    "realCoverageRows": 0,
+    "sourceAvailabilityAttested": false,
+    "semanticAcceptance": false,
+    "fullFeatureGateComplete": false
+  },
+  "liveUnresolvedPerHead": {
+    "heads": ["LIVE_MAP_WIN", "LIVE_KILLS", "LIVE_DURATION", "SERIES_LIVE:observed_live"],
+    "countPerHead": 10982,
+    "otherNineHeadsUnresolved": 0,
+    "meaning": "Typed declared operands remain ineligible for model use; they are diagnostic columns, not admitted measurements.",
+    "families": [
+      {"familyId": "L02", "unresolved": 500, "example": "draft_live.hero.1.native_gold.observed_value", "blocker": "opaque provider gold/net_gold measurement semantics; native netWorth is a distinct qualified literal"},
+      {"familyId": "L06", "unresolved": 500, "example": "draft_live.hero.1.native_gold.hero_minute_residual", "blocker": "unqualified current native_gold operand and no equivalent qualified prior-native reference"},
+      {"familyId": "L11", "unresolved": 250, "example": "draft_live.hero.1.respawn_timer_raw", "blocker": "literal respawn timer has no verified alive/dead/countdown contract"},
+      {"familyId": "L12", "unresolved": 500, "example": "draft_live.hero.1.ultimate_state_raw", "blocker": "ultimate enum/cooldown semantics and patch-valid ability readiness not qualified"},
+      {"familyId": "L14", "unresolved": 8232, "example": "draft_live.hero.1.native_gold.recentForm.history_product", "blocker": "typed descendants preserve the unqualified operand; interaction does not make source meaning valid"},
+      {"familyId": "L15", "unresolved": 500, "example": "draft_live.hero.1.buyback_cooldown_raw", "blocker": "buyback readiness/cost/cooldown source semantics and rules unqualified"},
+      {"familyId": "L16", "unresolved": 500, "example": "draft_live.hero.1.position_x_raw", "blocker": "unqualified coordinate transform; no validated geometry or objective distance"}
+    ]
+  },
+  "remainingCapabilityTable": [
+    {"familyIds": ["I01", "I02", "I03", "I04"], "kind": "metadata_and_selected_feature_mapping", "state": "not emitted as separate families in21", "required": "Separate identity/provenance metadata from intended known-count/context predictors; role1..5 needs explicit evidence, never native wealth rank. Existing draft/history/series blocks already bind identity and BO context; avoid duplicate massive encodings.", "newDataNecessarilyRequiredForEveryPart": false},
+    {"familyIds": ["D06", "D07"], "kind": "prepared_port_not_model_vector", "state": "new bounded meta preparation exists; genuine auxiliary population/letter-patch evidence and model-vector wiring not accepted", "required": "Independently pinned contemporaneous rank-at-match, exact letter revision/knownAt and explicit roles/bans where conditioned. Keep pro and highrank7/14/30-day populations separate. Existing D02pro7/30/90 remains a distinct contract.", "reference": "retainedPatchMetaPreparation.mjs"},
+    {"familyIds": ["D08"], "kind": "missing_rules_modality", "state": "not emitted", "required": "Patch-valid hero/ability/item mechanical descriptors with evidenced definitions; no guessed numerical power weights"},
+    {"familyIds": ["S02"], "kind": "missing_qualified_historical_events", "state": "not emitted as timing/habit family", "required": "Prior purchase-time, ward/smoke/buyback events and censoring/coverage. Existing final player performance fields are not live vision or purchase timing."},
+    {"familyIds": ["S03"], "kind": "missing_frozen_prior_opponent_context", "state": "explicit pending capability", "required": "At each prior map, opponent prematch30d pace frozen before that map; causal prior expected win for residual variants. Final prior pace or post-result rating cannot substitute.", "reference": "B/REQUIRED-FAMILY-INPUTS.json"},
+    {"familyIds": ["S06"], "kind": "composition_mapping_or_remaining_variant", "state": "not separately emitted in21", "required": "Audit existing L14 form interactions against exact S06 trajectory products; any new variants need source-qualified current lead/recovery prefix and supported frozen form. No future comeback label as an input."},
+    {"familyIds": ["S05", "L04", "L06", "L08", "L09"], "kind": "implemented_needs_real_qualified_prior_or_prefix_data", "state": "level references, trajectory and closing-landmark producers implemented;21 is synthetic", "required": "Actual prior native frames with complete NW/level/clock/identity and causal completion receipts; actual prior10/20/30-minute anchors<=30s and reviewed support. Raw states alone do not certify native-history views."},
+    {"familyIds": ["L07"], "kind": "different_measurement_source", "state": "historical reconstruction bridge only; unavailable as equivalent Steam-only current earned-resource field", "required": "Keep OpenDota earned gold_t distinct from native networth_t and from Steam GPM. No NW/time alias; bridge requires exact clock/array/identity/parser lineage and prospective equivalent fields before live admission."},
+    {"familyIds": ["L13"], "kind": "partial_real_modality", "state": "slot-qualified producer exists; sparse retained GLG six-slot presence", "required": "237/8619GLG states have six nonmissing observed slots on every player; that is not full inventory/backpack/neutral. RTitems are a different9-slot profile and mostly delta frames; no cross-source fill."},
+    {"familyIds": ["L17", "L18", "L19", "L20"], "kind": "missing_or_unqualified_current_modalities", "state": "not emitted", "required": "Qualified ward/smoke events, versioned structure mask decoder, objective/day rules/events and actual wave/creep positions. Do not infer map control from final ward counts or live wave pressure from hero names."},
+    {"familyIds": ["R01", "R02", "R03", "R04", "R06"], "kind": "producer_exists_real_event_rules_coverage_open", "state": "emitted but predominantly missing in synthetic21 fixture; actual raw timer presence alone insufficient", "required": "R01literal timer observed8213/8619GLG; confirm exact timer semantics separately. R02death/respawn intervals need qualified events+patch rules; R03pickup/holder/consumption needs linked episodes; R04steal needs linked killer/pickup sides. Prior conversion also needs missing reviewed episode port/window grammar.", "reference": "B/REQUIRED-FAMILY-INPUTS.json"},
+    {"familyIds": ["R05", "R07"], "kind": "missing_event_prefix_or_contest_modalities", "state": "not emitted", "required": "Complete qualified observed objective-death prefix and contest positions/life/ability/items/event links. Missing events are unknown, not zero deaths or no steal."},
+    {"familyIds": ["Q03"], "kind": "missing_complete_historical_series_population", "state": "explicit pending capability", "required": "Distinct completed historical series, ordered map membership and terminal receipts; recovery denominators are completed series reaching exact deficit, not maps/frames. Current Q02counts do not supply historical recovery.", "reference": "B/REQUIRED-FAMILY-INPUTS.json"},
+    {"familyIds": ["Q04"], "kind": "partial_subfamily", "state": "picks subset emitted, bans/opponent-change variants not complete", "required": "Qualified prior/current hero sets already permit explicit exposure comparisons; complete received ban/team/order/knownAt stream and reviewed opponent-change selector required for additional variants. Missing bans stay missing.", "reference": "B/REQUIRED-FAMILY-INPUTS.json"},
+    {"familyIds": ["Q05", "Q06"], "kind": "future_learned_child_context", "state": "not emitted; no compatible OOFprior generated", "required": "Separate future training authorization, compatible version/fold/chronology/OOF child model state. Do not fabricate earlier map probabilities or fit them on own target labels."},
+    {"familyIds": ["Q07"], "kind": "composition_not_duplicate_vector", "state": "rich historical/draft/live/prior-map blocks and Q01reuse already present; family mapping incomplete", "required": "Review composition manifest/phase masks/side orientation instead of copying all components into another giant numeric block. Main card remains full-series outcome."},
+    {"familyIds": ["T01"], "kind": "totals_family_mapping_and_remaining_conditional_contracts", "state": "H13/H14and prior performance already contain duration/kill population summaries; separate T01not emitted", "required": "Map existing exact distributions/supports first, then add only genuinely missing conditional risk-set/hazard variants. Historical own-team and total-map kills are distinct."},
+    {"familyIds": ["T02", "O04"], "kind": "label_only_or_future_hazard", "state": "not ordinary current feature columns by design", "required": "Final winner/kills/duration and remaining targets belong in separate label store after completion; learned hazard features need past-map risk sets and later authorization. Never fill feature vectors with current final labels."},
+    {"familyIds": ["T03", "T04"], "kind": "candidate_axis_and_presentation", "state": "not shared base outcome predictors", "required": "Future calibrated distributions/strict line settlement and exact selected bookmaker markets or own grid. Candidate line is query input, odds are not replacement model probabilities."},
+    {"familyIds": ["O01", "O02", "O03"], "kind": "masks_and_binding_metadata", "state": "missing-family label must be reconciled with existing per-column masks/support/source/clock/row bindings", "required": "Expose intended numeric collection masks/support carefully; operation/audit timestamps, hashes and future reconstruction markers remain diagnostic binding metadata. No zero-filled duplicate features to improve counts."}
+  ],
+  "globalSourceBlockers": [
+    "All8619realGLGstates have phase absent; current progression is separate from prior-history explicit phase/profile-review alignment contract.",
+    "No genuine prior native-history->vector chain was demonstrated; original receipt verification is not a completed prior fact/profile/alignment proof.",
+    "14pinnedRTbodies are partial evidence,13delta frames; no reviewed delta assembly or current R8RTprofile. No cross-profile fill or switch activated.",
+    "No per-month/per-letter-patch whole-calendar OpenDota field inventory or real auxiliary highrank/role/ban artifact established.",
+    "Ninety days covers reviewed rolling statistics only. Cumulative chronological ratings require explicit pinned genesis/checkpoint and intervening events.",
+    "Source95, original issuance, event-to-app latency, warm326state throughput and model quality remain separate unaccepted gates."
+  ],
+  "trainingAdmitted": false,
+  "providersActivated": false,
+  "runtimeActivated": false,
+  "modelQualityEvaluated": false
+}

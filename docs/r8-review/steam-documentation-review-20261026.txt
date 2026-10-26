@@ -1,0 +1,97 @@
+AEGIS — USER-SUPPLIED STEAM DOCUMENTATION REVIEW
+26 October2026. Read-only documentation/source research; app and training unchanged.
+
+ANSWER
+Documentation exists, but the supplied materials cover different layers: official
+method discovery, third-party API clients, a separate commercial data service and
+replay-parser implementation. They are useful when bound to exact method/version,
+field path and source horizon. None establishes one universal economic field map
+for all Steam, OpenDota and other providers.
+
+The owner and architecture agree: canonical netWorth is current inventory value
+plus wallet, can decrease, and is the main current-economy measure. Total earned
+gold is different. Our uncertainty concerns specific raw gold/net_gold mappings,
+not whether net worth is useful or how the canonical net-worth metric is defined.
+
+SOURCE RESULTS
+1. Official Valve documentation
+https://partner.steamgames.com/doc/webapi/ISteamWebAPIUtil
+Describes GetSupportedAPIList and optional authenticated listing of restricted
+methods. A method/parameter catalogue is not a complete response-field dictionary.
+No catalogue/data call was made by root for this review.
+
+2. xPaw Steam API reference
+https://steamapi.xpaw.me/IDOTA2Match_570
+https://steamapi.xpaw.me/#idota2match_570
+Useful method/version/parameter index. GetLiveLeagueGames and GetMatchDetails
+are separate. The inspected index does not define every economic response field.
+No Execute action or credentials were used. Different index fragments are not
+different data sources.
+
+3. Attached PDF and its maintained documentation URL
+Local file: C:/Users/Admin/Downloads/demodota2api-readthedocs-io-en-latest.pdf.
+SHA256a1c654ee272d1293a9e7adf99e90612804d6065d62f539dce4399b8f39792bae.
+23pages, title dota2api Documentation, Release1, Joshua Duffy,28February2019.
+Page5 explicitly calls the Python library an unofficial wrapper. Page11 in the
+GetMatchDetails section distinguishes held gold, GPM and spending. The live-list
+section on pages12-13 lacks detailed scoreboard economy definitions. Its older
+claim about current values in live MatchDetails is not current availability proof.
+Full relevant pages were extracted; pages5,11,13 were visually inspected. The PDF
+was not modified or republished. An initial console-encoding error was corrected;
+it did not prevent reading. No package was installed.
+https://demodota2api.readthedocs.io/en/latest/responses.html
+https://github.com/joshuaduffy/dota2api
+
+4. bobbyrward/dota2_stats, egger0a6/dota-web-api and RDota2
+First is an old archived project describing final MatchDetails fields; egger is
+largely an endpoint/JSON wrapper; RDota2 documents final-wallet gold separately
+from spending. They do not implement a verified current GLG net_gold conversion.
+Exact pinned paths and dates are in source-doc-research/opendota-wrappers.txt.
+https://github.com/bobbyrward/dota2_stats/tree/master
+https://github.com/egger0a6/dota-web-api
+https://rdrr.io/cran/RDota2/man/get_match_details.html
+
+5. Cito API
+https://citoapi.com/docs/api/dota-2/#match-centers
+Its own service uses api.citoapi.com and x-api-key; it advertises live schedules,
+series/maps, player statistics and normalized radar measurements. This is not
+Valve's specification for our existing Steam key. The match-center section also
+describes post-match pages. No Cito account, key, purchase or data call was made.
+Its marketing/API vocabulary is not evidence that it supplies every field needed
+by Aegis at the same game clock or lower delay.
+
+6. Reddit
+https://www.reddit.com/r/DotA2/comments/17rkclw/is_there_any_documentation_of_steam_web_api_for/
+Useful discovery links to Steam tracking, OpenDota and xPaw. The discussion does
+not itself define economic field semantics; technical claims were checked in the
+linked primary implementation/docs instead of promoted from comments.
+
+7. OpenDota primary source investigation
+https://github.com/odota
+The replay parser separately reads m_iNetWorth and m_iTotalEarnedGold, with
+networth_t and gold_t outputs. This is meaningful positive evidence for historical
+feature mappings, but does not imply identical raw Steam key names across methods.
+The deeper core/parser/availability/constants study is recorded separately with
+specific commits and decisions. It supersedes any broad claim that all OpenDota
+economy fields are opaque; uncertainty is now source/version/field-specific.
+
+LOCAL OBSERVATIONS TO KEEP SEPARATE
+The saved23October GLG field census lists gold,net_worth,gold_per_min for81,165
+player records and no net_gold path. Root re-read that catalogue, not all raw data.
+The current adapter supports optional net_gold, but support is not observation.
+Mirrored realtime protobufs declare net_gold in a different detailed message;
+LiveScoreboardUpdate instead declares gold and net_worth separately. The precise
+WebAPI mapping must remain endpoint-specific. Do not blend packets by name.
+
+EXECUTION BOUNDARY
+No authenticated game API call, fresh match download, provider migration, model
+fit or application-code edit occurred. Public documentation and GitHub source
+were read. One delegated documentation search mistakenly opened a public hero
+datafeed URL; it returned inaccessible/no data. The attempt is explicitly recorded
+in steam-methods.txt and was not repeated. This is not described as zero endpoint
+attempts. No secrets or user raw observations were sent to public sources.
+
+SUPPORTING REPORTS
+work/astra-r7-review-20261026/source-doc-research/steam-methods.txt
+work/astra-r7-review-20261026/source-doc-research/opendota-wrappers.txt
+The private PDF extraction/renders are evidence only; exclude them from source PRs.

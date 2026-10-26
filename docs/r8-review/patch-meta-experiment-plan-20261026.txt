@@ -1,0 +1,105 @@
+AEGIS — PATCH/META HYPOTHESES AT THE LATER FEATURE-SELECTION STAGE
+26 October 2026. Owner clarification supersedes mandatory patch-decay wording.
+
+PLACEMENT AND CURRENT SCOPE
+Sequence: complete feature/data contracts -> review/authorization -> fit and
+evaluate full eligible boosting baselines -> feature selection/consolidation and
+patch/meta experiments -> qualified package review. No experiments or fits now.
+The new patch/meta comparisons belong to P6 of the R8 future model plan, AFTER the
+full-feature baseline. Do not introduce an automatic age/patch discount or new
+adaptive updater into application behavior based on this architectural hypothesis.
+
+Prepare now: exact patch revision, game/source-known times, pro/public population,
+contemporaneous high-rank qualification, account/hero/role evidence, causal raw
+window counts, completeness and source compatibility. Data provenance and future
+exclusion are correctness requirements, not optional ablations. Whether a valid
+patch feature, a public-match reference or an old-data weighting policy improves
+prediction is an empirical question deferred to the selection stage.
+
+HYPOTHESES, NOT CONCLUSIONS
+H1. Recent same-letter-patch hero statistics improve some professional forecasts.
+H2. High-ranked public games reveal useful hero/meta/player information sooner
+    than the smaller professional population, including verified pro accounts.
+H3. Older patches may retain substantial information about player/team skill,
+    decision-making and some hero interactions despite balance changes.
+H4. Relevance may differ by hero, changed mechanic, model phase and target; one
+    global age discount may be inferior to no discount or contextual treatment.
+H5. Fast feature-statistic updates and slower boosting refits may help new patches,
+    but adaptation can also overfit small samples or react to noise.
+None is a measured Aegis result. Do not assume shared players remove the pub/pro
+domain difference; no claim that every high-ranked player is professional.
+
+CONTROLLED COMPARISONS AFTER FULL BASELINES
+Use one pinned dataset calendar, global chronological series split and common
+eligible evaluation maps/minutes for each comparison. Preserve original/rebuilt
+evidence labels, source masks and all unrelated feature/model settings.
+1. Patch/meta feature-family ablations and semantic consolidation against the
+   full-feature baseline. Record useful subgroup effects, not only overall mean.
+2. Uniform treatment of eligible history versus age-based weighting versus
+   patch-aware weighting. No decay is the legitimate control, not a failed default.
+   Owner explicitly raised sample age weighting as an OPTIONAL experiment, not an
+   implementation request. A possible candidate is exponential decay
+   w_age = exp(-ln(2) * age_days / half_life_days), with half-life selected only on
+   earlier validation folds; no half-life is chosen now. Compute age relative to
+   the relevant training decision cutoff, not today's date for every old fold.
+   Multiply the existing map/series balancing weights and distribute frame weights
+   within that unit; repeated live frames must not acquire independent map weight.
+   Test age and patch effects separately before a justified interaction. Report
+   effective sample support, rare-hero loss and recent-versus-older cohort effects.
+   Keep the uniform-age-weight control and identical held-out maps/minutes.
+3. Long history versus recent windows versus current-revision-only history where
+   enough data exists. Compare on common test rows and disclose differing support.
+4. Professional-only meta, separately qualified high-rank public meta, verified
+   professional-player public history and their combinations. Outcome training
+   targets remain professional by default; direct pub-to-pro target transfer is a
+   separately declared experiment, never silent pooling.
+5. Alternative causal window lengths;7/14/30 days are candidate configurations,
+   not selected optimal constants. Test support/uncertainty signals as features.
+6. If earlier results justify it, compare fixed pooled boosting, statistic-only
+   refresh, controlled refit and a regularized adaptation candidate. Small-sample
+   smoothing/relevance parameters are learned on earlier TRAIN folds only.
+   No implicit online learning or automatic model activation follows.
+
+Do not run the full combinatorial cross-product. Predeclare bounded main effects
+and a small justified interaction set; extend only on validation evidence and
+within an explicitly authorized compute budget. Keep full-set artifacts intact.
+
+PATCH TRANSITION VALIDATION
+Replay several historical patch transitions in chronological order. At every
+decision use only data and labels actually permitted before that cutoff under the
+declared original/reconstructed profile. Never calculate a patch's full-month
+win rate and feed it into its first day's examples. Parameter/feature selection
+uses earlier development transitions; final locked transitions stay untouched.
+Report first-day/early/supported phases by actual elapsed time AND available
+sample counts. A fixed number of elapsed days does not guarantee adequate data.
+
+Evaluate map winner, series winner and PRE/POST/LIVE kills/duration separately.
+For LIVE use fixed same-map landmarks and one80+ group; repeated frames are not
+independent examples. Report equal-strength/strong-team/comeback and sparse hero/
+role cohorts, sample support and appropriate map/series clustered uncertainty.
+Metrics: winner logloss/Brier/calibration/accuracy; totals MAE plus distribution
+scores and interval coverage/width; availability, latency and memory as constraints.
+An apparent aggregate gain cannot excuse a causal violation or widespread loss
+on the agreed priority cohorts. A tiny subgroup gain is not proof without enough
+independent support. Holdout is never reused to tune weights/thresholds.
+
+SELECTION OUTCOMES
+Accept a patch/meta policy only if the declared validation criteria support it.
+Otherwise retain the simpler existing policy and record the result. A feature
+family can help early-patch or equal-strength cases without improving the global
+average; preserve such effects only with reproducible subgroup evidence. No fixed
+number of features, compulsory discount or promised accuracy is prescribed.
+After an accepted reduction, compile dependency masks so unused branches are not
+computed. Keep full feature catalogue and reversible package/version lineage.
+
+RESEARCH CONTEXT, NOT VALIDATION OF OUR PROPOSED DESIGN
+Concept-drift literature distinguishes changing data/target relationships and
+adaptation strategies, including retaining/forgetting historical information.
+It does not establish which policy works for Aegis or which Dota patch matters.
+https://doi.org/10.1145/2523813
+CatBoost's ordered target-statistic/boosting work addresses a particular leakage
+problem; it does not replace chronological/as-of and patch-transition validation.
+https://proceedings.neurips.cc/paper/2018/hash/14491b756b3a51daac41c24863285549-Abstract.html
+
+No application code, source weights, fitted state, provider tasks or model outputs
+were changed by this plan. Training and model activation remain separately gated.

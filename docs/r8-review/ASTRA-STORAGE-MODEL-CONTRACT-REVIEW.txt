@@ -1,0 +1,324 @@
+ASTRA REVIEW OF SOL R7: STORAGE, RESOURCE OWNERSHIP, MODEL CONTRACTS
+26 October 2026. Architecture and static source review only.
+
+Scope and evidence
+Canonical APP = C:/Users/Admin/Documents/Codex/Aegis-local/app.
+Source baseline is PR12, merge85c3b056769cf98f2bedfa233036e56b854201e4,
+reviewed head4fe709dfc2b54e78a6dbdc8df180a5e71f07dbf4, as recorded in the local
+publication receipt. Root handles current remote/Graphify verification separately.
+This review read the26October handoff/report,25October full implementation report,
+schema-identity architecture note and the source locations below. It performed no
+code edits, tests, native execution, provider access, training or activation.
+All file:line citations below are relative to APP unless explicitly noted.
+
+Disposition
+Accept the completed functional/capacity checks for their documented synthetic
+diagnostic scope. Do not reinterpret them as feature-semantic acceptance, successful
+current live issuance, original source availability or model compatibility. The next
+Sol block must close the row/contract distinction and concrete cross-binding gap,
+then implement bounded data factories and hot-path persistence. Enlarging another
+capacity ceiling is not a substitute for those changes.
+
+1. Confirmed missing relation: separately owned schema and vector can be cross-paired
+Files:
+ scripts/steam-live-collector/source-adapter/featureProjectionCompiler.mjs:13-22,
+ 117-132; diagnosticModelInputDelivery.mjs:17-28,45-58;
+ compactFeatureJournal.mjs:204-215,218-237.
+
+The compiler authenticates a schema by exact schema hash. Its private vector record
+authenticates only ordered names and count. The vector descriptor at compiler130
+does not retain its originating schema/context/row binding. Input delivery.borrow
+retains those two authorities independently, then describe() honestly hashes their
+combined content. Therefore an accidentally assembled pair consisting of schema A
+and a genuine private vector B with the same names/count is not rejected solely
+because B came from another context or differently defined columns. A new manifest
+created for this pair also passes the exact-manifest comparison: that comparison
+authenticates the same incorrect composition, rather than its origin.
+
+Static counterexample to implement as a small regression: generate two valid private
+routes with identical column names/count but different teams/hero selectors or units
+and values; call manifestFor with A.schema/A.expectedHash and B.vector; deliver the
+result. The current borrow predicate accepts both private objects. Existing test
+diagnosticModelInputDelivery.r7.test.mjs:19 checks tampered manifest fields and cloned
+JSON, not two genuine but unrelated private objects. This is a source-derived
+counterexample, not an executed failing test or evidence of a public wrong forecast.
+The input port is disabled and explicitly not source-availability authority today.
+
+Required architecture:
+ A. Mint one opaque projection/row capability when the actual producer assembles a
+ validated context and compiler projects it. It binds source context, causal-history
+ context, map/series/side orientation, decision/receipt horizon, component row IDs,
+ ordered vector identity and the set of exact authorized target-schema projections.
+ B. Journal append and model input delivery consume that capability. Do not allow
+ callers to create the relation by combining independently valid objects or by
+ supplying JSON hashes. Separate schema/vector borrowing can remain an internal
+ memory-management primitive; it is not the semantic assembly authority.
+ C. Legitimate same-row multihead reuse remains: one vector may serve winner/kills/
+ duration heads only when that original projected row explicitly authorizes their
+ schemas. Do not disable this optimization by binding a row to exactly one target.
+ D. A stable function-contract hash, described next, does not replace row capability.
+ Two rows of the same model schema are still different observations. A later saved
+ reader may reconstruct an equivalent verified row envelope from pinned bytes and
+ source proof, but parsed JSON alone may not mint its private authority.
+ E. Current diagnostic-only compiler fixtures can keep an explicit compiler-only
+ forensic profile; no source-bound or inference claim follows from it. Make the
+ production-required envelope distinction explicit rather than silently broadening
+ the old input-only receipt.
+
+Acceptance: cross-context private objects, changed units/formula with identical
+names, swapped targets/sides, stale corrected source, expired/released capability
+and cloned capability all refuse; same actual row across authorized heads succeeds.
+Cover error paths before/after awaited persistence and delayed recording, with
+zero leaked leases. Small synthetic regressions first; no model needed.
+
+2. Confirmed scaling blocker: diagnostic instance hash is being used as model identity
+Files:
+ historicalRelationalFeatures.mjs:185-195,369-370;
+ historicalSemanticBindings.mjs:24-43;
+ featureProjectionCompiler.mjs:71-77,105-123;
+ diagnosticModelInputDelivery.mjs:21-28;
+ scripts/feature-registry/pinned-dataset-manifest.mjs:42-54,251-267.
+Exact earlier source explanation is retained in
+ work/sol-r7-resume-20261026/semantics/schema-identity-architecture-note.txt.
+
+Actual bound team/account/hero IDs appear in formulaParameters, while ordered names
+remain slot-based. The full diagnostic schema hash therefore changes when teams or
+players change. This is useful forensic identity and must not be stripped in place.
+It is unsuitable as the sole estimator/column compatibility key. Names hash and
+columnContractSha256 are too weak: they do not bind all formulas/time/source policies.
+
+The manifest has64schemas and300000 aggregate declared columns, not300000 per schema.
+Two different current LIVE map schemas of150553 columns already exceed300000. Even
+one full13 inventory exceeds that sum. The current prep also groups samples/weights
+by exact schemaSha256 (263), so instance-specific schema identities fragment an
+otherwise common estimator and can give one series separate units across variants.
+Keeping training paused is correct; current manifests do not yet solve this.
+
+Required versioned identities (do not silently reinterpret existing v1/v2 hashes):
+ 1. FeatureFunctionContract: ordered definition IDs; exact formula/operator/version,
+ input ports and selector grammar, sides/slot ordering, dtype/units/missing policies,
+ history windows/support, time/as-of rules, phase/profile eligibility, patch rules,
+ dependency types and registry/projection rules. Actual team IDs and actual cutoff
+ instants are bindings to these functions, not separate feature functions.
+ 2. Transformer/model-state binding: exact fitted state/cohort/fold and approved
+ producer implementation/source inventory. A code or formula change is never
+ authorized merely because names match. A migration/equivalence decision is explicit.
+ Causal rolling ratings are evaluated historical state and retain their past-data
+ provenance; algorithm constants belong to the function contract.
+ 3. RowInstanceProvenance: actual series/map/roster/hero/side selectors; source raw
+ hashes/profile/epoch; confirmed source time, observed receipts and decision time;
+ history snapshot/cutoff/proof, actual selected row identities/support/knownAt and
+ transformer-state reference; exact vector/mask hashes and authorized projections.
+ 4. Preserve the current exact diagnostic descriptor/hash as legacy forensic evidence.
+ New storage may store the function contract once plus bounded row bindings, with
+ an explicit independently checked reconstruction/equivalence path for old metadata.
+
+Do not globally delete selector or formulaParameters fields. Each parameter needs
+classification: a window of30days is a function constant, selected team100 is row
+binding, and role-inference method/version is a function rule whose resulting
+current assignment is row evidence. References must be typed: emitted-feature ID,
+source-statistic definition ID, raw input port and learned-state reference cannot
+all masquerade as historyDefinitions strings.
+
+Acceptance matrix: same functions with different teams/heroes/cutoffs => same new
+function contract, different row provenance; changed units/window/formula/source
+meaning/missing policy/selector grammar => different contract or explicit denied
+compatibility. Exact source correction changes row authority even if values match.
+Replay from actual pinned dependencies must match online values/masks and binding.
+
+3. Dataset architecture before any factory or fit
+Files: scripts/feature-registry/pinned-dataset-manifest.mjs:39-93,130-146,207-268.
+
+Keep one immutable global series/linked-component split inventory. Shard row data
+by target/mode, source-availability profile and stable function/state contract;
+do not split map frames or connected series independently. Share that split hash
+between all13 modes. A per-target shard does not become an independent random split.
+
+Replace inline repeated rich metadata/row lists with a versioned bounded manifest
+of pinned schema and row-shard references, counts and hashes. Validate schemas and
+rows pagewise; do not raise the32MiB metadata envelope until it holds the entire
+archive. Keep the current legacy manifest reader and its limits for old artifacts.
+Specify total column capacity per stable decoded contract, then separate finite
+manifest/shard/row counts. A function contract can be deduplicated across rows; the
+actual row provenance still needs exact validation and immutable pins.
+
+Weight equal series, then maps, then selected frames inside the actual estimator's
+stable target/profile/contract cohort. Diagnostic instance hashes must not create
+extra independent weights. Preserve one unit of evidence per series/component for
+uncertainty, and all missing/error/stale ongoing slots in coverage denominators.
+Root has a separate learned-state availability review. Preserve two provenance
+axes: original raw-source observation and feature derivation/original issuance.
+Rebuilt OOF features may legitimately have later wall-clock materialization while
+their TRAIN cohort and event cutoff remain strictly past; label them as replayed
+derived features. An actual originally issued/online prediction instead requires
+its state and prediction to have been available by the decision. The present plan
+already states originalPredictionTimingClaimed:false, so this is a missing explicit
+classification, not proven target leakage. Reject claims of original availability
+laundered through materializedAt, but do not discard valid labelled historical OOF.
+
+Keep float64 values and explicit masks/negative-zero semantics through migration.
+Float32, quantization, dimensional reduction and learned compression are later
+experiments; they are not an excuse to change the present numerical contract.
+
+4. Resource and storage design: preserve finite caps; change work placement
+Files: diagnosticResourceArena.mjs:4-19; compactFeatureJournal.mjs:68-109,139-197,
+ 230-257; persistentArtifactWriter.mjs:14,39-43,103-139,200-209,267-315;
+ proofScopedMapReader.mjs:54-112.
+
+Current owner caps:30GiB conservative aggregate admission,9GiB owned technical tree,
+8GiB explicit shared arena,2GiB factoring work,256MiB encoded schemas/vectors for
+all profiles. Four CPUs,min4GiBfree,finite1200swall,manualSTOP/foreignlocks remain.
+Aggregate launcher admission is not a supervisor for all independent services;
+engineering arena charges are not measured heap guarantees. Keep OS cap evidence.
+Object/batch16MiB,chunk1MiB,cumulative writer root256MiB are different constraints.
+
+Accepted mechanisms on scoped static inspection:
+ - Bounded journal FIFO(max4),64KiB pending descriptors and dequeue-time heavy work.
+ Writes refuse overlap with pending reads; they are not queued as unbounded bundles.
+ - Actual private schema/vector owners retained before asynchronous append work;
+ deferred factoring and final release paths preserve async memory ownership.
+ - Writer serial lane, full root/ledger/inventory start/end fences and bounded
+ readMany/commitMany; marker-last visibility, explicit partial-prefix failures,
+ immutable refs, exact retry semantics and no foreign-file cleanup.
+ - Proof-scoped row cache has immutable-row checks, an explicit128MiB UTF8 ceiling,
+ actual source epoch checks and final full dependency re-scan. Unknown/oversized
+ cases fall back to streaming; they do not declare equivalence without evidence.
+
+No new concrete stale-byte or release defect in those mechanisms was established
+by this static slice. Their actual concurrent/native Windows behavior remains its
+own test boundary. Do not describe this review as proving every possible race.
+
+Hot-path costs remain concrete: final cold LIVE diagnostic boundary250.016s,
+generation36.938s,commit149.625s,read/record62.433s. Commit/read dominate. PersistAsset
+collects the complete encoded output, joins it and creates a Buffer (145-151).
+Cached assets still read/re-hash all immutable committed wire(186-195). Each writer
+batch does whole root/ledger/inventory checks(200-209). These protections explain
+cost but do not qualify live response time.
+
+Optimization order:
+ 1. Separate stable function contracts from row bindings; compile/cache exact shared
+ function blocks once and persist immutable schema once. Persist new vector, small
+ context/provenance and target routes per decision. Reuse identical same-row vectors
+ across heads using the explicit projection relation from section1.
+ 2. Keep bounded single rich IO/decode and exclusive mutations initially. Metadata
+ queue continues to return busy/deadline rather than accumulating large closures.
+ An append/complete-row transaction may use one private verification epoch with
+ actual start/end fences, bounded batches and final manifest-last publication.
+ The token is lexical/private; no public JSON assertion extends verification across
+ unrelated mutation, STOP, lock loss, replacement, close or process restart.
+ 3. Stream compact output into bounded asynchronous chunks instead of keeping all
+ text+Buffer copies when profiling confirms that cost. Refactor encoded-hash
+ accounting without changing byte order/hashes or introducing partial trace visibility.
+ 4. Shared serving/admin owners must not race separate writer leases. The current
+ admin saved-reader deliberately acquires an exclusive store writer lease and
+ appends its epoch fence on open; it is not a parallel read-only filesystem reader.
+ Prefer a read port from the current owning host for the same root. Closed/offline
+ root inspection can use the existing exclusive reader factory. Do not relax native
+ lease semantics merely to make two independent owners open simultaneously.
+ 5. After these changes, measure one warm retained map first. Only then scale the
+ bounded pilot and sustained326 case. Do not infer warm speed from cold results.
+
+Cumulative disk acceptance is separate. The1600-source POST run already occupied
+234214840bytes of256MiB; it does not imply1600-source LIVE or326frames fit. Preflight
+the full dependency/schema/vector/manifest and temporary reservation budget. Use
+explicit pinned segmented roots and immutable catalog references if needed, with
+bounded aggregate disk ownership and restart traversal. No silent root raise,
+unrecorded GC, destructive rewrite or deletion of source evidence. A rejected
+capacity attempt must not publish a usable trace or corrupt a previously valid one.
+
+5. Exact meaning and limits of the13-mode receipt
+Files: r7ActualRetainedDelivery.test.mjs:21-22,31,51-58,78-114;
+ savedDiagnosticReaderFactory.mjs:13-26;
+ artifacts/api-server/src/services/FeatureDiagnosticAdmin.ts:25-61;
+ diagnosticFeatureReadApi.mjs:43-54,65-87.
+
+The receipt fairly covers actual code/filesystem with synthetic inputs. It validates
+saved vector hashes, then sends the still-owned original compiler vector to the
+input-only recording port(test54-56). It does not turn saved JSON back into private
+inference authority. Fourteen variants include the extra PRE-series representation.
+The restart router uses readLiveEligibility:()=>null and late READ_AT(test87-88);
+LIVE asserts unavailable, not successful currently eligible main/detail routing.
+The effective clock is controlled fixture time, not an actual running game clock.
+
+Admin checks load the actual service source, but override the lease provider,
+arena8GiB and journal2GiB work(test91-94). Current standalone reader defaults are
+arena4GiB(savedDiagnosticReaderFactory18) and asset work512MiB(journal68). Therefore
+the pass is not default runtime capacity acceptance. Wire ceiling256MiB was the
+changed default; the other explicit profile knobs remain separate. The test calls
+services directly, not a listening HTTP application or emulator.
+
+SKIP_PILOT=1 explicitly skipped the additional60/90/120s frames and reports null
+metrics; sustained326 and actual Windows locking are false. This decomposition is
+valid for functional coverage. It is not a performance pass. Preserve these facts.
+
+Required focused acceptance before a new full sweep:
+ - One positive current source-qualified LIVE trace through host, journal, router
+ main-series + detail-map and final currentness fence, followed by terminal/STOP/
+ correction/expiry and delayed-IO counterexamples. Currentness must use an advancing
+ controllable clock; freeze only where the scenario expressly models a pause.
+ - Actual configured deployment profile exercised without hidden capacity/lease
+ overrides; defaults fail safely or are deliberately configured from one reviewed
+ resource-policy object. No arbitrary environment-controlled unbounded caps.
+ - Native Windows lease contention/loss/close ownership once under the owned runner;
+ direct service and HTTP request cancellation remain separately labelled evidence.
+ - Cross-private row binding from section1; successful restart reads remain forensic
+ until an actual source-bound rehydration path is intentionally implemented.
+
+6. C++ decision and cleanup
+The current latency breakdown does not justify rewriting the API/server in C++.
+Tree libraries already execute their numeric kernels natively. First remove repeated
+schema construction/serialization/whole-root verification work under the preserved
+proof contracts. Profile the complete affected operation, not an isolated arithmetic
+function. If CPU dominates after that, prototype one exact kernel (canonical hashing/
+compact factoring or indexed historical aggregation), using the existing failed-linker
+receipt as historical evidence. Do one bounded tooling availability check only if
+needed; no repeated installer searches or unscheduled purchases/installations.
+
+Adopt a native path only with identical values/masks/order/hashes and failure behavior,
+correct cancellation/ownership, fixed resource caps, and >=30% complete-operation
+gain in at least three measured pairs after a separate warmup. No usable toolchain
+or <30%gain => retain current implementation and record evidence; no invented speedup.
+Do not rewrite network IO/API boundaries merely because they can be written in C++.
+
+The only reported source cleanup, dangling scripts/package.json hello alias removal,
+is narrow and appropriate. Absence of direct callers is not sufficient to delete
+old model readers, scheduled/CLI entrypoints, format migrations or manual exports.
+Continue a deletion manifest with positive replacement/import/entrypoint evidence;
+deleting features or weights is outside this review and current authorization.
+
+7. Six-hour Sol execution envelope (planning estimates, not completion promises)
+Root should merge this with history/semantic decisions into one plan. Implement
+independent source tracks in parallel; execute every native check serially under
+the existing9/30guard. Do not restart manually stopped tasks or launch training.
+
+0:00-0:20: pin baseline and required counterexamples; define function/row contracts,
+projection capability and source-profile fixtures. Reuse unchanged R7 evidence.
+0:20-1:40: source trackA private row/projection binding; trackB stable definition/
+row binding representation and typed refs; trackC semantic/source fixes from the
+other reviews. No native parallelism. Commit to a stable interface before factories.
+1:40-2:45: bounded versioned dataset manifests/shards using global split inventory,
+weighting and exact learned-state availability rules. No fits. Small negatives first.
+2:45-3:45: cache/persistence placement, same-row vector sharing, shared actual host/
+admin read ownership and explicit resource profile. Preserve durability semantics.
+3:45-4:45: focused cross-binding/currentness/rollback/lease tests, actual warm pilot,
+one affected1600-source capacity scenario only if prior admission/throughput fits.
+4:45-5:30: one evidence-driven optimization or native-kernel comparison if justified;
+otherwise continue genuinely independent missing source/contract work. Run326 only
+when extrapolated wall/memory/disk admission passes; never launch an impossible fit.
+5:30-6:00: consolidate receipts, failures and corrected scopes, review changed files,
+source-only completed-block PR/standing merge, precise handoff and unresolved gates.
+
+Stop gates are local to dependent work, not permission to manufacture acceptance.
+Unresolved source semantics blocks those feature profiles; new row identity missing
+blocks model-input admission; no original availability means reconstruction-only;
+memory/disk/wall preflight refusal prevents that heavy job. If only a native job
+remains, save the exact continuation and yield using authorized periodic follow-up,
+not repeated token-consuming polling. At deadline checkpoint safe boundaries and
+report actual status; unfinished code is not a reviewed completed-block merge.
+
+Final conclusion
+R7 establishes useful diagnostic plumbing and clearer finite ownership, but the
+next block must bind the right row to the right semantics and use stable model
+function identity before scaling datasets. The highest-value acceleration comes
+from sharing invariant contracts and reducing repeated IO while preserving causal
+proof and durable publication. No model quality or training permission is inferred.

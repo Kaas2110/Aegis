@@ -1,0 +1,229 @@
+AEGIS — OPENDOTA SOURCE STUDY AND HISTORICAL/LIVE BRIDGE
+26 October 2026. Astra architecture and source review; no application changes.
+
+DECISION
+Keep OpenDota for completed-match acquisition and replay-derived historical data.
+Keep the new current dynamic decision path on a coherent qualified Steam profile,
+with historical player/hero/team context supplied from the local causal store.
+OpenDota history CAN support live-model training after causal-prefix and measurement
+compatibility checks. It does not have to have been downloaded during the original
+game. Such reconstruction is not proof of original live availability or latency.
+Neither wholesale replacement of OpenDota by Steam WebAPI nor a blind field-name
+substitution is supported. No new provider, replay parser or model was activated.
+
+STUDY SCOPE AND REPRODUCIBLE SOURCES
+Focused primary-source review of ingestion, match assembly, derived metrics, live
+worker, replay collection, blob construction and game dictionaries:
+- odota/core: 86e09304d7775540fd5e22e9a94d930034c4da09.
+- odota/parser: 927adf6bbd1fd321b711f544a5d754bfe75d89a7.
+- odota/dotaconstants: 5c0242df9057848fa2036ca3fafe9f2bd4508163.
+These pins establish repository behavior, not deployed-service build, actual
+archive coverage, live timing or predictive quality. The numeric parse version
+alone is insufficient: Java and JS producers at this pin both declare version22
+while exposing different fields. Unknown historical implementation stays unknown.
+No full-repository completeness claim is made; exact inspected paths and lines
+are recorded in the four companion reports listed at the end.
+
+1. WHAT OPENDOTA ADDS BEYOND A SINGLE STEAM WEBAPI RESPONSE
+Core combines several acquisition stages: basic API results, Game Coordinator
+metadata, replay parsing, archive data, derived metrics and current enrichment.
+The Game Coordinator retriever uses a logged-in Steam client; a WebAPI key alone
+does not instantiate that transport. Rich replay data is reconstructed after the
+game. Reproducing this entire infrastructure locally is a separate undertaking,
+not a consequence of possessing a Steam key.
+
+The public match object merges archive < parsed < GC < API, joining players by
+player_slot. has_parsed and other flags mean that a stage blob exists, not that
+every desired field is present, temporally qualified or originally observable.
+Later refreshes can overwrite blobs. Aegis must keep its own observed versions,
+receipt times, identity corrections and immutable dependency hashes.
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/getMatchBlob.ts#L14-L68
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/retriever.ts#L176-L206
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/insert.ts#L628-L652
+
+2. ECONOMY: RESOLVED MEANINGS, NOT GENERIC ALIASES
+Canonical net worth is CURRENT inventory value plus wallet, can decrease, and is
+the primary current economic measure. This agrees with the owner's clarification.
+Cumulative earnings, current assets, current wallet and income rate are distinct.
+
+In the inspected parser:
+  m_iNetWorth -> entry.networth -> networth_t.
+  m_iTotalEarnedGold -> entry.gold -> gold_t.
+The minute team-advantage routine sums signed entry.gold, so radiant_gold_adv in
+THIS implementation is earned-gold advantage, not net-worth advantage. Root also
+independently read these exact two source regions. Do not retroactively redefine
+all old OpenDota rows without establishing their lineage. Preserve old values and
+weight contracts; source adapters need explicit semantic versions.
+
+Core total_gold is floor(final gold_per_min * final duration / 60), an earnings
+proxy affected by rounding. It cannot recover early GPM or current net worth.
+netWorth / elapsedMinutes is not GPM. This source mapping does not determine the
+meaning of another Steam endpoint's gold or net_gold merely from its name.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/Parse.java#L701-L729
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L469-L505
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L60-L80
+
+3. FIELD-TO-FEATURE DECISION TABLE
+The current map being forecast is distinct from already completed prior maps.
+Prior-map final summaries may become legitimate historical form once available.
+
+Field/group | Source meaning | Decision for Aegis
+times | relative rounded game seconds at retained minute boundaries | validate
+  actual coordinates; latest sample <= cutoff; no future interpolation.
+gold_t | cumulative earned gold | earnings trajectory; never native NW alias.
+networth_t | optional native m_iNetWorth samples | promising historical counterpart
+  to qualified Steam NW; require real presence, alignment and profile comparison.
+xp_t | cumulative earned XP | XP trajectory; not automatic XPM/level replacement.
+lh_t/dn_t | cumulative last hits/denies | prefix farming/pressure trajectories.
+radiant_gold_adv | signed earned-gold sum in inspected parser | qualified earnings
+  lead only; team NW needs ten same-time native NW measurements and valid sides.
+final GPM/XPM/total_gold | final-map income summaries | prior-map history or labels;
+  never substitute for current-map early income.
+level/K/D/A | raw interval counters, not complete public per-minute arrays here |
+  use retained timed raw/Steam states; final scalars cannot supply early levels.
+hero_damage_t/tower_damage_t/camps_stacked_t | optional native minute counters |
+  historical candidate; prove alignment and Steam measurement counterpart.
+hero_healing_t | derived prefix healing with exclusions | keep exact rules;
+  not an automatic alias of a differently defined provider healing counter.
+purchase_log | purchase events, recipes excluded; limited initial synthesis |
+  purchase milestones, not complete current inventory/ownership/power.
+hero_inventory | transient limited-slot collection, omitted from final blob |
+  no claim that the API exposes a full historical inventory timeline.
+buyback_log | occurred buyback event | age/count after event; not current
+  affordability, availability or exact cooldown without qualified rules/state.
+objectives | building deaths, Roshan kills and Aegis events | event-qualified
+  objective history; not arbitrary current HP or complete initial state.
+lane_pos/lane_role/position_est | aggregated lane behavior and inferred role |
+  final early-window inference must not appear before its full dependency horizon.
+obs/sen logs | placement/removal events | historical vision only with complete
+  event/identity rules and a real live counterpart; heatmaps are not current vision.
+ability_uses/item_uses | full-map aggregate uses | previous-map style; not present
+  ultimate cooldown, mana, readiness or item ownership.
+deaths_log/teamfights/pauses | some fields finalized using later events | individual
+  causal-horizon rules or separate online prefix accumulator, not timestamp-only.
+rank_tier/computed_mmr/benchmarks | request-time current enrichment in core |
+  cannot silently describe what was known when an old map occurred.
+patch/hero/item dictionaries | calendar inference and versioned game metadata |
+  use matching rules/units; current dictionary is not historical truth for all maps.
+
+4. A MATERIAL ALIGNMENT TRAP
+times/gold_t/xp_t/lh_t/dn_t append together. Optional networth_t and some other
+arrays append only when a property is non-null. A partially absent optional field
+can therefore produce a shorter array without its own timestamps. Blindly pairing
+its first value with times[0] invents chronology. Reject ambiguous alignment or
+use an explicitly timed retained source; do not pad, forward-infer or fill with
+final values. Equal lengths alone do not prove every other identity/clock rule.
+Seconds-level interval objects are consumed internally and discarded from the
+public blob. Parser access to a field is not proof the API preserves its timeline.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1387-L1497
+
+5. SPECIFIC FUTURE-INFORMATION COUNTEREXAMPLES
+- Death duration is attached to death time but requires a later respawn. Some
+  death/gold/reincarnation classifications use later seconds as well.
+- A finalized teamfight includes its eventual end, damage/XP outcome and grouping
+  based on a gap after the last kill. At an earlier frame that result is unknown.
+- Completed pause duration refers to pause start but is emitted at unpause.
+- position_est uses farm at minutes10-12 and lane data; it is not a draft/5-minute
+  position label. lane_role and hero Carry tags are not player positions1-5.
+- Current profile rank/MMR and request-time benchmark percentiles may reflect
+  later games. A historical response is not necessarily a historical snapshot.
+- Comeback/throw/stomp/loss use the full advantage curve and final winner; current
+  online momentum requires its own prefix-only formula.
+
+These are upstream source risks, not a claim that Aegis currently uses every such
+field incorrectly. Technical regressions must append later events and verify
+already-admissible earlier feature rows remain unchanged; explicit later revisions
+remain separate rather than backdating correction knowledge.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L562-L774
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1589-L1719
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L254-L335
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/buildMatch.ts#L119-L200
+
+6. ROSHAN AND AEGIS: USEFUL POSITIVE EVIDENCE
+The parser records Roshan kill time/team and separate Aegis pickup, explicit theft
+and denial with recipient slot. Keep these as different events: the Roshan-killing
+team need not possess Aegis, and pickup can happen later. Build last-confirmed-death
+age, kill count/team, pickup age/recipient and explicit theft/denial evidence.
+Where an explicit theft event exists, use its source-qualified meaning; do not
+require an invented reconstructed killer identity. Where theft is inferred from
+kill/pickup sides, preserve that different derivation and its prerequisites.
+
+No exact next-spawn timer is emitted by this inspected Java blob path. A confirmed
+death plus qualified patch rules supports a respawn interval, not an observed exact
+second. Alive status can remain unknown inside/after that window without observation.
+Steam timer semantics still require independent qualification. Aegis item rules
+do not prove possession or pickup time. These features can interact with prior-map
+team closing pace/late tendency, hero stage and live advantage; they do not establish
+that the earlier ~5.7-minute total-duration error was caused by Roshan.
+The owner explicitly extends this context to winners, not just totals. Current
+qualified Aegis state belongs to map-win and whole-series LIVE heads as well as
+kills/duration. PRE/POST/BETWEEN can use prior-map control/conversion history;
+they cannot know future current-map possession. Context includes holder identity,
+hero/stage, pickup age, qualified remaining life and coherent economic/draft state.
+Do not impose a constant probability bonus: conversion into pressure/objectives
+depends on the situation, and possession may be wasted. Historical conversion
+statistics describe completed prior episodes under explicit windows/support;
+they are not proof of causation and do not admit future current-episode outcomes.
+https://github.com/odota/parser/blob/927adf6bbd1fd321b711f544a5d754bfe75d89a7/src/main/java/opendota/CreateParsedDataBlob.java#L1250-L1279
+
+7. DICTIONARIES AND DOCUMENTATION NEED VERSIONED SEMANTICS TOO
+Pinned dotaconstants patch.json contains61 base patches, ending7.41, without letter
+revisions. This is not current Valve patch verification. Keep Aegis's separate
+letter-aware observed/inferred/unknown patch contract and boundary uncertainty.
+Today's hero attributes, item costs and mechanics cannot be applied to all old maps.
+
+Two concrete naming/description mismatches warrant regression coverage:
+- dotaconstants base_attack_time is assigned BaseAttackSpeed, whereas attack_rate
+  is assigned AttackRate. Do not assume base_attack_time is seconds by its name.
+- core purchase_time description says last purchase; compute.ts sums purchase
+  times per item. first_purchase_time is a separate statistic.
+The old fixed lane-efficiency denominator4948 is not a modern hero/patch-specific
+expected-farm model. Build a separately named historical empirical reference.
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/build/patch.json
+https://github.com/odota/dotaconstants/blob/5c0242df9057848fa2036ca3fafe9f2bd4508163/tasks/updateconstants.ts#L1938-L2009
+https://github.com/odota/core/blob/86e09304d7775540fd5e22e9a94d930034c4da09/svc/util/compute.ts#L159-L204
+
+8. PRACTICAL MODEL FEATURES THIS ENABLES
+Preserve the complete agreed feature inventory; no importance pruning now.
+Qualified historical trajectories support hero x minute economic expectation,
+current native NW residual/z-score with support, player-hero form and opponent
+comparisons, team economy concentration and stage-specific closing behavior.
+Prefix trajectory shape can distinguish income acceleration from current asset
+advantage; these are useful separate factors rather than one fabricated strength.
+Prior-map Roshan-to-end timing, recovery after map loss and hero/style-specific
+late-game behavior may inform LIVE and series heads when historical facts are causal.
+Whether these improve prediction is a later experiment, not a result of this study.
+
+9. BOUNDED SOL IMPLEMENTATION AND ACCEPTANCE (R8.6A)
+1. Inventory ALREADY retained data by method/stage/build-known-or-unknown, fields,
+   time axis, identities, corrections and original availability evidence. No refresh.
+2. Create a per-port ledger: raw path -> physical measure -> clock/horizon ->
+   canonical feature -> vector index/mask -> restored row -> model input contract.
+3. Separate earned gold, wallet, native NW and opaque fields. Trace actual old
+   gold-lead contracts before any source migration; never reuse weights silently.
+4. Validate array alignment and full causal dependency horizons. Add the specific
+   counterexamples above; keep original observation and retrospective reconstruction
+   as separate axes from originally issued and replayed features.
+5. Compare retained same-map/player/time Steam and OpenDota observations where
+   available, with bounded declared skew and no future interpolation. Correlation
+   is not equivalence. Report signed differences, missingness and event strata.
+6. Assign exact equivalent / explicit causal conversion / distinct quantity /
+   historical-only / unavailable to each port. Source coverage denominators must
+   include failed eligible polls; paired successful replay samples do not prove95%.
+7. Trace one qualified real example end to end where evidence permits, plus negative
+   earned-gold-as-NW and future-dependent event cases. Missing paired corpus is a
+   specific evidence gate, not permission for guesses or new provider acquisition.
+8. Return this mapping with all13 routing/semantics receipts before training.
+
+No authenticated match request, parse-job submission, replay download, builder,
+library install, model fit or app change occurred in this OpenDota study. Upstream
+MIT code reuse later requires retaining notices; no code was transplanted here.
+The related earlier Steam-doc review separately records one inaccessible public
+datafeed access attempt. No claim of zero endpoint attempts across both reviews.
+
+DETAILED SUPPORTING REPORTS (ENGLISH)
+work/astra-r7-review-20261026/source-doc-research/opendota-core-deep.txt
+work/astra-r7-review-20261026/source-doc-research/opendota-parser-deep.txt
+work/astra-r7-review-20261026/source-doc-research/opendota-availability-deep.txt
+work/astra-r7-review-20261026/source-doc-research/opendota-constants-deep.txt
+Portable mirrors and source/review mappings: APP/docs/r8-review/README.txt.

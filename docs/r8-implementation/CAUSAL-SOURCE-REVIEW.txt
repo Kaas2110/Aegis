@@ -1,0 +1,160 @@
+R8 INDEPENDENT FINAL CONTRACT REVIEW — 26 October 2026
+Reviewer: child track A. Static review only; no native execution, providers or fits.
+
+Scope and conclusion
+--------------------
+Reviewed the changed A authority/state seams, C private row/function/input seams,
+root resource/bootstrap and bounded dataset/coverage seams, plus exact root21 and
+real retained GLG/RT evidence. This is a scoped review, not a claim to have reviewed
+all289 staged paths. Exact source hashes are in FINAL-REVIEWED-SOURCE-HASHES.json.
+No new gross causal leakage or source/model promotion was found in this scope.
+The code preserves the distinction between byte/private-row correctness, source
+meaning/availability, original issuance, runtime currentness and model quality.
+The remaining blockers below are substantive; a complete feature/training gate
+must NOT be inferred from zero declaration gaps or generalized function hashes.
+Root's actual retained-delivery/coverage23 run was pending when this note was made.
+This note does not extend root21 evidence to23 or to subsequent source changes.
+
+Exact root21 evidence
+---------------------
+Receipt: work/sol-r8-20261026/reports/r8-actual13-semantics-21/0.json
+File SHA256 bb464b14bb52c717211b44cc44bb0769f49bc3c61158d626f1709a1b386a2396.
+Its internal contentHash is7cb6b2a3438e8d4783b68560cf402942505469b3b863b134353e39241a950aaa;
+these hashes have different scopes and are not interchangeable.
+12 logical targets,13 target/modes,13 schemas;934446 definition occurrences.
+All13 typed closures complete, declarationGapCount0, function generalized=true
+and unclassifiedDefinitionCount0. Semantic identity complete890518; unresolved
+43928, exactly10982 in each of four LIVE heads; other nine heads have0.
+LIVE unresolved breakdown per head:
+L02 wealth500; L06 hero-minute residuals500; L11 life/respawn250;
+L12 ability readiness500; L14 interactions8232; L15 buyback500; L16 geometry500.
+Examples identify native_gold, respawn_timer_raw, ultimate_state_raw,
+buyback_cooldown_raw and position_x_raw. This is broader than opaque gold alone.
+All these examples remain unverified_native_semantics/ineligible, including their
+typed descendants. Semantic completion is not certified merely by declaring edges.
+The receipt explicitly retains sourceAvailabilityAttested=false,
+prospectiveCoverageAttested=false, semanticAcceptance=false,
+fullFeatureGateComplete=false, training=false, serving=false and
+modelQualityEvaluated=false. Inputs are synthetic; vectors use the actual
+canonical producer. Coverage rows are single synthetic rows, realRows0, with
+every column nonqualified_source. Neither constant values nor missing features
+in one fixture estimate support in actual matches. See machine blocker table.
+
+Authority/causality decisions checked
+------------------------------------
+1. retainedFeaturePipeline admits a newest immutable receipt head independently
+   of per-map classification. Pending newer work immediately prevents old current
+   authority. Classification names only executing receipt, not a queued head.
+   Non200/empty/missing-map gaps retain the last qualified observation/trace and
+   its ORIGINAL300-second deadline. They do not generate new vectors or renew
+   freshness. Integrity, terminal, identity and manual STOP remain barriers.
+2. steamEligibleState separates HTTP receipt, qualified state receipt, clock
+   progress and read horizon. Repeated/late packets do not renew lastConfirmedAt.
+   Source-gap retention does not waive the separate180-second progression lease.
+   Confirmed pause capability remains unavailable for this profile; no fabricated
+   pause is introduced from repeated clocks. Event-to-app latency stays unknown.
+3. Static expected authority is derived from actual private frozen history proof,
+   including separate active target binding. The host callback must independently
+   select the same authority at entry and after IO. A null or old unbound callback
+   cannot claim currentAuthorityVerified. Released/changed proof and STOP fail
+   closed; forensic committed traces do not become current merely by existence.
+4. Compiler schema/vector relations are private same-row capabilities. Delivery
+   and compact restore require that relation, not two separately held objects.
+   Restored compact values require an exact regenerated private witness; disk
+   hashes alone do not mint source authority. Diagnostic delivery returns no
+   model output and records only bounded input pages.
+5. Feature function IDs separate classified selector grammar from row parameter
+   bindings and source compatibility. Unknown parameters block generalization.
+   A content/function hash is not an availability proof. Root21 shows zero unknown
+   classifications only for its exact producer/source inventory.
+6. Retained native historical selection replays original raw bytes, excludes the
+   target map, selects completed prior maps from the frozen history view, compares
+   exact outcome/duration/roster facts and uses field-knownAt fences. Historical
+   phase-absence annotations are validation-only, separately pinned and do not
+   rewrite raw phases or transport receipts. No OpenDota HTTP occurs in this path.
+7. Bounded dataset shards share one owned chronological series split inventory.
+   Actual pinned row/function page bytes are checked; labels/features cannot share
+   pins across the shard in either arrival order. They explicitly still require
+   actual private row/source proof and label/fold lineage before training.
+   Prepared sample weights group stable estimator/profile/role/series, then map,
+   then samples, preserving child OOF lineage. No fitting or default decay runs.
+8. Projected-row coverage refuses caller original-issuance strings. Every column
+   remains sourceQualified=false until a separately reviewed source adapter exists.
+   Exports bind supplied descriptors, exact column pages and readback pins while
+   maintaining byte-verification/private-row/source axes. The directory ownership
+   corrections F1/F2/F3 were reviewed separately in COVERAGE-EXPORT-REVIEW.txt.
+   Cooperative stale-owner checks are NOT an atomic native Windows lease: the
+   check/open/unlink TOCTOU limitation remains explicitly documented.
+9. Bootstrap passes one explicit resource configuration/arena through producer,
+   compiler, host, journal and borrowed saved readers. Creating ports starts no
+   listener/provider/model. This does not supervise unrelated processes or prove
+   project-wide measured RSS; per-job native measurements remain separate.
+
+Source coverage and readiness blockers
+--------------------------------------
+The machine table REMAINING-FAMILY-SOURCE-BLOCKERS-20261026.json separates:
+  a actual unverified emitted operands;
+  b genuinely missing qualified source fields/populations;
+  c implemented preparation ports not yet wired into vectors;
+  d composition, labels, diagnostics and presentation that should not be forced
+    into every shared outcome vector just to make family counts look complete.
+MissingEligibleFamilyIds is an audit signal, not proof that every listed family
+is a missing numeric predictor. All79 families/14 legacy dispositions stay in scope.
+
+Real GLG inventory12:467 verified captures,3 original no-response receipts,
+8619 states/401 maps, receipt span19Oct20:58:08.183Z–20Oct15:39:59.856Z.
+All8619 have absent phase. Original raw/old normalization are verified, current
+dynamic projections are reconstructed; no originally-issued forecast is proven.
+8176 states have complete ten-player NW/GPM/XPM/level,8057 complete account IDs,
+6413 complete hero IDs,237 six observed item slots on all ten players,8213 literal
+Roshan timer. These are PRESENCE counts, not phase/as-of/source95 acceptance.
+Six slots are not full inventory; literal timer is not proved Roshan alive state.
+
+Pinned RT evidence:14 existing W raw bodies,130992 bytes,9 maps/140 player rows;
+8 explicit state5 bodies cover3 maps. Literal GPM/XPM0/140; items arrays100/140;
+13/14 bodies declare delta_frame=true. No reviewed delta assembly/current R8 RT
+profile exists. Do not combine RT items/NW with differently timed GLG GPM by map ID.
+Current GLG normalizer does not admit RT schema. No source switch was activated.
+
+Genuine retained source -> prior-native view -> vector example
+-----------------------------------------------------------
+NOT demonstrated by synthetic root21 or the raw inventory. The current GLG
+progression capability can be derived by replaying consecutive real committed
+captures at their original horizons, without changing absent phase. However,
+retainedNativeHistoryView's entry contract has observation/raw/priorMap/profile-
+review/alignment pins, not a current progressionProof port. Its as-of evaluator
+requires either explicit phase5 or an independently host-pinned real profile
+review plus per-observation historical alignment and exact completed-prior facts.
+No genuine bound prior fact/review/alignment artifact was established in A.
+Therefore a current progression token cannot be transplanted into that history
+view or used as proof that a completed prior map's facts were known at cutoff.
+
+Precise minimal continuation, without providers:
+  - Choose ONE actual completed prior map from the existing sealed GLG corpus.
+  - Supply already-retained authoritative outcome/duration/team/hero/player facts
+    with explicit knownAt receipts and exact frozen reference-corpus version.
+  - Pin the approved GLG phase-absence review independently in host policy; bind
+    a validation-only historical alignment to exact original observation/raw/fact
+    pins. Keep annotation knownAt separate from original transport availability.
+  - Intake original receipt/raw/normalization through the durable companion;
+    materialize native history against a different target's actual frozen view.
+  - Verify selected count>0 and exact match binding, then generate one disabled
+    diagnostic target vector and label provenance reconstructed/replayed-derived.
+  - Root runs this serially under the owned guard. A partial/raw-only positive or
+    a synthetic facts replacement is not the requested genuine full-chain example.
+An alternative progression-backed PRIOR-history entry would be a new reviewed
+interface/policy, not a caller flag or silent relaxation of the existing gate.
+
+Calendar correction and remaining review
+----------------------------------------
+ENRICHMENT-COVERAGE.json now states90 days is rolling-statistic warmup only.
+chronologicalResultRatings replays all admitted events from a declared genesis;
+it requires a pinned genesis/checkpoint and intervening events, not a90-day reset.
+The saved20October experimental calendar is historical evidence only. No new R8
+training period, independent holdout, full-period inventory or active backfill
+queue has been established. Provider budgets remain unchanged; no calls executed.
+
+Astra should review seven-family physical semantics, the GLG-vs-RT profile choice
+and honest missing modalities, the real prior-history proof seam, family mapping
+versus composition/presentation, and cumulative rating genesis. Then root can
+assign concrete source/data work. No new model training is authorized by this note.

@@ -22,6 +22,7 @@ function heroes(x){
  return [...x].sort((a,b)=>a-b);
 }
 function frozen(x){if(x&&typeof x==='object'){Object.values(x).forEach(frozen);Object.freeze(x);}return x;}
+function parameterClassification(parameters){const keys=Object.keys(parameters);if(keys.some(key=>!['templateId','universalPriorSlots','operator','draftDependent'].includes(key)))fail('unclassified_function_parameter');return{contract:'aegis.feature-parameter-classification.v1',functionParameters:parameters,rowParameters:{},classifiedKeys:keys,unclassifiedKeys:[]};}
 export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,currentMapNumber=null,currentDraft=null,currentMapSides=null}={}){
  const data=pin(seriesInput),decision=time(decisionAt,'decision_time');
  if(data?.contract!=='aegis.series-map-receipts.v1'||!sid(data.seriesId)||![1,3,5].includes(data.bestOf)||!id(data.team1Id)||!id(data.team2Id)||data.team1Id===data.team2Id||!Array.isArray(data.previousMaps)||data.previousMaps.length>data.bestOf)fail('identity_format');
@@ -69,7 +70,8 @@ export function produceSeriesContext({seriesInput,decisionAt,currentMapId=null,c
   const inputBindings=[{normalizedField:'seriesInput.{seriesId,bestOf,team1Id,team2Id,completeThroughMapNumber,previousMaps}',rawField:'pinned aegis.series-map-receipts.v1 JSON identity and complete previousMaps records',sourceProfile:'aegis.series-map-receipts.v1',sourceKind:'retained_versioned_series_receipt',units:'structured identity/outcome/duration/kills/draft records',availabilityPolicy:'verified pinned bytes; all dependency availableAt <= decision; byte pin is not original source authenticity'}];
   if(draftDependent)inputBindings.push({normalizedField:'currentDraft.{team1Heroes,team2Heroes}',rawField:'received current draft binding for the same series/map and nominal teams',sourceProfile:'host_bound_current_series_draft',sourceKind:'current_draft_identity',units:'nominal_hero_ids',availabilityPolicy:'currentDraft.availableAt <= decision, no earlier than last prior map end'});
   if(inputScopes.includes('current_identity'))inputBindings.push({normalizedField:'currentMapSides.{radiantTeamId,direTeamId}',rawField:'received same series/current map nominal-team side binding',sourceProfile:'host_bound_current_map_sides',sourceKind:'current_map_identity',units:'nominal_team_ids',availabilityPolicy:'currentMapSides.availableAt <= decision, no earlier than last prior map end'});
-  definitions.push({name:full,familyId,formula,formulaVersion:'series-causal.v2',units,inputScopes,inputFields:inputBindings.map(x=>x.normalizedField),historyDefinitions:[],knownAt:draftDependent?(draft?.availableAt??null):data.availableAt,...bindFeatureSemanticTemplate(seriesSemantics,{inputBindings,formulaParameters:{operator:name,draftDependent},minimumSupport:null}),...metadata});
+  const semanticMetadata=bindFeatureSemanticTemplate(seriesSemantics,{inputBindings,formulaParameters:{operator:name,draftDependent},minimumSupport:null});
+  definitions.push({name:full,familyId,formula,formulaVersion:'series-causal.v2',units,inputScopes,inputFields:inputBindings.map(x=>x.normalizedField),historyDefinitions:[],knownAt:draftDependent?(draft?.availableAt??null):data.availableAt,...semanticMetadata,...metadata,parameterClassification:parameterClassification(semanticMetadata.formulaParameters),dependencyRefs:[...inputBindings.map(port=>({kind:'input',port})),{kind:'formulaTemplate',templateId:seriesSemantics.templateId}]});
  };
  add('best_of',data.bestOf,'Q01','declared series format');
  add('wins_needed',needed,'Q01','(bestOf+1)/2');

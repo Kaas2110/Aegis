@@ -9,9 +9,12 @@ export const FACTS_CONTRACT='aegis.prior-map-facts.v1';
 export const NATIVE_CONTRACT='aegis.pinned-native-economy-observations.v1';
 const DAY=86400n*1000000000n,MAX_BYTES=64*1024*1024,MAX_MAPS=100000,MAX_FRAMES=20000;
 const PROFILE='steam.GetLiveLeagueGames.v1.scoreboard';
-const METRICS={native_nw:'netWorth',native_gpm:'goldPerMinute',native_xpm:'experiencePerMinute'};
-const SOURCE_FIELDS={native_nw:'net_worth',native_gpm:'gold_per_min',native_xpm:'xp_per_min'};
-const UNITS={native_nw:'gold',native_gpm:'gold_per_minute',native_xpm:'experience_per_minute'};
+export const NATIVE_REFERENCE_METRICS=Object.freeze({native_nw:'netWorth',native_gpm:'goldPerMinute',native_xpm:'experiencePerMinute',native_level:'level'});
+export const NATIVE_LEVEL_REFERENCE_DEFINITION='aegis.native_steam_hero_preceding_minute_level_mean_sample_sd_90d.v2';
+export const NATIVE_CLOSING_REFERENCE_DEFINITION='aegis.prior_native_team_landmark_lead_closing_90d.v1';
+const METRICS=NATIVE_REFERENCE_METRICS;
+const SOURCE_FIELDS={native_nw:'net_worth',native_gpm:'gold_per_min',native_xpm:'xp_per_min',native_level:'level'};
+const UNITS={native_nw:'gold',native_gpm:'gold_per_minute',native_xpm:'experience_per_minute',native_level:'level'};
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
 const positiveId=x=>typeof x==='string'&&/^[1-9]\d{0,19}$/.test(x);
@@ -98,6 +101,27 @@ function statistics(rows,{minimumSupport,definition,windowDays,units,value}){
  return result;
 }
 function latestInstants(rows){let latest=null,text=null;for(const row of rows){if(latest===null||row.at>latest){latest=row.at;text=row.iso;}}return text;}
+/** S05 exact approved risk sets. Only already replay-qualified PRIOR frames may
+ * enter; a missing duration receipt is not borrowed from an outcome timestamp. */
+function closingLandmarks({maps,frames,roster,known,minimumSupport,nativeProofPolicy,audit,use}){
+ const threshold=Math.max(5,minimumSupport),out=[],byMap=new Map();for(const frame of frames){if(!byMap.has(frame.map.matchId))byMap.set(frame.map.matchId,[]);byMap.get(frame.map.matchId).push(frame);}
+ const quantile=(xs,q)=>{const sorted=[...xs].sort((a,b)=>a-b),at=(sorted.length-1)*q,lo=Math.floor(at),hi=Math.ceil(at);return sorted.length?sorted[lo]+(sorted[hi]-sorted[lo])*(at-lo):null;};
+ for(const side of ['radiant','dire']){const teamId=roster.find(p=>p.side===side)?.teamId??null;
+  for(const landmarkSeconds of [600,1200,1800])for(const condition of ['lead_at_least_1000','deficit_at_most_minus_1000']){const rows=[];let missingDurationReceipts=0,missingAnchors=0;
+   if(nativeProofPolicy==='raw_replay_required'&&teamId!==null)for(const map of maps){const ownSide=map.radiantTeamId===teamId?'radiant':map.direTeamId===teamId?'dire':null;if(!ownSide||map.durationSeconds<=landmarkSeconds)continue;
+    const durationAt=instantNs(map.durationKnownAt),field=map.fieldAvailability?.['/duration'];
+    if(durationAt===null||durationAt>known||durationAt<map.ended||field&&(field.status!=='observed'||instantNs(field.knownAt)!==durationAt)){missingDurationReceipts++;continue;}
+    const candidates=(byMap.get(map.matchId)??[]).filter(frame=>frame.clock<=landmarkSeconds&&landmarkSeconds-frame.clock<=30).sort((a,b)=>b.clock-a.clock||(a.at>b.at?-1:a.at<b.at?1:a.x.observationId.localeCompare(b.x.observationId))),frame=candidates[0];if(!frame){missingAnchors++;continue;}
+    const sums={};for(const orientation of ['radiant','dire']){const ps=frame.players.filter(p=>p.identity.side===orientation),values=ps.map(p=>p.netWorth?.missing===false&&p.netWorth.sourceField==='net_worth'&&finite(p.netWorth.value)&&p.netWorth.value>=0?p.netWorth.value:null);sums[orientation]=ps.length===5&&values.every(finite)?values.reduce((a,b)=>a+b,0):null;}
+    if(!finite(sums.radiant)||!finite(sums.dire))continue;const lead=(sums.radiant-sums.dire)*(ownSide==='radiant'?1:-1);if(condition==='lead_at_least_1000'?lead<1000:lead>-1000)continue;
+    const dependencyAt=latestInstants([...frame.dependencies,{at:durationAt,iso:map.durationKnownAt}]);rows.push({map,frame,lead,remaining:map.durationSeconds-landmarkSeconds,anchorLag:landmarkSeconds-frame.clock,won:map.radiantWon===(ownSide==='radiant'),dependencyAt});use(map);
+   }
+   rows.sort((a,b)=>byId(a.map,b.map));const count=rows.length,qualified=nativeProofPolicy==='raw_replay_required'&&teamId!==null,values=rows.map(row=>row.remaining),mean=count?values.reduce((a,b)=>a+b,0)/count:null,sd=count>1?Math.sqrt(values.reduce((sum,v)=>sum+(v-mean)**2,0)/(count-1)):null,supported=qualified&&count>=threshold;
+   out.push({definition:NATIVE_CLOSING_REFERENCE_DEFINITION,side,teamId,landmarkSeconds,condition,thresholdNativeNetWorth:condition==='lead_at_least_1000'?1000:-1000,windowDays:90,minimumSupport:threshold,supportMaps:count,cohortQualified:qualified,availabilityBasis:'explicit_prior_duration_receipt_and_raw_replayed_native_frame',reason:!qualified?'qualified_raw_native_proof_and_current_team_required':count<threshold?'below_support':null,values:{supportMaps:qualified?count:null,winFraction:supported?rows.reduce((n,row)=>n+Number(row.won),0)/count:null,meanRemainingDurationSeconds:supported?mean:null,remainingDurationSampleSdSeconds:supported&&finite(sd)?sd:null,remainingDurationP25Seconds:supported?quantile(values,.25):null,remainingDurationMedianSeconds:supported?quantile(values,.5):null,remainingDurationP75Seconds:supported?quantile(values,.75):null,meanAnchorLagSeconds:supported?rows.reduce((n,row)=>n+row.anchorLag,0)/count:null},latestHistoryAvailabilityAt:rows.length?latestInstants(rows.map(row=>({at:instantNs(row.dependencyAt),iso:row.dependencyAt}))):null,sourceObservations:rows.map(row=>({matchId:row.map.matchId,observationId:row.frame.x.observationId,rawSha256:row.frame.x.source.capture.rawSha256,knownAt:row.frame.x.source.capture.receivedAt,outcomeKnownAt:row.map.outcomeKnownAt,durationKnownAt:row.map.durationKnownAt,playersKnownAt:row.map.players.length?row.map.playersKnownAt:null,gameClockSeconds:row.frame.clock,anchorLagSeconds:row.anchorLag,ownNativeNetWorthLead:row.lead,remainingDurationFromLandmarkSeconds:row.remaining,dependencyKnownAt:row.dependencyAt})),audit:{missingDurationReceipts,missingAnchors,population:'provided_qualified_prior_maps_not_global',noCurrentMapOutcome:true}});
+  }
+ }
+ audit.closingLandmarkReferences=out.length;audit.closingLandmarkSupportedReferences=out.filter(ref=>ref.supportMaps>=ref.minimumSupport).length;return out;
+}
 /** Structural qualification of a distinct bounded retained-response population.
  * The source-envelope verifier separately replays actual receipt/version bytes;
  * this function never converts scope metadata into provider authentication. */
@@ -190,14 +214,15 @@ export function calculateHistoryCore({target,known,roster,facts,native,roleProof
   const mean=rows.reduce((s,r)=>s+r.value,0)/n,scale=Math.sqrt(rows.reduce((s,r)=>s+(r.value-mean)**2,0)/(n-1));
   if(!finite(scale)||scale<=0){count(audit,'referenceGroupsZeroVariance');continue;}
   const first=rows[0],latestNative=latestInstants(rows.map(r=>({at:r.f.at,iso:r.f.x.source.capture.receivedAt}))),latest=latestInstants(rows.flatMap(r=>r.f.dependencies));rows.forEach(r=>use(r.f.map));
-  references.push({heroId:first.p.identity.heroId,metric:first.metric,minute:first.f.minute,mean,scale,supportMaps:n,minimumSupport,windowDays:90,units:UNITS[first.metric],sourceProfile:PROFILE,metricSourceField:SOURCE_FIELDS[first.metric],definition:'aegis.native_steam_hero_preceding_minute_mean_sample_sd_90d.v1',latestNativeReceiptAt:latestNative,latestHistoryAvailabilityAt:latest,evidenceRef:`${native.ref}#hero/${first.p.identity.heroId}/minute/${first.f.minute}/${first.metric}`,sourceObservations:rows.map(r=>({matchId:r.f.map.matchId,observationId:r.f.x.observationId,rawSha256:r.f.x.source.capture.rawSha256,knownAt:r.f.x.source.capture.receivedAt,gameClockSeconds:r.f.clock,admissionOutcomeKnownAt:r.f.map.outcomeKnownAt,admissionRosterKnownAt:r.f.map.players.length?r.f.map.playersKnownAt:null}))});
+  references.push({heroId:first.p.identity.heroId,metric:first.metric,minute:first.f.minute,mean,scale,supportMaps:n,minimumSupport,windowDays:90,units:UNITS[first.metric],sourceProfile:PROFILE,metricSourceField:SOURCE_FIELDS[first.metric],definition:first.metric==='native_level'?NATIVE_LEVEL_REFERENCE_DEFINITION:'aegis.native_steam_hero_preceding_minute_mean_sample_sd_90d.v1',latestNativeReceiptAt:latestNative,latestHistoryAvailabilityAt:latest,evidenceRef:`${native.ref}#hero/${first.p.identity.heroId}/minute/${first.f.minute}/${first.metric}`,sourceObservations:rows.map(r=>({matchId:r.f.map.matchId,observationId:r.f.x.observationId,rawSha256:r.f.x.source.capture.rawSha256,knownAt:r.f.x.source.capture.receivedAt,gameClockSeconds:r.f.clock,admissionOutcomeKnownAt:r.f.map.outcomeKnownAt,admissionRosterKnownAt:r.f.map.players.length?r.f.map.playersKnownAt:null}))});
  }
  references.sort((a,b)=>a.heroId-b.heroId||a.minute-b.minute||a.metric.localeCompare(b.metric,'en'));
  const acceptedRoles=[];for(const r of roleProofs){const at=instantNs(r?.knownAt);if(!object(r)||!roster.some(p=>identity(p,r))||!Number.isInteger(r.role)||r.role<1||r.role>5||r.confirmed!==true||!proof(r.evidenceRef)||at===null||at>known){count(audit,'roleProofRejected');continue;}acceptedRoles.push({...r,heroId:Number(r.heroId)});}
  const duplicateRoleKeys=new Set();for(const r of acceptedRoles)if(acceptedRoles.filter(x=>x.side===r.side&&x.role===r.role||x.accountId===r.accountId).length>1)duplicateRoleKeys.add(r.accountId);
  const roles=acceptedRoles.filter(r=>!duplicateRoleKeys.has(r.accountId));audit.rolesRejectedAmbiguous=acceptedRoles.length-roles.length;
+ const closingLandmarkReferences=closingLandmarks({maps,frames,roster,known,minimumSupport,nativeProofPolicy,audit,use});
  if(!used.size&&!emptyRetained)return {status:'blocked',reason:'no_history_for_target_roster_or_heroes'};
  const sourceMatches=[...used.values()].sort(byId).map(m=>({matchId:m.matchId,endedAt:m.endedAt,outcomeKnownAt:m.outcomeKnownAt,evidenceRef:m.evidenceRef,sourceFactsSha256:facts.pin.sha256,sourceRowIndex:m.index}));
  audit.sourceMatches=sourceMatches.length;audit.nativeFramesAdmitted=frames.length;audit.nativeMapHeroMinuteSelected=selected.size;audit.heroMinuteReferenceGroups=references.length;audit.profileValuesPresent=players.reduce((n,p)=>n+Object.values(p.values).filter(finite).length,0);audit.profiles=players.length;
- return{status:'calculated',players,roles,references,sourceMatches,heroCohort,usedMapRecords:[...used.values()].sort(byId),nativeAlignmentBindings:[...aligned.values()].filter(x=>x.basis==='phase_absent_reviewed_profile'),nativeEvidenceBindings:[...aligned.values()]};
+ return{status:'calculated',players,roles,references,closingLandmarkReferences,sourceMatches,heroCohort,usedMapRecords:[...used.values()].sort(byId),nativeAlignmentBindings:[...aligned.values()].filter(x=>x.basis==='phase_absent_reviewed_profile'),nativeEvidenceBindings:[...aligned.values()]};
 }

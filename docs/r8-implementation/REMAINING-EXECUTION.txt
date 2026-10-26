@@ -1,0 +1,99 @@
+AEGIS R8 REMAINING GATES AND NEXT EXECUTION ORDER
+26 October 2026. This file is a continuation proposal, not training permission.
+
+Current boundaries
+Preserve the full79-family/14-catalogue inventory and the reviewed feature meanings.
+Current dynamic inputs must belong to one coherent admitted Steam observation;
+historical team/player/hero context remains local, as-of and immutable at its cutoff.
+No OpenDota HTTP call is added to the disabled live decision path. Do not replace
+GPM by netWorth/minute, earned gold by assets, or source absence by a guessed zero.
+No fits, HPO, ablation, calibration, predictive scoring, learned compression,
+provider probing/refresh, runtime/task activation, model promotion or purchases.
+Preserve the 30/9/8/2GiB resource policy, CPU4, min4GiB free, finite wall and STOPs.
+
+Architecture decisions for Astra
+0. Resolve the large LIVE compact representation barrier first. Actual29 failed
+   at the existing1M DISTINCT encoded-DAG nodes; isolated31 confirmed it at
+   definitionIndex142882/153649 with~1.089GB factoring held below2GiB. This is an
+   observed prefix, not full required capacity. FULL128M logically expanded nodes
+   and16M encoded-JSON traversal are different limits. Choose an explicitly funded
+   distinct FULL cap or reviewed versioned paging/stable-definition versus instance
+   storage with exact old-reader/hash/row-pair/aggregate ownership requirements.
+   Do not strip metadata or simply raise memory. Warm/326 checks remain unadmitted.
+1. Review the exact R8 causal/currentness and authentic row-capability changes,
+   including static expected authority derived from the actual private proof,
+   classified gaps retaining only the original300s lease, and current fences.
+2. Decide the current Steam profile policy using the sealed GLG/RT evidence.
+   GLG supplies literal GPM/XPM; examined RT bodies do not. RT delta_frame and
+   item/ability arrays need their own assembly/semantic contract. One-source
+   preference cannot authorize merging frames from different clocks. Review
+   either a qualified GLG profile, a separately qualified RT subset, or an
+   explicitly aligned composite profile; no source switch is implemented here.
+3. Resolve or preserve the seven ineligible semantic families. Each LIVE head
+   has10,982 affected definitions, including typed descendants. Ineligible
+   meanings do not become usable because the DAG has zero declaration gaps.
+   Any narrower model profile requires explicit review; do not silently prune.
+4. Approve the genuine prior-native history bridge. Current progression proof
+   is not a completed prior-map proof. RetainedNativeHistoryView currently needs
+   bound prior facts plus explicit phase or independent profile-review/alignment
+   pins. Either supply those exact existing receipts or review a new causal
+   progression-backed prior-history interface. Never transplant a current token.
+5. Pin the target calendar, stateful-rating genesis/checkpoint and history warmup.
+   The saved January-August20October experiment is historical evidence; it is
+   not an R8 dataset or current training cutoff.90d covers rolling windows only.
+6. Review the remaining missing family ports, especially historical completed
+   series transitions/recovery, causal opponent-style expectations, Roshan/Aegis
+   episodes/conversion, patch-valid items/abilities/roles and high-rank provenance.
+   Composition/labels/presentation entries need correct manifests, not filler
+   numeric columns. Use the complete disposition/required-input ledgers.
+7. Review stable feature-function coordinates versus row provenance and explicit
+   learned-state coordinate compatibility. OOF child IDs alone do not define
+   separate estimators; changed encoders cannot silently share coordinates.
+
+Sol work after those decisions, still before training
+A. Build ONE genuine retained source->qualified prior-history->private vector
+   example from exact existing receipts, then expand the already pinned intake.
+   Keep original-observed/reconstructed and original-issued/replayed distinct.
+B. Materialize bounded private vector/label pages with global chronological
+   series/component splits. The new page/weight factories verify metadata bytes
+   but do not yet certify every vector/label/fold dependency. Add actual per-map
+   terminal receipts before relaxing the conservative whole-series label cutoff.
+C. Join exact completed historical series/roster/profile facts to the reviewed
+   missing ports; project meta preparation only when its typed source contract
+   is accepted. Separate pro/public and letter revisions; no default blend/decay.
+D. Run full REAL per-column support over the selected period and all13 modes,
+   with phase/minute/patch/source/hero/player strata and eligible opportunity
+   denominators. Synthetic coverage pages are the exporter verification only.
+   Do not equate rare valid events with implementation errors or all-null ports
+   with valid structural zeros. Publish only source-safe aggregate summaries.
+E. Prepare a deduplicated GET-only backfill proposal for target period+warmup;
+   retain covered exclusions, irrecoverable original-live gaps, estimated calls
+   and current budget-ledger checks. Do not run it without the appropriate gate.
+F. Optimize measured invariant construction/encoding/IO/restart costs, retaining
+   private proof/currentness, exact values/masks/order and bounded ownership.
+   Stable function identity is implemented; physical storage deduplication and
+   cheap autonomous cold restoration are NOT consequently complete. Keep native
+   Windows control leases and one rich IO/exclusive mutation; no unbounded cache.
+G. Repeat only affected exact checks. The326-state stress gate requires pilot
+   throughput/disk/headroom admission under1200s. Do not rerun a known timeout
+   unchanged, extrapolate p99 from two/three warm frames, or waive latency targets.
+   C++ remains conditional on>=30% full-boundary gain in>=3 pairs after warmup,
+   including IPC/STOP semantics; no blanket API rewrite or toolchain search.
+H. Finish the actual paged-private-proof boosting adapter and totals distribution
+   runner. Existing closed all13 runner descriptors and installed LightGBM4.6.0
+   metadata are preparation, not compatible native matrices, a fitted model or
+   verified native import. Reuse existing training/evaluation framework carefully.
+I. Review the integrated qualified full-set input gate with Astra, then obtain
+   separate explicit bounded training authorization. Only after that: full-set
+   boosting baseline, pooled-vs-minute experts/80+, contextual seriesBO1/3/5,
+   PRE/POST/LIVE winner and totals, TRAIN-only HPO/calibration and later selection,
+   patch/public/age-weighting/compression experiments on frozen splits. No fixed
+   compression dimension and no holdout tuning. Report minute-level quality and
+   equal-strength/comeback cohorts with series-clustered uncertainty.
+
+Completion reporting
+Keep source correctness, numerical feature support, timely source95, actual data
+availability, private dataset proof, model quality and serving approval as separate
+gates. A completed reviewed source-only block may merge under standing authorization;
+it does not close the remaining project or activate models. Preserve exact current
+local/remote commits and native receipts, original failures and scoped corrections.

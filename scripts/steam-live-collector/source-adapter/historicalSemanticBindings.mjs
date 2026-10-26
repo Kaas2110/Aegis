@@ -21,13 +21,24 @@ function performanceFields(metric){
  if(metric.endsWith('PerMinute')){const key=metric.slice(0,-9);return Object.hasOwn(PERFORMANCE_FIELDS,key)?[key,'durationSeconds']:null;}
  if(metric.endsWith('PerGpm')){const key=metric.slice(0,-6);return Object.hasOwn(PERFORMANCE_FIELDS,key)?[key,'durationSeconds','gpm']:null;}return null;
 }
+/** Explicit selector grammar at this factory boundary. Values stay in row
+ * provenance; fixed population operations and slot addresses stay functions. */
+export function historicalSelectorFunctionGrammar(s){
+ const allowed=['key','kind','teamId','opponentTeamId','players','opponents','heroes','opponentHeroes'];
+ if(!s||Object.keys(s).some(k=>!allowed.includes(k)))return null;
+ const out={...(s.key!==undefined?{key:s.key}:{}),...(s.kind!==undefined?{kind:s.kind}:{})};
+ for(const k of ['teamId','opponentTeamId'])if(Object.hasOwn(s,k))out[k]={kind:'current_identity_binding',field:k};
+ for(const k of ['players','opponents'])if(Object.hasOwn(s,k)){if(!Array.isArray(s[k])||s[k].some(p=>!p||Object.keys(p).some(f=>!['accountId','heroId'].includes(f))))return null;out[k]=s[k].map((p,index)=>({slot:index,...Object.fromEntries(Object.keys(p).map(field=>[field,{kind:'current_identity_binding',field}]))}));}
+ for(const k of ['heroes','opponentHeroes'])if(Object.hasOwn(s,k)){if(!Array.isArray(s[k]))return null;out[k]=s[k].map((_,index)=>({kind:'current_identity_binding',field:'heroId',slot:index}));}
+ return out;
+}
 export function bindHistoricalRelationalSemantics(d,{minimumSupport,selectorBindings,support,performanceDefinitions,formulaVersion}){
  const p=d.formulaParameters??{},refs=d.supportRefs??(d.supportRef?[d.supportRef]:[]),selectors=refs.map(ref=>support[ref]?.selectorRef??support[support[ref]?.cohortRef]?.selectorRef).filter(Boolean).map(key=>({key,...selectorBindings[key]}));
  if(p.selector)selectors.push({key:d.selectorRef??null,kind:p.selectorKind,...p.selector});
  const fields=new Set(['matchId','endedAt','outcomeKnownAt','radiantTeamId','direTeamId']);
  if(selectors.some(s=>s.players?.length||s.opponents?.length)){fields.add('players');fields.add('playersKnownAt');}
  if(selectors.some(s=>s.heroes?.length||s.opponentHeroes?.length)){fields.add('heroes');fields.add('heroesKnownAt');}
- const inputBindings=[];let unknown=null;
+ const inputBindings=[],featureRefs=[];let unknown=null;
  if(p.inputClass==='outcome'){
   const operands=outcomeFields[p.operator];if(!operands)unknown='unbound_outcome_metric:'+p.operator;else for(const key of operands)fields.add(key);
  }else if(p.inputClass==='performance'){
@@ -35,10 +46,14 @@ export function bindHistoricalRelationalSemantics(d,{minimumSupport,selectorBind
   else for(const key of sourceFields){if(key==='durationSeconds'){fields.add(key);continue;}inputBindings.push(input('heroPerformances[].metrics.'+key,performanceDefinitions[key].units,'players[].'+PERFORMANCE_FIELDS[key]));}
   inputBindings.push(input('heroPerformances[].heroId','nominal_hero_id','players[].hero_id'),input('heroPerformances[].accountId','nominal_account_id','players[].account_id'),input('heroPerformances[].side','observed_side','players[].player_slot'),input('heroPerformances[].contract','versioned_performance_contract'),input('heroPerformances[].sourceProfile','versioned_prior_performance_profile'),input('heroPerformances[].sourceFields','literal_raw_field_dictionary'),input('heroPerformances[].knownAt','UTC_instant'),input('heroPerformances[].metricAvailability','per_field_UTC_instants'),input('heroPerformances[].metricSources','per_field_raw_source_hashes'));
  }else if(['profile','profile_aggregation'].includes(p.inputClass)){
-  for(const s of p.sourceStatistics??[])inputBindings.push({normalizedField:'same_component.statistics.'+s.definition,rawField:'not_applicable: deterministic derived statistic in the SAME relational generator; exact cohort selectors/support refs retained',sourceProfile:formulaVersion,sourceKind:'derived_prior_statistic',units:s.units,availabilityPolicy:'every referenced statistic dependency <= immutable cutoff'});
+  for(const s of p.sourceStatistics??[]){if(!Array.isArray(s.emittedReferences)||!s.emittedReferences.length||s.emittedReferences.some(ref=>typeof ref!=='string'||!ref.startsWith('histrel.'))){unknown='exact_emitted_statistic_reference_required';continue;}for(const ref of s.emittedReferences){featureRefs.push({kind:'feature',component:'history',name:ref});inputBindings.push({normalizedField:ref,rawField:'not_applicable: exact emitted statistic in the SAME relational generator; formulaTemplate is metadata only',sourceProfile:formulaVersion,sourceKind:'derived_prior_statistic',units:s.emittedOperandUnits?.[ref]??s.units,availabilityPolicy:'every referenced statistic dependency <= immutable cutoff'});}}
  }else if(d.formulaParameters?.templateId==='aegis.team-conditioned-draft-style-fit.v1')return d;
  else unknown='numeric_factory_parameters_not_bound';
  for(const key of fields)inputBindings.push(input(key,units[key]));
+ for(const selector of selectors){for(const field of ['teamId','opponentTeamId','players','opponents','heroes','opponentHeroes'])if(Object.hasOwn(selector,field))inputBindings.push({normalizedField:'currentSelector.'+field,rawField:'supplied normalized current target identity.'+field,sourceProfile:'historical_relational.current_target_identity',sourceKind:'supplied_normalized_current_identity',units:['players','opponents'].includes(field)?'account_hero_identity':field.includes('Heroes')||field==='heroes'?'hero_identity':'nominal_team_id',availabilityPolicy:'current target validFrom/identityRevision; does not expand immutable historyCutoffAt'});}
  const boundInputs=shared(selectorBindings,'bindings',inputBindings),boundSelectors=shared(selectorBindings,'selectors',selectors),boundSelector=p.selector?shared(selectorBindings,'selectors',p.selector):null;
- return{...d,inputFields:[...new Set(inputBindings.map(x=>x.normalizedField))],historyDefinitions:(p.sourceStatistics??[]).map(s=>s.definition).filter((x,i,a)=>a.indexOf(x)===i),...bindFeatureSemanticTemplate(template,{inputBindings:boundInputs,minimumSupport:d.minimumSupport??minimumSupport,historyWindowDays:d.historyWindowDays??null,semanticVerification:unknown?'parameter_binding_required':'authoritative_template',formulaParameters:{...p,...(p.selector?{selector:boundSelector}:{}),selectors:boundSelectors,minimumSupport:d.minimumSupport??minimumSupport,windowDays:d.historyWindowDays??null,formulaVersion,unboundParameter:unknown}})};
+ const metadata=bindFeatureSemanticTemplate(template,{inputBindings:boundInputs,minimumSupport:d.minimumSupport??minimumSupport,historyWindowDays:d.historyWindowDays??null,semanticVerification:unknown?'parameter_binding_required':'authoritative_template',formulaParameters:{...p,...(p.selector?{selector:boundSelector}:{}),selectors:boundSelectors,minimumSupport:d.minimumSupport??minimumSupport,windowDays:d.historyWindowDays??null,formulaVersion,unboundParameter:unknown}}),parameters=metadata.formulaParameters,functionSelectors=selectors.map(historicalSelectorFunctionGrammar),functionSelector=p.selector?historicalSelectorFunctionGrammar(p.selector):null;
+ const classificationMissing=functionSelectors.some(s=>s===null)||p.selector&&functionSelector===null;
+ const parameterClassification={contract:'aegis.feature-parameter-classification.v1',functionParameters:{...parameters,...(p.selector?{selector:functionSelector}:{}),selectors:functionSelectors},rowParameters:{...(p.selector?{selector:boundSelector}:{}),selectors:boundSelectors},classifiedKeys:classificationMissing?[]:Object.keys(parameters),unclassifiedKeys:classificationMissing?Object.keys(parameters):[]};
+ return{...d,inputFields:[...new Set(inputBindings.map(x=>x.normalizedField))],historyDefinitions:[...new Set(featureRefs.map(ref=>ref.name))],...metadata,dependencyRefs:shared(selectorBindings,'bindings',[...boundInputs.filter(x=>x.sourceKind!=='derived_prior_statistic').map(port=>({kind:'input',port})),...featureRefs,{kind:'formulaTemplate',templateId:template.templateId}]),parameterClassification,rowInstanceFieldNames:[],functionFieldSubstitutions:{}};
 }

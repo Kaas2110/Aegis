@@ -1,0 +1,74 @@
+{
+  "contract": "aegis.r8.dataset-calendar-evidence.v1",
+  "recordedDate": "2026-10-26",
+  "timeZone": "UTC",
+  "scope": "Saved historical experiment metadata and explicitly unselected future R8 calendar; no new dataset or fit",
+  "evidence": "work/astra-r7-review-20261026/training-period-evidence.txt",
+  "historicalExperiment": {
+    "name": "October20 paired temporal OOF experiment",
+    "independentHoldout": false,
+    "distinctValidationMaps": 1537,
+    "repeatedValidationFrames": 10651,
+    "folds": [
+      {
+        "trainStart": "2026-01-01T00:53:40Z",
+        "trainLabelBefore": "2026-04-30T00:00:00Z",
+        "id": "May",
+        "validationEnd": "2026-05-30T20:24:56Z",
+        "validationStart": "2026-05-01T03:12:13Z",
+        "validationMaps": 762,
+        "trainEnd": "2026-04-29T20:40:29Z",
+        "trainMaps": 3185
+      },
+      {
+        "trainStart": "2026-01-01T00:53:40Z",
+        "trainLabelBefore": "2026-05-31T00:00:00Z",
+        "id": "June",
+        "validationEnd": "2026-06-29T22:44:02Z",
+        "validationStart": "2026-06-01T02:42:31Z",
+        "validationMaps": 372,
+        "trainEnd": "2026-05-30T20:24:56Z",
+        "trainMaps": 3964
+      },
+      {
+        "trainStart": "2026-01-01T00:53:40Z",
+        "trainLabelBefore": "2026-06-30T00:00:00Z",
+        "id": "July",
+        "validationEnd": "2026-07-30T19:01:30Z",
+        "validationStart": "2026-07-01T01:04:23Z",
+        "validationMaps": 158,
+        "trainEnd": "2026-06-29T22:44:02Z",
+        "trainMaps": 4361
+      },
+      {
+        "trainStart": "2026-01-01T00:53:40Z",
+        "trainLabelBefore": "2026-07-31T00:00:00Z",
+        "id": "August",
+        "validationEnd": "2026-08-30T18:27:44Z",
+        "validationStart": "2026-08-01T00:18:32Z",
+        "validationMaps": 245,
+        "trainEnd": "2026-07-30T19:01:30Z",
+        "trainMaps": 4554
+      }
+    ],
+    "separatePurgeHours": 24,
+    "phaseScope": "Saved paired PRE/POST/LIVE and phase totals evidence only; series and older experiments require separate calendars"
+  },
+  "futureR8": {
+    "status": "not_materialized_or_admitted",
+    "train": null,
+    "validation": null,
+    "calibration": null,
+    "lockedTest": null,
+    "sourceKnownBounds": null,
+    "labelKnownBounds": null,
+    "rollingStatisticWarmupDays": 90,
+    "rollingWarmupReferenceForOldFirstTarget": "2025-10-03T00:53:40Z",
+    "statefulRatingWarmup": "ALL provided causal prior events from an explicitly pinned genesis or verified checkpoint; 90 days alone is not sufficient certification",
+    "reason": "Full real per-feature support, source profile authority, vector/label private proof and global calendar are not yet accepted",
+    "archiveReceiptDateIsTrainingEnd": false
+  },
+  "newTrainingPerformed": false,
+  "holdoutConsumed": false,
+  "providerCalls": 0
+}

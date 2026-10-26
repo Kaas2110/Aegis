@@ -1,0 +1,70 @@
+AEGIS: SAVED MODEL TRAINING CALENDAR EVIDENCE
+Reviewed: 2026-10-26. Read-only artifact inspection; no DB scan, providers or fits.
+
+Scope and time convention
+The dates below describe the saved October 20 experimental results, not newly
+trained R7/R8 models and not an independently verified production-model inventory.
+All timestamps are UTC. They are actual map start times joined from pinned row
+metadata, not archive ingestion dates. Training-label cutoffs are distinct fields.
+
+Current October 20 four-fold experiment
+Fold   Train maps  Earliest actual start   Latest actual start    Validation maps
+May    3185        2026-01-01 00:53:40      2026-04-29 20:40:29    762
+June   3964        2026-01-01 00:53:40      2026-05-30 20:24:56    372
+July   4361        2026-01-01 00:53:40      2026-06-29 22:44:02    158
+August 4554        2026-01-01 00:53:40      2026-07-30 19:01:30    245
+
+Fold   Earliest validation start  Latest validation start  Training label cutoff
+May    2026-05-01 03:12:13         2026-05-30 20:24:56      2026-04-30 00:00:00
+June   2026-06-01 02:42:31         2026-06-29 22:44:02      2026-05-31 00:00:00
+July   2026-07-01 01:04:23         2026-07-30 19:01:30      2026-06-30 00:00:00
+August 2026-08-01 00:18:32         2026-08-30 18:27:44      2026-07-31 00:00:00
+
+Validation label-before cutoffs are May 31, June 30, July 31 and August 31,
+respectively. The split has a separate 24-hour purge/label-availability constraint.
+Therefore calendar month descriptions alone do not describe exact eligibility.
+The four validation folds contain 1537 distinct maps in total. These are temporal
+OOF evaluations inside TRAIN, not the external independent holdout.
+
+Source files and method
+1. outputs/Aegis-ML-results-20261020.txt identifies the PRE C1, POST C1/C2,
+   LIVE C1/C2 and phase/live totals evaluations and explicitly describes their
+   May-August OOF scope.
+2. outputs/Aegis-paired-c1-c2-data-r2-20261019/FOLDS.json supplies the four folds,
+   train_map_ids, validation_map_ids and label-before cutoffs.
+3. outputs/Aegis-prematch-C1-at-start-20261020/ROWS.json supplies 4823 map rows
+   with match_id and start. Read-only ID join produced the extrema above.
+4. outputs/Aegis-paired-c1-c2-data-r2-20261019/FOLD-PROOF.json confirms paired
+   live membership and frame counts: training 19925/25109/27746/29163;
+   validation 5087/2482/1190/1892. Thus the paired LIVE experiment uses the same
+   map periods; its 10651 validation frames are repeated observations of the
+   same 1537 maps, not 10651 independent matches.
+5. outputs/Aegis-phase-totals-at-start-20261019/FOLD-PROOF.json confirms the
+   same four map counts for the phase totals preparation. The October 20
+   results report identifies completed PRE/POST totals and LIVE totals fits.
+6. outputs/Aegis-prematch-C1-at-start-20261020/SOURCE-AUDIT.json and
+   outputs/Aegis-postdraft-rich-at-start-20261020/SOURCE-AUDIT.json record
+   corrected historical reconstruction and the source-receipt limitation.
+
+Do not extrapolate these dates
+- outputs/Aegis-paired-c1-c2-data-r2-20261019/DATA-SCOPE.json records
+  archiveCutoff=2026-10-16T00:00:00Z, sourceTargetPriors=13371 and
+  sourceFrameRows=31235. That cutoff describes prepared source scope, NOT
+  evidence that these models trained through October 16.
+- The reduced earned-economy preparation has smaller fold memberships. Its
+  precise actual extrema were not independently reconstructed in this bounded
+  check. Do not attribute the full paired-map range/count to it without its IDs.
+- Series experiments and the older 59.83% post-draft experiment have separate
+  split artifacts. They must not inherit the October 20 fold dates. Their exact
+  fit-eligible date extrema were not established by this bounded check.
+- Existing production artifacts were not fully audited here. This report does
+  not establish the age or training period of every model currently loaded.
+- R7's 1600-map history/storage fixture, functional13/schema checks and R8
+  preparation are technical correctness evidence. No new R7/R8 fits occurred;
+  there is consequently no new R7/R8 model training period to report.
+
+Practical conclusion
+For the latest reported full paired experiment, training began January 1, 2026,
+and the last rolling fold used eligible maps through July 30. Evaluation spans
+May 1-August 30. Recent archive coverage does not make these fits current to
+October. New training remains paused pending the agreed preparation/review gate.

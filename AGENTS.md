@@ -1,4 +1,36 @@
+# Sol R8 reviewed implementation block - 26 October 2026
+
+Read `docs/sol-r8-review-20261026.txt` and
+`docs/sol-r8-exact-continuation-20261026.txt` before historical execution orders.
+This is source-only diagnostic preparation, not the full feature-first gate.
+No training, HPO/calibration/scoring, provider probing/refresh, runtime/task/model
+activation or publication of the application is authorized. Preserve 30/9/8/2 GiB,
+CPU4, minimum4 GiB physical free, finite wall, manual STOPs and foreign locks.
+Do not treat synthetic all13 technical checks or per-column exports as real
+feature coverage/source95. Preserve all79 families/14 catalogue dispositions and
+explicitly ineligible opaque inputs. Use exact current install/merge receipts;
+do not rerun old assembly guards. Graphify refreshes automatically after the
+completed-block merge; current local source wins during indexing lag.
+
 # Aegis source and feature architecture
+
+## Latest execution order — Sol R8,26October2026
+
+Read `docs/continuation/astra-to-sol-r8-20261026.txt`,
+`docs/astra-r7-review-20261026.txt`, `docs/astra-r8-architecture-20261026.txt`
+and `docs/sol-feature-first-plan-20261026-r8.txt` before older plans below.
+The exact formula table and independent review attachments are in
+`docs/r8-review/`. Astra changed documentation only. PR12 remains the application
+baseline; its technical receipts do not close semantic/source/runtime gates.
+Sol first fixes classified-gap retention, proof-bound static authority and
+cross-context schema/vector pairing, then completes stable function/row contracts,
+typed dependencies/features, causal datasets and actual disabled routing.
+The six-hour plan does not authorize training, quality scoring, provider calls,
+runtime/task activation or model promotion. Preserve30/9/8/2GiB and all-profile
+encoded256MiB limits,4CPUs,min4GiBfree,manual STOPs and all feature vocabulary.
+Graphify still described olderPR11 during review; use current local source.
+Include these documents in the next substantive reviewed source-only Sol PR;
+no duplicatePR12 or standalone pointer-only PR. Standing policies still apply.
 
 ## Documentation language
 

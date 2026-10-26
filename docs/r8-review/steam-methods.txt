@@ -1,0 +1,126 @@
+STEAM ECONOMIC FIELD DOCUMENTATION REVIEW
+26 October 2026. Read-only web research; no implementation, authentication, fitting
+or qualification changes. This report distinguishes endpoint schemas from physical
+measurement definitions. Current master URLs are mutable external references.
+
+DECISION
+Owner-confirmed project meaning: canonical netWorth is the hero's current inventory
+value plus wallet, can decrease, and remains the canonical current-economy measure.
+This report does not reopen that accepted definition. The unresolved question is
+the exact raw GLG gold/net_gold ports and any proposed alias to canonical netWorth.
+
+The examined sources do NOT establish an authoritative formula for the exact
+GetLiveLeagueGames/v1 scoreboard players[].net_gold field. Do not qualify it as
+total earned gold, net worth, or wallet merely from its name. The strongest found
+schema evidence places net_gold in the separate detailed realtime protobuf message.
+It does not prove that GLG exposes that field or how any GLG JSON projection maps it.
+
+There is useful positive evidence: gold, gold_per_min and net_worth are distinct
+named fields in game-produced schemas. The usual reading of gold as current wallet
+is plausible and consistent with community wrappers, but this bounded research did
+not locate a Valve statement/implementation assigning that precise meaning to the
+GLG JSON path. Preserve the distinction between plausible interpretation, exact
+source binding, actual retained availability, and model qualification.
+
+1. OFFICIAL STEAM API DISCOVERY
+https://partner.steamgames.com/doc/webapi/ISteamWebAPIUtil
+Valve's official page documents GetSupportedAPIList/v1 and says it provides the
+supported API-call catalogue. Its key parameter permits restricted method listing.
+This is evidence for method discovery, not a response-field semantic dictionary.
+No request to this endpoint was made; only the documentation page was read.
+
+2. THE USER-SUPPLIED XPAW CATALOGUE
+https://steamapi.xpaw.me/IDOTA2Match_570
+Observed page identifies GetLiveLeagueGames/v1 and GetMatchDetails/v1 separately.
+GLG parameters: optional league_id, match_id, dpc. MatchDetails parameters: required
+match_id, optional include_persona_names. The page does not define response gold,
+net_gold, net_worth, accounting formulae, or their mapping between methods.
+This is a third-party presentation of Steam discovery; it is not itself a Valve
+guarantee of economy semantics. Nothing was entered into its Execute controls.
+
+https://github.com/SteamTracking/SteamTracking/blob/master/API/IDOTA2Match_570.json
+The tracked machine method catalogue similarly contains method/parameter metadata,
+not the scoreboard response semantics. It cannot settle the economic question.
+
+3. PRIMARY-STRUCTURE ARTIFACT, THIRD-PARTY MIRROR
+https://raw.githubusercontent.com/SteamTracking/GameTracking-Dota2/master/Protobufs/dota_gcmessages_common.proto
+https://github.com/SteamTracking/GameTracking-Dota2/blob/master/Protobufs/dota_gcmessages_common.proto
+This is a SteamTracking mirror of game protocol definitions, not a Valve-authored
+explanatory web API contract. Treat its declarations as schema evidence and keep
+that provenance explicit. The read master file had1843lines in the web result.
+
+Three short declarations from CMsgDOTARealtimeGameStats.PlayerDetails:
+  optional uint32 gold_per_min = 34;
+  optional uint32 net_gold = 36;
+  optional uint32 gold = 37;
+The surrounding block is at web lines500-548 (zero-based extraction coordinates).
+There are no comments/formulae explaining those economic quantities.
+
+The same file separately declares:
+- Detailed realtime TeamDetails: net_worth field9.
+- Terse realtime PlayerDetails: gold field12 and net_worth field15.
+- Terse realtime TeamDetails: net_worth field7.
+- Completed-match CMsgDOTAMatch.Player: gold field18, gold_per_min21, gold_spent23,
+  net_worth52, gold_lost_to_death71.
+- Timed match statistics: net_worth and separate income/spending-related counters.
+
+These separate fields contradict any assumption that one common name/column can
+be freely substituted across all transports. They do NOT provide a proved equation
+connecting detailed realtime net_gold to terse net_worth, cumulative earnings, or
+GLG scoreboard gold. No such mapping implementation was found in this review.
+
+https://steamapi.xpaw.me/IDOTA2MatchStats_570
+This is the separate interface catalogue for realtime statistics. Do not conflate
+its method family with IDOTA2Match_570/GetLiveLeagueGames merely because both are
+served by Steam and concern the same match.
+
+4. THIRD-PARTY GETMATCHDETAILS CLAIM: WHAT IT DOES AND DOES NOT SUPPORT
+https://lyzander.r-universe.dev/RDota2/doc/manual.html
+The wrapper's get_match_details documentation describes gold as the gold remaining
+at the end and gold_spent as cumulative spending. This is a third-party description
+of a completed-match response, not new independent Valve evidence for live GLG.
+Its existence makes the owner's final-wallet explanation reasonable for that named
+method; it does not establish live net_gold semantics or any common total formula.
+
+https://wiki.teamfortress.com/wiki/WebAPI/GetMatchDetails
+https://wiki.teamfortress.com/wiki/WebAPI/GetLiveLeagueGames
+Both direct web reads returned403; no access workaround was attempted. Do not cite
+them as pages successfully inspected here. Community documentation on a Valve-owned
+domain is also distinct from an explicit Valve implementation contract.
+
+5. LOCAL BINDING TO KEEP SEPARATE FROM THE WEB FINDINGS
+Previously inspected current APP source-adapter/steamLiveAdapter.mjs:78-79 selects
+GLG scoreboard raw players.gold -> normalized gold;
+players.net_gold -> netGoldRaw; players.net_worth -> netWorth;
+players.gold_per_min -> goldPerMinute.
+Parser support is not proof those fields were returned in retained GLG responses.
+The existing reviewed report correctly keeps gold/netGoldRaw source meaning opaque.
+Do not substitute detailed-realtime declarations into this GLG profile silently.
+
+6. QUALIFICATION OUTCOME AND NEXT EVIDENCE
+- Method identity/version: established by the method catalogue.
+- Distinct protocol field identities: established by the mirrored declarations.
+- GLG gold wallet interpretation: plausible, not fully endpoint-qualified here.
+- Detailed realtime net_gold physical meaning: unresolved in inspected material.
+- GLG net_gold presence and mapping: not established by these documents.
+- Exact relation to GPM, earnedGold, spending/loss or netWorth: not established.
+
+Keep the raw diagnostics and full feature inventory. To upgrade a particular port,
+require endpoint-specific source/projection documentation or a reviewed independent
+game-observable validation with exact matched frames and accounting events. That
+future validation must preserve receipts, clock/identity and patch/profile versions.
+A cross-stream numerical coincidence is supporting evidence, not an identity proof.
+No request to qualify one field implies all9232 related branches become eligible;
+qualification and reference support propagate separately through each dependency.
+
+No formula such as net_gold=netWorth, net_gold=totalEarnedGold,
+GPM=netWorth/minutes, or totalEarnedGold=gold+gold_spent is adopted by this report.
+No source gate should be cleared merely to reduce an unresolved-description count.
+
+EXECUTION DISCLOSURE
+Only pages/search results and existing source-derived context were used. No key,
+live match identifier or authenticated API request was sent. One mistaken web open
+of https://www.dota2.com/datafeed/herodata was made while looking for official
+documentation; the tool returned inaccessible and no data was obtained. This was
+not documentation and is recorded rather than described as zero endpoint attempts.
+No further endpoint request, code edit, test or training followed from it.

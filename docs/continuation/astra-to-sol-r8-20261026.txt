@@ -1,0 +1,101 @@
+AEGIS — EXACT ASTRA -> SOL R8 HANDOFF
+26 October2026. Next actor: Sol. Training remains OFF.
+
+START PROMPT
+Continue Sol R8 from AEGIS-SOL-PLAN-2026-10-26-R8.txt. Use its six-hour work
+envelope, beginning with R8.0-R8.3 correctness/semantics, then finish all independent
+available tasks through R8.10. Read the Astra R7 review, R8 architecture and exact
+formula contracts. Do not train, probe providers, enable runtime/tasks or promote
+models. Keep30/9/8/2GiB,256MiB encoded capacities,4CPUs,min4GiB free and manual
+STOP/locks. Record every change/reason/test for Astra, use one owned heavy job,
+and produce one consolidated result with exact continuation. If only a native
+job remains, checkpoint and yield rather than busy-poll. Source-only reviewed
+completed-block PR/merge is already authorized; no new model activation is.
+
+WHAT CHANGED IN ASTRA REVIEW
+Only documentation and continuation pointers changed. No app/test code, native
+technical test, model/quality calculation, authenticated match-data collection,
+runtime, task or automation was started. Public documentation/source research
+was added at the owner's request; its exact access limitations and one inaccessible
+public datafeed attempt are recorded separately. Existing PR12 remains application
+baseline; do not publish it again.
+Review results are source-derived counterexamples, not executed failing tests.
+
+THREE CORRECTNESS FIXES FIRST
+1. A completed failed/absent-map poll remains 'pending' and prematurely blocks the
+   prior forecast. Separate admitted/classified/last-success heads; no lease renewal.
+2. A static candidate can be stale already on entry while unchanged fresh authority
+   stamps pass. Bind actual private history/target proof at entry and after IO.
+3. Genuine unrelated private schema/vector objects with identical names/count
+   can be paired. Require a private assembly/projection row capability.
+
+SEMANTICS AND SCALE DECISIONS
+The39,808 reported gaps are4*(9,232 opaque gold/net_gold descendants +720 exact
+trajectory/history reference gaps). Keep opaque raw vocabulary but don't qualify
+it by name. Fix720 references, missing ranking/clock/selector dependencies and
+the500 emitted level reference columns with no current producer. Finish all
+remaining approved families/delivery and record explicit external dispositions.
+Separate stable feature-function contracts from actual instance/provenance hashes
+and fitted-state identity. Do not delete all selectors or accept matching names.
+Use global temporal series splits with bounded target shards and correct weights;
+finish actual restored-row/positive LIVE routing and shared resource ownership.
+Optimize repeated metadata/IO before conditional C++; preserve all agreed features.
+
+OPENDOTA STUDY ADDENDUM
+Read outputs/Aegis-OpenDota-source-study-20261026.txt and architecture A11 before
+R8.6A. Native networth_t differs from earned gold_t; the inspected parser also
+uses earned gold for radiant_gold_adv. Preserve exact source/version contracts.
+Optional arrays may lose positional time alignment. Death/fight/pause descriptors
+and inferred roles can depend on future events; current rank/MMR/benchmarks are
+not automatically historical facts. Version all patch/item/hero rules.
+Build and validate the retained-only historical-to-Steam port ledger. Valid replay
+prefixes remain useful for future reconstructed training, separately from original
+online availability evidence. No new data acquisition or training is authorized.
+Owner clarification: Roshan/Aegis context applies to map/series winner heads as
+well as totals. Current qualified possession is LIVE-only; earlier phases use
+causal prior-map control/conversion history. No constant winner-probability bonus.
+R8.5A now requires a full per-feature observed-data support ledger and exact calendar
+bounds per split before training; schema presence is not data completeness. Preserve
+missing/applicability distinctions and disclose all-null/unwired intended features.
+R8.6B covers the full target calendar plus historical warmup and a backfill proposal
+without launching acquisition. Separate high-ranked pub meta from professional
+targets, preserve letter-patch and strict as-of windows, and do not backdate current
+rank or borrow old-patch observations as if they belonged to the new revision.
+LATEST ORDER: patch/meta weighting, usefulness and small-data adaptation are
+experiments at later P6 feature selection, AFTER the full eligible model baseline.
+No automatic discount or adaptation is mandated. Read the separate patch/meta
+experiment plan; R8 only prepares the required source/feature contracts and data.
+Exact dates for the last saved October20 experiments are in the training-period
+evidence attachment: Jan1-Jul30 train extrema; May1-Aug30 temporal OOF,2026.
+These are not the calendar of every production package or a newly trained R8 model.
+
+BASELINE AND POINTERS
+APP=C:/Users/Admin/Documents/Codex/Aegis-local/app.
+W=C:/Users/Admin/Documents/Codex/2026-10-03/new-chat-2.
+PR12 merge85c3b056769cf98f2bedfa233036e56b854201e4.
+Reviewed head4fe709dfc2b54e78a6dbdc8df180a5e71f07dbf4;117paths.
+Source receipt: work/sol-r7-resume-20261026/PUBLICATION-RECEIPT.json.
+Frozen final technical evidence: outputs/Aegis-Sol-R7-Astra-review-20261026.txt.
+New decisions: outputs/Aegis-Astra-R8-architecture-20261026.txt.
+Review: outputs/Aegis-Astra-R7-review-20261026.txt.
+Plan: AEGIS-SOL-PLAN-2026-10-26-R8.txt.
+Exact formula table: work/astra-r7-review-20261026/semantics/FORMULA-CONTRACTS.txt.
+The full prior79-family meaning remains in outputs/Aegis-Astra-feature-semantics-20261025.txt.
+Graphify checked ready on olderPR11, not newR7; current local source is authority.
+No extra index build is needed. New docs are local for next substantive Sol PR.
+
+RESOURCE / CURRENTNESS REMINDERS
+Use work/sol-r7-resume-20261026/run-bounded-tests-30g.py unchanged unless a reviewed
+successor is necessary. Whole-tree9GiB plus4GiB headroom required before launch.
+ThirtyGiB aggregate is conservative admission, not an attached global supervisor.
+Qualification180s, retention300s, landmark alignment30s and event delay are distinct.
+Do not edit old guards/receipts or erase STOP/foreign locks. No active R7 native job
+was recorded at closeout. Inspect current state read-only before any new launch.
+
+EXPECTED RETURN
+Complete/partial/not-run status per R8 task; exact files/interfaces/reasons;
+failures and corrected receipts; causal/semantic/model-contract and real-coverage
+limits; actual all13 configured delivery; measured storage/native outcomes;
+cleanup evidence; source PR/merge when a coherent reviewed block is ready;
+explicit remaining Astra decisions. No false trained-model or ready-for-production
+claim. Six hours is an execution envelope, not permission to bypass review gates.
